@@ -1,0 +1,220 @@
+"""Generate the public catalogue from an internal one.
+
+The internal repository describes every dataset, including ones that are hidden
+(embargoed) or whose bytes are restricted. The public catalogue must contain only
+what may be listed publicly, so it is generated rather than hand-maintained:
+
+    internal repo  --(filter visibility: public)-->  public repo
+
+Fields that only make sense to a maintainer are stripped on the way out --
+crucially the embargo block, which would otherwise announce the existence and
+release date of data nobody outside is supposed to know about.
+
+    ice2-catalog publish ../ice2-data-catalog
+    ice2-catalog publish ../ice2-data-catalog --check   # CI: is it current?
+
+Publishing an embargoed dataset is then two edits in dataset.yaml
+(visibility: public, access: public), a rebuild, an upload, and a re-run of this.
+Dataset names, resource names and checksums never change, so every collection
+that already referenced it keeps resolving.
+
+Note that this rewrites a *worktree*, not a history.  A public checkout must
+never have been a clone of the internal repository, or the embargo blocks are
+still one ``git log`` away -- see SETUP.md.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import yaml
+
+from . import datasets_dir
+
+# Maintainer-only. Never appears in the public catalogue.
+#   ice2:embargo        -- would leak that unpublished data exists, and when it lands
+#   ice2:license_note   -- internal review notes, not a public statement
+#   source_dir          -- a path on someone's workstation
+STRIP_FROM_PACKAGE = ("ice2:embargo", "ice2:license_note", "source_dir")
+
+# Written into the public tree so that a stray local artefact -- an oidc-agent
+# socket symlink, a __pycache__ -- cannot be committed by a careless `git add -A`.
+# It is generated rather than hand-kept because the publish step erases anything
+# it did not produce.
+GENERATED_GITIGNORE = """__pycache__/
+*.pyc
+oidc-agent.sock
+"""
+
+GENERATED_README = """# ice2-data-catalog
+
+Public catalogue of datasets published by Forschungszentrum Jülich, Institute of
+Climate and Energy Systems (ICE-2).
+
+> **Generated — do not edit.**
+> Produced from the internal catalogue by `ice2-catalog publish`.
+> Changes made here will be overwritten. Open an issue instead.
+
+The data itself lives on [DESY dCache InfiniteSpace][dcache] and is served over
+anonymous HTTPS — no Helmholtz account is needed to download it.
+
+```bash
+pip install ice2-data
+ice2-data -c collections.yaml fetch test_suite
+```
+
+## Datasets
+
+{table}
+
+Datasets marked **listed only** are described here but cannot be downloaded
+publicly: their bytes are licensed or institute-internal. The entry exists so a
+workflow that needs them fails with a useful message rather than a mystery.
+
+[dcache]: https://hifis.net/doc/cloud-services/Storage_DESY/
+"""
+
+
+def public_datasets(catalog_root: Path) -> list[tuple[Path, dict]]:
+    """Every dataset whose catalogue entry may be published, with its descriptor."""
+    selected = []
+    for dataset_dir in sorted(datasets_dir(catalog_root).iterdir()):
+        descriptor_path = dataset_dir / "datapackage.json"
+        if not descriptor_path.is_file():
+            continue
+        package = json.loads(descriptor_path.read_text())
+        if package.get("ice2:visibility", "public") == "public":
+            selected.append((dataset_dir, package))
+    return selected
+
+
+def strip(package: dict) -> dict:
+    return {key: value for key, value in package.items() if key not in STRIP_FROM_PACKAGE}
+
+
+def render(catalog_root: Path) -> dict[Path, str]:
+    """Build the complete public tree in memory: {relative path -> file contents}."""
+    catalog_meta = yaml.safe_load((catalog_root / "catalog.yaml").read_text())
+    for key in STRIP_FROM_PACKAGE:
+        catalog_meta.pop(key, None)
+
+    files: dict[Path, str] = {}
+    entries, rows = [], []
+
+    for dataset_dir, package in public_datasets(catalog_root):
+        public_package = strip(package)
+        here = Path("datasets") / dataset_dir.name
+        files[here / "datapackage.json"] = json.dumps(public_package, indent=2, ensure_ascii=False) + "\n"
+
+        # A sharded dataset is useless without its shards: the index names them
+        # by relative path, so they have to travel with it or every resolve
+        # 404s on a file the public catalogue swears exists.
+        for shard in public_package.get("ice2:shards", []):
+            source = dataset_dir / shard["path"]
+            if not source.is_file():
+                raise SystemExit(
+                    f"{public_package['name']}: shard {shard['path']} is missing. Run:\n"
+                    f"    ice2-catalog build {dataset_dir.name}"
+                )
+            files[here / shard["path"]] = source.read_text()
+
+        entries.append(
+            {
+                "name": public_package["name"],
+                "path": f"datasets/{dataset_dir.name}/datapackage.json",
+                "title": public_package.get("title", ""),
+                "ice2:access": public_package.get("ice2:access", "public"),
+                "ice2:total_bytes": public_package["ice2:total_bytes"],
+                "ice2:file_count": public_package["ice2:file_count"],
+            }
+        )
+        access = public_package.get("ice2:access", "public")
+        size = public_package["ice2:total_bytes"] / 1e6
+        note = "downloadable" if access == "public" else "**listed only**"
+        rows.append(
+            f"| `{public_package['name']}` | {public_package.get('title','')} "
+            f"| {public_package['ice2:file_count']} | {size:,.1f} MB | {note} |"
+        )
+
+    files[Path("datacatalog.json")] = (
+        json.dumps(
+            {
+                "$schema": "https://datapackage.org/profiles/2.0/datacatalog.json",
+                **catalog_meta,
+                "datasets": entries,
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
+
+    table = "\n".join(
+        ["| Dataset | Title | Files | Size | Availability |", "|:--|:--|--:|--:|:--|", *rows]
+    )
+    files[Path("README.md")] = GENERATED_README.format(table=table)
+    files[Path(".gitignore")] = GENERATED_GITIGNORE
+    return files
+
+
+def run(catalog_root: Path, target: str, check: bool = False) -> int:
+    destination_root = Path(target).expanduser().resolve()
+    files = render(catalog_root)
+
+    all_datasets = [
+        d for d in sorted(datasets_dir(catalog_root).iterdir()) if (d / "datapackage.json").is_file()
+    ]
+    published = {p.parts[1] for p in files if len(p.parts) > 1}
+    withheld = [d.name for d in all_datasets if d.name not in published]
+
+    if check:
+        stale = [
+            rel for rel, text in files.items()
+            if not (destination_root / rel).is_file() or (destination_root / rel).read_text() != text
+        ]
+        # Anything in the target that we no longer generate is also staleness --
+        # a dataset withdrawn from publication must actually disappear.
+        generated = {str(rel) for rel in files}
+        orphans = [
+            str(p.relative_to(destination_root))
+            for p in destination_root.rglob("*")
+            if p.is_file() and ".git" not in p.parts and str(p.relative_to(destination_root)) not in generated
+        ]
+        if stale or orphans:
+            print("Public catalogue is out of date:", file=sys.stderr)
+            for rel in stale:
+                print(f"  changed/missing: {rel}", file=sys.stderr)
+            for rel in orphans:
+                print(f"  should be removed: {rel}", file=sys.stderr)
+            return 1
+        print(f"Public catalogue is current ({len(files)} files).")
+        return 0
+
+    if not destination_root.exists():
+        raise SystemExit(f"target does not exist: {destination_root}\nClone the public repo there first.")
+
+    # Remove previously generated content so withdrawn datasets really go away.
+    # Symlinks are unlinked without following them: a dangling one is neither a
+    # file nor a directory, and would otherwise survive every publish forever.
+    for path in sorted(destination_root.rglob("*"), reverse=True):
+        if ".git" in path.parts:
+            continue
+        if path.is_symlink() or path.is_file():
+            path.unlink()
+        elif path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
+
+    for rel, text in files.items():
+        destination = destination_root / rel
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(text)
+
+    print(f"Published to {destination_root}")
+    for rel in sorted(files, key=str):
+        print(f"  + {rel}")
+    if withheld:
+        print(f"\nWithheld (visibility: hidden): {', '.join(withheld)}")
+    print("\nReview and commit in the public repo, then push.")
+    return 0

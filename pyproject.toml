@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=64.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ice2-data"
+version = "0.1.0"
+description = "Shared, deduplicating data access for ICE-2 scientific software"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = [
+  "pooch>=1.8.0",
+  "pyyaml>=5.4",
+  "platformdirs>=3.0",   # cross-platform config and cache locations
+]
+
+[project.optional-dependencies]
+progress = ["tqdm"]
+
+[project.scripts]
+ice2-data = "ice2_data.cli:main"
+# Maintainer-side counterpart: writes catalogues, uploads bytes. It needs no
+# extra Python dependencies -- only `rclone` and `oidc-agent` on PATH, and only
+# for `upload` / `check-access` -- so there is no install extra to gate it.
+ice2-catalog = "ice2_data.maintain.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"ice2_data.maintain" = ["scripts/*.sh"]

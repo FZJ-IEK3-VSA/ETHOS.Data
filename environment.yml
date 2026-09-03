@@ -1,0 +1,9 @@
+name: ice2_data_env
+channels:
+  - conda-forge
+dependencies:
+  - python 
+  - pooch
+  - pyyaml
+  - platformdirs
+  - tqdm
