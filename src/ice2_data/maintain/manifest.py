@@ -30,7 +30,7 @@ from pathlib import Path
 
 import yaml
 
-from ..catalog import ROOT_SHARD, shard_key
+from ..catalog import CATALOG_ROLES, ROLE_KEY, ROLE_SOURCE, ROOT_SHARD, shard_key
 from . import datasets_dir
 
 # Scientific formats that ``mimetypes`` does not know about.
@@ -291,8 +291,33 @@ def stale_files(dataset_dir: Path, files: dict[str, str]) -> list[Path]:
     return stale
 
 
-def build_catalog(catalog_root: Path, dataset_dirs: list[Path]) -> dict:
+def catalog_meta(catalog_root: Path) -> dict:
+    """Read and validate catalog.yaml.
+
+    Called before any dataset is touched. Catalogue-level mistakes are cheap to
+    find and expensive to find late: checksumming a multi-terabyte dataset only
+    to reject the file that names the catalogue wastes the whole run.
+    """
     meta = yaml.safe_load((catalog_root / "catalog.yaml").read_text())
+
+    # A catalogue you can run `build` in is by definition a source one: it has
+    # the dataset.yaml files this reads. Default rather than demand it, so an
+    # existing catalog.yaml keeps working, but reject a wrong value outright --
+    # a catalogue mislabelled `published` would make every tool refuse to touch it.
+    role = meta.setdefault(ROLE_KEY, ROLE_SOURCE)
+    if role not in CATALOG_ROLES:
+        raise SystemExit(f"catalog.yaml: {ROLE_KEY} must be one of {CATALOG_ROLES}, got {role!r}")
+    if role != ROLE_SOURCE:
+        raise SystemExit(
+            f"catalog.yaml declares {ROLE_KEY}: {role!r}, but this is the catalogue being built "
+            f"from dataset.yaml files, which makes it {ROLE_SOURCE!r}. The published copy gets "
+            "its role set by `ice2-catalog publish`; do not set it by hand."
+        )
+    return meta
+
+
+def build_catalog(catalog_root: Path, dataset_dirs: list[Path]) -> dict:
+    meta = catalog_meta(catalog_root)
     datasets = []
     for dataset_dir in sorted(dataset_dirs):
         package = json.loads((dataset_dir / "datapackage.json").read_text())
@@ -324,6 +349,7 @@ def build_catalog(catalog_root: Path, dataset_dirs: list[Path]) -> dict:
 
 
 def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
+    catalog_meta(catalog_root)  # fail on a bad catalog.yaml before hashing anything
     root = datasets_dir(catalog_root)
     selected = (
         [root / name for name in names]

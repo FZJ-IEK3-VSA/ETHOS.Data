@@ -75,6 +75,13 @@ description: >-
 ice2:publication_url: https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ice2-data-files
 
 ice2:contact: <team or username>
+
+# What kind of catalogue this is. Always `source` in a hand-written
+# catalog.yaml; `ice2-catalog publish` stamps `published` into the generated
+# copy, which has no catalog.yaml of its own. Tools read this instead of
+# guessing, so standing in the wrong one gets you a straight answer rather
+# than a missing-file error.
+ice2:catalog_role: source
 ```
 
 ## 4. Repo skeleton

@@ -18,7 +18,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import find_catalog_root
+from . import resolve_catalog_root
 
 SCRIPTS = Path(__file__).resolve().parent / "scripts"
 
@@ -56,7 +56,9 @@ def main(argv: list[str] | None = None) -> int:
     uploader.add_argument("--remote", default="HIFIS", help="rclone remote name (default: HIFIS)")
     uploader.add_argument("--oidc-profile", default="HIFIS", help="oidc-agent profile (default: HIFIS)")
     uploader.add_argument("--vo-path", default="Helmholtz/FZJ-ICE2", help="namespace path of the VO")
-    uploader.add_argument("--root", default="reskit-data", help="publication root under the VO")
+    uploader.add_argument("--root", default=None,
+                          help="publication root under the VO (default: the last path segment of "
+                               "catalog.yaml's ice2:publication_url)")
     uploader.add_argument("--dry-run", action="store_true", help="show what rclone would transfer")
     uploader.add_argument("--verify-only", action="store_true", help="skip the upload, just check readability")
     uploader.add_argument("--allow-internal", action="store_true")
@@ -71,9 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "check-access":
         return check_access(args.vo)
 
-    root = Path(args.catalog_root).expanduser().resolve() if args.catalog_root else find_catalog_root()
-    if not (root / "catalog.yaml").is_file():
-        raise SystemExit(f"not a catalogue checkout (no catalog.yaml): {root}")
+    root = resolve_catalog_root(args.catalog_root)
 
     if args.command == "build":
         from . import manifest

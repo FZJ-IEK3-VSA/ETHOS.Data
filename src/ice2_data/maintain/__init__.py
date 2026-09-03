@@ -18,26 +18,95 @@ install extra to remember.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+from ..catalog import ROLE_KEY, ROLE_PUBLISHED, ROLE_SOURCE
+
 CATALOG_MARKER = "catalog.yaml"
+#: Present in a *generated* catalogue too, so it can never identify a source one.
+GENERATED_MARKER = "datacatalog.json"
+
+
+def catalogue_role(path: Path) -> str | None:
+    """The role a directory's ``datacatalog.json`` declares, if it has one.
+
+    Read rather than inferred. The old guess -- index present, ``catalog.yaml``
+    absent -- happened to be right, but it could not tell a published catalogue
+    from a source checkout someone had half-deleted, and it had nothing to say
+    about a catalogue that is neither.
+    """
+    index = path / GENERATED_MARKER
+    if not index.is_file():
+        return None
+    try:
+        return json.loads(index.read_text()).get(ROLE_KEY) or None
+    except (OSError, ValueError):
+        return None
+
+
+def _source_catalogue_near(path: Path) -> Path | None:
+    """A sibling that *is* a source catalogue, to name in an error message."""
+    try:
+        siblings = sorted(p for p in path.parent.iterdir() if p.is_dir())
+    except OSError:
+        return None
+    return next((p for p in siblings if (p / CATALOG_MARKER).is_file()), None)
+
+
+def _refuse(path: Path, searched_upward: bool) -> SystemExit:
+    """Explain why this directory cannot be worked on, as specifically as possible."""
+    role = catalogue_role(path)
+    has_index = (path / GENERATED_MARKER).is_file()
+    if role != ROLE_PUBLISHED and not (role is None and has_index):
+        where = f"{path} or any parent directory" if searched_upward else str(path)
+        return SystemExit(
+            f"no {CATALOG_MARKER} in {where}.\n"
+            "Run this from inside a catalogue checkout, or pass --catalog-root."
+        )
+
+    if role:
+        says = f"it declares {ROLE_KEY}: {role!r}"
+    else:
+        says = f"it has {GENERATED_MARKER} but no {CATALOG_MARKER}"
+
+    source = _source_catalogue_near(path)
+    where_to_go = str(source) if source else "<the source catalogue>"
+
+    return SystemExit(
+        f"{path} is a {ROLE_PUBLISHED} catalogue, not a {ROLE_SOURCE} one ({says}).\n"
+        "It carries the published output only -- no dataset.yaml and no source_dir -- so there "
+        "are no local bytes to build, upload or publish from, and anything you change in it is "
+        "overwritten by the next `ice2-catalog publish`.\n\n"
+        "Work in the source catalogue and republish:\n"
+        f"    cd {where_to_go}\n"
+        "    ice2-catalog upload <dataset>\n"
+        f"    ice2-catalog publish {path}"
+    )
 
 
 def find_catalog_root(start: Path | None = None) -> Path:
     """The nearest enclosing catalogue checkout, searching upward from ``start``.
 
     A catalogue is identified by its hand-written ``catalog.yaml``; the generated
-    ``datacatalog.json`` is not a marker, because a half-built checkout that has
-    one but not the other is exactly when a clear error matters most.
+    ``datacatalog.json`` is not a marker, because a published catalogue has one
+    of those too and must never be mistaken for a source one.
     """
     here = (start or Path.cwd()).expanduser().resolve()
     for candidate in (here, *here.parents):
         if (candidate / CATALOG_MARKER).is_file():
             return candidate
-    raise SystemExit(
-        f"no {CATALOG_MARKER} in {here} or any parent directory.\n"
-        "Run this from inside a catalogue checkout, or pass --catalog-root."
-    )
+    raise _refuse(here, searched_upward=True)
+
+
+def resolve_catalog_root(explicit: str | None, start: Path | None = None) -> Path:
+    """The catalogue to act on: ``--catalog-root`` if given, else the enclosing one."""
+    if explicit is None:
+        return find_catalog_root(start)
+    path = Path(explicit).expanduser().resolve()
+    if not (path / CATALOG_MARKER).is_file():
+        raise _refuse(path, searched_upward=False)
+    return path
 
 
 def datasets_dir(catalog_root: Path) -> Path:

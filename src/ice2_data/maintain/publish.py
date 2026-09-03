@@ -31,6 +31,7 @@ from pathlib import Path
 
 import yaml
 
+from ..catalog import ROLE_KEY, ROLE_PUBLISHED
 from . import datasets_dir
 
 # Maintainer-only. Never appears in the public catalogue.
@@ -99,6 +100,10 @@ def render(catalog_root: Path) -> dict[Path, str]:
     catalog_meta = yaml.safe_load((catalog_root / "catalog.yaml").read_text())
     for key in STRIP_FROM_PACKAGE:
         catalog_meta.pop(key, None)
+    # Overwritten, not inherited: this copy is generated whatever the source says.
+    # It is the only durable marker of that -- the public tree has no catalog.yaml,
+    # so without it every tool has to guess from which files happen to be present.
+    catalog_meta[ROLE_KEY] = ROLE_PUBLISHED
 
     files: dict[Path, str] = {}
     entries, rows = [], []

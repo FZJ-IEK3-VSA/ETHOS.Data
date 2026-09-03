@@ -60,9 +60,20 @@ def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path, Path]
     dataset_dir = datasets_dir(catalog_root) / dataset_name
     meta_file = dataset_dir / "dataset.yaml"
     package_file = dataset_dir / "datapackage.json"
+    if not meta_file.is_file():
+        # Distinguish "not described yet" from "described but not built" -- they
+        # need different fixes, and telling someone to build a dataset that does
+        # not exist just moves the same error one command further along.
+        known = sorted(d.name for d in datasets_dir(catalog_root).iterdir() if (d / "dataset.yaml").is_file())
+        listing = "\n".join(f"    {name}" for name in known) or "    (none)"
+        raise SystemExit(
+            f"no dataset called {dataset_name!r} in {datasets_dir(catalog_root)}.\n"
+            f"Datasets in this catalogue:\n{listing}\n"
+            "To add a new one, describe it first -- see ADDING-DATA.md."
+        )
     if not package_file.is_file():
         raise SystemExit(
-            f"no datapackage.json for {dataset_name!r}. Run:\n"
+            f"{dataset_name!r} has no datapackage.json yet. Run:\n"
             f"    ice2-catalog build {dataset_name}"
         )
     meta = yaml.safe_load(meta_file.read_text())
@@ -175,8 +186,24 @@ def run(catalog_root: Path, args) -> int:
     meta, package, source_dir, dataset_dir = load(catalog_root, args.dataset)
     prefix = preflight(args.dataset, package, source_dir, args.allow_internal)
 
-    namespace_path = f"{args.vo_path}/{args.root}/{prefix}"
-    destination = f"{args.remote}:{args.root}/{prefix}"
+    # The upload destination and the URL we verify afterwards have to name the
+    # same folder, so derive the default from the catalogue rather than repeating
+    # it. They drifted apart once already, when the publication root moved from
+    # reskit-data to ice2-data-files: bytes would have gone to the old folder and
+    # every verification HEAD would have 404d against the new one, which reads
+    # like a permissions problem and is not one.
+    published_root = base_url.rstrip("/").rsplit("/", 1)[-1]
+    root = args.root or published_root
+    if args.root and args.root != published_root:
+        raise SystemExit(
+            f"--root {args.root!r} does not match the catalogue's publication root "
+            f"{published_root!r} (from ice2:publication_url in catalog.yaml).\n"
+            f"Uploading to {args.root!r} would publish bytes that {base_url}/... never serves.\n"
+            "Fix ice2:publication_url, or drop --root to use the catalogue's own value."
+        )
+
+    namespace_path = f"{args.vo_path}/{root}/{prefix}"
+    destination = f"{args.remote}:{root}/{prefix}"
     dataset_url = f"{base_url}/{prefix}"
 
     print(f"dataset      {args.dataset}  ({package['ice2:file_count']} files, "

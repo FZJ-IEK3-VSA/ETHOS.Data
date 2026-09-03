@@ -22,6 +22,7 @@ from .config import (
     unset_option,
 )
 from .access import AccessError
+from .catalog import UnknownDataset
 from .fetch import cache_dir, download, plan
 from .selection import load_collections
 
@@ -45,8 +46,11 @@ def main(argv: list[str] | None = None) -> int:
     """
     try:
         return _main(argv)
-    except AccessError as error:
-        print(f"error: {error}", file=sys.stderr)
+    except (AccessError, UnknownDataset) as error:
+        # UnknownDataset stringifies like a KeyError (quoted), which reads badly
+        # on a terminal line that already says "error:".
+        message = error.args[0] if error.args else error
+        print(f"error: {message}", file=sys.stderr)
         return 2
 
 
