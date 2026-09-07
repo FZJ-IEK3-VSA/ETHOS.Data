@@ -18,7 +18,7 @@ import yaml
 
 from .catalog import Catalog, Resource, load_catalog
 
-__all__ = ["Collections", "load_collections"]
+__all__ = ["Collections", "load_collections", "path_matches"]
 
 
 @dataclass
@@ -65,7 +65,7 @@ class Collections:
             # resources_matching narrows a sharded dataset to the shards these
             # patterns can reach; the glob below is still the real filter.
             for resource in list(dataset.resources_matching(patterns).values()):
-                if not any(_matches(resource.path, p) for p in patterns):
+                if not any(path_matches(resource.path, p) for p in patterns):
                     continue
                 selected[resource.key] = resource
                 for sidecar in resource.sidecars:
@@ -76,12 +76,17 @@ class Collections:
         return sorted(selected.values(), key=lambda r: r.key)
 
 
-def _matches(path: str, pattern: str) -> bool:
+def path_matches(path: str, pattern: str) -> bool:
     """Glob a resource path with proper directory semantics.
 
     ``*`` matches within one path segment; ``**`` matches any number of
     segments. Plain ``fnmatch`` would let ``*.tif`` match ``sub/dir/x.tif``,
     which quietly pulls in far more than a collections file asked for.
+
+    Public because the manifest writer selects files with the same rule -- see
+    ``maintain.manifest.select``. A dataset's ``ice2:include`` and a collection's
+    ``files:`` have to mean the same thing by the same code, or a pattern that
+    picks a file in one place would miss it in the other.
     """
     return _match_segments(path.split("/"), pattern.split("/"))
 

@@ -5,9 +5,32 @@ Each dataset directory under ``datasets/`` holds a hand-written ``dataset.yaml``
 inventory: paths, sizes, checksums).  Never edit ``datapackage.json`` by hand --
 re-run this instead.
 
-    ice2-catalog build                 # rebuild every dataset
-    ice2-catalog build landcover       # rebuild one
-    ice2-catalog build --check         # verify manifests are current
+    ice2-data catalog build                 # rebuild every dataset
+    ice2-data catalog build landcover       # rebuild one
+    ice2-data catalog build --check         # verify manifests are current
+
+A dataset whose ``source_dir`` holds more than the dataset -- a shared download
+directory nobody is going to tidy up -- narrows the inventory with ``ice2:include``
+and ``ice2:exclude``.  Both are lists of glob patterns matched against the path
+relative to ``source_dir``, by the same rule a tool's ``collections.yaml`` uses,
+imported from the reader so the two can never diverge.
+
+``source_dir`` is not forever, though: once a dataset has been uploaded (see
+``ice2-data catalog upload``) and verified, dCache -- not somebody's workstation
+or a shared-storage mount that may get cleaned up or reorganised -- is the
+authoritative copy. Setting ``ice2:uploaded: true`` in ``dataset.yaml`` says so,
+and ``source_dir`` must be removed at the same time: a rebuild then freezes the
+existing inventory (paths, sizes, hashes) exactly as last recorded, re-deriving
+only the metadata that never depended on the bytes -- title, licence,
+provenance, access. This is also what makes a dataset build-able again after
+its ``source_dir`` has genuinely disappeared.
+
+Provenance and licensing are checked here rather than left to a reviewer's eye.
+``ice2:origin`` says whether the data was downloaded, derived or created, and an
+origin that claims authorship has to name an author in ``contributors``.
+``licenses`` is a list because a dataset really can be under several; one entry
+may narrow itself to some of the files with ``ice2:applies_to``, which is
+rendered as a resource-level ``licenses`` override.
 
 A dataset that declares ``ice2:shard_depth: N`` is written *sharded*: the
 inventory is split across ``manifests/<prefix>.json``, one file per directory
@@ -15,6 +38,18 @@ prefix of N segments, and ``datapackage.json`` carries an ``ice2:shards`` index
 instead of a ``resources`` array.  ``ice2_data.catalog`` then parses only the
 shards a selection can match.  The grouping rule is imported from the reader
 rather than reimplemented -- writer and reader must agree on it exactly.
+
+Hashing is the expensive part -- this catalogue's source_dirs run to hundreds
+of gigabytes on shared storage -- so each dataset directory keeps a
+``.ice2-hash-cache.json`` alongside its datapackage.json: a private, unpublished
+map of relative path to the size/mtime last seen and the digest that went with
+them. A rebuild re-hashes a file only when its size or mtime has moved; the rest
+is a stat call. It is not a Data Package property (a maintainer's disk paths and
+timestamps mean nothing to a consumer) and it is not written at all under
+``--check``, which promises to write nothing. Whatever still needs hashing is
+read through a small thread pool: the cost is waiting on shared storage, not
+CPU, and hashlib releases the GIL while it works a chunk, so concurrent reads
+actually overlap.
 
 Spec: https://datapackage.org/standard/data-package/
 """
@@ -26,12 +61,14 @@ import json
 import mimetypes
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import yaml
 
 from ..catalog import CATALOG_ROLES, ROLE_KEY, ROLE_SOURCE, ROOT_SHARD, shard_key
-from . import datasets_dir
+from ..selection import path_matches
+from . import datasets_dir, resources_of
 
 # Scientific formats that ``mimetypes`` does not know about.
 EXTRA_MEDIATYPES = {
@@ -55,8 +92,51 @@ SHAPEFILE_SIDECAR_EXTS = [".shx", ".dbf", ".prj", ".cpg", ".qpj", ".qmd", ".sbn"
 ACCESS_CLASSES = ("public", "internal", "restricted")
 VISIBILITIES = ("public", "hidden")
 
+#: How this dataset came to exist. Declared, never inferred -- the same reason
+#: ``ice2:catalog_role`` is declared. "Somebody here made this" is a claim with
+#: licensing consequences, and guessing it from the presence of an author
+#: contributor would make it true by accident.
+ORIGIN_KEY = "ice2:origin"
+#: downloaded -- mirrored as obtained; the upstream terms are the terms.
+#: derived    -- computed from other data; ours, but downstream of somebody else's.
+#: created    -- produced here from scratch; ICE-2 holds the rights.
+ORIGINS = ("downloaded", "derived", "created")
+DEFAULT_ORIGIN = "downloaded"
+#: Prose saying *how* a derived dataset was computed. Already used by
+#: geothermal-resource before it was formalised here; required for `derived`,
+#: because "derived from what, by what method" is the whole content of the claim.
+DERIVATION_KEY = "ice2:derivation"
+
+#: Declared, not inferred, exactly like ``ice2:origin``. Once true, dCache holds
+#: the copy this manifest's hashes must match, ``source_dir`` stops being read,
+#: and it must be removed outright -- a stale path nobody rebuilds from is worse
+#: than no path, since nothing about the descriptor would say it stopped being
+#: the truth.
+UPLOADED_KEY = "ice2:uploaded"
+
+CONTRIBUTORS_KEY = "contributors"
+#: Data Package's suggested roles. `author` is the one that carries weight here:
+#: an origin of `derived` or `created` has to name who did it.
+CONTRIBUTOR_ROLES = ("author", "contributor", "maintainer", "publisher", "wrangler")
+AUTHOR_ROLE = "author"
+
+LICENSES_KEY = "licenses"
+#: Optional on one entry of ``licenses``: the glob patterns that licence covers,
+#: for a dataset whose files are not all under the same terms -- upstream
+#: originals beside conversions we made, say. Matched by the same rule as
+#: ``ice2:include`` and a collection's ``files:``.
+APPLIES_TO_KEY = "ice2:applies_to"
+
 # Where a sharded dataset keeps the split inventory, relative to its own directory.
 SHARD_DIR = "manifests"
+
+# Per-dataset, maintainer-local, never published -- see the module docstring.
+HASH_CACHE_NAME = ".ice2-hash-cache.json"
+
+# Hashing waits on shared storage, not CPU, so this is sized for concurrent I/O
+# rather than core count. High enough to hide per-file latency, low enough that
+# one build does not monopolise a filesystem other people are using too.
+HASH_WORKERS = 8
 
 # Never published: VCS plumbing, editor droppings, dataset-local docs.
 EXCLUDE_NAMES = {".git", ".datalad", ".gitattributes", ".gitignore", "__pycache__"}
@@ -72,6 +152,68 @@ def sha256_of(path: Path, chunk: int = 8 * 1024 * 1024) -> str:
         for block in iter(lambda: handle.read(chunk), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def load_hash_cache(dataset_dir: Path) -> dict:
+    """The dataset's hash cache, or an empty one if there isn't one yet.
+
+    Corrupt or unreadable is treated the same as absent -- worst case a stale or
+    broken cache costs a full re-hash, exactly like a first build. It must never
+    fail the build.
+    """
+    path = dataset_dir / HASH_CACHE_NAME
+    try:
+        return json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_hash_cache(dataset_dir: Path, cache: dict) -> None:
+    """Persist the hash cache. Best-effort: a cache write must not fail the build."""
+    try:
+        (dataset_dir / HASH_CACHE_NAME).write_text(json.dumps(cache))
+    except OSError as error:
+        print(f"warning: could not write {HASH_CACHE_NAME} in {dataset_dir}: {error}",
+              file=sys.stderr)
+
+
+def resolve_hashes(paths: list[Path], root: Path, cache: dict) -> dict[Path, tuple[int, str]]:
+    """SHA-256 (and size) for every path, as ``{path: (size, digest)}``.
+
+    Reuses ``cache`` when a path's size and mtime match what was last recorded
+    there -- the file has not moved since it was last hashed, so re-reading it
+    would only reproduce the same digest. Everything else is a genuine cache
+    miss and goes through the thread pool together, since those are exactly the
+    reads that are slow.
+
+    ``cache`` is updated in place with every freshly computed digest; the caller
+    decides whether that is worth writing back to disk.
+    """
+    relative = {path: path.relative_to(root).as_posix() for path in paths}
+    stats = {path: path.stat() for path in paths}
+
+    digests: dict[Path, str] = {}
+    misses: list[Path] = []
+    for path in paths:
+        stat = stats[path]
+        entry = cache.get(relative[path])
+        if entry and entry.get("size") == stat.st_size and entry.get("mtime_ns") == stat.st_mtime_ns:
+            digests[path] = entry["hash"]
+        else:
+            misses.append(path)
+
+    if misses:
+        with ThreadPoolExecutor(max_workers=min(HASH_WORKERS, len(misses))) as pool:
+            for path, digest in zip(misses, pool.map(sha256_of, misses)):
+                digests[path] = digest
+                stat = stats[path]
+                cache[relative[path]] = {
+                    "size": stat.st_size,
+                    "mtime_ns": stat.st_mtime_ns,
+                    "hash": digest,
+                }
+
+    return {path: (stats[path].st_size, digests[path]) for path in paths}
 
 
 def slugify(relative_path: str) -> str:
@@ -95,7 +237,23 @@ def mediatype_of(path: Path) -> str:
 
 
 def iter_data_files(root: Path):
+    """Every publishable file under ``root``, relative paths in sorted order.
+
+    ``rglob`` descends when ``root`` itself is a symbolic link -- which is what
+    lets a source_dir point into the curated namespace -- but it does **not**
+    descend into symbolic links found *inside* the tree. Such a directory would
+    therefore be silently absent from the manifest, so it is reported rather
+    than skipped in silence.
+    """
     for path in sorted(root.rglob("*")):
+        if path.is_symlink() and path.is_dir():
+            print(
+                f"warning: {path} is a symbolic link to a directory; its contents are "
+                f"NOT in the manifest. Point source_dir at the real tree, or replace "
+                f"the link with the files themselves.",
+                file=sys.stderr,
+            )
+            continue
         if not path.is_file():
             continue
         if any(part in EXCLUDE_NAMES for part in path.relative_to(root).parts):
@@ -108,13 +266,166 @@ def iter_data_files(root: Path):
         yield path
 
 
-def build_resource(path: Path, root: Path) -> dict:
+INCLUDE_KEY = "ice2:include"
+EXCLUDE_KEY = "ice2:exclude"
+
+
+def expand_pattern(pattern: str) -> list[str]:
+    """The glob patterns one ``ice2:include`` / ``ice2:exclude`` entry stands for.
+
+    Wildcard patterns are used as written, with the reader's rule: ``*`` inside
+    one path segment, ``**`` across any number of them.
+
+    A pattern with no wildcard is a literal path, and naming a folder is the
+    obvious way to say "this folder" -- so it stands for the path itself *and*
+    everything under it.  ``"test"`` therefore excludes the directory's whole
+    contents, not just a file that happens to be called ``test``.  Purely
+    syntactic: it does not look at the disk, so the descriptor means the same
+    thing on a machine where that directory has already been cleaned up.
+
+    A trailing slash asks for the subtree only, for the rare case where a file
+    and a directory share a name.
+    """
+    pattern = pattern.strip()
+    if not pattern:
+        raise SystemExit(f"{INCLUDE_KEY}/{EXCLUDE_KEY}: empty pattern")
+    if pattern.startswith("/"):
+        raise SystemExit(
+            f"{INCLUDE_KEY}/{EXCLUDE_KEY}: {pattern!r} starts with '/'. Patterns are "
+            "relative to source_dir; drop the leading slash.")
+    if pattern.endswith("/"):
+        return [pattern.rstrip("/") + "/**"]
+    if any(character in pattern for character in "*?["):
+        return [pattern]
+    return [pattern, pattern + "/**"]
+
+
+def _patterns(name: str, meta: dict, key: str) -> list[str] | None:
+    """Read one pattern list out of dataset.yaml, or None if it is absent."""
+    raw = meta.get(key)
+    if raw is None:
+        return None
+    if isinstance(raw, str) or not isinstance(raw, list):
+        raise SystemExit(f"{name}: {key} must be a list of patterns, got {type(raw).__name__}")
+    if not raw:
+        raise SystemExit(
+            f"{name}: {key} is an empty list, which would select nothing. "
+            f"Remove the key instead -- absent means 'no filter'.")
+    if not all(isinstance(entry, str) for entry in raw):
+        raise SystemExit(f"{name}: every entry in {key} must be a string")
+    return raw
+
+
+def select(name: str, root: Path, paths: list[Path], meta: dict) -> list[Path]:
+    """Narrow an inventory to what ``ice2:include`` / ``ice2:exclude`` ask for.
+
+    Exists because ``source_dir`` is frequently somebody else's download
+    directory -- a shared tree holding the dataset *and* the zip it was
+    extracted from, a wget log, a colleague's test clip -- that we have neither
+    the write access nor the standing to tidy up.  Without this the only way to
+    publish five rasters out of eighteen files was to move the other thirteen.
+
+    Two guard rails, because a silently smaller manifest is the failure mode
+    that matters here:
+
+    * an ``ice2:include`` pattern that matches nothing is an error, named.  A
+      typo, or a file renamed upstream, must not quietly shrink the dataset.
+    * an ``ice2:exclude`` pattern that matches nothing is only a warning -- the
+      stray it named may simply have been cleaned up since, and failing the
+      build for a cleanup that actually happened would be perverse.
+
+    Shapefile companions are added back after filtering, mirroring what the
+    reader does when a collection selects a ``.shp``: a ``.shp`` without its
+    ``.dbf`` and ``.shx`` is unreadable, and an include list is exactly where
+    somebody would forget them.
+    """
+    include = _patterns(name, meta, INCLUDE_KEY)
+    exclude = _patterns(name, meta, EXCLUDE_KEY)
+    if include is None and exclude is None:
+        return paths
+
+    relative = {path: path.relative_to(root).as_posix() for path in paths}
+
+    def matched_by(patterns: list[str]) -> dict[str, set[str]]:
+        """Which source patterns each path matched, keyed by the pattern as written."""
+        hits: dict[str, set[str]] = {pattern: set() for pattern in patterns}
+        for pattern in patterns:
+            globs = expand_pattern(pattern)
+            for path, rel in relative.items():
+                if any(path_matches(rel, glob) for glob in globs):
+                    hits[pattern].add(rel)
+        return hits
+
+    kept = set(paths)
+
+    if include is not None:
+        hits = matched_by(include)
+        empty = [pattern for pattern, found in hits.items() if not found]
+        if empty:
+            raise SystemExit(
+                f"{name}: {INCLUDE_KEY} pattern(s) match no file under {root}:\n"
+                + "".join(f"    {pattern}\n" for pattern in empty)
+                + "Fix the pattern, or drop it if the file is gone. An include list that\n"
+                  "silently matches nothing would publish a smaller dataset than intended.")
+        wanted = set().union(*hits.values())
+        kept = {path for path in paths if relative[path] in wanted}
+
+    if exclude is not None:
+        hits = matched_by(exclude)
+        for pattern, found in hits.items():
+            if not found:
+                print(f"warning: {name}: {EXCLUDE_KEY} pattern {pattern!r} matches nothing "
+                      f"under {root} -- already cleaned up, or a typo?", file=sys.stderr)
+        unwanted = set().union(*hits.values()) if hits else set()
+        kept = {path for path in kept if relative[path] not in unwanted}
+
+    # Drag shapefile companions back in, the same way the reader does.
+    for path in list(kept):
+        if path.suffix.lower() != ".shp":
+            continue
+        for extension in SHAPEFILE_SIDECAR_EXTS:
+            companion = path.with_suffix(extension)
+            if companion in relative and companion not in kept:
+                print(f"note: {name}: keeping {relative[companion]} -- companion of "
+                      f"{relative[path]}, which a filter would otherwise have dropped",
+                      file=sys.stderr)
+                kept.add(companion)
+
+    skipped = len(paths) - len(kept)
+    if skipped:
+        print(f"  {name}: {len(kept)} of {len(paths)} files under {root} "
+              f"selected, {skipped} filtered out", file=sys.stderr)
+    return [path for path in paths if path in kept]
+
+
+def frozen_resources(name: str, dataset_dir: Path) -> list[dict]:
+    """The inventory already on disk, for a dataset that will not be re-read.
+
+    Everything ``build_resource`` would derive from the file itself -- path,
+    bytes, hash, mediatype, shapefile sidecars -- is exactly what a maintainer
+    already checksummed and uploaded, so there is nothing to recompute. What is
+    dropped is any per-resource ``licenses`` override from the last render:
+    ``apply_resource_licenses`` is about to run again against the current
+    ``dataset.yaml``, and appending onto an already-applied copy would double it
+    on every subsequent freeze.
+    """
+    package_file = dataset_dir / "datapackage.json"
+    if not package_file.is_file():
+        raise SystemExit(
+            f"{name}: {UPLOADED_KEY} is true but there is no datapackage.json to freeze. "
+            f"Build once with source_dir set, upload it, then set {UPLOADED_KEY}: true."
+        )
+    resources = resources_of(json.loads(package_file.read_text()), dataset_dir)
+    return [{k: v for k, v in resource.items() if k != LICENSES_KEY} for resource in resources]
+
+
+def build_resource(path: Path, root: Path, size: int, digest: str) -> dict:
     relative = path.relative_to(root).as_posix()
     resource = {
         "name": slugify(relative),
         "path": relative,
-        "bytes": path.stat().st_size,
-        "hash": f"sha256:{sha256_of(path)}",
+        "bytes": size,
+        "hash": f"sha256:{digest}",
         "mediatype": mediatype_of(path),
     }
     if path.suffix.lower() == ".shp":
@@ -163,6 +474,182 @@ def validate_classification(name: str, meta: dict) -> tuple[str, str]:
     return access, visibility
 
 
+def validate_licenses(name: str, meta: dict) -> list[dict]:
+    """Check the ``licenses`` array, and return it.
+
+    Frictionless makes ``licenses`` a list already, so several licences need no
+    extension -- only checking. A dataset really does carry more than one: a
+    product whose documentation is CC-BY while the data is under bespoke terms,
+    or an upstream mirror beside conversions we made and licence ourselves.
+
+    An entry needs ``name`` (an Open Definition id) or ``path`` (a URL) to say
+    anything at all; one carrying only a ``title`` reads as a licence and
+    identifies nothing, which is worse than an honest
+    ``ice2:license_status: unresolved``.
+    """
+    licenses = meta.get(LICENSES_KEY)
+    if licenses is None:
+        return []
+    if not isinstance(licenses, list):
+        raise SystemExit(
+            f"{name}: {LICENSES_KEY} must be a list, even with one entry -- "
+            "a dataset can be under several."
+        )
+    for index, entry in enumerate(licenses):
+        where = f"{name}: {LICENSES_KEY}[{index}]"
+        if not isinstance(entry, dict):
+            raise SystemExit(f"{where} must be a mapping with 'name' and/or 'path'.")
+        if not (entry.get("name") or entry.get("path")):
+            raise SystemExit(
+                f"{where} has neither 'name' nor 'path'. Give an Open Definition id "
+                "(name: CC-BY-4.0) or a URL to the terms (path: https://...); a bare "
+                "title names no licence. If the terms are not settled, drop the entry "
+                "and set ice2:license_status: unresolved instead."
+            )
+        patterns = entry.get(APPLIES_TO_KEY)
+        if patterns is None:
+            continue
+        if not isinstance(patterns, list) or not all(
+            isinstance(p, str) and p for p in patterns
+        ):
+            raise SystemExit(f"{where}: {APPLIES_TO_KEY} must be a list of glob patterns.")
+    return licenses
+
+
+def apply_resource_licenses(name: str, resources: list[dict], licenses: list[dict]) -> None:
+    """Attach per-file licences, for a dataset whose files differ.
+
+    Frictionless lets a *resource* carry its own ``licenses``, which override the
+    package's -- so files under different terms are expressible without splitting
+    the dataset in two. That is the point: the C3S netCDF originals and the
+    GeoTIFFs we converted from them are one dataset by every other measure, and
+    forcing them apart to record two licences would be the tail wagging the dog.
+
+    Every licence stays in the package-level array as well, ``ice2:applies_to``
+    and all. A reader that only looks at the package then sees the full set --
+    conservative, and true -- while one that looks at a resource gets the exact
+    answer. Dropping the narrowed ones from the package instead would leave a
+    dataset whose licence list omits most of its licences.
+
+    A pattern that matches nothing is an error, exactly as ``ice2:include`` is:
+    silently licensing no files is how a dataset ends up published under terms
+    nobody applied.
+    """
+    narrowed = [entry for entry in licenses if entry.get(APPLIES_TO_KEY)]
+    if not narrowed:
+        return
+
+    for entry in narrowed:
+        patterns = entry[APPLIES_TO_KEY]
+        # The resource-level copy drops applies_to: it is a build-time
+        # instruction about which files to attach to, and on the file it was
+        # attached to it answers a question nobody is asking.
+        published = {k: v for k, v in entry.items() if k != APPLIES_TO_KEY}
+        matched = 0
+        for resource in resources:
+            if any(path_matches(resource["path"], p) for p in patterns):
+                resource.setdefault(LICENSES_KEY, []).append(published)
+                matched += 1
+        if not matched:
+            raise SystemExit(
+                f"{name}: {LICENSES_KEY} entry "
+                f"{entry.get('name') or entry.get('path')!r} has {APPLIES_TO_KEY} "
+                f"{patterns}, which matches none of the {len(resources)} files in this "
+                "dataset. Fix the pattern, or drop the key so the licence covers "
+                "everything."
+            )
+
+    uncovered = [r["path"] for r in resources if LICENSES_KEY not in r]
+    if uncovered and len(narrowed) == len(licenses):
+        # Every licence was narrowed, so these files inherit an empty package
+        # licence -- described by nothing at all.
+        shown = ", ".join(uncovered[:5])
+        more = "" if len(uncovered) <= 5 else f", and {len(uncovered) - 5} more"
+        print(
+            f"warning: {name}: every {LICENSES_KEY} entry is narrowed with "
+            f"{APPLIES_TO_KEY}, so {len(uncovered)} file(s) are covered by no licence "
+            f"at all: {shown}{more}. Add a licence without {APPLIES_TO_KEY} for the "
+            "rest, or widen one of the patterns.",
+            file=sys.stderr,
+        )
+
+
+def validate_provenance(name: str, meta: dict) -> str:
+    """Check ``ice2:origin`` and ``contributors``, defaulting origin to downloaded.
+
+    Most of this catalogue is mirrored data: somebody else made it, we hold a
+    copy, and the upstream terms are the terms. Some of it is not -- the GeoTIFF
+    conversions in ``landcover``, the whole of ``geothermal-resource`` -- and for
+    those the licence question has a different answer, because the rights are
+    ours. Nothing in a descriptor said which kind a dataset was, so it had to be
+    read out of prose in ``ice2:attribution``, one dataset at a time.
+
+    ``downloaded`` is the default because it is both the common case and the
+    conservative one: claiming less about authorship than is true is safe, and
+    claiming more is not.
+    """
+    origin = meta.setdefault(ORIGIN_KEY, DEFAULT_ORIGIN)
+    if origin not in ORIGINS:
+        raise SystemExit(f"{name}: {ORIGIN_KEY} must be one of {ORIGINS}, got {origin!r}")
+
+    contributors = meta.get(CONTRIBUTORS_KEY) or []
+    if not isinstance(contributors, list):
+        raise SystemExit(f"{name}: {CONTRIBUTORS_KEY} must be a list of mappings.")
+    for index, person in enumerate(contributors):
+        where = f"{name}: {CONTRIBUTORS_KEY}[{index}]"
+        if not isinstance(person, dict):
+            raise SystemExit(f"{where} must be a mapping with at least a 'title'.")
+        if not person.get("title"):
+            raise SystemExit(f"{where} needs a 'title' -- the person or group's name.")
+        roles = person.get("roles", [])
+        if isinstance(roles, str):
+            # Data Package v1 spelled this `role`, singular and scalar. Reject
+            # rather than coerce: a descriptor that half-follows two versions of
+            # the spec is worse than one that is told which it is following.
+            raise SystemExit(
+                f"{where}: 'roles' is a list in Data Package v2 -- write "
+                f"roles: [{roles}], not roles: {roles}."
+            )
+        if not isinstance(roles, list):
+            raise SystemExit(f"{where}: 'roles' must be a list.")
+        for role in roles:
+            if role not in CONTRIBUTOR_ROLES:
+                raise SystemExit(
+                    f"{where}: unknown role {role!r}. Use one of {CONTRIBUTOR_ROLES}."
+                )
+
+    if origin == DEFAULT_ORIGIN:
+        return origin
+
+    authors = [p for p in contributors if AUTHOR_ROLE in (p.get("roles") or [])]
+    if not authors:
+        raise SystemExit(
+            f"{name}: {ORIGIN_KEY} is {origin!r}, which claims this data was made here, "
+            f"so it has to say by whom. Add a {CONTRIBUTORS_KEY} entry with "
+            f'roles: [{AUTHOR_ROLE}]:\n'
+            f"    {CONTRIBUTORS_KEY}:\n"
+            f"      - title: Some Person\n"
+            f"        roles: [{AUTHOR_ROLE}]\n"
+            f"        organization: Forschungszentrum Julich, ICE-2"
+        )
+
+    if origin == "derived":
+        if not meta.get("sources"):
+            raise SystemExit(
+                f"{name}: {ORIGIN_KEY}: derived needs 'sources' saying what it was "
+                "derived FROM. Derived data inherits obligations from its inputs; a "
+                "derivation with no named input cannot be checked against them."
+            )
+        if not meta.get(DERIVATION_KEY):
+            raise SystemExit(
+                f"{name}: {ORIGIN_KEY}: derived needs {DERIVATION_KEY} saying HOW -- the "
+                "method, parameters and inputs, in enough detail that somebody could "
+                "redo it. Without that, 'derived' says only that the numbers are not "
+                "upstream's, which is the least useful half of the claim."
+            )
+    return origin
+
+
 def shard_path(prefix: str) -> str:
     """Where one shard's inventory lives, relative to the dataset directory."""
     return f"{SHARD_DIR}/{prefix}.json"
@@ -180,26 +667,71 @@ def dumps(payload: dict) -> str:
     return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
 
 
-def render_dataset(dataset_dir: Path) -> dict[str, str]:
+def render_dataset(dataset_dir: Path, check: bool = False) -> dict[str, str]:
     """Build every generated file for one dataset.
 
     Returns ``{path relative to dataset_dir -> file text}``: always
     ``datapackage.json``, plus one ``manifests/<prefix>.json`` per shard when the
     dataset declares ``ice2:shard_depth``.  Rendering the whole set in memory is
     what lets ``--check`` detect a stale *shard* as readily as a stale index.
+
+    ``check`` gates only the hash cache write at the end -- ``--check`` promises
+    to write nothing, but it may still *read* an existing cache to skip hashing
+    files that have not changed.
     """
     meta = yaml.safe_load((dataset_dir / "dataset.yaml").read_text())
     validate_classification(dataset_dir.name, meta)
+    validate_provenance(dataset_dir.name, meta)
+    licenses = validate_licenses(dataset_dir.name, meta)
 
-    source_dir = Path(meta.pop("source_dir")).expanduser()  # local to the maintainer, never published
-    if not source_dir.is_absolute():
-        source_dir = (dataset_dir / source_dir).resolve()
-    if not source_dir.is_dir():
-        raise SystemExit(f"{dataset_dir.name}: source_dir does not exist: {source_dir}")
+    # Both local to the maintainer, never published -- see the module docstring.
+    uploaded = bool(meta.pop(UPLOADED_KEY, False))
+    raw_source_dir = meta.pop("source_dir", None)
 
-    resources = [build_resource(p, source_dir) for p in iter_data_files(source_dir)]
-    if not resources:
-        raise SystemExit(f"{dataset_dir.name}: no data files found under {source_dir}")
+    if uploaded:
+        if raw_source_dir is not None:
+            raise SystemExit(
+                f"{dataset_dir.name}: declares {UPLOADED_KEY}: true and still has "
+                f"source_dir: {raw_source_dir!r}. Once uploaded, dCache is the source of "
+                "truth and source_dir is never read again -- remove it."
+            )
+        resources = frozen_resources(dataset_dir.name, dataset_dir)
+    else:
+        if raw_source_dir is None:
+            raise SystemExit(
+                f"{dataset_dir.name}: source_dir is required, unless {UPLOADED_KEY}: true "
+                "says the dataset was already uploaded and dCache is now the source of truth."
+            )
+        source_dir = Path(raw_source_dir).expanduser()
+        # Only a *relative* source_dir is resolved, and only to make it absolute.
+        # An absolute one is used exactly as written, symbolic links and all: when
+        # it names the curated namespace (/fast/central/shared_data/...), that is
+        # the path worth recording, because it is the one that stays correct when
+        # the storage behind it moves. Resolving it here would silently write the
+        # transient physical location into the manifest instead.
+        if not source_dir.is_absolute():
+            source_dir = (dataset_dir / source_dir).resolve()
+        if not source_dir.is_dir():
+            raise SystemExit(f"{dataset_dir.name}: source_dir does not exist: {source_dir}")
+
+        found = list(iter_data_files(source_dir))
+        if not found:
+            raise SystemExit(f"{dataset_dir.name}: no data files found under {source_dir}")
+        selected = select(dataset_dir.name, source_dir, found, meta)
+        if not selected:
+            raise SystemExit(
+                f"{dataset_dir.name}: {INCLUDE_KEY}/{EXCLUDE_KEY} filtered out every one of the "
+                f"{len(found)} files under {source_dir}")
+
+        cache = load_hash_cache(dataset_dir)
+        hashes = resolve_hashes(selected, source_dir, cache)
+        if not check:
+            save_hash_cache(dataset_dir, cache)
+        resources = [build_resource(p, source_dir, *hashes[p]) for p in selected]
+
+    # After the inventory exists, because a narrowed licence has to be checked
+    # against the files it claims to cover.
+    apply_resource_licenses(dataset_dir.name, resources, licenses)
 
     depth = int(meta.get("ice2:shard_depth", 0) or 0)
     if depth < 0:
@@ -311,7 +843,7 @@ def catalog_meta(catalog_root: Path) -> dict:
         raise SystemExit(
             f"catalog.yaml declares {ROLE_KEY}: {role!r}, but this is the catalogue being built "
             f"from dataset.yaml files, which makes it {ROLE_SOURCE!r}. The published copy gets "
-            "its role set by `ice2-catalog publish`; do not set it by hand."
+            "its role set by `ice2-data catalog publish`; do not set it by hand."
         )
     return meta
 
@@ -326,6 +858,13 @@ def build_catalog(catalog_root: Path, dataset_dirs: list[Path]) -> dict:
                 "name": package["name"],
                 "path": f"datasets/{dataset_dir.name}/datapackage.json",
                 "title": package.get("title", ""),
+                # The publisher's own release string. Promoted for the same reason
+                # as license_status: "which release of the upstream product is
+                # this?" is a question a consumer asks before deciding to fetch
+                # 60 GiB, and answering it should not cost an inventory read.
+                # Omitted rather than blanked when a dataset does not declare one,
+                # so absent means "nobody has recorded it", not "unversioned".
+                **({"version": package["version"]} if package.get("version") else {}),
                 "ice2:access": package.get("ice2:access", "public"),
                 "ice2:visibility": package.get("ice2:visibility", "public"),
                 "ice2:total_bytes": package["ice2:total_bytes"],
@@ -361,7 +900,7 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
     for dataset_dir in selected:
         if not (dataset_dir / "dataset.yaml").exists():
             raise SystemExit(f"no dataset.yaml in {dataset_dir}")
-        files = render_dataset(dataset_dir)
+        files = render_dataset(dataset_dir, check=check)
         package = json.loads(files["datapackage.json"])
 
         if check:
@@ -383,7 +922,7 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
         if not catalog_path.exists() or catalog_path.read_text() != catalog_text:
             stale.append(catalog_path)
         if stale:
-            print("Out of date (re-run `ice2-catalog build`):", file=sys.stderr)
+            print("Out of date (re-run `ice2-data catalog build`):", file=sys.stderr)
             for path in stale:
                 print(f"  {path.relative_to(catalog_root)}", file=sys.stderr)
             return 1

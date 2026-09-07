@@ -1,0 +1,201 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+
+site_name: ice2-data
+site_description: Shared, deduplicating data access for ICE-2 scientific software
+site_author: ICE-2 Jülich Systems Analysis
+
+# The canonical URL is whatever the host serves this from. GitLab CI sets
+# CI_PAGES_URL for a Pages job; SITE_URL is the manual override. The localhost
+# default keeps `mkdocs serve` honest -- an absolute site_url baked in from
+# somebody's laptop makes every <link rel="canonical"> and the 404 page's
+# root-absolute asset paths point at a host that does not serve this site.
+site_url: !ENV [SITE_URL, CI_PAGES_URL, "http://localhost:8000/"]
+
+repo_url: https://jugit.fz-juelich.de/iek-3/shared-code/ice2-data
+repo_name: iek-3/shared-code/ice2-data
+edit_uri: edit/initial_dev/docs/
+
+# NOTE: no `copyright:` key, deliberately. docs/overrides/partials/copyright.html
+# renders config.copyright as a plain line ABOVE the institutional logo band, so
+# setting it puts a stray "Forschungszentrum Julich GmbH, ICE-2" on its own above
+# a footer that already names the institute in full underneath the logos. TSAM
+# and GLAES leave it unset for the same reason; the partial keeps the `{% if %}`
+# only so a project that wants a real copyright line can still set one.
+
+docs_dir: docs
+site_dir: site
+
+validation:
+    links:
+        anchors: warn
+        absolute_links: warn
+        unrecognized_links: warn
+
+theme:
+    name: material
+    custom_dir: docs/overrides
+    # NOTE: no `logo:`/`favicon:` keys. ice2-data has no product mark of its
+    # own, and the only lockup in play is the institution's, which is not a
+    # substitute for one. Material's defaults are used until there is a real
+    # logo; add both keys together when there is. (RESKit and ETHOS.GLAES have
+    # the same gap and are configured the same way.)
+    font:
+        text: Roboto
+        code: Roboto Mono
+    features:
+        - navigation.tabs
+        - navigation.sections
+        - navigation.indexes
+        - navigation.top
+        - navigation.path
+        - navigation.tracking
+        - content.code.copy
+        - content.code.annotate
+        - content.tabs.link
+        - content.action.edit
+        - content.tooltips
+        - search.suggest
+        - search.highlight
+        - search.share
+        - toc.follow
+    palette:
+        - media: "(prefers-color-scheme: light)"
+          scheme: default
+          primary: custom
+          accent: custom
+          toggle:
+              icon: material/brightness-7
+              name: Switch to dark mode
+        - media: "(prefers-color-scheme: dark)"
+          scheme: slate
+          primary: custom
+          accent: custom
+          toggle:
+              icon: material/brightness-4
+              name: Switch to light mode
+
+plugins:
+    - search
+
+    - mkdocstrings:
+          default_handler: python
+          handlers:
+              python:
+                  paths: [src]
+                  options:
+                      show_source: true
+                      show_root_heading: true
+                      members_order: source
+                      # The docstrings here carry no formal section headers, so
+                      # a pinned style would make griffe warn on every one of
+                      # them. `auto` detects per docstring and stays quiet.
+                      docstring_style: auto
+                      docstring_section_style: table
+                      summary: true
+                      show_symbol_type_heading: true
+                      show_symbol_type_toc: true
+                      separate_signature: true
+                      show_signature_annotations: true
+                      signature_crossrefs: true
+                      merge_init_into_class: true
+                      show_bases: true
+
+markdown_extensions:
+    - admonition
+    - attr_list
+    - abbr
+    - def_list
+    - footnotes
+    - md_in_html
+    - tables
+    - pymdownx.details
+    - pymdownx.inlinehilite
+    - pymdownx.mark
+    - pymdownx.highlight:
+          anchor_linenums: true
+          line_spans: __span
+    # No mermaid custom_fence: diagrams are TikZ, rendered to committed SVGs by
+    # docs/diagrams/render.py. superfences is still needed for nested fences
+    # inside admonitions and tabs.
+    - pymdownx.superfences
+    - pymdownx.tabbed:
+          alternate_style: true
+    - pymdownx.emoji:
+          emoji_index: !!python/name:material.extensions.emoji.twemoji
+          emoji_generator: !!python/name:material.extensions.emoji.to_svg
+    - pymdownx.snippets:
+          base_path: ['.']
+    - toc:
+          permalink: true
+          toc_depth: 4
+
+# Under docs/ but not documentation, so not copied into the built site:
+#   overrides/  Material theme template source (see theme.custom_dir)
+#   diagrams/   TikZ sources and the render script. The rendered SVGs they
+#               produce live in assets/diagrams/ and ARE published; the .tex
+#               and the renderer are edit-time tooling.
+# The leading slash anchors to the docs root. Without it, gitignore semantics
+# match a directory of that name at ANY depth -- and `diagrams/` then also
+# excluded assets/diagrams/, i.e. the rendered SVGs the pages actually embed.
+exclude_docs: |
+  /overrides/
+  /diagrams/
+
+extra:
+    generator: false
+
+extra_css:
+    - stylesheets/extra.css
+
+nav:
+    - Home:
+          - index.md
+          - Installation: installation.md
+          - Glossary: reference/glossary.md
+          - Contributing: contributing.md
+          - Legal Notice: legal-notice.md
+
+    - Tutorials:
+          - Overview: tutorials/index.md
+          - Your first fetch: tutorials/first-fetch.md
+          - Use it from your own package: tutorials/use-from-a-library.md
+          - Add a dataset to the catalogue: tutorials/add-a-dataset.md
+
+    - How-to guides:
+          - Overview: how-to/index.md
+          - Getting data:
+                - Point the cache somewhere: how-to/configure-the-cache.md
+                - Use data already on disk: how-to/use-data-already-on-disk.md
+                - Work with restricted data: how-to/restricted-data.md
+                - Check and repair the cache: how-to/verify-and-repair.md
+                - Run it in CI: how-to/run-in-ci.md
+          - Building on it:
+                - Write a collections file: how-to/write-a-collections-file.md
+                - Stage uncatalogued data: how-to/stage-unpublished-data.md
+          - Maintaining a catalogue:
+                - Describe a dataset: how-to/describe-a-dataset.md
+                - Upload a dataset: how-to/upload-a-dataset.md
+                - Publish the catalogue: how-to/publish-the-catalogue.md
+                - Withdraw a dataset: how-to/withdraw-a-dataset.md
+                - Bootstrap a new catalogue: how-to/bootstrap-a-catalogue.md
+
+    - Explanation:
+          - Overview: explanation/index.md
+          - Why one catalogue: explanation/deduplication.md
+          - Caches, classes and roots: explanation/caches-and-access.md
+          - The catalogue format: explanation/catalogue-format.md
+          - Licensing and immutability: explanation/licensing.md
+
+    - Reference:
+          - Command line:
+                - ice2-data: reference/cli/ice2-data.md
+                - ice2-data catalog: reference/cli/catalog.md
+          - Configuration: reference/configuration.md
+          - File formats: reference/schemas.md
+          - API:
+                - reference/api/index.md
+                - Catalogue and collections: reference/api/catalog.md
+                - Configuration and access: reference/api/configuration.md
+                - Integrity and staging: reference/api/integrity.md
+                - Maintainer tooling: reference/api/maintain.md
+          - Glossary: reference/glossary.md

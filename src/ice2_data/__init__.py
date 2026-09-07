@@ -17,19 +17,30 @@ from .access import AccessError, Location, locate
 from .catalog import Catalog, Dataset, Resource, load_catalog
 from .config import (
     ENV_VAR,
+    RESTRICTED_ENV_VAR,
+    STAGING_ENV_VAR,
     Resolved,
+    Roots,
     config_path,
     config_sources,
     dataset_roots,
     find_project_config,
     resolve_cache_dir,
+    resolve_public_cache,
+    resolve_restricted_cache,
+    resolve_roots,
+    resolve_skip_unavailable,
+    resolve_staging_cache,
     set_dataset_root,
     set_option,
     unset_dataset_root,
     unset_option,
 )
-from .fetch import DataFiles, cache_dir, download, local_path, plan
+from .retrieval import DataFiles, cache_dir, download, local_path, plan
+from .materialize import materialize
 from .selection import Collections, load_collections
+from .staging import apply_staging, classify_staged, staged_only
+from .verify import Finding, repair, verify
 
 __all__ = [
     "Catalog",
@@ -39,9 +50,15 @@ __all__ = [
     "DataFiles",
     "ENV_VAR",
     "Location",
+    "Finding",
+    "RESTRICTED_ENV_VAR",
     "Resolved",
     "Resource",
+    "Roots",
+    "STAGING_ENV_VAR",
+    "apply_staging",
     "cache_dir",
+    "classify_staged",
     "config_path",
     "config_sources",
     "download",
@@ -50,16 +67,25 @@ __all__ = [
     "load_catalog",
     "load_collections",
     "local_path",
+    "materialize",
     "plan",
+    "repair",
     "resolve",
+    "resolve_public_cache",
+    "resolve_restricted_cache",
+    "resolve_roots",
+    "resolve_skip_unavailable",
+    "resolve_staging_cache",
     "dataset_roots",
     "find_project_config",
     "locate",
     "resolve_cache_dir",
     "set_dataset_root",
+    "staged_only",
     "set_option",
     "unset_dataset_root",
     "unset_option",
+    "verify",
 ]
 
 __version__ = "0.1.0"

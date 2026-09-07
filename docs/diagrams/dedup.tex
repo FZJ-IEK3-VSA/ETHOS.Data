@@ -1,0 +1,34 @@
+% Why deduplication works: two tools, one catalogue, one derived path.
+% Replaces the mermaid flowchart in explanation/deduplication.md.
+\begin{tikzpicture}[node distance=8mm and 14mm]
+
+% -- the one description everybody resolves against
+\node[artifact, draw=brand, fill=fillbrand, minimum width=52mm, align=center]
+  (cat) {\textbf{ice2-data-catalog}\\[0.4mm]
+         \textcolor{muted}{paths $\cdot$ sizes $\cdot$ SHA-256 $\cdot$ licences}};
+
+% -- each tool names only slices of it
+\node[artifact, below left=14mm and 6mm of cat, minimum width=44mm]
+  (rk) {\textbf{RESKit}\\[0.3mm]\textcolor{muted}{collections.yaml}};
+\node[artifact, below right=14mm and 6mm of cat, minimum width=44mm]
+  (other) {\textbf{another tool}\\[0.3mm]\textcolor{muted}{collections.yaml}};
+
+\draw[flow] (cat.south) -- ++(0,-3mm) -| (rk.north);
+\draw[flow] (cat.south) -- ++(0,-3mm) -| (other.north);
+
+\node[note, right=5mm of cat, text width=34mm, align=left]
+  {no paths,\\no checksums,\\no URLs};
+
+% -- both derive the SAME path, so the second one finds the file there
+\node[store, below=18mm of cat, minimum width=64mm, minimum height=16mm]
+  (cache) {\textbf{shared cache}\\[0.3mm]\texttt{\textless dataset\textgreater/\textless path\textgreater}};
+
+\draw[flowaccent] (rk.south)    -- node[edgelabel, sloped, above]{resolves to} (cache.west);
+\draw[flowaccent] (other.south) -- node[edgelabel, sloped, above]{resolves to} (cache.east);
+
+\node[note, below=5mm of cache, text width=76mm]
+  {Same catalogue entry $\Rightarrow$ same path. The second tool to ask\\
+   finds the file already there --- nothing synchronises, because\\
+   nothing needs to.};
+
+\end{tikzpicture}

@@ -1,0 +1,69 @@
+% The catalogue lifecycle, as the maintainer guides walk it. A plain use case
+% diagram would hide the thing that matters most here: these steps are ORDERED,
+% and withdrawal runs them in the opposite order from publication. So the ovals
+% are laid out along the sequence the runbooks actually follow, with the command
+% for each step underneath it.
+\begin{tikzpicture}[
+  node distance=6mm and 11mm,
+  writecase/.append style={text width=28mm, minimum width=0mm},
+  lifecycle/.style={flow, draw=brand},
+  cmd/.append style={align=center},
+]
+
+\node[actor] (maint) {Catalogue\\maintainer};
+
+% ---- prerequisites -------------------------------------------------------
+\node[writecase, above right=17mm and 14mm of maint] (boot)  {Bootstrap a catalogue};
+\node[writecase, right=of boot]                      (probe) {Check the store};
+\node[cmd, below=2.5mm of probe] (probe-c) {catalog check-store};
+\draw[uses] (boot) -- node[edgelabel, above]{first} (probe);
+
+% ---- the happy path, left to right ---------------------------------------
+\node[writecase, below=15mm of boot] (describe) {Describe a dataset};
+\node[writecase, right=of describe]  (build)    {Build the manifest};
+\node[writecase, right=of build]     (upload)   {Upload the bytes};
+\node[writecase, right=of upload]    (publish)  {Publish the catalogue};
+
+\node[cmd, below=2.5mm of describe] (describe-c) {dataset.yaml};
+\node[cmd, below=2.5mm of build]    (build-c)    {catalog build};
+\node[cmd, below=2.5mm of upload]   (upload-c)   {catalog upload};
+\node[cmd, below=2.5mm of publish]  (publish-c)  {catalog publish};
+
+\draw[lifecycle] (describe) -- node[edgelabel, above]{then} (build);
+\draw[lifecycle] (build)    -- node[edgelabel, above]{then} (upload);
+\draw[lifecycle] (upload)   -- node[edgelabel, above]{then} (publish);
+
+% ---- withdrawal: the same two objects, deliberately reversed -------------
+\node[writecase, below=15mm of upload]  (unpub)  {Unpublish the entry};
+\node[writecase, right=of unpub]        (delete) {Delete the bytes};
+\node[cmd, below=2.5mm of unpub]  (unpub-c)  {catalog publish};
+\node[cmd, below=2.5mm of delete] (delete-c) {rclone purge};
+\draw[lifecycle, draw=accent] (unpub) -- node[edgelabel, above]{then} (delete);
+
+% ---- site administration, which is not catalogue publishing at all -------
+\node[writecase, below=15mm of describe] (link) {Build the shared cache};
+\node[cmd, below=2.5mm of link] (link-c) {catalog link-cache};
+
+\draw[link] (maint) |- (boot);
+\draw[link] (maint) -- (describe);
+\draw[link] (maint) |- (link);
+% Withdrawal hangs off publication rather than off the actor: it IS the publish
+% step, run against a dataset that has been hidden. Drawing it from the actor
+% instead sent a long line straight through the link-cache oval, which read as
+% a connection between two unrelated jobs.
+\draw[lifecycle, draw=accent, dash pattern=on 2pt off 2pt]
+  (publish.south) -- node[edgelabel, pos=0.66, below left, xshift=-1mm]{to withdraw} (unpub.north east)
+  ;
+
+\begin{scope}[on background layer]
+  \node[boundarybox, fit=(boot)(probe)(probe-c)(describe)(build)(upload)(publish)
+                        (describe-c)(build-c)(upload-c)(publish-c)
+                        (unpub)(delete)(unpub-c)(delete-c)(link)(link-c)] (sys) {};
+\end{scope}
+\node[boundarylabel, anchor=north west] at (sys.north west) {ice2-data catalog};
+
+\node[note, below=5mm of sys.south, text width=96mm]
+  {Withdrawal reverses the order: unpublish the entry \emph{before} deleting the
+   bytes, or the public catalogue points at a path that 404s.};
+
+\end{tikzpicture}

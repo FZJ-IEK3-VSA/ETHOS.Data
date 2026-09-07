@@ -38,38 +38,38 @@ ice2-data -c collections.yaml fetch test_suite    # download it
 
 ## Documentation
 
-### Using data
+Full documentation lives in [`docs/`](docs/) — tutorials, how-to guides,
+explanation and reference, organised by what you came for:
 
-- **[GETTING-DATA.md](GETTING-DATA.md)** — set up a cache folder and download
-  data: where it's stored, how to point it somewhere specific, and the
-  `list`/`info`/`plan`/`fetch` CLI.
-- **[USING-IN-A-LIBRARY.md](USING-IN-A-LIBRARY.md)** — wire a Python package
-  (RESKit is the worked example) up to the catalogue: `collections.yaml`, and
-  the thin wrapper module pattern.
+```bash
+mkdocs serve      # live preview on http://localhost:8000
+mkdocs build      # static site into ./site
+```
 
-### Maintaining a catalogue
+| | |
+|---|---|
+| [Your first fetch](docs/tutorials/first-fetch.md) | install, point at a catalogue, download a collection |
+| [Use it from your own package](docs/tutorials/use-from-a-library.md) | `collections.yaml` and the thin wrapper module pattern |
+| [Add a dataset to the catalogue](docs/tutorials/add-a-dataset.md) | the maintainer round trip, end to end |
+| [How-to guides](docs/how-to/index.md) | cache configuration, local data, restricted data, verify/repair, CI, uploading, publishing |
+| [Explanation](docs/explanation/index.md) | why one catalogue; caches, classes and roots; the catalogue format; licensing |
+| [Reference](docs/reference/cli/ice2-data.md) | both CLIs, configuration keys, file formats, glossary, API |
 
-The `ice2-catalog` command, installed alongside `ice2-data`, is the writing
+## Maintaining a catalogue
+
+The `ice2-data catalog` command, installed alongside `ice2-data`, is the writing
 half of the same format. A catalogue repository holds metadata only; the code
 that generates and publishes it lives here, so that the descriptors written and
 the descriptors read can never drift apart.
 
 ```bash
-ice2-catalog build                        # regenerate manifests from dataset.yaml
-ice2-catalog publish ../ice2-data-catalog # emit the public subset
-ice2-catalog upload <dataset>             # put the bytes on dCache, then verify
-ice2-catalog check-access                 # probe dCache permissions
+ice2-data catalog build                        # regenerate manifests from dataset.yaml
+ice2-data catalog publish ../ice2-data-catalog # emit the public subset
+ice2-data catalog upload <dataset>             # put the bytes on dCache, then verify
+ice2-data catalog check-store                 # probe dCache permissions
 ```
 
-- **[ADDING-DATA.md](ADDING-DATA.md)** — describe a new dataset, build its
-  manifest, and publish the catalogue entry.
-- **[UPLOAD.md](UPLOAD.md)** — one-time credential setup, then the runbook for
-  putting a dataset's bytes on dCache.
-- **[DELETE.md](DELETE.md)** — remove files or a whole dataset, and the right
-  order to unpublish one first.
-- **[SETUP.md](SETUP.md)** — day-zero bootstrap for a brand new catalogue.
-
-`upload` and `check-access` need `rclone` and `oidc-agent` on PATH. Nothing
+`upload` and `check-store` need `rclone` and `oidc-agent` on PATH. Nothing
 else here has dependencies beyond the package's own.
 
 ## Licensing

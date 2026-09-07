@@ -1,0 +1,136 @@
+# Configuration
+
+Every setting, where it can be written, and how it is resolved. The
+authoritative answer for any given machine is always:
+
+```bash
+ice2-data config show
+```
+
+which prints the resolved values, the provenance of each, and every file
+consulted along the way.
+
+## Precedence
+
+First match wins:
+
+| | Source | |
+|---|---|---|
+| 1 | an explicit argument | `--root` / `root=` (public cache only) |
+| 2 | an environment variable | `$ICE2_DATA_DIR`, `$ICE2_RESTRICTED_DIR`, … |
+| 3 | project config | `./ice2-data.yaml`, searched upward from the cwd |
+| 4 | user config | the per-user config directory, all platforms |
+| 5 | environment config | `<sys.prefix>/etc/ice2-data/config.yaml` |
+| 6 | site config | the machine-wide config directory |
+| 7 | built-in default | the per-user OS cache directory (public cache only) |
+
+Layer 3 is found by walking up from the current directory, the way `git` finds
+`.git`. It is for people who want the setting to be **visible**: an ordinary
+file sitting next to the work it belongs to, which can be committed so a whole
+team shares one answer.
+
+Only the public cache has a layer 7. The restricted and staging roots have no
+built-in default on purpose — where licensed bytes land is a decision somebody
+has to make out loud, and staging is opt-in.
+
+## Scopes
+
+`--scope` on every `config set-*` / `unset-*` command:
+
+| Scope | File |
+|---|---|
+| `project` | `./ice2-data.yaml` (created in the current directory; updates the nearest existing one if there is one above) |
+| `user` (default) | the per-user config directory, e.g. `~/.config/ice2-data/config.yaml` |
+| `environment` | `<sys.prefix>/etc/ice2-data/config.yaml` |
+| `site` | the machine-wide config directory, e.g. `/etc/xdg/ice2-data/config.yaml` |
+
+Exact locations are platform-dependent (via
+[platformdirs](https://platformdirs.readthedocs.io/)); `config show` prints the
+real paths.
+
+## Keys
+
+Written into a config file, or into `ice2-data.yaml` for the project scope.
+
+| Key | Set with | |
+|---|---|---|
+| `public_cache` | `config set-public-cache` | public and internal data: read from, and downloaded into |
+| `cache_dir` | `config set-cache` | what `public_cache` used to be called. Still read and still writable, so existing files keep working |
+| `restricted_cache` | `config set-restricted-cache` | licensed data; never downloaded, never written to |
+| `staging_cache` | `config set-staging-cache` | work in progress that shadows the catalogue |
+| `skip_unavailable` | `config set-skip-unavailable` | `true` to carry on without data this machine cannot reach |
+| `dataset_roots` | `config set-root <dataset> <dir>` | a mapping of dataset name to directory. Roots from different scopes **combine** rather than clobbering each other |
+| `catalog` | `config set-catalog` | a default catalogue location, so `--catalog` is not needed every time |
+| `collections` | `config set-collections` | a default collections file, so `-c` is not needed every time |
+| `publication_url` | `config set-publication-url` | fetch bytes from a different door than the catalogue declares |
+
+A minimal project file:
+
+```yaml title="ice2-data.yaml"
+cache_dir: /data/my-analysis/ice2-data
+```
+
+A fuller one:
+
+```yaml title="ice2-data.yaml"
+public_cache: /projects5/ice2_data_cache_public
+restricted_cache: /projects5/ice2_data_restricted
+skip_unavailable: false
+catalog: /projects2/ice2-data-catalog-internal/datacatalog.json
+dataset_roots:
+  submarine-cables: /benchtop/shared_data/SubmarineCables
+```
+
+## Environment variables
+
+| Variable | Overrides |
+|---|---|
+| `ICE2_DATA_DIR` | `public_cache` |
+| `ICE2_RESTRICTED_DIR` | `restricted_cache` |
+| `ICE2_STAGING_DIR` | `staging_cache` |
+| `ICE2_SKIP_UNAVAILABLE` | `skip_unavailable` |
+| `ICE2_CATALOG_NO_CACHE` | if set, a fetched catalogue descriptor is never cached on disk |
+
+`ICE2_DATA_DIR` is named for the era when there was only one root. It is kept
+under that name because it is in scripts, job files and people's shell profiles.
+
+## The three roots
+
+| Root | Holds | Written to |
+|---|---|---|
+| public | public and internal data — symlinks to data already here, plus real directories for downloads | yes, for downloads into real directories |
+| restricted | licensed data, real files, ideally read-only | never |
+| staging | uncatalogued work in progress | only by `staging add --copy` |
+
+Which root a dataset comes from follows from its access class; whether it is
+read in place follows from whether its entry is a symbolic link. See
+[Caches, classes and roots](../explanation/caches-and-access.md).
+
+## Catalogue resolution
+
+Strongest first:
+
+1. `--catalog` on the command line, or `catalog=` in Python
+2. the `catalog:` key in a config file (`config set-catalog`)
+3. the `catalog:` key at the top of the collections file
+
+A local relative path in a collections file is resolved **relative to that
+file**, not to the caller's working directory. A `@ref` suffix pins a version:
+for a git host it selects the tag, and for a local path it is stripped.
+
+A catalogue fetched from a version-pinned URL is cached on disk indefinitely.
+One whose URL names `main`, `master`, `HEAD`, `latest`, `dev` or `develop` is
+recognised as moving and re-fetched every time.
+
+## Collections resolution
+
+Strongest first:
+
+1. `-c` / `--collections` on the command line
+2. the `collections:` key in a config file (`config set-collections`)
+3. `collections.yaml` in the current directory
+
+!!! warning
+    A project-scope `collections` setting applies everywhere the project config
+    is found — the same walk-up rule as `cache_dir` — not just in the directory
+    where you set it.

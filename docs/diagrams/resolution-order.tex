@@ -1,0 +1,65 @@
+% Where one resource is read from. Replaces the mermaid flowchart in
+% explanation/caches-and-access.md. Decision points are diamonds; the four
+% outcomes are colour-coded by whether anything is copied.
+\begin{tikzpicture}[
+  node distance=6mm and 9mm,
+  decision/.style={
+    draw=brand, fill=fillsoft, text=ink, diamond, aspect=2.4,
+    align=center, font=\sffamily\scriptsize, inner sep=0.6mm,
+  },
+  outcome/.style={
+    draw=accent, fill=fillaccent, text=ink, rounded corners=1.2mm,
+    align=center, font=\sffamily\scriptsize, inner sep=1.4mm, minimum height=8mm,
+  },
+  download/.style={outcome, draw=brand, fill=fillbrand},
+  stop/.style={outcome, draw=muted, fill=fillsoft},
+  yes/.style={flow, draw=accent},
+  no/.style={flow, draw=muted},
+  lbl/.style={font=\sffamily\scriptsize, text=muted, inner sep=1pt},
+]
+
+\node[artifact] (start) {a resource};
+
+\node[decision, below=of start] (cfg) {configured root\\for this dataset?};
+\node[decision, below=9mm of cfg] (restricted) {restricted?};
+\node[decision, below=9mm of restricted] (staged) {staging entry?};
+\node[decision, below=9mm of staged] (link) {cache entry\\is a symlink?};
+
+\draw[flow] (start) -- (cfg);
+
+% -- 1. the per-dataset escape hatch, most specific thing anybody can say
+\node[outcome, right=22mm of cfg] (o-cfg) {in place\\\textit{configured root}};
+\draw[yes] (cfg) -- node[lbl,above]{yes} (o-cfg);
+\draw[no]  (cfg) -- node[lbl,left]{no} (restricted);
+
+% -- 2/3. restricted branches off to its own root, or refuses
+\node[decision, left=16mm of restricted] (rcache) {restricted\\cache set?};
+\draw[yes] (restricted) -- node[lbl,above]{yes} (rcache);
+\draw[no]  (restricted) -- node[lbl,left]{no} (staged);
+
+\node[outcome, above=7mm of rcache] (o-restricted) {in place\\\textit{restricted cache}};
+\draw[yes] (rcache) -- node[lbl,right]{yes} (o-restricted);
+
+\node[decision, below=9mm of rcache] (skip) {skip-\\unavailable?};
+\draw[no] (rcache) -- node[lbl,right]{no} (skip);
+
+\node[stop, below=7mm of skip] (o-skip) {left out, and listed\\\textit{unavailable}};
+\node[stop, left=7mm of skip] (o-stop) {\textbf{AccessError}\\says what to configure};
+\draw[yes] (skip) -- node[lbl,right]{yes} (o-skip);
+\draw[no]  (skip) -- node[lbl,above]{no} (o-stop);
+
+% -- 4. staging shadows the catalogue, but never for restricted data
+\node[outcome, right=22mm of staged] (o-staged) {in place \textit{staging}\\\textcolor{muted}{warns; no checksums}};
+\draw[yes] (staged) -- node[lbl,above]{yes} (o-staged);
+\draw[no]  (staged) -- node[lbl,left]{no} (link);
+
+% -- 5. the public cache: link means borrowed, real directory means ours
+\node[outcome, right=22mm of link] (o-link) {in place\\\textit{namespace link}};
+\node[download, below=8mm of link] (o-dl) {download\\\textit{into the public cache}};
+\draw[yes] (link) -- node[lbl,above]{yes} (o-link);
+\draw[no]  (link) -- node[lbl,left]{no} (o-dl);
+
+\node[note, below=5mm of o-dl, text width=62mm]
+  {First match wins. Everything but the last outcome is read\\where it lies and never copied.};
+
+\end{tikzpicture}

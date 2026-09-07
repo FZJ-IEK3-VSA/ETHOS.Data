@@ -1,4 +1,13 @@
-"""Command line interface: ``ice2-data list|info|plan|fetch``."""
+"""Command line interface: one command, two modes.
+
+    ice2-data list|info|plan|fetch|verify|materialize|staging|config   read
+    ice2-data catalog build|publish|upload|link-cache|check-store      write
+
+Everything at the top level reads; everything that writes to a catalogue or to
+the storage behind it is one word further in, under ``catalog`` (see
+:mod:`ice2_data.maintain.cli`). That grouping is the surviving half of what used
+to be a separate ``ice2-catalog`` executable.
+"""
 
 from __future__ import annotations
 
@@ -9,22 +18,34 @@ from pathlib import Path
 
 from .config import (
     ENV_VAR,
+    SKIP_UNAVAILABLE_KEY,
+    LEGACY_CACHE_KEY,
+    PUBLIC_CACHE_KEY,
+    RESTRICTED_CACHE_KEY,
+    RESTRICTED_ENV_VAR,
     SCOPES,
-    config_path,
+    STAGING_CACHE_KEY,
+    STAGING_ENV_VAR,
     config_sources,
     dataset_roots,
-    resolve_cache_dir,
     resolve_catalog,
     resolve_collections,
+    resolve_public_cache,
+    resolve_restricted_cache,
+    resolve_roots,
+    resolve_skip_unavailable,
+    resolve_staging_cache,
     set_dataset_root,
     set_option,
     unset_dataset_root,
     unset_option,
 )
 from .access import AccessError
-from .catalog import UnknownDataset
-from .fetch import cache_dir, download, plan
+from .catalog import UnknownDataset, load_catalog
+from .maintain.cli import add_catalog_parser, dispatch as _catalog_dispatch
+from .retrieval import download, plan
 from .selection import load_collections
+from .staging import apply_staging
 
 
 def _human(num_bytes: int) -> str:
@@ -54,28 +75,52 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
 
-def _main(argv: list[str] | None = None) -> int:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ice2-data", description=__doc__)
     parser.add_argument("-c", "--collections", default=None,
                         help="path to a collections file (default: collections.yaml, "
                              "or a configured default -- see `ice2-data config show`)")
     parser.add_argument("--catalog", default=None, help="override the catalogue location")
-    parser.add_argument("--root", default=None, help="override the cache directory")
+    parser.add_argument("--root", default=None, help="override the public cache directory")
+    parser.add_argument("--skip-unavailable", action="store_true", default=None,
+                        help="carry on without data this machine has no access to "
+                             "(licensed datasets away from the institute cluster), "
+                             "listing what was left out instead of stopping")
 
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("list", help="list the collections this file defines")
 
-    config_parser = sub.add_parser("config", help="show or change where the cache lives")
+    config_parser = sub.add_parser("config", help="show or change where the caches live")
     config_sub = config_parser.add_subparsers(dest="config_command", required=True)
-    config_sub.add_parser("show", help="show the resolved cache directory and why")
-    setter = config_sub.add_parser("set-cache", help="set the cache directory persistently")
-    setter.add_argument("directory")
-    setter.add_argument("--scope", choices=SCOPES, default="user",
-                        help="user (default) = this account; environment = this conda env / venv; site = whole machine")
-    unsetter = config_sub.add_parser("unset-cache", help="remove the setting again")
-    unsetter.add_argument("--scope", choices=SCOPES, default="user")
+    config_sub.add_parser("show", help="show the resolved cache directories and why")
+
+    for verb, key, blurb in (
+        ("cache", PUBLIC_CACHE_KEY, "the public cache (alias of set-public-cache)"),
+        ("public-cache", PUBLIC_CACHE_KEY, "where public and internal data is read and downloaded"),
+        ("restricted-cache", RESTRICTED_CACHE_KEY, "where licensed data lives; never downloaded"),
+        ("staging-cache", STAGING_CACHE_KEY, "where work in progress lives; shadows the catalogue"),
+    ):
+        setter = config_sub.add_parser(f"set-{verb}", help=f"set {blurb}")
+        setter.add_argument("directory")
+        setter.add_argument("--scope", choices=SCOPES, default="user",
+                            help="user (default) = this account; environment = this conda env "
+                                 "/ venv; site = whole machine")
+        setter.set_defaults(option_key=key)
+        unsetter = config_sub.add_parser(f"unset-{verb}", help="remove the setting again")
+        unsetter.add_argument("--scope", choices=SCOPES, default="user")
+        unsetter.set_defaults(option_key=key)
+
+    skipper = config_sub.add_parser(
+        "set-skip-unavailable",
+        help="carry on without licensed data this machine cannot reach (for people "
+             "not working on the institute cluster)")
+    skipper.add_argument("value", choices=("true", "false"))
+    skipper.add_argument("--scope", choices=SCOPES, default="user")
+    unskipper = config_sub.add_parser("unset-skip-unavailable", help="remove the setting again")
+    unskipper.add_argument("--scope", choices=SCOPES, default="user")
+
     rooter = config_sub.add_parser(
-        "set-root", help="use a dataset from a local directory instead of downloading it")
+        "set-root", help="escape hatch: use one dataset from a local directory")
     rooter.add_argument("dataset")
     rooter.add_argument("directory")
     rooter.add_argument("--scope", choices=SCOPES, default="user")
@@ -102,65 +147,339 @@ def _main(argv: list[str] | None = None) -> int:
     uncollectioner = config_sub.add_parser("unset-collections", help="remove the setting again")
     uncollectioner.add_argument("--scope", choices=SCOPES, default="user")
 
-    for name, helptext in (("info", "show what a collection contains"), ("plan", "show what a fetch would download"), ("fetch", "download a collection")):
+    for name, helptext in (
+        ("info", "show what a collection contains"),
+        ("plan", "show what a fetch would download"),
+        ("fetch", "download a collection"),
+    ):
         p = sub.add_parser(name, help=helptext)
         p.add_argument("collection")
-    args = parser.parse_args(argv)
 
-    if args.command == "config":
-        return _config_command(args)
+    verifier = sub.add_parser(
+        "verify", help="check the data on disk against the catalogue's checksums")
+    verifier.add_argument("collection", nargs="?", help="a collection (default: --all)")
+    verifier.add_argument("--all", action="store_true", help="every collection in the file")
+    verifier.add_argument("--deep", action="store_true",
+                          help="compare checksums, not just sizes (reads every byte)")
+    verifier.add_argument("--repair", action="store_true",
+                          help="re-fetch whatever no longer matches, from dCache")
+    verifier.add_argument("--dry-run", action="store_true",
+                          help="with --repair: say what would be re-fetched, change nothing")
+    verifier.add_argument("-q", "--quiet", action="store_true", help="only report problems")
 
+    material = sub.add_parser(
+        "materialize",
+        help="replace a symbolic-link cache entry with a real, verified copy")
+    material.add_argument("datasets", nargs="*", help="dataset names (default: --all)")
+    material.add_argument("--all", action="store_true",
+                          help="every entry in the public cache that is currently a link")
+    material.add_argument("--dry-run", action="store_true", help="show the cost, copy nothing")
+    material.add_argument("--force", action="store_true",
+                          help="do not stop at entries that are already real directories")
+    material.add_argument("--no-verify", action="store_true",
+                          help="skip checksum verification of each copied file (not advised)")
+
+    add_catalog_parser(sub)
+
+    stager = sub.add_parser("staging", help="data that is not in the catalogue yet")
+    stager_sub = stager.add_subparsers(dest="staging_command", required=True)
+    adder = stager_sub.add_parser("add", help="register a directory as a staged dataset")
+    adder.add_argument("name")
+    adder.add_argument("directory")
+    adder.add_argument("--note", default="", help="what this is, for the next person")
+    adder.add_argument("--copy", action="store_true",
+                       help="copy the data instead of linking to it")
+    lister = stager_sub.add_parser("list", help="show what is staged")
+    lister.add_argument("--new-only", action="store_true",
+                        help="only datasets with no entry in the public or restricted "
+                             "cache -- the ones that still need describing")
+    remover = stager_sub.add_parser("remove", help="unregister a staged dataset")
+    remover.add_argument("name")
+    remover.add_argument("--force", action="store_true",
+                         help="required if the entry is a real directory, not a link")
+    return parser
+
+
+def _load(args, roots):
+    """The collections file, with the catalogue it pins and staging applied."""
     resolved_catalog = resolve_catalog(args.catalog)
     catalog = resolved_catalog[0] if resolved_catalog else None
     resolved_collections = resolve_collections(args.collections)
     collections_file = resolved_collections[0] if resolved_collections else "collections.yaml"
     loaded = load_collections(collections_file, catalog=catalog)
-    root = Path(args.root).expanduser() if args.root else cache_dir()
+    # warn=False: locate() already warns once per staged dataset that is
+    # actually read, which is the warning that matters. A second, identical
+    # summary on every command is noise that teaches people to ignore both.
+    shadowed = apply_staging(loaded.catalog, roots, warn=False)
+    if shadowed:
+        print(f"note: staging is active ({roots.staging}); "
+              f"{', '.join(shadowed)} shadow(s) the catalogue.", file=sys.stderr)
+    return loaded
+
+
+def _main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+
+    if args.command == "config":
+        return _config_command(args)
+    if args.command == "staging":
+        return _staging_command(args)
+    # Before the cache roots are resolved: a maintainer command works on a
+    # catalogue checkout, and has no use for the consumer's cache directories.
+    if args.command == "catalog":
+        return _catalog_dispatch(args)
+
+    roots = resolve_roots(args.root)
+
+    if args.command == "materialize":
+        return _materialize_command(args, roots)
+
+    loaded = _load(args, roots)
 
     if args.command == "list":
         print(f"catalogue: {loaded.catalog.location}")
-        print(f"cache:     {root}\n")
+        print(f"cache:     {roots.public}\n")
+        unresolved = 0
         for name in loaded.names():
             definition = loaded.describe(name)
-            resources = loaded.resolve(name)
+            try:
+                resources = loaded.resolve(name)
+            except UnknownDataset as error:
+                # One collection naming a dataset this catalogue lacks -- a
+                # withdrawn dataset, or one that only exists in somebody's
+                # staging root -- must not hide every other collection in the
+                # file from everybody else.
+                unresolved += 1
+                # UnknownDataset subclasses KeyError, whose str() is a repr --
+                # quoted, with newlines escaped. args[0] is the real sentence.
+                message = (error.args[0] if error.args else str(error)).splitlines()[0]
+                print(f"  {name:<28} {'[unresolvable]':>17}   {message}")
+                continue
             total = sum(r.bytes for r in resources)
-            print(f"  {name:<28} {len(resources):>4} files  {_human(total):>10}   {definition.get('title','')}")
-        return 0
+            print(f"  {name:<28} {len(resources):>4} files  {_human(total):>10}   "
+                  f"{definition.get('title','')}")
+        return 1 if unresolved else 0
+
+    if args.command == "verify":
+        return _verify_command(args, loaded, roots)
 
     resources = loaded.resolve(args.collection)
 
     if args.command == "info":
-        print(f"{args.collection}: {len(resources)} files, {_human(sum(r.bytes for r in resources))}\n")
+        print(f"{args.collection}: {len(resources)} files, "
+              f"{_human(sum(r.bytes for r in resources))}\n")
         for resource in resources:
             print(f"  {resource.key:<64} {_human(resource.bytes):>10}")
         return 0
 
-    report = plan(loaded.catalog, resources, root)
+    report = plan(loaded.catalog, resources, roots, args.skip_unavailable)
     if args.command == "plan":
-        print(f"cache root:      {report['root']}")
-        if report["in_place"]:
-            print(f"used in place:   {len(report['in_place']):>4} files  "
-                  f"{_human(sum(r.bytes for r in report['in_place'])):>10}  (local root, never copied)")
+        print(f"public cache:    {report['root']}")
+        for origin, items in sorted(report["in_place_by_origin"].items()):
+            print(f"used in place:   {len(items):>4} files  "
+                  f"{_human(sum(r.bytes for r in items)):>10}  ({origin}, never copied)")
         print(f"already cached:  {len(report['present']):>4} files  "
               f"{_human(sum(r.bytes for r in report['present'])):>10}")
-        print(f"to download:     {len(report['missing']):>4} files  {_human(report['bytes_to_download']):>10}")
+        print(f"to download:     {len(report['missing']):>4} files  "
+              f"{_human(report['bytes_to_download']):>10}")
         for resource in report["missing"]:
             print(f"    + {resource.key}")
+        if report["unavailable"]:
+            names = sorted({r.dataset for r in report["unavailable"]})
+            print(f"not available here: {len(report['unavailable']):>4} files            "
+                  f"      ({', '.join(names)} -- left out)")
         if report["unreadable"]:
-            print(f"\nMISSING from their local root ({len(report['unreadable'])}):")
+            print(f"\nMISSING from where they were expected ({len(report['unreadable'])}):")
             for location in report["unreadable"][:10]:
-                print(f"    ! {location.path}")
+                print(f"    ! {location.path}   [{location.origin}]")
         return 0
 
+    omitted = len(report["unavailable"])
+    if omitted:
+        names = sorted({r.dataset for r in report["unavailable"]})
+        print(f"{args.collection}: leaving out {omitted} file(s) from "
+              f"{', '.join(names)} -- not available on this machine.", file=sys.stderr)
     if not report["missing"]:
         note = f" ({len(report['in_place'])} used in place)" if report["in_place"] else ""
-        print(f"{args.collection}: all {len(resources)} files already available{note}")
-        download(loaded.catalog, resources, root=root, progressbar=False)
+        print(f"{args.collection}: all {len(resources) - omitted} available files "
+              f"already present{note}")
+        download(loaded.catalog, resources, root=roots, progressbar=False,
+                 skip_unavailable=args.skip_unavailable)
         return 0
     print(f"{args.collection}: fetching {len(report['missing'])} of {len(resources)} files "
           f"({_human(report['bytes_to_download'])}) into {report['root']}")
-    download(loaded.catalog, resources, root=root)
+    download(loaded.catalog, resources, root=roots, skip_unavailable=args.skip_unavailable)
     print("done.")
+    return 0
+
+
+def _verify_command(args, loaded, roots) -> int:
+    from .verify import OK, UNAVAILABLE, UNVERIFIABLE, repair, summarise, verify
+
+    if not args.collection and not args.all:
+        args.all = True
+    names = loaded.names() if args.all else [args.collection]
+    resources = {}
+    for name in names:
+        for resource in loaded.resolve(name):
+            resources[resource.key] = resource
+    ordered = sorted(resources.values(), key=lambda r: r.key)
+
+    what = "every collection" if args.all else args.collection
+    how = "checksums" if args.deep else "sizes"
+    print(f"verifying {len(ordered):,} files from {what} ({how})\n")
+
+    findings = verify(loaded.catalog, ordered, roots, deep=args.deep,
+                      skip_unavailable=args.skip_unavailable)
+    grouped = summarise(findings)
+
+    for status, group in grouped.items():
+        if status == OK and args.quiet:
+            continue
+        print(f"{status}: {len(group)}")
+        if status == OK:
+            continue
+        for finding in group[:20]:
+            print(f"    {finding}")
+        if len(group) > 20:
+            print(f"    ... and {len(group) - 20} more")
+
+    broken = [f for f in findings if not f.ok]
+    unverifiable = [f for f in findings if f.status == UNVERIFIABLE]
+    absent = [f for f in findings if f.status == UNAVAILABLE]
+    if not broken:
+        checked = len(findings) - len(unverifiable) - len(absent)
+        print(f"\n{checked:,} file(s) match the catalogue.")
+        if absent:
+            names = sorted({f.resource.dataset for f in absent})
+            print(f"{len(absent):,} file(s) were NOT checked -- no access to "
+                  f"{', '.join(names)} from this machine.")
+        if unverifiable:
+            # Never call these "matching": nothing was compared. Staged data
+            # carries no checksums, which is the point of staging and also the
+            # reason a result built on it is not reproducible.
+            print(f"{len(unverifiable):,} file(s) could NOT be checked -- no checksum in "
+                  f"the manifest (staged data). Describe and publish them to get one.")
+        return 0
+
+    if not args.repair:
+        print(f"\n{len(broken)} file(s) do not match. Re-fetch them with:")
+        print("    ice2-data verify --repair" + (" --deep" if args.deep else ""))
+        return 1
+
+    outcome = repair(loaded.catalog, findings, roots, dry_run=args.dry_run)
+    if outcome["links_to_remove"]:
+        print("\nthese links will be removed so a download has somewhere to land")
+        print("(other people share this cache -- they will be re-fetching too):")
+        for link in outcome["links_to_remove"]:
+            print(f"    {link} -> {link.readlink()}")
+    for key, why in sorted(outcome["skipped"].items()):
+        print(f"  not repairable: {key}  ({why})")
+    if args.dry_run:
+        print(f"\nwould re-fetch {len(outcome['resources']):,} file(s). Nothing was changed.")
+        return 1
+    print(f"\nre-fetched {outcome['downloaded']:,} file(s).")
+    return 0 if not outcome["skipped"] else 1
+
+
+def _materialize_command(args, roots) -> int:
+    from .materialize import materialize
+
+    resolved_catalog = resolve_catalog(args.catalog)
+    if resolved_catalog:
+        catalog = load_catalog(resolved_catalog[0])
+    else:
+        catalog = _load(args, roots).catalog
+
+    names = list(args.datasets)
+    if args.all or not names:
+        if not roots.public.is_dir():
+            print(f"no public cache at {roots.public}")
+            return 1
+        names = sorted(p.name for p in roots.public.iterdir() if p.is_symlink())
+        if not names:
+            print(f"no symbolic-link entries in {roots.public}; nothing to materialise.")
+            return 0
+
+    reports = materialize(
+        catalog, names, roots,
+        force=args.force, verify_hashes=not args.no_verify, dry_run=args.dry_run,
+    )
+    for report in reports:
+        print(f"  {report}")
+        for failure in report.failures[:10]:
+            print(f"      ! {failure}")
+
+    total = sum(r.bytes for r in reports if r.action in ("would copy", "materialized"))
+    if args.dry_run:
+        print(f"\nwould copy {_human(total)} into {roots.public}. Nothing was written.")
+        return 1 if any(r.action in ("unknown", "cannot", "dangling") for r in reports) else 0
+    failed = [r for r in reports if r.action in ("failed", "unknown", "cannot", "dangling")]
+    print(f"\ncopied {_human(total)} into {roots.public}.")
+    return 1 if failed else 0
+
+
+def _staging_command(args) -> int:
+    from . import staging
+
+    if args.staging_command == "add":
+        staged = staging.add(args.name, args.directory, note=args.note, copy=args.copy)
+        # For a copy the entry *is* the data, so staged.target resolves to the
+        # entry itself; the source is only interesting as provenance.
+        source = Path(args.directory).expanduser().resolve()
+        verb = "copied from" if args.copy else "linked to"
+        print(f"staged {staged.name!r}: {staged.entry} {verb} {source}")
+        print(f"  {staged.files:,} files, {_human(staged.bytes)}")
+        print("\nThis shadows the catalogue for that dataset. It is not checksummed and "
+              "not reproducible;\nremove it once the data is described and published:")
+        print(f"    ice2-data staging remove {staged.name}")
+        return 0
+
+    if args.staging_command == "remove":
+        entry = staging.remove(args.name, force=args.force)
+        print(f"unstaged {args.name!r} ({entry}). The data it pointed at was not touched.")
+        return 0
+
+    root = staging.staging_root()
+    if root is None:
+        print("no staging root configured.")
+        print("    ice2-data config set-staging-cache /path/to/ice2_data_staging")
+        return 0
+
+    roots = resolve_roots()
+    entries = staging.classify_staged(roots)
+    if args.new_only:
+        entries = [e for e in entries if e.is_new]
+
+    print(f"staging root:     {root}")
+    print(f"official caches:  {roots.public}")
+    print(f"                  {roots.restricted or '(no restricted cache on this machine)'}\n")
+    if not entries:
+        print("  (nothing staged)" if not args.new_only
+              else "  every staged dataset also exists in an official cache.")
+        return 0
+
+    for staged in entries:
+        flag = "  [BROKEN]" if staged.broken else ""
+        kind = "link" if staged.is_link else "copy"
+        mark = "NOT IN CATALOGUE" if staged.is_new else "shadows official"
+        print(f"  {staged.name:<28} {staged.files:>6,} files  "
+              f"{_human(staged.bytes):>10}  {kind}  [{mark}]{flag}")
+        print(f"  {'':<28} -> {staged.target}")
+        if staged.official is not None:
+            print(f"  {'':<28}    official copy: {staged.official}")
+        if staged.note:
+            print(f"  {'':<28}    {staged.note}")
+        if staged.added:
+            print(f"  {'':<28}    added {staged.added} by {staged.added_by or 'unknown'}")
+
+    new = [e for e in entries if e.is_new]
+    if new:
+        print(f"\n{len(new)} dataset(s) exist ONLY here. Nothing outside this machine can "
+              f"resolve them:")
+        print(f"    {', '.join(e.name for e in new)}")
+        print("Describe them in the catalogue and publish them before anything they "
+              "depend on is deleted.")
     return 0
 
 
@@ -193,20 +512,62 @@ def _resolve_catalog_location(location: str) -> str:
     return str(candidate)
 
 
+#: How each cache setting is described when it is written or shown.
+CACHE_KEYS = {
+    PUBLIC_CACHE_KEY: ("public cache", resolve_public_cache),
+    RESTRICTED_CACHE_KEY: ("restricted cache", resolve_restricted_cache),
+    STAGING_CACHE_KEY: ("staging cache", resolve_staging_cache),
+}
+
+
 def _config_command(args) -> int:
-    if args.config_command == "set-cache":
-        path = set_option("cache_dir", str(Path(args.directory).expanduser()), scope=args.scope)
-        print(f"cache_dir written to {path}")
-        print(f"resolved now: {resolve_cache_dir()}")
+    command = args.config_command
+
+    if command.startswith("set-") and getattr(args, "option_key", None) in CACHE_KEYS:
+        key = args.option_key
+        label, resolver = CACHE_KEYS[key]
+        path = set_option(key, str(Path(args.directory).expanduser()), scope=args.scope)
+        print(f"{key} written to {path}")
+        print(f"resolved now: {resolver()}")
         return 0
 
-    if args.config_command == "set-publication-url":
+    if command.startswith("unset-") and getattr(args, "option_key", None) in CACHE_KEYS:
+        key = args.option_key
+        label, resolver = CACHE_KEYS[key]
+        path = unset_option(key, scope=args.scope)
+        removed = f"removed from {path}" if path else f"nothing set in the {args.scope} config"
+        print(removed)
+        if key == PUBLIC_CACHE_KEY:
+            # The legacy name lives in the same files and would still win.
+            legacy = unset_option(LEGACY_CACHE_KEY, scope=args.scope)
+            if legacy:
+                print(f"also removed the older {LEGACY_CACHE_KEY} key from {legacy}")
+        print(f"resolved now: {resolver() or '(not set)'}")
+        return 0
+
+    if command == "set-skip-unavailable":
+        path = set_option(SKIP_UNAVAILABLE_KEY, args.value == "true", scope=args.scope)
+        wanted, _ = resolve_skip_unavailable()
+        print(f"{SKIP_UNAVAILABLE_KEY} written to {path}")
+        if wanted:
+            print("Licensed datasets this machine cannot reach will now be left out of "
+                  "results and listed,\nrather than stopping the command.")
+        else:
+            print("Commands will now stop when licensed data cannot be reached.")
+        return 0
+
+    if command == "unset-skip-unavailable":
+        path = unset_option(SKIP_UNAVAILABLE_KEY, scope=args.scope)
+        print(f"removed from {path}" if path else f"nothing set in the {args.scope} config")
+        return 0
+
+    if command == "set-publication-url":
         path = set_option("publication_url", args.url, scope=args.scope)
         print(f"publication_url written to {path}")
         print(f"bytes will now be fetched from {args.url}")
         return 0
 
-    if args.config_command == "set-catalog":
+    if command == "set-catalog":
         location = _resolve_catalog_location(args.location)
         path = set_option("catalog", location, scope=args.scope)
         print(f"catalog written to {path}")
@@ -215,12 +576,12 @@ def _config_command(args) -> int:
               "overrides the catalogue it pins for itself, the same way --catalog does.")
         return 0
 
-    if args.config_command == "unset-catalog":
+    if command == "unset-catalog":
         path = unset_option("catalog", scope=args.scope)
         print(f"removed from {path}" if path else f"nothing set in the {args.scope} config")
         return 0
 
-    if args.config_command == "set-collections":
+    if command == "set-collections":
         candidate = Path(args.path).expanduser()
         if not candidate.is_file():
             raise SystemExit(f"no such file: {candidate}")
@@ -230,60 +591,101 @@ def _config_command(args) -> int:
         print("-c/--collections still overrides this for a single run.")
         return 0
 
-    if args.config_command == "unset-collections":
+    if command == "unset-collections":
         path = unset_option("collections", scope=args.scope)
         print(f"removed from {path}" if path else f"nothing set in the {args.scope} config")
         return 0
 
-    if args.config_command == "set-root":
+    if command == "set-root":
         path = set_dataset_root(args.dataset, args.directory, scope=args.scope)
         print(f"dataset_roots[{args.dataset}] written to {path}")
-        print(f"{args.dataset!r} will now be read from {Path(args.directory).expanduser()} and never downloaded")
+        print(f"{args.dataset!r} will now be read from "
+              f"{Path(args.directory).expanduser()} and never downloaded")
         return 0
 
-    if args.config_command == "unset-root":
+    if command == "unset-root":
         path = unset_dataset_root(args.dataset, scope=args.scope)
-        print(f"removed from {path}" if path else f"no root set for {args.dataset!r} in the {args.scope} config")
+        print(f"removed from {path}" if path
+              else f"no root set for {args.dataset!r} in the {args.scope} config")
         return 0
 
-    if args.config_command == "unset-cache":
-        path = unset_option("cache_dir", scope=args.scope)
-        print(f"removed from {path}" if path else f"nothing set in the {args.scope} config")
-        print(f"resolved now: {resolve_cache_dir()}")
-        return 0
+    return _config_show()
 
-    resolved = resolve_cache_dir()
-    print(f"cache directory: {resolved.value}")
-    print(f"          from: {resolved.source}\n")
-    print("precedence (first match wins):")
-    env_value = os.environ.get(ENV_VAR)
-    print(f"  1. explicit --root / root=      {'(not given)'}")
-    print(f"  2. ${ENV_VAR:<22} {env_value or '(unset)'}")
+
+def _config_show() -> int:
+    public = resolve_public_cache()
+    restricted = resolve_restricted_cache()
+    staging = resolve_staging_cache()
+
+    print("the two settings that matter:\n")
+    print(f"  public cache      {public.value}")
+    print(f"                    from {public.source}")
+    if restricted:
+        print(f"  restricted cache  {restricted.value}")
+        print(f"                    from {restricted.source}")
+    else:
+        skipping = resolve_skip_unavailable()[0]
+        consequence = ("licensed datasets are left out of results and listed"
+                       if skipping else "licensed datasets will refuse to resolve")
+        print(f"  restricted cache  (not set -- {consequence})")
+        print("                    ice2-data config set-restricted-cache /path --scope environment")
+    if staging:
+        print(f"\n  staging cache     {staging.value}   [ACTIVE -- shadows the catalogue]")
+        print(f"                    from {staging.source}")
+
+    skip, skip_source = resolve_skip_unavailable()
+    if skip:
+        print("\n  unreachable data      left out and listed, not an error")
+        print(f"                        from {skip_source}")
+    elif not restricted:
+        print("\n  unreachable data      stops the command (the default)")
+        print("                        ice2-data config set-skip-unavailable true"
+              "    # if you are not on the cluster")
+
+    print("\nprecedence for each, first match wins:")
+    print(f"  1. explicit --root / root=      (public cache only)")
+    for label, variable in (("public", ENV_VAR), ("restricted", RESTRICTED_ENV_VAR),
+                            ("staging", STAGING_ENV_VAR)):
+        value = os.environ.get(variable)
+        print(f"  2. ${variable:<22} {value or '(unset)'}   [{label}]")
     for index, (scope, path, exists) in enumerate(config_sources(), start=3):
         marker = "exists" if exists else "not present"
         print(f"  {index}. {scope + ' config':<24} {path}  [{marker}]")
-    print(f"  {len(SCOPES) + 3}. built-in default          per-user OS cache directory")
+    print(f"  {len(SCOPES) + 3}. built-in default          "
+          f"per-user OS cache directory (public only)")
+
     roots = dataset_roots()
     if roots:
-        print("\ndatasets read from a local root (never downloaded):")
+        print("\nescape hatch -- datasets read from a per-dataset root (never downloaded):")
         for name, where in sorted(roots.items()):
             exists = "" if Path(where).is_dir() else "   [MISSING]"
             print(f"  {name:<28} {where}{exists}")
+
+    if public.value.is_dir():
+        links = sorted(p for p in public.value.iterdir() if p.is_symlink())
+        real = sorted(p for p in public.value.iterdir() if not p.is_symlink() and p.is_dir())
+        print(f"\npublic cache holds {len(links)} link(s) and {len(real)} real director(ies):")
+        for link in links[:10]:
+            broken = "   [BROKEN]" if not link.exists() else ""
+            print(f"  {link.name:<28} -> {link.readlink()}{broken}")
+        if len(links) > 10:
+            print(f"  ... and {len(links) - 10} more")
+
     catalog = resolve_catalog()
     if catalog:
         print(f"\ndefault catalog: {catalog[0]}  (from {catalog[1]})")
-        print("  used instead of whatever -c/--collections pins for itself; --catalog overrides both")
+        print("  used instead of whatever -c/--collections pins for itself; "
+              "--catalog overrides both")
     collections = resolve_collections()
     if collections:
         exists = "" if Path(collections[0]).is_file() else "   [MISSING]"
         print(f"\ndefault collections file: {collections[0]}{exists}  (from {collections[1]})")
         print("  used when -c/--collections is not given")
-    print("\nSet it with one of:")
-    print("  ice2-data config set-cache /path/to/data --scope project      # a visible file here")
-    print("  ice2-data config set-cache /path/to/data                      # just for you")
-    print("  ice2-data config set-cache /path/to/data --scope site         # everyone on this machine")
-    print("  ice2-data config set-catalog /path/or/url --scope project     # default catalogue")
-    print("  ice2-data config set-collections /path/to/collections.yaml --scope project")
+
+    print("\nSet them with:")
+    print("  ice2-data config set-public-cache     /path --scope site")
+    print("  ice2-data config set-restricted-cache /path --scope site")
+    print("  ice2-data config set-staging-cache    /path            # only while developing")
     return 0
 
 

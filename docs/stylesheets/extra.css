@@ -1,0 +1,318 @@
+/* ==========================================================================
+   ice2-data — Forschungszentrum Jülich Brand Theme
+
+   Shares its palette, syntax colours and institutional footer with
+   ETHOS.TSAM, ETHOS.GLAES and RESKit, so the ICE-2 docs sites read as one
+   family. The notebook (.jupyter-wrapper) rules those carry are absent here:
+   this site has no notebooks, so mkdocs-jupyter is not a dependency and
+   JupyterLab's CSS variables never appear.
+   ========================================================================== */
+
+/* -- FZJ Brand Colors ---------------------------------------------------- */
+:root {
+  --md-primary-fg-color: #023d6b;
+  --md-primary-fg-color--light: #0a5a9e;
+  --md-primary-fg-color--dark: #012845;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: #ffffffb3;
+  --md-accent-fg-color: #21918c;
+  --md-accent-fg-color--transparent: #21918c1a;
+  --md-accent-bg-color: #ffffff;
+  --md-accent-bg-color--light: #ffffffb3;
+  --md-typeset-a-color: #35b0ab;
+}
+
+.md-typeset a {
+  color: #35b0ab;
+}
+
+.md-typeset a:hover {
+  color: #21918c;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #023d6b;
+  --md-primary-fg-color--light: #0a5a9e;
+  --md-primary-fg-color--dark: #012845;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: #ffffffb3;
+  --md-accent-fg-color: #35b0ab;
+  --md-accent-fg-color--transparent: #35b0ab1a;
+  --md-typeset-a-color: #35b0ab;
+}
+
+/* -- Syntax highlighting: Monokai Light + Monokai Dark --------------------
+ * Light = darkened-Monokai variant (dark hues on a light ground, for
+ * readability); dark = classic Monokai. */
+
+:root,
+[data-md-color-scheme="default"] {
+  --md-code-fg-color: #272822;
+  --md-code-bg-color: #fafafa;
+
+  --md-code-hl-keyword-color:     #d11f72;   /* darkened pink */
+  --md-code-hl-string-color:      #998800;   /* mustard yellow */
+  --md-code-hl-number-color:      #6f42c1;   /* purple */
+  --md-code-hl-function-color:    #4d8d04;   /* green */
+  --md-code-hl-comment-color:     #75715e;   /* olive-gray */
+  --md-code-hl-name-color:        #272822;   /* default text */
+  --md-code-hl-operator-color:    #d11f72;   /* pink */
+  --md-code-hl-punctuation-color: #272822;
+  --md-code-hl-constant-color:    #6f42c1;   /* purple — None, True, False */
+  --md-code-hl-special-color:     #4d8d04;   /* green — decorators */
+  --md-code-hl-variable-color:    #d35400;   /* burnt orange */
+  --md-code-hl-generic-color:     #272822;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-code-fg-color: #f8f8f2;
+  /* Derived from the slate body bg: same hue, less saturated, brighter. */
+  --md-code-bg-color: hsla(var(--md-hue), 6%, 18%, 1);
+
+  --md-code-hl-keyword-color:     #f92672;   /* hot pink */
+  --md-code-hl-string-color:      #e6db74;   /* yellow */
+  --md-code-hl-number-color:      #ae81ff;   /* purple */
+  --md-code-hl-function-color:    #a6e22e;   /* green */
+  --md-code-hl-comment-color:     #75715e;   /* olive-gray */
+  --md-code-hl-name-color:        #f8f8f2;   /* default text */
+  --md-code-hl-operator-color:    #f92672;   /* pink */
+  --md-code-hl-punctuation-color: #f8f8f2;
+  --md-code-hl-constant-color:    #ae81ff;   /* purple — None, True, False */
+  --md-code-hl-special-color:     #a6e22e;   /* green — decorators */
+  --md-code-hl-variable-color:    #fd971f;   /* orange */
+  --md-code-hl-generic-color:     #f8f8f2;
+}
+
+/* -- Layout & navigation polish ------------------------------------------ */
+
+:root {
+  --md-grid-max-width: 80rem;  /* default 61rem — let content breathe */
+}
+
+.md-grid {
+  max-width: var(--md-grid-max-width);
+}
+
+/* Narrower sidebars — defaults are 12.1rem each. Both kept visible so the
+   per-page TOC stays on the right. */
+.md-sidebar--primary {
+  width: 11rem;
+}
+
+.md-sidebar--secondary {
+  width: 10rem;
+}
+
+/* Tighter heading spacing site-wide. */
+.md-typeset h1 {
+  margin: 0 0 0.5em;
+  font-weight: 600;
+}
+
+.md-typeset h2 {
+  margin: 0.8em 0 0.3em;
+}
+
+.md-typeset h3 {
+  margin: 0.6em 0 0.2em;
+}
+
+.md-typeset h4 {
+  margin: 0.5em 0 0.15em;
+}
+
+/* Code block font size: Material defaults to 0.85em, which is hard to scan in
+   a page that is mostly terminal transcripts. Bump blocks; leave inline `code`
+   at the default so it still stands out mid-sentence. */
+.md-typeset pre > code,
+.md-typeset .highlight pre {
+  font-size: 0.92em;
+}
+
+/* -- Landing page logo row -----------------------------------------------
+ *
+ * Light/dark switching uses Material's native "#only-light" / "#only-dark"
+ * URL-fragment convention, so it follows the palette toggle — Material does
+ * not honour <picture> for theme switching.
+ *
+ * Sized in PERCENT of the content column rather than in pixels, because every
+ * ETHOS docs site uses the same Material grid and sidebars: a given percentage
+ * is then the same rendered width on all of them. Keep `.hero-logo--jsa`
+ * identical across the repos so the ICE-2 header is the same size everywhere.
+ *
+ * There is only one logo in this row (ice2-data has no product mark of its
+ * own), so the basis is the JSA lockup's share of the column on the sites that
+ * do have two — the header lands at the same size as it does there. */
+.landing-logos {
+  display: flex;
+  align-items: center;
+  gap: 4%;
+  margin-bottom: 1.5rem;
+}
+
+.md-typeset .hero-logo {
+  height: auto;
+}
+
+/* The <a> is the flex item; the lockup inside fills it. `line-height: 0` keeps
+   the link box from adding a text line's worth of height below the image.
+   `min-width: 0` is required because a flex item defaults to
+   `min-width: auto`, which floors it at the image's intrinsic width (568px)
+   and overflows the content column. */
+.landing-logos > .hero-logo-link {
+  flex: 0 0 64.3%;
+  min-width: 0;
+  line-height: 0;
+}
+
+.landing-logos > .hero-logo-link > .hero-logo--jsa {
+  width: 100%;
+}
+
+/* -- Anchor target highlight --------------------------------------------
+ * When the URL has a #hash, the matching element gets :target. Flash the
+ * background once on arrival so it is obvious where the page jumped to. */
+.md-content :target {
+  animation: target-flash 1.5s ease-in-out;
+  scroll-margin-top: 4rem;
+}
+
+.md-content tr:has(:target) {
+  animation: target-row-flash 1.5s ease-in-out;
+}
+
+@keyframes target-flash {
+  0%, 100% {
+    background-color: transparent;
+    box-shadow: -0.4rem 0 0 0 transparent;
+  }
+  25%, 65% {
+    background-color: rgba(53, 176, 171, 0.35);
+    box-shadow: -0.4rem 0 0 0 rgba(53, 176, 171, 0.75);
+  }
+  45% {
+    background-color: transparent;
+    box-shadow: -0.4rem 0 0 0 transparent;
+  }
+}
+
+@keyframes target-row-flash {
+  0%, 100% { background-color: transparent; }
+  25%, 65% { background-color: rgba(53, 176, 171, 0.3); }
+  45% { background-color: transparent; }
+}
+
+[data-md-color-scheme="slate"] .md-content :target {
+  animation: target-flash-dark 1.5s ease-in-out;
+}
+
+[data-md-color-scheme="slate"] .md-content tr:has(:target) {
+  animation: target-row-flash-dark 1.5s ease-in-out;
+}
+
+@keyframes target-flash-dark {
+  0%, 100% {
+    background-color: transparent;
+    box-shadow: -0.4rem 0 0 0 transparent;
+  }
+  25%, 65% {
+    background-color: rgba(53, 176, 171, 0.22);
+    box-shadow: -0.4rem 0 0 0 rgba(53, 176, 171, 0.65);
+  }
+  45% {
+    background-color: transparent;
+    box-shadow: -0.4rem 0 0 0 transparent;
+  }
+}
+
+@keyframes target-row-flash-dark {
+  0%, 100% { background-color: transparent; }
+  25%, 65% { background-color: rgba(53, 176, 171, 0.18); }
+  45% { background-color: transparent; }
+}
+
+/* -- Institutional footer ------------------------------------------------- */
+.footer-institutional {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 1.5rem 0;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.footer-institutional__logos {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-shrink: 0;
+}
+
+/* Height-based here (unlike the landing row): the footer is a fixed-height
+   band rather than a column-width row, and the JSA lockup needs to run taller
+   than the Helmholtz wordmark, whose glyphs stay legible small. Scoped through
+   the parent so these outrank Material's `.md-typeset img` (specificity 0-1-1),
+   which forces `height: auto` and would otherwise win silently — the Helmholtz
+   SVG has no intrinsic size, so it collapses to 0x0 and vanishes when its
+   height is not honoured.
+
+   60px / 33px matches TSAM, GeoKit and GLAES; keep them in step so the ICE-2
+   logo is the same size in every ETHOS footer. */
+.footer-institutional__logos .footer-logo--jsa {
+  height: 60px;
+  width: auto;
+}
+
+.footer-institutional__logos .footer-logo--helmholtz {
+  height: 33px;
+  width: auto;
+}
+
+.footer-institutional__text {
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+
+.footer-institutional__text p {
+  margin: 0.2rem 0;
+}
+
+.footer-institutional__text a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.4);
+}
+
+.footer-institutional__text a:hover {
+  text-decoration-color: inherit;
+}
+
+/* Footer is always dark — always show the JSA logo in white. */
+.footer-logo--jsa {
+  filter: brightness(0) invert(1);
+}
+
+/* -- TikZ diagrams --------------------------------------------------------
+ * Rendered to SVG by docs/diagrams/render.py, one file per theme, selected
+ * with Material's "#only-light" / "#only-dark" convention. They carry no
+ * background of their own, so they sit on whatever the page ground is.
+ *
+ * `max-width: 100%` with `height: auto` keeps a wide diagram inside the
+ * content column on a narrow viewport instead of pushing the body sideways;
+ * the figure scrolls rather than the page. */
+.md-typeset figure > .diagram {
+  max-width: 100%;
+  height: auto;
+}
+
+.md-typeset figure:has(> .diagram) {
+  overflow-x: auto;
+  margin: 1.2em 0;
+}
+
+/* The dark renders use light strokes, so on the light-mode ground they would
+   be invisible -- Material's #only-dark already hides them, but a printout
+   ignores media queries, so pin the visible one. */
+@media print {
+  .md-typeset img[src*="-dark.svg"] { display: none !important; }
+}

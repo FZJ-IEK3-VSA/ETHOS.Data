@@ -1,0 +1,63 @@
+# Generated documentation. `mkdocs build` regenerates it; never commit it.
+# The diagram SVGs under docs/assets/ are the exception -- they ARE committed,
+# so that an ordinary docs build needs no LaTeX (see docs/diagrams/render.py).
+site/
+
+# Python bytecode and editable-install metadata.
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Packaging output. `pip install -e .` rewrites the egg-info on every install,
+# so a committed copy is a permanent phantom diff.
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environments. environment.yml and pyproject.toml are the record of
+# what to install; a checked-in env is a 400 MB copy of someone's machine.
+.venv/
+venv/
+env/
+ENV/
+
+# Test, lint and type-check caches.
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.nox/
+.hypothesis/
+
+# Coverage reports.
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Notebook checkpoints.
+.ipynb_checkpoints/
+
+# LaTeX intermediates. render.py builds in a tempdir, but running tectonic by
+# hand in the source directory leaves these behind. Scoped to docs/diagrams so
+# a licence PDF carried by a dataset is never ignored by accident.
+docs/diagrams/*.aux
+docs/diagrams/*.log
+docs/diagrams/*.pdf
+docs/diagrams/*.synctex.gz
+
+# Maintainer-side strays. `catalog upload` writes an rclone --files-from listing
+# to a tempdir, and an oidc-agent socket symlink can be dropped into whatever
+# directory the agent was started from; neither belongs in the repository.
+ice2-upload-*.txt
+oidc-agent.sock
+
+# Editors and OS.
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

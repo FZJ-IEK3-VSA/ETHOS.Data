@@ -1,0 +1,52 @@
+% The consumer side, with the commands attached. Answers "which command do I
+% actually run, and what does it touch?" for the Getting-data how-to guides.
+\begin{tikzpicture}[
+  node distance=6mm and 16mm,
+  usecase/.append style={text width=33mm, minimum width=0mm},
+]
+
+\node[actor] (user) {Data user};
+
+\node[usecase, right=of user, yshift=27mm]  (see)   {See what is on offer};
+\node[usecase, right=of user, yshift=13mm]  (where) {Decide where data lands};
+\node[usecase, right=of user, yshift=-1mm]  (get)   {Get a collection};
+\node[usecase, right=of user, yshift=-15mm] (trust) {Trust what is on disk};
+\node[usecase, right=of user, yshift=-29mm] (own)   {Stop borrowing a link};
+
+\foreach \t in {see,where,get,trust,own} \draw[link] (user) -- (\t);
+
+% The commands, right of each use case. Deliberately literal: the guides are
+% task-shaped, and this is the bridge from task to keystrokes.
+\node[cmd, right=13mm of see, align=left]   (c1)
+  {ice2-data list\\ice2-data info \textit{name}};
+\node[cmd, right=13mm of where, align=left] (c2)
+  {ice2-data config show\\ice2-data config set-cache \textit{dir}};
+\node[cmd, right=13mm of get, align=left]   (c3)
+  {ice2-data plan \textit{name}\\ice2-data fetch \textit{name}};
+\node[cmd, right=13mm of trust, align=left] (c4)
+  {ice2-data verify --all\\ice2-data verify --deep --repair};
+\node[cmd, right=13mm of own, align=left]   (c5)
+  {ice2-data materialize \textit{dataset}};
+
+\foreach \a/\b in {see/c1,where/c2,get/c3,trust/c4,own/c5}
+  \draw[uses] (\a) -- (\b);
+
+% Reading in place vs downloading is the distinction the guides keep returning
+% to, so it is drawn rather than only described.
+\node[usecase, below=9mm of own, text width=33mm] (inplace)
+  {Read data already here};
+\draw[link] (user.south) |- (inplace.west);
+\node[cmd, right=13mm of inplace, align=left] (c6)
+  {ice2-data config set-root \textit{ds dir}};
+\draw[uses] (inplace) -- (c6);
+
+\begin{scope}[on background layer]
+  \node[boundarybox, fit=(see)(where)(get)(trust)(own)(inplace)] (sys) {};
+\end{scope}
+\node[boundarylabel, anchor=north west] at (sys.north west) {reading};
+
+\node[note, below=6mm of inplace, xshift=22mm, text width=88mm]
+  {Nothing here writes to a catalogue. \texttt{fetch} and \texttt{materialize}\\
+   write only into the cache; everything else only looks.};
+
+\end{tikzpicture}

@@ -10,8 +10,8 @@ format with its writer in one repository and its reader in another drifts
 silently: the reader grows a feature, the writer never emits it, and nothing
 fails loudly enough to notice.
 
-The command line entry point is ``ice2-catalog`` (see :mod:`.cli`).  ``upload``
-and ``check-access`` additionally need ``rclone`` and ``oidc-agent`` on PATH;
+The command line entry point is ``ice2-data catalog`` (see :mod:`.cli`).  ``upload``
+and ``check-store`` additionally need ``rclone`` and ``oidc-agent`` on PATH;
 they pull in no extra Python dependencies, which is why there is no separate
 install extra to remember.
 """
@@ -77,11 +77,11 @@ def _refuse(path: Path, searched_upward: bool) -> SystemExit:
         f"{path} is a {ROLE_PUBLISHED} catalogue, not a {ROLE_SOURCE} one ({says}).\n"
         "It carries the published output only -- no dataset.yaml and no source_dir -- so there "
         "are no local bytes to build, upload or publish from, and anything you change in it is "
-        "overwritten by the next `ice2-catalog publish`.\n\n"
+        "overwritten by the next `ice2-data catalog publish`.\n\n"
         "Work in the source catalogue and republish:\n"
         f"    cd {where_to_go}\n"
-        "    ice2-catalog upload <dataset>\n"
-        f"    ice2-catalog publish {path}"
+        "    ice2-data catalog upload <dataset>\n"
+        f"    ice2-data catalog publish {path}"
     )
 
 
@@ -111,3 +111,26 @@ def resolve_catalog_root(explicit: str | None, start: Path | None = None) -> Pat
 
 def datasets_dir(catalog_root: Path) -> Path:
     return catalog_root / "datasets"
+
+
+def resources_of(package: dict, dataset_dir: Path) -> list[dict]:
+    """Every resource in a dataset, whether its inventory is inline or sharded.
+
+    A sharded descriptor carries an ``ice2:shards`` index instead of
+    ``resources``; the inventory lives in ``manifests/<prefix>.json`` beside it.
+    Shared by the manifest builder (freezing an uploaded dataset's inventory
+    without re-reading source_dir) and the uploader (finding what to copy and
+    verify) so the two can never disagree about what a sharded package contains.
+    """
+    if "resources" in package:
+        return package["resources"]
+    resources: list[dict] = []
+    for shard in package.get("ice2:shards", []):
+        shard_file = dataset_dir / shard["path"]
+        if not shard_file.is_file():
+            raise SystemExit(
+                f"{package['name']}: shard {shard['path']} is missing. Run:\n"
+                f"    ice2-data catalog build {package['name']}"
+            )
+        resources.extend(json.loads(shard_file.read_text())["resources"])
+    return resources

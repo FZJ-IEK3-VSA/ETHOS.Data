@@ -1,8 +1,8 @@
 """Upload a dataset to DESY dCache InfiniteSpace, then prove it is readable.
 
-    ice2-catalog upload reskit-test-data --dry-run
-    ice2-catalog upload reskit-test-data
-    ice2-catalog upload reskit-test-data --verify-only
+    ice2-data catalog upload reskit-test-data --dry-run
+    ice2-data catalog upload reskit-test-data
+    ice2-data catalog upload reskit-test-data --verify-only
 
 The verify step is the point of this tool. Uploading is one rclone call; knowing
 that an anonymous user on the other side of the internet can actually read what
@@ -17,6 +17,10 @@ Guard rails:
   * internal datasets need --allow-internal, and are NOT made world-readable
   * paths are immutable: an upload that would overwrite an existing, differing
     file is refused, because published paths must never change under consumers
+  * only files in the manifest are uploaded.  A source_dir narrowed by
+    ``ice2:include`` / ``ice2:exclude`` is usually a shared download directory
+    holding things that are not the dataset, so "copy the directory" is not the
+    same instruction as "publish the dataset"
 """
 
 from __future__ import annotations
@@ -24,13 +28,14 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 import yaml
 
-from . import datasets_dir
+from . import datasets_dir, resources_of
 
 FRONTEND = "https://hifis-storage-web.desy.de/api/v1"
 MODE_0755 = 493  # dCache wants the mode as a decimal integer, not octal
@@ -56,7 +61,7 @@ def token(profile: str) -> str:
     return result.stdout.strip()
 
 
-def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path, Path]:
+def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path | None, Path]:
     dataset_dir = datasets_dir(catalog_root) / dataset_name
     meta_file = dataset_dir / "dataset.yaml"
     package_file = dataset_dir / "datapackage.json"
@@ -69,16 +74,21 @@ def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path, Path]
         raise SystemExit(
             f"no dataset called {dataset_name!r} in {datasets_dir(catalog_root)}.\n"
             f"Datasets in this catalogue:\n{listing}\n"
-            "To add a new one, describe it first -- see ADDING-DATA.md."
+            "To add a new one, describe it first -- see docs/how-to/describe-a-dataset.md."
         )
     if not package_file.is_file():
         raise SystemExit(
             f"{dataset_name!r} has no datapackage.json yet. Run:\n"
-            f"    ice2-catalog build {dataset_name}"
+            f"    ice2-data catalog build {dataset_name}"
         )
     meta = yaml.safe_load(meta_file.read_text())
     package = json.loads(package_file.read_text())
-    source_dir = Path(meta["source_dir"]).expanduser()
+    raw_source_dir = meta.get("source_dir")
+    # A dataset marked ice2:uploaded: true has none -- dCache is already the
+    # source of truth, and there is nothing local left to read bytes from.
+    if raw_source_dir is None:
+        return meta, package, None, dataset_dir
+    source_dir = Path(raw_source_dir).expanduser()
     # Resolve exactly as the manifest builder does -- relative to the dataset
     # directory, not the current one. Otherwise a relative source_dir means two
     # different things depending on where you happened to run the tool from, and
@@ -88,7 +98,8 @@ def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path, Path]
     return meta, package, source_dir, dataset_dir
 
 
-def preflight(name: str, package: dict, source_dir: Path, allow_internal: bool) -> str:
+def preflight(name: str, package: dict, source_dir: Path | None, allow_internal: bool,
+              verify_only: bool) -> str:
     access = package.get("ice2:access", "public")
     prefix = package.get("ice2:remote_prefix")
 
@@ -106,35 +117,21 @@ def preflight(name: str, package: dict, source_dir: Path, allow_internal: bool) 
         )
     if not prefix:
         raise SystemExit(f"{name} declares no ice2:remote_prefix, so there is nowhere to put it.")
-    if not source_dir.is_dir():
+
+    if source_dir is None:
+        if not verify_only:
+            raise SystemExit(
+                f"{name} has no source_dir (ice2:uploaded: true) -- there is nothing left "
+                "to upload. Pass --verify-only to recheck what is already on dCache, or "
+                "unset ice2:uploaded and restore source_dir to publish a fresh copy."
+            )
+    elif not source_dir.is_dir():
         raise SystemExit(f"source_dir does not exist: {source_dir}")
 
     if package.get("ice2:license_status") == "unresolved":
         print(f"  ! {name} has unresolved licensing. Publishing it may not be permitted.")
         print("    Settle the redistribution terms before making it world-readable.\n")
     return prefix
-
-
-def resources_of(package: dict, dataset_dir: Path) -> list[dict]:
-    """Every resource in a dataset, whether its inventory is inline or sharded.
-
-    A sharded descriptor carries an ``ice2:shards`` index instead of
-    ``resources``; the inventory lives in ``manifests/<prefix>.json`` beside it.
-    Verification has to read those, or a sharded dataset gets uploaded and then
-    never checked -- which is the half of this tool that matters.
-    """
-    if "resources" in package:
-        return package["resources"]
-    resources: list[dict] = []
-    for shard in package.get("ice2:shards", []):
-        shard_file = dataset_dir / shard["path"]
-        if not shard_file.is_file():
-            raise SystemExit(
-                f"{package['name']}: shard {shard['path']} is missing. Run:\n"
-                f"    ice2-catalog build {package['name']}"
-            )
-        resources.extend(json.loads(shard_file.read_text())["resources"])
-    return resources
 
 
 def remote_manifest_check(resources: list[dict], base_url: str) -> tuple[list, list, list]:
@@ -184,7 +181,7 @@ def run(catalog_root: Path, args) -> int:
     base_url = catalog_meta["ice2:publication_url"].rstrip("/")
 
     meta, package, source_dir, dataset_dir = load(catalog_root, args.dataset)
-    prefix = preflight(args.dataset, package, source_dir, args.allow_internal)
+    prefix = preflight(args.dataset, package, source_dir, args.allow_internal, args.verify_only)
 
     # The upload destination and the URL we verify afterwards have to name the
     # same folder, so derive the default from the catalogue rather than repeating
@@ -208,13 +205,26 @@ def run(catalog_root: Path, args) -> int:
 
     print(f"dataset      {args.dataset}  ({package['ice2:file_count']} files, "
           f"{package['ice2:total_bytes'] / 1e6:,.1f} MB)")
-    print(f"from         {source_dir}")
+    print(f"from         {source_dir or '(already uploaded -- no local source_dir)'}")
     print(f"to           {destination}")
     print(f"public URL   {dataset_url}\n")
 
+    resources = resources_of(package, dataset_dir)
+
     if not args.verify_only:
+        # Upload the manifest, not the directory. They are the same thing only
+        # when nothing else lives under source_dir; with ice2:include or
+        # ice2:exclude in play they are not, and `rclone copy <dir>` would
+        # publish the strays the manifest deliberately leaves out -- silently,
+        # since verification only ever looks for files it knows about.
+        handle, listing_path = tempfile.mkstemp(
+            prefix=f"ice2-upload-{args.dataset}-", suffix=".txt", text=True)
+        with open(handle, "w") as listing_file:
+            listing_file.writelines(f"{resource['path']}\n" for resource in resources)
+        listing = Path(listing_path)
         command = [
             "rclone", "copy", str(source_dir), destination,
+            "--files-from", str(listing),
             "--transfers", str(args.transfers),
             "--checksum",
             # dCache cannot modify a file in place -- a changed file is delete +
@@ -223,8 +233,12 @@ def run(catalog_root: Path, args) -> int:
             "--immutable",
             "--progress" if not args.dry_run else "--dry-run",
         ]
+        print(f"  ({len(resources)} files listed in {listing})")
         print("  $ " + " ".join(command) + "\n")
-        result = subprocess.run(command)
+        try:
+            result = subprocess.run(command)
+        finally:
+            listing.unlink(missing_ok=True)
         if result.returncode != 0:
             print("\nrclone failed. Common causes:", file=sys.stderr)
             print("  * no rclone remote called "
@@ -246,7 +260,6 @@ def run(catalog_root: Path, args) -> int:
             print("  chmod failed; anonymous reads will 401 until it succeeds.")
 
     print("\nverifying anonymous access (no credentials, exactly what a public user gets)")
-    resources = resources_of(package, dataset_dir)
     ok, missing, wrong = remote_manifest_check(resources, dataset_url)
     print(f"  readable       {len(ok)}/{package['ice2:file_count']}")
     if wrong:

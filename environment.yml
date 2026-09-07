@@ -7,3 +7,24 @@ dependencies:
   - pyyaml
   - platformdirs
   - tqdm
+  # dev
+  - pytest
+  - ruff
+  # Diagram toolchain. The docs reference committed SVGs, so these are needed
+  # only to re-render a diagram after editing its .tex source -- an ordinary
+  # `mkdocs build` needs neither. docs/diagrams/render.py drives them:
+  #   tectonic  TikZ -> PDF. Fetches the LaTeX packages it needs on demand,
+  #             which a system TeX Live install often cannot (no standalone,
+  #             no preview, no arrows.meta).
+  #   poppler   provides pdftocairo, for PDF -> SVG.
+  - tectonic
+  - poppler
+  # Documentation (MkDocs). `mkdocs serve` for a live preview, `mkdocs build`
+  # for the static site. mkdocstrings needs ice2_data importable, so install
+  # the package into this environment (`pip install -e . --no-deps`) before
+  # building the API reference pages.
+  - mkdocs >=1.6,<1.7
+  - mkdocs-material >=9.5
+  - mkdocstrings >=0.25
+  - mkdocstrings-python >=1.10
+  - griffe >=0.45

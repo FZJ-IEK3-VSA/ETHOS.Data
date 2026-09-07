@@ -1,13 +1,26 @@
-"""Command line interface: ``ice2-catalog build|publish|upload|check-access``.
+"""The ``ice2-data catalog ...`` subcommands: build, publish, upload, link-cache, check-store.
 
-The maintainer counterpart to ``ice2-data``.  Everything here writes -- to a
-catalogue checkout, or to the storage behind it -- which is why it is a separate
-command rather than more subcommands on the consumer tool: the two have
-different audiences, and nothing a data *user* runs should be one typo away from
-republishing a catalogue.
+The maintainer half of one command. Everything here **writes** -- to a catalogue
+checkout, or to the storage behind it -- while everything under ``ice2-data``
+itself only reads. That split used to be two executables (``ice2-catalog`` and
+``ice2-data``), which made the separation obvious at the cost of a second name
+to install, remember and keep on PATH; people hit "command not found" and
+concluded the tooling was gone.
 
-The catalogue to act on is found by searching upward from the current directory
-for ``catalog.yaml``, so these commands work from anywhere inside a checkout.
+One executable, two modes. The ``catalog`` noun does the same job the second
+binary did -- nothing a data *user* types is one key away from republishing a
+catalogue -- and it does it where the user is already looking. Grouping is not
+decoration: ``ice2-data --help`` stays a list of things that read, and every
+command that writes is one word further in.
+
+Four of the five need a catalogue checkout, found by searching upward from the
+current directory for ``catalog.yaml``, so they work from anywhere inside one.
+``check-store`` is the exception: it probes dCache and has nothing to do with
+any particular catalogue.
+
+This module owns the argument definitions rather than exporting a ``main``:
+:mod:`ice2_data.cli` calls :func:`add_catalog_parser` to graft them on, and
+:func:`dispatch` to run them.
 """
 
 from __future__ import annotations
@@ -15,7 +28,6 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 from . import resolve_catalog_root
@@ -23,7 +35,7 @@ from . import resolve_catalog_root
 SCRIPTS = Path(__file__).resolve().parent / "scripts"
 
 
-def check_access(vo: str) -> int:
+def check_store(vo: str) -> int:
     """Run the dCache access probe, which is a shell script by necessity.
 
     It reproduces exactly what a maintainer types by hand against curl and
@@ -36,59 +48,104 @@ def check_access(vo: str) -> int:
     return subprocess.run([str(script), vo]).returncode
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="ice2-catalog", description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--catalog-root", default=None,
-                        help="catalogue checkout to act on (default: search upward for catalog.yaml)")
-    sub = parser.add_subparsers(dest="command", required=True)
+def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentParser:
+    """Graft ``catalog`` and its subcommands onto the ``ice2-data`` parser."""
+    parser = sub.add_parser(
+        "catalog",
+        help="maintainer commands: describe, publish and upload datasets",
+        description="Write to a catalogue, or to the storage behind it. "
+                    "Everything else in ice2-data only reads.",
+    )
+    # NOT a top-level option: `ice2-data --catalog` already exists and means
+    # something else entirely -- which catalogue to *read*. Keeping this one
+    # inside the group is what stops the two from being confusable.
+    parser.add_argument(
+        "--catalog-root", default=None,
+        help="catalogue checkout to act on (default: search upward for catalog.yaml)")
 
-    builder = sub.add_parser("build", help="regenerate datapackage.json and datacatalog.json")
+    catalog_sub = parser.add_subparsers(dest="catalog_command", required=True)
+
+    builder = catalog_sub.add_parser(
+        "build", help="regenerate datapackage.json and datacatalog.json from dataset.yaml")
     builder.add_argument("datasets", nargs="*", help="dataset directory names (default: all)")
-    builder.add_argument("--check", action="store_true", help="fail if any manifest is out of date")
+    builder.add_argument("--check", action="store_true",
+                         help="fail if any manifest is out of date; write nothing")
 
-    publisher = sub.add_parser("publish", help="generate the public catalogue from this internal one")
+    publisher = catalog_sub.add_parser(
+        "publish", help="generate the public catalogue from this source one")
     publisher.add_argument("target", help="path to a checkout of the public ice2-data-catalog repo")
-    publisher.add_argument("--check", action="store_true", help="fail if the target is out of date")
+    publisher.add_argument("--check", action="store_true",
+                           help="fail if the target is out of date; write nothing")
 
-    uploader = sub.add_parser("upload", help="put a dataset's bytes on dCache, then verify them")
+    uploader = catalog_sub.add_parser(
+        "upload", help="put a dataset's bytes on dCache, then verify them anonymously")
     uploader.add_argument("dataset")
     uploader.add_argument("--remote", default="HIFIS", help="rclone remote name (default: HIFIS)")
-    uploader.add_argument("--oidc-profile", default="HIFIS", help="oidc-agent profile (default: HIFIS)")
-    uploader.add_argument("--vo-path", default="Helmholtz/FZJ-ICE2", help="namespace path of the VO")
+    uploader.add_argument("--oidc-profile", default="HIFIS",
+                          help="oidc-agent profile (default: HIFIS)")
+    uploader.add_argument("--vo-path", default="Helmholtz/FZJ-ICE2",
+                          help="namespace path of the VO")
     uploader.add_argument("--root", default=None,
                           help="publication root under the VO (default: the last path segment of "
                                "catalog.yaml's ice2:publication_url)")
     uploader.add_argument("--dry-run", action="store_true", help="show what rclone would transfer")
-    uploader.add_argument("--verify-only", action="store_true", help="skip the upload, just check readability")
+    uploader.add_argument("--verify-only", action="store_true",
+                          help="skip the upload, just check readability")
     uploader.add_argument("--allow-internal", action="store_true")
-    uploader.add_argument("--no-chmod", action="store_true", help="do not set 0755 on the dataset prefix")
+    uploader.add_argument("--no-chmod", action="store_true",
+                          help="do not set 0755 on the dataset prefix")
     uploader.add_argument("--transfers", type=int, default=8)
 
-    prober = sub.add_parser("check-access", help="probe what we can do on dCache InfiniteSpace")
+    # Named for what it produces, not for the internal idea behind it. It was
+    # `namespace`, which named the concept ("a namespace of links") and left the
+    # reader of `--root /projects5/...` with no way to guess that the thing being
+    # built is the shared cache.
+    linker = catalog_sub.add_parser(
+        "link-cache",
+        help="build the shared cache as links to data already on this machine")
+    linker.add_argument("--root", required=True,
+                        help="the public cache directory to build "
+                             "(e.g. /projects5/ice2_data_cache_public)")
+    linker.add_argument("--dry-run", action="store_true",
+                        help="show what would change, write nothing")
+    linker.add_argument("--prune", action="store_true",
+                        help="also remove links for datasets no longer in the catalogue")
+
+    # Was `check-access`, which did not say access to *what*. It probes the
+    # publication store, and is the one subcommand here that needs no catalogue.
+    prober = catalog_sub.add_parser(
+        "check-store", help="probe what this account can do on dCache InfiniteSpace")
     prober.add_argument("vo", nargs="?", default="FZJ-ICE2", help="VO name (default: FZJ-ICE2)")
 
-    args = parser.parse_args(argv)
+    return parser
 
-    if args.command == "check-access":
-        return check_access(args.vo)
+
+def dispatch(args) -> int:
+    """Run one ``ice2-data catalog`` subcommand.
+
+    The heavy modules are imported here rather than at module scope: a plain
+    ``ice2-data list`` builds this parser too, and should not pay to import the
+    manifest builder to do it.
+    """
+    if args.catalog_command == "check-store":
+        return check_store(args.vo)
 
     root = resolve_catalog_root(args.catalog_root)
 
-    if args.command == "build":
+    if args.catalog_command == "build":
         from . import manifest
         return manifest.run(root, args.datasets, check=args.check)
 
-    if args.command == "publish":
+    if args.catalog_command == "publish":
         from . import publish
         return publish.run(root, args.target, check=args.check)
 
-    if args.command == "upload":
+    if args.catalog_command == "link-cache":
+        from . import namespace
+        return namespace.run(root, args)
+
+    if args.catalog_command == "upload":
         from . import upload
         return upload.run(root, args)
 
-    raise SystemExit(f"unknown command: {args.command}")
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(f"unknown catalog command: {args.catalog_command}")

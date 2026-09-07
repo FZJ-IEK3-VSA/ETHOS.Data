@@ -1,18 +1,40 @@
-"""Where the shared cache lives, and how that gets decided.
+"""Where the caches live, and how that gets decided.
 
-The cache location is resolved from several sources so that it can be set once
-and then forgotten -- per user, per environment, or site-wide -- while still
-being overridable for a single job. First match wins:
+There are three roots, and a user is expected to set at most two of them:
+
+    public_cache       public and internal data -- a namespace of symbolic
+                       links to data already on this machine, plus real
+                       directories for anything downloaded from dCache
+    restricted_cache   licensed data, held as real files we own and can make
+                       read-only; never downloaded, never written to
+    staging_cache      optional: work in progress that is not in the catalogue
+                       yet, shadowing it during development
+
+Deliberately *not* one setting per dataset. A cache shared by a whole institute
+has to be configurable in one line, or people will not configure it at all.
+Which root a dataset comes from follows from its access class, and whether it is
+read in place follows from whether its entry in the root is a symbolic link --
+both facts already available without anybody writing them down.
+
+``dataset_roots`` survives as a per-dataset escape hatch for somebody working
+offline from a private copy. Normal users never touch it.
+
+Each root is resolved from several sources so that it can be set once and then
+forgotten -- per user, per environment, or site-wide -- while still being
+overridable for a single job. First match wins:
 
     1. an explicit argument        fetch(..., root=...) / --root
-    2. $ICE2_DATA_DIR              per-shell, per-SLURM-job, CI
+    2. an environment variable     $ICE2_DATA_DIR, $ICE2_RESTRICTED_DIR, ...
     3. project file                ./ice2-data.yaml, searched upward from the cwd
     4. user config                 per-user config directory (all platforms)
     5. environment config          <sys.prefix>/etc/ice2-data/config.yaml
     6. site config                 machine-wide config directory
     7. built-in default            the per-user OS cache directory
 
-Nothing has to be configured: layer 7 works on Linux, macOS and Windows alike.
+Nothing has to be configured for public data: layer 7 works on Linux, macOS and
+Windows alike. The restricted and staging roots have *no* built-in default on
+purpose -- where licensed bytes land is a decision somebody has to make out
+loud, and staging is opt-in by nature.
 
 Layer 3 is for people who want the setting to be *visible*. It is an ordinary
 file sitting next to the work it belongs to, found by walking up from the
@@ -27,7 +49,7 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import platformdirs
@@ -40,13 +62,27 @@ __all__ = [
     "unset_dataset_root",
     "CONFIG_FILENAME",
     "ENV_VAR",
+    "RESTRICTED_ENV_VAR",
+    "STAGING_ENV_VAR",
+    "SKIP_UNAVAILABLE_ENV_VAR",
+    "SKIP_UNAVAILABLE_KEY",
+    "PUBLIC_CACHE_KEY",
+    "LEGACY_CACHE_KEY",
+    "RESTRICTED_CACHE_KEY",
+    "STAGING_CACHE_KEY",
     "Resolved",
+    "Roots",
     "config_path",
     "find_project_config",
     "writable_config_path",
     "config_sources",
     "load_config",
     "resolve_cache_dir",
+    "resolve_public_cache",
+    "resolve_restricted_cache",
+    "resolve_staging_cache",
+    "resolve_roots",
+    "resolve_skip_unavailable",
     "resolve_catalog",
     "resolve_collections",
     "resolve_publication_url",
@@ -54,7 +90,24 @@ __all__ = [
     "unset_option",
 ]
 
+#: The public cache. Named for the era when there was only one root; kept
+#: because it is in scripts, job files and people's shell profiles.
 ENV_VAR = "ICE2_DATA_DIR"
+RESTRICTED_ENV_VAR = "ICE2_RESTRICTED_DIR"
+STAGING_ENV_VAR = "ICE2_STAGING_DIR"
+
+PUBLIC_CACHE_KEY = "public_cache"
+#: What ``public_cache`` used to be called. Still read, still writable by
+#: ``config set-cache``, so existing ice2-data.yaml files keep working.
+LEGACY_CACHE_KEY = "cache_dir"
+RESTRICTED_CACHE_KEY = "restricted_cache"
+STAGING_CACHE_KEY = "staging_cache"
+#: "I do not have the licensed data, carry on without it." Set once by anybody
+#: working away from the institute cluster, where the restricted cache does not
+#: and cannot exist.
+SKIP_UNAVAILABLE_KEY = "skip_unavailable"
+SKIP_UNAVAILABLE_ENV_VAR = "ICE2_SKIP_UNAVAILABLE"
+
 CONFIG_FILENAME = "config.yaml"
 PROJECT_FILENAME = "ice2-data.yaml"
 APP = "ice2-data"
@@ -72,6 +125,43 @@ class Resolved:
 
     def __str__(self) -> str:
         return f"{self.value}  (from {self.source})"
+
+
+@dataclass(frozen=True)
+class Roots:
+    """The three cache roots, resolved together with their provenance.
+
+    Passed around as one object so that adding a root later does not mean
+    changing every signature between the command line and ``locate()``.
+    """
+
+    public: Path
+    restricted: Path | None = None
+    staging: Path | None = None
+    public_source: str = ""
+    restricted_source: str = ""
+    staging_source: str = ""
+
+    @classmethod
+    def coerce(cls, value: "Roots | str | Path | None") -> "Roots":
+        """Accept a Roots, a bare path meaning "the public cache", or nothing.
+
+        The bare-path form is what keeps ``fetch(root=...)`` and ``--root``
+        working unchanged: they always meant the public cache, and still do.
+        """
+        if isinstance(value, cls):
+            return value
+        if value is None:
+            return resolve_roots()
+        return replace(
+            resolve_roots(),
+            public=Path(value).expanduser(),
+            public_source="explicit argument",
+        )
+
+    def for_access(self, access: str) -> Path | None:
+        """The root a dataset of this access class is read from."""
+        return self.restricted if access == "restricted" else self.public
 
 
 def find_project_config(start: Path | None = None) -> Path | None:
@@ -160,8 +250,17 @@ def load_config() -> tuple[dict, dict[str, str]]:
     return merged, origin
 
 
-def resolve_cache_dir(explicit: str | Path | None = None) -> Resolved:
-    """Work out the cache directory and say where the answer came from."""
+def _from_config(keys: tuple[str, ...]) -> Resolved | None:
+    """First of ``keys`` that any config file sets, with its provenance."""
+    settings, origin = load_config()
+    for key in keys:
+        if settings.get(key):
+            return Resolved(Path(str(settings[key])).expanduser(), origin[key])
+    return None
+
+
+def resolve_public_cache(explicit: str | Path | None = None) -> Resolved:
+    """Where public and internal data is read from, and downloaded into."""
     if explicit is not None:
         return Resolved(Path(explicit).expanduser(), "explicit argument")
 
@@ -169,19 +268,102 @@ def resolve_cache_dir(explicit: str | Path | None = None) -> Resolved:
     if from_env:
         return Resolved(Path(from_env).expanduser(), f"${ENV_VAR}")
 
-    settings, origin = load_config()
-    if settings.get("cache_dir"):
-        return Resolved(Path(str(settings["cache_dir"])).expanduser(), origin["cache_dir"])
+    found = _from_config((PUBLIC_CACHE_KEY, LEGACY_CACHE_KEY))
+    if found is not None:
+        return found
 
     return Resolved(Path(platformdirs.user_cache_dir(APP)), "built-in default (OS cache directory)")
+
+
+def resolve_restricted_cache(explicit: str | Path | None = None) -> Resolved | None:
+    """Where licensed data lives on this machine, or None if nobody has said.
+
+    No built-in default, deliberately. Restricted bytes landing somewhere by
+    accident is exactly the failure this package exists to prevent, so the
+    absence of a setting is reported as a question rather than guessed at.
+    """
+    if explicit is not None:
+        return Resolved(Path(explicit).expanduser(), "explicit argument")
+    from_env = os.environ.get(RESTRICTED_ENV_VAR)
+    if from_env:
+        return Resolved(Path(from_env).expanduser(), f"${RESTRICTED_ENV_VAR}")
+    return _from_config((RESTRICTED_CACHE_KEY,))
+
+
+def resolve_staging_cache(explicit: str | Path | None = None) -> Resolved | None:
+    """Where work-in-progress data lives, or None if staging is not in use.
+
+    Opt-in by design: an unset staging root means the catalogue is the only
+    thing that can answer for a dataset, which is what you want everywhere
+    except on the machine where somebody is preparing new data.
+    """
+    if explicit is not None:
+        return Resolved(Path(explicit).expanduser(), "explicit argument")
+    from_env = os.environ.get(STAGING_ENV_VAR)
+    if from_env:
+        return Resolved(Path(from_env).expanduser(), f"${STAGING_ENV_VAR}")
+    return _from_config((STAGING_CACHE_KEY,))
+
+
+#: Strings a person plausibly types meaning yes.
+_TRUTHY = {"1", "true", "yes", "on"}
+_FALSY = {"0", "false", "no", "off"}
+
+
+def resolve_skip_unavailable(explicit: bool | None = None) -> tuple[bool, str]:
+    """Whether to carry on when licensed data cannot be reached here.
+
+    Off by default: a dataset quietly missing from a result is worse than a
+    command that stops and says so. Somebody who simply does not have access to
+    the licensed data -- most people, most of the time, away from the institute
+    cluster -- sets this once and stops being asked.
+    """
+    if explicit is not None:
+        return bool(explicit), "explicit argument"
+    from_env = os.environ.get(SKIP_UNAVAILABLE_ENV_VAR)
+    if from_env is not None:
+        lowered = from_env.strip().lower()
+        if lowered in _TRUTHY:
+            return True, f"${SKIP_UNAVAILABLE_ENV_VAR}"
+        if lowered in _FALSY:
+            return False, f"${SKIP_UNAVAILABLE_ENV_VAR}"
+        raise ValueError(
+            f"${SKIP_UNAVAILABLE_ENV_VAR}={from_env!r} is not a yes/no value; "
+            f"use one of {', '.join(sorted(_TRUTHY | _FALSY))}"
+        )
+    settings, origin = load_config()
+    if SKIP_UNAVAILABLE_KEY in settings:
+        return bool(settings[SKIP_UNAVAILABLE_KEY]), origin[SKIP_UNAVAILABLE_KEY]
+    return False, "built-in default (stop rather than omit data)"
+
+
+def resolve_roots(public: str | Path | None = None) -> Roots:
+    """All three roots at once, each with its provenance."""
+    resolved_public = resolve_public_cache(public)
+    restricted = resolve_restricted_cache()
+    staging = resolve_staging_cache()
+    return Roots(
+        public=resolved_public.value,
+        restricted=restricted.value if restricted else None,
+        staging=staging.value if staging else None,
+        public_source=resolved_public.source,
+        restricted_source=restricted.source if restricted else "",
+        staging_source=staging.source if staging else "",
+    )
+
+
+def resolve_cache_dir(explicit: str | Path | None = None) -> Resolved:
+    """The public cache. Retained under its old name for existing callers."""
+    return resolve_public_cache(explicit)
 
 
 def dataset_roots() -> dict[str, str]:
     """Per-dataset local roots for this machine.
 
-    A dataset listed here is read where it lies and never downloaded -- used for
-    licensed data, for data staged centrally on the HPC, and for data that has
-    simply not been uploaded yet.
+    The escape hatch, not the main road: a dataset listed here is read where it
+    lies and never downloaded, whatever the three roots say. Use it for a
+    private copy on a laptop; on a shared machine, put a symbolic link in the
+    public cache instead, which needs no per-user configuration at all.
     """
     settings, _ = load_config()
     roots = settings.get("dataset_roots") or {}
@@ -242,7 +424,7 @@ def resolve_publication_url(catalog_default: str = "") -> tuple[str, str]:
 
 
 def resolve_catalog(explicit: str | None = None) -> tuple[str, str] | None:
-    """Optional default catalogue location, resolved the same way as cache_dir.
+    """Optional default catalogue location, resolved the same way as the caches.
 
     Returns ``None`` if nothing is configured, so a caller falls back to
     whatever a collections.yaml pins for itself via its own ``catalog:`` key.

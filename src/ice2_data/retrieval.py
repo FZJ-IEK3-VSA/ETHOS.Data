@@ -1,0 +1,256 @@
+"""Downloading catalogue resources into the shared, hash-verified cache.
+
+(Module named ``retrieval`` rather than ``fetch`` so it can never shadow the
+public ``ice2_data.fetch`` function -- the same reason ``selection`` is not
+called ``collections``. At runtime the function won anyway, because ``def
+fetch`` in ``__init__`` runs after the ``from .fetch import ...`` line, but
+static tooling saw only the module: griffe could not document the package's
+main entry point, and editors and type checkers offered the module's members
+for ``ice2_data.fetch``. ``download`` and ``plan`` are exported from here under
+their own names for the same reason -- do not rename this module to either.)
+
+The cache layout is the whole trick behind cross-tool deduplication:
+
+    <public cache>/<dataset>/<resource path>
+
+Every tool derives that path from the same catalogue, so two tools asking for
+the same file land on the same file. There is nothing to synchronise: the second
+tool simply finds the file already there.
+
+A dataset's entry in that root may be a **symbolic link** to data that is
+already on this machine, in which case nothing is downloaded and nothing is
+copied -- see :mod:`ice2_data.access` for the resolution rules. Downloads only
+ever create real directories, and never write through a link.
+"""
+
+from __future__ import annotations
+
+import warnings
+from pathlib import Path
+
+import pooch
+
+from .access import (
+    AccessError,
+    Location,
+    check_missing,
+    locate,
+    unavailable,
+)
+from .catalog import Catalog, Resource
+from .config import ENV_VAR, Roots, dataset_roots, resolve_public_cache
+
+__all__ = [
+    "AccessError",
+    "DataFiles",
+    "ENV_VAR",
+    "cache_dir",
+    "download",
+    "local_path",
+    "plan",
+]
+
+
+class DataFiles(dict):
+    """The files a collection resolved to: ``{"<dataset>/<path>": Path}``.
+
+    Behaves as an ordinary dict, with two conveniences for the common cases --
+    handing the whole set to a workflow, and pulling out one known file.
+    """
+
+    @property
+    def paths(self) -> list[Path]:
+        """Every file, in catalogue order."""
+        return list(self.values())
+
+    @property
+    def directories(self) -> list[Path]:
+        """The distinct directories the files live in, for path-based readers."""
+        seen: dict[Path, None] = {}
+        for path in self.values():
+            seen.setdefault(path.parent, None)
+        return list(seen)
+
+    def one(self, suffix: str) -> Path:
+        """The single file whose key ends with ``suffix``.
+
+        Raises if it is ambiguous or absent, so a typo fails loudly instead of
+        silently handing back the wrong raster.
+        """
+        matches = [key for key in self if key.endswith(suffix)]
+        if not matches:
+            raise KeyError(f"no file ending in {suffix!r}; have: {', '.join(sorted(self))}")
+        if len(matches) > 1:
+            raise KeyError(f"{suffix!r} is ambiguous, matches: {', '.join(sorted(matches))}")
+        return self[matches[0]]
+
+
+def cache_dir(explicit: str | Path | None = None) -> Path:
+    """Root of the shared public cache.
+
+    Resolved from an explicit argument, then $ICE2_DATA_DIR, then the user /
+    environment / site config files, then the per-user OS cache directory.
+    See :mod:`ice2_data.config` for the full precedence and the reasoning.
+    """
+    return resolve_public_cache(explicit).value
+
+
+def local_path(resource: Resource, root: Path | None = None) -> Path:
+    return (root or cache_dir()) / resource.dataset / resource.path
+
+
+def plan(
+    catalog: Catalog,
+    resources: list[Resource],
+    roots: "Roots | str | Path | None" = None,
+    skip_unavailable: bool | None = None,
+) -> dict:
+    """Report what a fetch would do, without touching the network."""
+    roots = Roots.coerce(roots)
+    locations = locate(catalog, resources, roots, dataset_roots(), skip_unavailable)
+
+    present, missing, in_place = [], [], []
+    by_origin: dict[str, list[Resource]] = {}
+    for location in locations:
+        if not location.available:
+            continue
+        if location.in_place:
+            in_place.append(location)
+            by_origin.setdefault(location.origin, []).append(location.resource)
+            continue
+        # Size is a cheap presence check; download() verifies the hash and
+        # re-fetches anything that fails, so this is an estimate, not a promise.
+        target = location.path
+        if target.is_file() and target.stat().st_size == location.resource.bytes:
+            present.append(location)
+        else:
+            missing.append(location)
+
+    return {
+        "root": roots.public,
+        "roots": roots,
+        "locations": locations,
+        "present": [l.resource for l in present],
+        "missing": [l.resource for l in missing],
+        "in_place": [l.resource for l in in_place],
+        "in_place_by_origin": by_origin,
+        "unreadable": check_missing(locations),
+        "unavailable": [l.resource for l in unavailable(locations)],
+        "bytes_total": sum(r.bytes for r in resources),
+        "bytes_to_download": sum(l.resource.bytes for l in missing),
+    }
+
+
+def download(
+    catalog: Catalog,
+    resources: list[Resource],
+    root: "Roots | str | Path | None" = None,
+    progressbar: bool = True,
+    skip_unavailable: bool | None = None,
+) -> DataFiles:
+    """Make every resource available locally and return where each one is.
+
+    Resources resolved in place -- a link in the public cache, the restricted
+    cache, a staging entry, or a configured root -- are used where they lie and
+    never copied; the rest are downloaded into the public cache, skipping
+    anything already present and hash-verified.
+    """
+    roots = Roots.coerce(root)
+    _warn_about_licensing(catalog, resources)
+
+    locations = locate(catalog, resources, roots, dataset_roots(), skip_unavailable)
+
+    absent = unavailable(locations)
+    if absent:
+        names = sorted({loc.resource.dataset for loc in absent})
+        warnings.warn(
+            f"{len(absent)} file(s) from {', '.join(names)} are not available on this "
+            f"machine and have been left out of the result. The returned mapping has no "
+            f"entry for them -- check for the keys you need rather than assuming they "
+            f"are there.",
+            UserWarning,
+            stacklevel=3,
+        )
+
+    unreadable = check_missing(locations)
+    if unreadable:
+        listing = "\n".join(f"    {loc.path}   [{loc.origin}]" for loc in unreadable[:8])
+        more = "" if len(unreadable) <= 8 else f"\n    ... and {len(unreadable) - 8} more"
+        raise AccessError(
+            f"{len(unreadable)} file(s) are missing from where they were expected:\n"
+            f"{listing}{more}\n"
+            "Run `ice2-data verify` for a per-file account, or check the roots with "
+            "`ice2-data config show`."
+        )
+
+    files = DataFiles()
+    to_download: dict[str, list[Location]] = {}
+    for location in locations:
+        if not location.available:
+            continue
+        if location.in_place:
+            files[location.resource.key] = location.path
+        else:
+            to_download.setdefault(location.resource.dataset, []).append(location)
+
+    for dataset_name, items in sorted(to_download.items()):
+        dataset = catalog.dataset(dataset_name)
+        destination = roots.public / dataset_name
+        _refuse_to_write_through_a_link(destination)
+        base_url = catalog.base_url_for(dataset)
+        puller = pooch.create(
+            path=destination,
+            base_url=base_url,
+            # Frictionless writes "sha256:..."; pooch reads the same "alg:hash"
+            # convention, so the manifest value passes straight through.
+            registry={loc.resource.path: loc.resource.hash for loc in items},
+            retry_if_failed=3,
+        )
+        for location in items:
+            fetched = puller.fetch(location.resource.path, progressbar=progressbar)
+            files[location.resource.key] = Path(fetched)
+
+    # Return in catalogue order, not download order. Unavailable resources are
+    # simply absent -- a missing key is something a caller can notice, whereas a
+    # path to a file that is not there is not.
+    return DataFiles(
+        (loc.resource.key, files[loc.resource.key])
+        for loc in locations
+        if loc.available
+    )
+
+
+def _refuse_to_write_through_a_link(destination: Path) -> None:
+    """Never let a download land in somebody else's directory.
+
+    ``locate`` already routes a symbolic-link entry to "in-place", so reaching
+    here with one means a bug or a race -- a link created between planning and
+    fetching. Either way the consequence would be writing into shared project
+    storage that this cache only borrows, so it is worth a second check.
+    """
+    if destination.is_symlink():
+        raise AccessError(
+            f"{destination} is a symbolic link to {destination.resolve()}, so it is data "
+            f"this machine already has and does not own. Refusing to download into it.\n"
+            f"If the link is stale, remove it and fetch again; if you want a real, "
+            f"independent copy in the cache, use `ice2-data materialize`."
+        )
+
+
+def _warn_about_licensing(catalog: Catalog, resources: list[Resource]) -> None:
+    """Refuse to let unresolved licensing pass silently.
+
+    An absent licence is a question, not a default. Datasets are published with
+    ice2:license_status until somebody has actually read the upstream terms.
+    """
+    unresolved = sorted(
+        {r.dataset for r in resources if catalog.dataset(r.dataset).license_status != "resolved"}
+    )
+    for name in unresolved:
+        note = catalog.dataset(name).descriptor.get("ice2:license_note", "")
+        warnings.warn(
+            f"dataset {name!r} has unresolved licensing; redistribution terms "
+            f"have not been confirmed. {note}".strip(),
+            UserWarning,
+            stacklevel=3,
+        )

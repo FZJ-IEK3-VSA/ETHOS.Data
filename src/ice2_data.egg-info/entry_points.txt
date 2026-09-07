@@ -1,3 +1,0 @@
-[console_scripts]
-ice2-catalog = ice2_data.maintain.cli:main
-ice2-data = ice2_data.cli:main

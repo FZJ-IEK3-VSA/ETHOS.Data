@@ -10,8 +10,8 @@ Fields that only make sense to a maintainer are stripped on the way out --
 crucially the embargo block, which would otherwise announce the existence and
 release date of data nobody outside is supposed to know about.
 
-    ice2-catalog publish ../ice2-data-catalog
-    ice2-catalog publish ../ice2-data-catalog --check   # CI: is it current?
+    ice2-data catalog publish ../ice2-data-catalog
+    ice2-data catalog publish ../ice2-data-catalog --check   # CI: is it current?
 
 Publishing an embargoed dataset is then two edits in dataset.yaml
 (visibility: public, access: public), a rebuild, an upload, and a re-run of this.
@@ -20,7 +20,7 @@ that already referenced it keeps resolving.
 
 Note that this rewrites a *worktree*, not a history.  A public checkout must
 never have been a clone of the internal repository, or the embargo blocks are
-still one ``git log`` away -- see SETUP.md.
+still one ``git log`` away -- see docs/how-to/bootstrap-a-catalogue.md.
 """
 
 from __future__ import annotations
@@ -38,7 +38,8 @@ from . import datasets_dir
 #   ice2:embargo        -- would leak that unpublished data exists, and when it lands
 #   ice2:license_note   -- internal review notes, not a public statement
 #   source_dir          -- a path on someone's workstation
-STRIP_FROM_PACKAGE = ("ice2:embargo", "ice2:license_note", "source_dir")
+#   ice2:uploaded       -- workflow bookkeeping about where the manifest came from
+STRIP_FROM_PACKAGE = ("ice2:embargo", "ice2:license_note", "source_dir", "ice2:uploaded")
 
 # Written into the public tree so that a stray local artefact -- an oidc-agent
 # socket symlink, a __pycache__ -- cannot be committed by a careless `git add -A`.
@@ -55,7 +56,7 @@ Public catalogue of datasets published by Forschungszentrum Jülich, Institute o
 Climate and Energy Systems (ICE-2).
 
 > **Generated — do not edit.**
-> Produced from the internal catalogue by `ice2-catalog publish`.
+> Produced from the internal catalogue by `ice2-data catalog publish`.
 > Changes made here will be overwritten. Open an issue instead.
 
 The data itself lives on [DESY dCache InfiniteSpace][dcache] and is served over
@@ -96,7 +97,7 @@ def strip(package: dict) -> dict:
 
 
 def render(catalog_root: Path) -> dict[Path, str]:
-    """Build the complete public tree in memory: {relative path -> file contents}."""
+    """Build the complete public tree in memory: {relative path -> str | bytes}."""
     catalog_meta = yaml.safe_load((catalog_root / "catalog.yaml").read_text())
     for key in STRIP_FROM_PACKAGE:
         catalog_meta.pop(key, None)
@@ -113,6 +114,22 @@ def render(catalog_root: Path) -> dict[Path, str]:
         here = Path("datasets") / dataset_dir.name
         files[here / "datapackage.json"] = json.dumps(public_package, indent=2, ensure_ascii=False) + "\n"
 
+        # Archived licence documents travel with the descriptor. A licence that
+        # exists only as a URL is a licence that can disappear -- the URL printed
+        # inside this catalogue's own ESA CCI delivery readme is already dead --
+        # and a public consumer who cannot read the terms cannot honour them.
+        for entry in public_package.get("licenses", []):
+            doc = entry.get("ice2:document")
+            if not doc:
+                continue
+            source = dataset_dir / doc
+            if not source.is_file():
+                raise SystemExit(
+                    f"{public_package['name']}: licences entry names "
+                    f"ice2:document {doc}, which is not a file at {source}."
+                )
+            files[here / doc] = source.read_bytes()
+
         # A sharded dataset is useless without its shards: the index names them
         # by relative path, so they have to travel with it or every resolve
         # 404s on a file the public catalogue swears exists.
@@ -121,7 +138,7 @@ def render(catalog_root: Path) -> dict[Path, str]:
             if not source.is_file():
                 raise SystemExit(
                     f"{public_package['name']}: shard {shard['path']} is missing. Run:\n"
-                    f"    ice2-catalog build {dataset_dir.name}"
+                    f"    ice2-data catalog build {dataset_dir.name}"
                 )
             files[here / shard["path"]] = source.read_text()
 
@@ -211,10 +228,15 @@ def run(catalog_root: Path, target: str, check: bool = False) -> int:
         elif path.is_dir() and not any(path.iterdir()):
             path.rmdir()
 
-    for rel, text in files.items():
+    for rel, content in files.items():
         destination = destination_root / rel
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(text)
+        # Licence documents are carried verbatim and may be PDFs, so the rendered
+        # tree is not text-only. Everything else is generated text.
+        if isinstance(content, bytes):
+            destination.write_bytes(content)
+        else:
+            destination.write_text(content)
 
     print(f"Published to {destination_root}")
     for rel in sorted(files, key=str):

@@ -19,11 +19,11 @@ dependencies = [
 progress = ["tqdm"]
 
 [project.scripts]
+# One executable. The maintainer commands are `ice2-data catalog ...`; they need
+# no extra Python dependencies -- only `rclone` and `oidc-agent` on PATH, and
+# only for `upload` / `check-store` -- so there is no install extra to gate them.
+# There was a second entry point, `ice2-catalog`, until the two were unified.
 ice2-data = "ice2_data.cli:main"
-# Maintainer-side counterpart: writes catalogues, uploads bytes. It needs no
-# extra Python dependencies -- only `rclone` and `oidc-agent` on PATH, and only
-# for `upload` / `check-access` -- so there is no install extra to gate it.
-ice2-catalog = "ice2_data.maintain.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
