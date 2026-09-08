@@ -165,6 +165,44 @@ ice2-data catalog upload my-dataset             # do it, then verify
 `upload` refuses `restricted` datasets outright, requires `--allow-internal` for
 `internal` ones, and warns on unresolved licensing.
 
+### Uploading a subset of the catalogue
+
+A release usually touches two or three datasets, not one and not all of them.
+Name as many as you like — by directory name, or by path, which is what shell
+completion gives you:
+
+```bash
+ice2-data catalog upload global-wind-atlas-v4 global-solar-atlas --dry-run
+ice2-data catalog upload global-wind-atlas-v4 global-solar-atlas
+ice2-data catalog upload datasets/global-wind-atlas-v4
+```
+
+They are uploaded and verified one at a time, in the order given, and the run
+ends with a summary:
+
+```title="Output"
+2 datasets, 123 files, 99.39 GB
+  global-wind-atlas-v4, global-solar-atlas
+
+---- [1/2] global-wind-atlas-v4 ------------------------------
+...
+========================================================================
+2/2 datasets ok
+```
+
+!!! tip "Prefer this over a shell loop"
+    Every dataset named is loaded and checked **before any of them is
+    uploaded** — so a restricted dataset, an unbuilt manifest or a mistyped
+    name stops the run while nothing has been published yet. A
+    `for name in ...; do ice2-data catalog upload "$name"; done` checks each
+    dataset only when it reaches it, and will happily transfer 70 GB before
+    discovering that the next name was one it should have refused.
+
+A path has to point into the *source* catalogue's `datasets/`. Naming a
+directory in the published catalogue is refused — it holds descriptors only, so
+there are no bytes there to upload — and the message tells you the name to use
+instead.
+
 What you want to see:
 
 ```title="Output"

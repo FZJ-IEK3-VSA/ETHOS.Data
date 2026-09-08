@@ -78,8 +78,14 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
                            help="fail if the target is out of date; write nothing")
 
     uploader = catalog_sub.add_parser(
-        "upload", help="put a dataset's bytes on dCache, then verify them anonymously")
-    uploader.add_argument("dataset")
+        "upload", help="put datasets' bytes on dCache, then verify them anonymously")
+    # A list, like `build`, so that publishing a subset of the catalogue is one
+    # command rather than a shell loop. A loop is not equivalent: it re-checks
+    # nothing up front, so it can upload half the subset and then stop on a
+    # dataset that was never eligible.
+    uploader.add_argument(
+        "datasets", nargs="+",
+        help="dataset directory names, or paths to them (e.g. datasets/global-wind-atlas-v4)")
     uploader.add_argument("--remote", default="HIFIS", help="rclone remote name (default: HIFIS)")
     uploader.add_argument("--oidc-profile", default="HIFIS",
                           help="oidc-agent profile (default: HIFIS)")

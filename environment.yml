@@ -7,6 +7,8 @@ dependencies:
   - pyyaml
   - platformdirs
   - tqdm
+  - oidc-agent
+  - rclone
   # dev
   - pytest
   - ruff
@@ -28,3 +30,4 @@ dependencies:
   - mkdocstrings >=0.25
   - mkdocstrings-python >=1.10
   - griffe >=0.45
+

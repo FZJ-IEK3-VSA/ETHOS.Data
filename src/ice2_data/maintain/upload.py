@@ -4,6 +4,11 @@
     ice2-data catalog upload reskit-test-data
     ice2-data catalog upload reskit-test-data --verify-only
 
+One dataset, or a subset of the catalogue -- naming them by name or by path:
+
+    ice2-data catalog upload global-wind-atlas-v4 global-solar-atlas
+    ice2-data catalog upload datasets/global-wind-atlas-v4
+
 The verify step is the point of this tool. Uploading is one rclone call; knowing
 that an anonymous user on the other side of the internet can actually read what
 you uploaded is the part that goes wrong, and it goes wrong quietly.
@@ -17,6 +22,8 @@ Guard rails:
   * internal datasets need --allow-internal, and are NOT made world-readable
   * paths are immutable: an upload that would overwrite an existing, differing
     file is refused, because published paths must never change under consumers
+  * every dataset named is loaded and checked before any of them is uploaded,
+    so a subset upload cannot publish two datasets and then refuse the third
   * only files in the manifest are uploaded.  A source_dir narrowed by
     ``ice2:include`` / ``ice2:exclude`` is usually a shared download directory
     holding things that are not the dataset, so "copy the directory" is not the
@@ -32,10 +39,12 @@ import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import NamedTuple
 
 import yaml
 
-from . import datasets_dir, resources_of
+from ..catalog import ROLE_PUBLISHED
+from . import catalogue_role, datasets_dir, resources_of
 
 FRONTEND = "https://hifis-storage-web.desy.de/api/v1"
 MODE_0755 = 493  # dCache wants the mode as a decimal integer, not octal
@@ -176,40 +185,62 @@ def chmod(path: str, mode: int, bearer: str) -> int:
         return error.code
 
 
-def run(catalog_root: Path, args) -> int:
-    catalog_meta = yaml.safe_load((catalog_root / "catalog.yaml").read_text())
-    base_url = catalog_meta["ice2:publication_url"].rstrip("/")
+def resolve_name(catalog_root: Path, argument: str) -> str:
+    """Turn one command-line argument -- a name, or a path -- into a dataset name.
 
-    meta, package, source_dir, dataset_dir = load(catalog_root, args.dataset)
-    prefix = preflight(args.dataset, package, source_dir, args.allow_internal, args.verify_only)
+    Paths are accepted because they are what shell completion produces: someone
+    looking at ``datasets/global-wind-atlas-v4`` will type that, and answering
+    "no dataset called 'datasets/global-wind-atlas-v4'" teaches them nothing.
+    """
+    if "/" not in argument:
+        return argument
 
-    # The upload destination and the URL we verify afterwards have to name the
-    # same folder, so derive the default from the catalogue rather than repeating
-    # it. They drifted apart once already, when the publication root moved from
-    # reskit-data to ice2-data-files: bytes would have gone to the old folder and
-    # every verification HEAD would have 404d against the new one, which reads
-    # like a permissions problem and is not one.
-    published_root = base_url.rstrip("/").rsplit("/", 1)[-1]
-    root = args.root or published_root
-    if args.root and args.root != published_root:
+    path = Path(argument).expanduser().resolve()
+    datasets = datasets_dir(catalog_root)
+    if path.parent == datasets:
+        return path.name
+
+    # Naming a directory in the *published* catalogue is the easy mistake to
+    # make: it has the same datasets/<name> layout, so the path looks right, but
+    # it carries no dataset.yaml and no source_dir -- there are no local bytes
+    # there to upload, and never were.
+    if catalogue_role(path.parent.parent) == ROLE_PUBLISHED:
         raise SystemExit(
-            f"--root {args.root!r} does not match the catalogue's publication root "
-            f"{published_root!r} (from ice2:publication_url in catalog.yaml).\n"
-            f"Uploading to {args.root!r} would publish bytes that {base_url}/... never serves.\n"
-            "Fix ice2:publication_url, or drop --root to use the catalogue's own value."
+            f"{path}\nis in a {ROLE_PUBLISHED} catalogue, which carries descriptors only "
+            "-- no dataset.yaml, no source_dir, so nothing to upload from.\n"
+            f"Name it in the source catalogue instead:\n"
+            f"    ice2-data catalog upload {path.name}"
         )
+    raise SystemExit(
+        f"{path}\nis not a dataset of the catalogue being uploaded from.\n"
+        f"  catalogue  {catalog_root}\n"
+        f"  datasets   {datasets}\n"
+        "Pass a bare dataset name, or a path inside that datasets directory."
+    )
 
-    namespace_path = f"{args.vo_path}/{root}/{prefix}"
-    destination = f"{args.remote}:{root}/{prefix}"
-    dataset_url = f"{base_url}/{prefix}"
 
-    print(f"dataset      {args.dataset}  ({package['ice2:file_count']} files, "
-          f"{package['ice2:total_bytes'] / 1e6:,.1f} MB)")
-    print(f"from         {source_dir or '(already uploaded -- no local source_dir)'}")
+class Plan(NamedTuple):
+    """One dataset, loaded and cleared for upload."""
+    name: str
+    package: dict
+    source_dir: Path | None
+    dataset_dir: Path
+    prefix: str
+
+
+def upload_one(args, plan: Plan, base_url: str, root: str, bearer) -> int:
+    """Upload and verify a single dataset. Returns a process-style exit code."""
+    namespace_path = f"{args.vo_path}/{root}/{plan.prefix}"
+    destination = f"{args.remote}:{root}/{plan.prefix}"
+    dataset_url = f"{base_url}/{plan.prefix}"
+
+    print(f"dataset      {plan.name}  ({plan.package['ice2:file_count']} files, "
+          f"{plan.package['ice2:total_bytes'] / 1e6:,.1f} MB)")
+    print(f"from         {plan.source_dir or '(already uploaded -- no local source_dir)'}")
     print(f"to           {destination}")
     print(f"public URL   {dataset_url}\n")
 
-    resources = resources_of(package, dataset_dir)
+    resources = resources_of(plan.package, plan.dataset_dir)
 
     if not args.verify_only:
         # Upload the manifest, not the directory. They are the same thing only
@@ -218,12 +249,12 @@ def run(catalog_root: Path, args) -> int:
         # publish the strays the manifest deliberately leaves out -- silently,
         # since verification only ever looks for files it knows about.
         handle, listing_path = tempfile.mkstemp(
-            prefix=f"ice2-upload-{args.dataset}-", suffix=".txt", text=True)
+            prefix=f"ice2-upload-{plan.name}-", suffix=".txt", text=True)
         with open(handle, "w") as listing_file:
             listing_file.writelines(f"{resource['path']}\n" for resource in resources)
         listing = Path(listing_path)
         command = [
-            "rclone", "copy", str(source_dir), destination,
+            "rclone", "copy", str(plan.source_dir), destination,
             "--files-from", str(listing),
             "--transfers", str(args.transfers),
             "--checksum",
@@ -251,17 +282,15 @@ def run(catalog_root: Path, args) -> int:
             print("\nDry run only; nothing was uploaded.")
             return 0
 
-    bearer = token(args.oidc_profile)
-
-    if not args.no_chmod and package.get("ice2:access") == "public":
-        status = chmod(namespace_path, MODE_0755, bearer)
+    if not args.no_chmod and plan.package.get("ice2:access") == "public":
+        status = chmod(namespace_path, MODE_0755, bearer())
         print(f"\nchmod 0755 {namespace_path} -> HTTP {status}")
         if status not in (200, 204):
             print("  chmod failed; anonymous reads will 401 until it succeeds.")
 
     print("\nverifying anonymous access (no credentials, exactly what a public user gets)")
     ok, missing, wrong = remote_manifest_check(resources, dataset_url)
-    print(f"  readable       {len(ok)}/{package['ice2:file_count']}")
+    print(f"  readable       {len(ok)}/{plan.package['ice2:file_count']}")
     if wrong:
         print(f"  WRONG SIZE     {len(wrong)}")
         for resource, length in wrong[:5]:
@@ -276,7 +305,7 @@ def run(catalog_root: Path, args) -> int:
         print(f"      '{FRONTEND}/namespace/{namespace_path}' -d '{{\"action\":\"chmod\",\"mode\":493}}'")
 
     sample = resources[0]["path"]
-    where = locality(f"{namespace_path}/{sample}", bearer)
+    where = locality(f"{namespace_path}/{sample}", bearer())
     print(f"\n  storage locality of {sample}: {where}")
     if where == "NEARLINE":
         print("    NEARLINE means tape only -- the first read will block on staging.")
@@ -284,3 +313,78 @@ def run(catalog_root: Path, args) -> int:
         print("    ONLINE means disk. Large files may also gain a tape copy after ~1 week.")
 
     return 1 if (missing or wrong) else 0
+
+
+def run(catalog_root: Path, args) -> int:
+    catalog_meta = yaml.safe_load((catalog_root / "catalog.yaml").read_text())
+    base_url = catalog_meta["ice2:publication_url"].rstrip("/")
+
+    # The upload destination and the URL we verify afterwards have to name the
+    # same folder, so derive the default from the catalogue rather than repeating
+    # it. They drifted apart once already, when the publication root moved from
+    # reskit-data to ice2-data-files: bytes would have gone to the old folder and
+    # every verification HEAD would have 404d against the new one, which reads
+    # like a permissions problem and is not one.
+    published_root = base_url.rstrip("/").rsplit("/", 1)[-1]
+    root = args.root or published_root
+    if args.root and args.root != published_root:
+        raise SystemExit(
+            f"--root {args.root!r} does not match the catalogue's publication root "
+            f"{published_root!r} (from ice2:publication_url in catalog.yaml).\n"
+            f"Uploading to {args.root!r} would publish bytes that {base_url}/... never serves.\n"
+            "Fix ice2:publication_url, or drop --root to use the catalogue's own value."
+        )
+
+    # Deduplicated, because naming a dataset twice should cost one upload, and
+    # ordered, so the run reads in the order it was asked for.
+    names = dict.fromkeys(resolve_name(catalog_root, argument) for argument in args.datasets)
+
+    # Load and check EVERY dataset before uploading ANY of them. The checks that
+    # matter here -- restricted data, an unbuilt manifest, a vanished source_dir
+    # -- are exactly the ones you want to hear about before bytes start moving,
+    # and a subset upload that dies on its fourth dataset has already published
+    # three. Nothing below this loop can raise SystemExit for a reason that was
+    # knowable up here.
+    plans = []
+    for name in names:
+        _meta, package, source_dir, dataset_dir = load(catalog_root, name)
+        prefix = preflight(name, package, source_dir, args.allow_internal, args.verify_only)
+        plans.append(Plan(name, package, source_dir, dataset_dir, prefix))
+
+    # One token for the whole run, fetched only if something actually needs it:
+    # a --dry-run never talks to dCache, and asking oidc-agent for a token it
+    # will not use turns a rehearsal into a login prompt.
+    cached: list[str] = []
+
+    def bearer() -> str:
+        if not cached:
+            cached.append(token(args.oidc_profile))
+        return cached[0]
+
+    if len(plans) > 1:
+        files = sum(plan.package["ice2:file_count"] for plan in plans)
+        size = sum(plan.package["ice2:total_bytes"] for plan in plans)
+        print(f"{len(plans)} datasets, {files:,} files, {size / 1e9:,.2f} GB")
+        print(f"  {', '.join(plan.name for plan in plans)}\n")
+
+    failed: dict[str, int] = {}
+    for index, plan in enumerate(plans, start=1):
+        if len(plans) > 1:
+            print(f"---- [{index}/{len(plans)}] {plan.name} " + "-" * max(0, 50 - len(plan.name)))
+        status = upload_one(args, plan, base_url, root, bearer)
+        if status:
+            failed[plan.name] = status
+        if len(plans) > 1:
+            print()
+
+    # A single dataset keeps its exit code exactly as before -- rclone's own on a
+    # transfer failure, 1 on a verification miss -- so existing scripts that read
+    # it do not change meaning now that the argument is a list.
+    if len(plans) == 1:
+        return failed.get(plans[0].name, 0)
+
+    print("=" * 72)
+    print(f"{len(plans) - len(failed)}/{len(plans)} datasets ok")
+    for name, status in failed.items():
+        print(f"  FAILED   {name} (exit {status})")
+    return 1 if failed else 0

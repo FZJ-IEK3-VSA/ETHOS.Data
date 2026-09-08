@@ -65,9 +65,9 @@ longer generates is deleted from the target.
 |---|---|
 | `--check` | fail if the target is out of date; write nothing |
 
-## `upload <dataset>`
+## `upload <dataset> [<dataset> ...]`
 
-Put a dataset's bytes on dCache, then verify them anonymously. Needs `rclone`
+Put datasets' bytes on dCache, then verify them anonymously. Needs `rclone`
 and `oidc-agent` on `PATH`.
 
 ```bash
@@ -75,6 +75,20 @@ ice2-data catalog upload my-dataset --dry-run
 ice2-data catalog upload my-dataset
 ice2-data catalog upload my-dataset --verify-only
 ```
+
+Name one dataset, or any subset of the catalogue. Each is uploaded and verified
+in turn, in the order given, and a run ends with a per-dataset summary:
+
+```bash
+ice2-data catalog upload global-wind-atlas-v4 global-solar-atlas
+ice2-data catalog upload datasets/global-wind-atlas-v4   # a path works too
+```
+
+Every dataset named is loaded and checked **before any of them is uploaded**, so
+a restricted dataset, an unbuilt manifest or a mistyped name stops the run while
+nothing has been published yet. That is the difference from a shell loop, which
+would upload the first dataset and only then discover the problem with the
+second.
 
 | Flag | Default | |
 |---|---|---|
@@ -88,11 +102,19 @@ ice2-data catalog upload my-dataset --verify-only
 | `--vo-path PATH` | `Helmholtz/FZJ-ICE2` | namespace path of the VO |
 | `--root NAME` | last segment of `catalog.yaml`'s `ice2:publication_url` | publication root under the VO |
 
+A dataset may be named by directory name or by path — a path must point into
+the source catalogue's `datasets/`, so naming one in the *published* catalogue
+is refused with the name to use instead.
+
 Refuses `restricted` datasets outright, warns on unresolved licensing, and
 passes `rclone --immutable` so a published path can never be overwritten. After
 transferring it HEADs every file in the manifest with **no credentials** and
 reports anything unreadable or the wrong size, plus the storage locality
 (`ONLINE` / `ONLINE_AND_NEARLINE` / `NEARLINE`).
+
+With a single dataset the exit code is rclone's own on a transfer failure, or
+`1` on a verification miss. With several it is `1` if any dataset failed, and
+the summary says which.
 
 Full runbook: [Upload a dataset](../../how-to/upload-a-dataset.md).
 
