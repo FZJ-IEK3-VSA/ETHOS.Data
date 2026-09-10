@@ -1,0 +1,16 @@
+\begin{tikzpicture}
+\node[artifact, text width=47mm, minimum height=17mm] (jugit) at (0,0) {JuGit\\reviewed source metadata\\Git repository};
+\node[artifact, text width=47mm, minimum height=17mm] (github) at (8,0) {GitHub\\public metadata revisions\\and release snapshots};
+\node[actor, text width=47mm, minimum height=24mm] (cluster) at (0,-4) {Institute cluster\\reader + maintainer tooling\\versioned internal metadata\\shared local data};
+\node[actor, text width=47mm, minimum height=24mm] (client) at (8,-4) {Workstation / CI runner\\package + reader\\local catalogue snapshot\\cache / test copies};
+\node[store, text width=55mm, minimum height=22mm] (dcache) at (4,-9) {dCache\\authoritative published bytes\\including test datasets};
+\draw[flow] (cluster.north west) -- node[edgelabel,left]{reviewed Git sync} (jugit.south west);
+\draw[flow] (jugit.south east) -- (cluster.north east);
+\draw[flow] (cluster.east) -- ++(14mm,0) |- node[edgelabel,pos=.77,above]{generate + release metadata} (github.west);
+\draw[flow] (github) -- node[edgelabel,right]{pinned metadata} (client);
+\draw[flowaccent] (cluster.south) -- node[edgelabel,above,sloped]{approved upload} (dcache.north west);
+\draw[flowaccent] (dcache.north east) -- node[edgelabel,above,sloped]{download} (client.south);
+\node[note, text width=55mm, align=left] at (-2,-9) {Cluster users read the\\generated catalogue directly\\from a filesystem path.};
+\node[note, text width=55mm, align=left] at (10,-9) {Required tests should use\\local metadata + copies.\\Temporary divergence is explicit.};
+\node[note, text width=150mm] at (4,-11) {Intended deployment. Metadata hosting and data authority are separate.\\Repository copies reduce remote reads; arrows do not imply automatic synchronisation.};
+\end{tikzpicture}

@@ -18,7 +18,7 @@ works.
 Before anything else, if this is a new VO or the access model is unclear:
 
 ```bash
-ice2-data catalog check-store FZJ-ICE2
+ethos-data catalog check-store FZJ-ICE2
 ```
 
 Non-destructive — it uses a throwaway subdirectory and cleans up after itself.
@@ -57,7 +57,7 @@ generated from it plus `datasets/*/dataset.yaml`:
 
 ```yaml
 # Hand-maintained catalogue-level metadata.
-# ice2-data catalog build merges this with the generated dataset list into
+# ethos-data catalog build merges this with the generated dataset list into
 # datacatalog.json. Do not edit datacatalog.json by hand.
 
 name: <catalogue-name>
@@ -66,20 +66,20 @@ description: >-
   What this catalogue is, who maintains it, and what it is for.
 
 # Root of the public data store. Every resource URL is
-#   <publication_url>/<dataset ice2:remote_prefix>/<resource path>
+#   <publication_url>/<dataset ethos:remote_prefix>/<resource path>
 # This is DESY's compatible door (443, no redirect) -- right for a public
-# catalogue. Override per machine with `ice2-data config set-publication-url`
+# catalogue. Override per machine with `ethos-data config set-publication-url`
 # for the high-throughput door instead (CI, bulk transfers).
-ice2:publication_url: https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ice2-data-files
+ethos:publication_url: https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ice2-data-files
 
-ice2:contact: <team or username>
+ethos:contact: <team or username>
 
 # What kind of catalogue this is. Always `source` in a hand-written
-# catalog.yaml; `ice2-data catalog publish` stamps `published` into the generated
+# catalog.yaml; `ethos-data catalog publish` stamps `published` into the generated
 # copy, which has no catalog.yaml of its own. Tools read this instead of
 # guessing, so standing in the wrong one gets you a straight answer rather
 # than a missing-file error.
-ice2:catalog_role: source
+ethos:catalog_role: source
 ```
 
 ## 5. The repository skeleton
@@ -87,18 +87,18 @@ ice2:catalog_role: source
 `catalog.yaml` and an empty `datasets/` directory. That is the whole skeleton —
 a catalogue repository holds metadata and nothing else.
 
-The tooling is **not** copied into it. `ice2-data catalog` ships with the
-`ice2-data` package and finds its catalogue by searching upward from the current
+The tooling is **not** copied into it. `ethos-data catalog` ships with the
+`ethos-data` package and finds its catalogue by searching upward from the current
 directory for `catalog.yaml`, so it works from anywhere inside any checkout:
 
 ```bash
-pip install ice2-data      # brings `ice2-data` and `ice2-data catalog`
+pip install ethos_data      # brings `ethos-data` and `ethos-data catalog`
 cd /path/to/your-catalogue
-ice2-data catalog build         # operates on the catalogue it is standing in
+ethos-data catalog build         # operates on the catalogue it is standing in
 ```
 
-Nothing in the tooling hardcodes a catalogue name. `ice2-data catalog upload --root`
-and `catalog.yaml`'s `ice2:publication_url` are the only places the folder name
+Nothing in the tooling hardcodes a catalogue name. `ethos-data catalog upload --root`
+and `catalog.yaml`'s `ethos:publication_url` are the only places the folder name
 appears at all.
 
 ## 6. Add and upload the first dataset
@@ -107,14 +107,14 @@ This proves the whole chain end to end:
 
 ```bash
 # describe it, build its manifest -- see Describe a dataset
-ice2-data catalog build <name>
+ethos-data catalog build <name>
 
 # upload it into the new root, then verify anonymous access -- see Upload
-ice2-data catalog upload <name> --dry-run
-ice2-data catalog upload <name>
+ethos-data catalog upload <name> --dry-run
+ethos-data catalog upload <name>
 
 # generate and inspect the public subset
-ice2-data catalog publish ../<public-repo>
+ethos-data catalog publish ../<public-repo>
 ```
 
 If `<name>` is the first thing ever uploaded here, the anonymous verification
@@ -124,12 +124,12 @@ folder, the permissions and the catalogue all agree with each other.
 ## 7. The public counterpart repository
 
 A generated, public mirror of just the `visibility: public` datasets, produced
-by `ice2-data catalog publish` and never hand-edited.
+by `ethos-data catalog publish` and never hand-edited.
 
 !!! danger "Start its git history empty. Never clone the internal repo to make it."
-    `ice2-data catalog publish` rewrites a *worktree*; it cannot rewrite a *history*.
+    `ethos-data catalog publish` rewrites a *worktree*; it cannot rewrite a *history*.
     A public checkout that began as a copy of the internal repository still
-    carries every `ice2:embargo` block, every `source_dir` pointing at a
+    carries every `ethos:embargo` block, every `source_dir` pointing at a
     maintainer's workstation, and every hidden dataset's `dataset.yaml` — one
     `git log` away from anyone who clones it.
 
@@ -149,9 +149,9 @@ the cluster, build the public cache as a directory of links to them so nothing
 has to be downloaded at all:
 
 ```bash
-ice2-data catalog link-cache --root /projects5/ice2_data_cache_public --dry-run
-ice2-data catalog link-cache --root /projects5/ice2_data_cache_public
-ice2-data config set-cache /projects5/ice2_data_cache_public --scope site
+ethos-data catalog link-cache --root /projects5/ice2_data_cache_public --dry-run
+ethos-data catalog link-cache --root /projects5/ice2_data_cache_public
+ethos-data config set-cache /projects5/ice2_data_cache_public --scope site
 ```
 
 Users then get the whole catalogue with no setup. See

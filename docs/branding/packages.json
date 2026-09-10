@@ -1,0 +1,50 @@
+[
+  {
+    "slug": "ethos-data", "wordmark": "ETHOS.DATA", "icon": "data",
+    "purpose": "Shared data catalogue and cache",
+    "symbol": "Catalogue records with an index column",
+    "source": "https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data"
+  },
+  {
+    "slug": "ethos-fine", "wordmark": "ETHOS.FINE", "icon": "fine",
+    "purpose": "Energy system modelling and optimisation",
+    "symbol": "Energy-system components joined through a central hub",
+    "source": "https://github.com/FZJ-IEK3-VSA/FINE"
+  },
+  {
+    "slug": "ethos-glaes", "wordmark": "ETHOS.GLAES", "icon": "glaes",
+    "purpose": "Geospatial land availability assessment",
+    "symbol": "Land cells and an eligibility check",
+    "source": "https://github.com/FZJ-IEK3-VSA/glaes"
+  },
+  {
+    "slug": "ethos-reskit", "wordmark": "ETHOS.RESKit", "icon": "reskit",
+    "purpose": "Renewable energy generation simulation",
+    "symbol": "Wind turbine",
+    "source": "https://github.com/FZJ-IEK3-VSA/RESKit"
+  },
+  {
+    "slug": "ethos-hisim", "wordmark": "ETHOS.HiSim", "icon": "hisim",
+    "purpose": "House infrastructure simulation",
+    "symbol": "House with an energy flow",
+    "source": "https://github.com/FZJ-IEK3-VSA/HiSim"
+  },
+  {
+    "slug": "ethos-penalps", "wordmark": "ETHOS.PeNALPS", "icon": "penalps",
+    "purpose": "Industrial load profile simulation",
+    "symbol": "Petri-net places connected through a transition",
+    "source": "https://github.com/FZJ-IEK3-VSA/ETHOS_PeNALPS"
+  },
+  {
+    "slug": "ethos-geokit", "wordmark": "ETHOS.GeoKit", "icon": "geokit",
+    "purpose": "Raster and vector geospatial operations",
+    "symbol": "Spatial layers with a shared extent",
+    "source": "https://github.com/FZJ-IEK3-VSA/geokit"
+  },
+  {
+    "slug": "ethos-tsam", "wordmark": "ETHOS.TSAM", "icon": "tsam",
+    "purpose": "Time series aggregation",
+    "symbol": "Fine time slices grouped into wider periods",
+    "source": "https://github.com/FZJ-IEK3-VSA/tsam"
+  }
+]

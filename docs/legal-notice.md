@@ -2,13 +2,13 @@
 
 ## License
 
-`ice2-data` — the software in this repository — is published under the
+`ethos-data` — the software in this repository — is published under the
 [MIT License](https://opensource.org/licenses/MIT).
 
 **The licence of the software is not the licence of the data.** Each dataset in
 the catalogue carries its own terms, recorded in its Data Package descriptor
-and reproduced by `ice2-data info`. A dataset whose redistribution terms have
-not been confirmed carries `ice2:license_status: unresolved` and warns on every
+and reproduced by `ethos-data info`. A dataset whose redistribution terms have
+not been confirmed carries `ethos:license_status: unresolved` and warns on every
 download; a dataset marked `restricted` may never be copied or redistributed at
 all. See [Licensing and immutability](explanation/licensing.md).
 

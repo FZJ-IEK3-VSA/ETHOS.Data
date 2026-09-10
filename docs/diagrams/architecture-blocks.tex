@@ -1,0 +1,16 @@
+\begin{tikzpicture}
+\node[artifact, text width=48mm, minimum height=14mm] (consumer) at (0,0) {Consumer entry points\\\texttt{API / cli}};
+\node[artifact, text width=48mm, minimum height=14mm] (maintainer) at (7,0) {Maintainer entry points\\\texttt{maintain.cli}};
+\node[actor, text width=48mm, minimum height=16mm] (access) at (0,-2.5) {Data access};
+\node[actor, text width=48mm, minimum height=16mm] (maintenance) at (7,-2.5) {Catalogue maintenance};
+\node[artifact, text width=118mm, minimum height=16mm] (shared) at (3.5,-5) {Catalogue and configuration\\\texttt{catalog / config}};
+\draw[flow] (consumer) -- node[edgelabel,right]{resolve / fetch / inspect} (access);
+\draw[flow] (maintainer) -- node[edgelabel,right]{build / upload / publish} (maintenance);
+\draw[flow] (maintenance) -- node[edgelabel,above]{matching} (access);
+\draw[flow] (access) -- node[edgelabel,right]{resources / roots} (0,-4.12);
+\draw[flow] (maintenance) -- node[edgelabel,left]{format constants} (7,-4.12);
+\begin{scope}[on background layer]
+\node[boundarybox, fit=(consumer)(maintainer)(shared), label={[boundarylabel]above:ethos-data package -- level 1}] {};
+\end{scope}
+\node[note, text width=118mm] at (3.5,-6.5) {Arrows point to required components or interfaces.\\The diagram shows code dependencies, not a publication sequence.};
+\end{tikzpicture}

@@ -4,7 +4,7 @@ Every setting, where it can be written, and how it is resolved. The
 authoritative answer for any given machine is always:
 
 ```bash
-ice2-data config show
+ethos-data config show
 ```
 
 which prints the resolved values, the provenance of each, and every file
@@ -17,10 +17,10 @@ First match wins:
 | | Source | |
 |---|---|---|
 | 1 | an explicit argument | `--root` / `root=` (public cache only) |
-| 2 | an environment variable | `$ICE2_DATA_DIR`, `$ICE2_RESTRICTED_DIR`, … |
-| 3 | project config | `./ice2-data.yaml`, searched upward from the cwd |
+| 2 | an environment variable | `$ETHOS_DATA_DIR`, `$ETHOS_RESTRICTED_DIR`, … |
+| 3 | project config | `./ethos-data.yaml`, searched upward from the cwd |
 | 4 | user config | the per-user config directory, all platforms |
-| 5 | environment config | `<sys.prefix>/etc/ice2-data/config.yaml` |
+| 5 | environment config | `<sys.prefix>/etc/ethos-data/config.yaml` |
 | 6 | site config | the machine-wide config directory |
 | 7 | built-in default | the per-user OS cache directory (public cache only) |
 
@@ -39,10 +39,10 @@ has to make out loud, and staging is opt-in.
 
 | Scope | File |
 |---|---|
-| `project` | `./ice2-data.yaml` (created in the current directory; updates the nearest existing one if there is one above) |
-| `user` (default) | the per-user config directory, e.g. `~/.config/ice2-data/config.yaml` |
-| `environment` | `<sys.prefix>/etc/ice2-data/config.yaml` |
-| `site` | the machine-wide config directory, e.g. `/etc/xdg/ice2-data/config.yaml` |
+| `project` | `./ethos-data.yaml` (created in the current directory; updates the nearest existing one if there is one above) |
+| `user` (default) | the per-user config directory, e.g. `~/.config/ethos-data/config.yaml` |
+| `environment` | `<sys.prefix>/etc/ethos-data/config.yaml` |
+| `site` | the machine-wide config directory, e.g. `/etc/xdg/ethos-data/config.yaml` |
 
 Exact locations are platform-dependent (via
 [platformdirs](https://platformdirs.readthedocs.io/)); `config show` prints the
@@ -50,7 +50,7 @@ real paths.
 
 ## Keys
 
-Written into a config file, or into `ice2-data.yaml` for the project scope.
+Written into a config file, or into `ethos-data.yaml` for the project scope.
 
 | Key | Set with | |
 |---|---|---|
@@ -66,17 +66,17 @@ Written into a config file, or into `ice2-data.yaml` for the project scope.
 
 A minimal project file:
 
-```yaml title="ice2-data.yaml"
-cache_dir: /data/my-analysis/ice2-data
+```yaml title="ethos-data.yaml"
+cache_dir: /data/my-analysis/ethos-data
 ```
 
 A fuller one:
 
-```yaml title="ice2-data.yaml"
+```yaml title="ethos-data.yaml"
 public_cache: /projects5/ice2_data_cache_public
 restricted_cache: /projects5/ice2_data_restricted
 skip_unavailable: false
-catalog: /projects2/ice2-data-catalog-internal/datacatalog.json
+catalog: /projects2/ethos-data-catalog-internal/datacatalog.json
 dataset_roots:
   submarine-cables: /benchtop/shared_data/SubmarineCables
 ```
@@ -85,13 +85,13 @@ dataset_roots:
 
 | Variable | Overrides |
 |---|---|
-| `ICE2_DATA_DIR` | `public_cache` |
-| `ICE2_RESTRICTED_DIR` | `restricted_cache` |
-| `ICE2_STAGING_DIR` | `staging_cache` |
-| `ICE2_SKIP_UNAVAILABLE` | `skip_unavailable` |
-| `ICE2_CATALOG_NO_CACHE` | if set, a fetched catalogue descriptor is never cached on disk |
+| `ETHOS_DATA_DIR` | `public_cache` |
+| `ETHOS_RESTRICTED_DIR` | `restricted_cache` |
+| `ETHOS_STAGING_DIR` | `staging_cache` |
+| `ETHOS_SKIP_UNAVAILABLE` | `skip_unavailable` |
+| `ETHOS_CATALOG_NO_CACHE` | if set, a fetched catalogue descriptor is never cached on disk |
 
-`ICE2_DATA_DIR` is named for the era when there was only one root. It is kept
+`ETHOS_DATA_DIR` is named for the era when there was only one root. It is kept
 under that name because it is in scripts, job files and people's shell profiles.
 
 ## The three roots

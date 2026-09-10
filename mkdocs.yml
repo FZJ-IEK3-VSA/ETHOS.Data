@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
 
-site_name: ice2-data
+site_name: ETHOS.DATA
 site_description: Shared, deduplicating data access for ICE-2 scientific software
 site_author: ICE-2 Jülich Systems Analysis
 
@@ -11,8 +11,8 @@ site_author: ICE-2 Jülich Systems Analysis
 # root-absolute asset paths point at a host that does not serve this site.
 site_url: !ENV [SITE_URL, CI_PAGES_URL, "http://localhost:8000/"]
 
-repo_url: https://jugit.fz-juelich.de/iek-3/shared-code/ice2-data
-repo_name: iek-3/shared-code/ice2-data
+repo_url: https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data
+repo_name: iek-3/shared-code/ethos-data
 edit_uri: edit/initial_dev/docs/
 
 # NOTE: no `copyright:` key, deliberately. docs/overrides/partials/copyright.html
@@ -34,11 +34,8 @@ validation:
 theme:
     name: material
     custom_dir: docs/overrides
-    # NOTE: no `logo:`/`favicon:` keys. ice2-data has no product mark of its
-    # own, and the only lockup in play is the institution's, which is not a
-    # substitute for one. Material's defaults are used until there is a real
-    # logo; add both keys together when there is. (RESKit and ETHOS.GLAES have
-    # the same gap and are configured the same way.)
+    logo: assets/branding/ethos-data-icon.svg
+    favicon: assets/branding/ethos-data-icon.svg
     font:
         text: Roboto
         code: Roboto Mono
@@ -134,12 +131,21 @@ markdown_extensions:
 #   diagrams/   TikZ sources and the render script. The rendered SVGs they
 #               produce live in assets/diagrams/ and ARE published; the .tex
 #               and the renderer are edit-time tooling.
+#   branding/   Logo source and renderer; exports live in assets/branding/.
+#   font/       Local font files and design references, used only for rendering.
 # The leading slash anchors to the docs root. Without it, gitignore semantics
 # match a directory of that name at ANY depth -- and `diagrams/` then also
 # excluded assets/diagrams/, i.e. the rendered SVGs the pages actually embed.
 exclude_docs: |
   /overrides/
   /diagrams/
+  /branding/
+  /font/
+
+# Compatibility pages retain previously shared architecture URLs.
+not_in_nav: |
+  /explanation/architecture/lifecycle.md
+  /explanation/architecture/quality-and-risks.md
 
 extra:
     generator: false
@@ -157,39 +163,69 @@ nav:
 
     - Tutorials:
           - Overview: tutorials/index.md
-          - Your first fetch: tutorials/first-fetch.md
-          - Use it from your own package: tutorials/use-from-a-library.md
-          - Add a dataset to the catalogue: tutorials/add-a-dataset.md
+          - Data users:
+                - Your first fetch: tutorials/first-fetch.md
+          - Package maintainers:
+                - Use data in your package: tutorials/use-from-a-library.md
+                - Develop and propose a dataset: tutorials/develop-and-propose-data.md
+                - Run a test with repository data: tutorials/bundled-tests.md
+          - Catalogue maintainers:
+                - Add a dataset to the catalogue: tutorials/add-a-dataset.md
 
     - How-to guides:
           - Overview: how-to/index.md
-          - Getting data:
-                - Point the cache somewhere: how-to/configure-the-cache.md
+          - Data users:
+                - Get data for a task: how-to/get-data-for-a-task.md
+                - Configure the cache: how-to/configure-the-cache.md
                 - Use data already on disk: how-to/use-data-already-on-disk.md
                 - Work with restricted data: how-to/restricted-data.md
                 - Check and repair the cache: how-to/verify-and-repair.md
-                - Run it in CI: how-to/run-in-ci.md
-          - Building on it:
+          - Package maintainers:
                 - Write a collections file: how-to/write-a-collections-file.md
                 - Stage uncatalogued data: how-to/stage-unpublished-data.md
-          - Maintaining a catalogue:
+                - Propose a dataset: how-to/propose-a-dataset.md
+                - Keep test data in the repository: how-to/keep-test-data-in-a-repository.md
+                - Run package tests in CI: how-to/run-in-ci.md
+          - Catalogue maintainers:
+                - Accept a dataset proposal: how-to/accept-a-dataset.md
                 - Describe a dataset: how-to/describe-a-dataset.md
+                - Add internal and restricted datasets: how-to/add-internal-and-restricted-data.md
+                - Migrate cluster data from symlinks: how-to/migrate-cluster-data.md
                 - Upload a dataset: how-to/upload-a-dataset.md
                 - Publish the catalogue: how-to/publish-the-catalogue.md
+                - Serve catalogues on the cluster and GitHub: how-to/catalogue-hosting.md
+                - Check catalogue changes in CI: how-to/catalogue-ci.md
+                - Diagnose catalogue problems: how-to/troubleshoot-catalogue.md
                 - Withdraw a dataset: how-to/withdraw-a-dataset.md
                 - Bootstrap a new catalogue: how-to/bootstrap-a-catalogue.md
 
     - Explanation:
           - Overview: explanation/index.md
-          - Why one catalogue: explanation/deduplication.md
-          - Caches, classes and roots: explanation/caches-and-access.md
-          - The catalogue format: explanation/catalogue-format.md
-          - Licensing and immutability: explanation/licensing.md
+          - Data concepts:
+                - Overview: explanation/data-concepts.md
+                - Why one catalogue: explanation/deduplication.md
+                - Caches, classes and roots: explanation/caches-and-access.md
+                - The catalogue format: explanation/catalogue-format.md
+                - Licensing and immutability: explanation/licensing.md
+          - Architecture:
+                - Overview: explanation/architecture/index.md
+                - 1. Introduction and Goals: explanation/architecture/introduction-and-goals.md
+                - 2. Architecture Constraints: explanation/architecture/constraints.md
+                - 3. Context and Scope: explanation/architecture/context.md
+                - 4. Solution Strategy: explanation/architecture/solution-strategy.md
+                - 5. Building Block View: explanation/architecture/building-blocks.md
+                - 6. Runtime View: explanation/architecture/runtime.md
+                - 7. Deployment View: explanation/architecture/deployment.md
+                - 8. Crosscutting Concepts: explanation/architecture/crosscutting-concepts.md
+                - 9. Architectural Decisions: explanation/architecture/decisions.md
+                - 10. Quality Requirements: explanation/architecture/quality-requirements.md
+                - 11. Risks and Technical Debt: explanation/architecture/risks-and-technical-debt.md
+                - 12. Glossary: explanation/architecture/glossary.md
 
     - Reference:
           - Command line:
-                - ice2-data: reference/cli/ice2-data.md
-                - ice2-data catalog: reference/cli/catalog.md
+                - ethos-data: reference/cli/ethos-data.md
+                - ethos-data catalog: reference/cli/catalog.md
           - Configuration: reference/configuration.md
           - File formats: reference/schemas.md
           - API:

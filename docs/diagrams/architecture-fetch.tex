@@ -1,0 +1,21 @@
+\begin{tikzpicture}
+\node[artifact, text width=25mm, minimum height=14mm] (entry) at (0,0) {Consumer\\entry points};
+\node[artifact, text width=25mm, minimum height=14mm] (selection) at (3.5,0) {Selection};
+\node[artifact, text width=25mm, minimum height=14mm] (catalog) at (7,0) {Catalogue\\model};
+\node[artifact, text width=25mm, minimum height=14mm] (retrieval) at (10.5,0) {Retrieval};
+\node[artifact, text width=25mm, minimum height=14mm] (access) at (14,0) {Access\\policy};
+\node[artifact, text width=30mm, minimum height=14mm] (store) at (17.7,0) {Pooch / files /\\dCache};
+\foreach \n in {entry,selection,catalog,retrieval,access,store}
+  \draw[link,dashed] (\n.south) -- +(0,-10.5);
+\draw[flow] (0,-1.5) -- node[edgelabel,above]{resolve collection} (3.5,-1.5);
+\draw[flow] (3.5,-2.5) -- node[edgelabel,above]{read required inventory} (7,-2.5);
+\draw[uses] (7,-3.5) -- node[edgelabel,above]{resources + sidecars} (3.5,-3.5);
+\draw[uses] (3.5,-4.5) -- node[edgelabel,above]{selected resources} (0,-4.5);
+\draw[flow] (0,-5.5) -- node[edgelabel,above]{download(selected resources)} (10.5,-5.5);
+\draw[flow] (10.5,-6.5) -- node[edgelabel,above]{locate} (14,-6.5);
+\draw[uses] (14,-7.5) -- node[edgelabel,above]{locations / unavailable} (10.5,-7.5);
+\draw[flow] (10.5,-8.5) -- node[edgelabel,above]{check in-place files OR hash-verified fetch} (17.7,-8.5);
+\draw[uses] (17.7,-9.5) -- node[edgelabel,above]{usable local paths} (10.5,-9.5);
+\draw[uses] (10.5,-10.5) -- node[edgelabel,above]{DataFiles: resource key to path} (0,-10.5);
+\node[note, text width=180mm] at (8.85,-12) {Time runs down. Solid arrows are requests; dashed arrows are returns.\\Missing required locations or failed verification stop the request. Metadata can also require network access.};
+\end{tikzpicture}

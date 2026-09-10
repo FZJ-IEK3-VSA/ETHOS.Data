@@ -11,7 +11,7 @@ actually ask.
 
 ## Configuration
 
-::: ice2_data.config
+::: ethos_data.config
     options:
       members:
         - Resolved
@@ -41,7 +41,7 @@ actually ask.
 
 ## Access
 
-::: ice2_data.access
+::: ethos_data.access
     options:
       members:
         - locate

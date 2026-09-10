@@ -10,7 +10,7 @@ patterns could reach.
 
 ## Catalogue
 
-::: ice2_data.catalog
+::: ethos_data.catalog
     options:
       members:
         - load_catalog
@@ -26,7 +26,7 @@ patterns could reach.
 
 ## Collections
 
-::: ice2_data.selection
+::: ethos_data.selection
     options:
       members:
         - load_collections

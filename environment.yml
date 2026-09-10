@@ -1,4 +1,4 @@
-name: ice2_data_env
+name: ethos_data_env
 channels:
   - conda-forge
 dependencies:
@@ -22,7 +22,7 @@ dependencies:
   - tectonic
   - poppler
   # Documentation (MkDocs). `mkdocs serve` for a live preview, `mkdocs build`
-  # for the static site. mkdocstrings needs ice2_data importable, so install
+  # for the static site. mkdocstrings needs ethos_data importable, so install
   # the package into this environment (`pip install -e . --no-deps`) before
   # building the API reference pages.
   - mkdocs >=1.6,<1.7

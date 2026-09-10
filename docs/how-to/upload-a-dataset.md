@@ -5,7 +5,7 @@ and now need to put its bytes on DESY dCache InfiniteSpace, served over
 anonymous HTTPS.
 
 The upload itself is one `rclone` call. The part that matters is the
-verification afterwards: `ice2-data catalog upload` HEADs every file in the manifest
+verification afterwards: `ethos-data catalog upload` HEADs every file in the manifest
 **with no credentials at all** and reports anything unreadable or the wrong
 size. That is the only check that actually proves a stranger can download what
 you just published.
@@ -148,8 +148,8 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 ## Upload
 
 ```bash
-ice2-data catalog upload my-dataset --dry-run   # see what would transfer
-ice2-data catalog upload my-dataset             # do it, then verify
+ethos-data catalog upload my-dataset --dry-run   # see what would transfer
+ethos-data catalog upload my-dataset             # do it, then verify
 ```
 
 | Flag | |
@@ -172,9 +172,9 @@ Name as many as you like — by directory name, or by path, which is what shell
 completion gives you:
 
 ```bash
-ice2-data catalog upload global-wind-atlas-v4 global-solar-atlas --dry-run
-ice2-data catalog upload global-wind-atlas-v4 global-solar-atlas
-ice2-data catalog upload datasets/global-wind-atlas-v4
+ethos-data catalog upload global-wind-atlas-v4 global-solar-atlas --dry-run
+ethos-data catalog upload global-wind-atlas-v4 global-solar-atlas
+ethos-data catalog upload datasets/global-wind-atlas-v4
 ```
 
 They are uploaded and verified one at a time, in the order given, and the run
@@ -194,7 +194,7 @@ ends with a summary:
     Every dataset named is loaded and checked **before any of them is
     uploaded** — so a restricted dataset, an unbuilt manifest or a mistyped
     name stops the run while nothing has been published yet. A
-    `for name in ...; do ice2-data catalog upload "$name"; done` checks each
+    `for name in ...; do ethos-data catalog upload "$name"; done` checks each
     dataset only when it reaches it, and will happily transfer 70 GB before
     discovering that the next name was one it should have refused.
 
@@ -217,21 +217,21 @@ while it stages.
 Re-run the check any time without re-transferring:
 
 ```bash
-ice2-data catalog upload my-dataset --verify-only
+ethos-data catalog upload my-dataset --verify-only
 ```
 
 !!! danger "Paths are immutable"
     `upload` passes `rclone --immutable`, which fails loudly on an attempted
     overwrite. If a dataset's bytes genuinely change, publish them at a **new**
-    path — `ice2:remote_prefix` keeps unchanged files stable, but a changed file
+    path — `ethos:remote_prefix` keeps unchanged files stable, but a changed file
     must never land at a path a consumer already has cached and hash-verified.
     See [Licensing and immutability](../explanation/licensing.md#paths-are-immutable).
 
 ## Then publish the catalogue entry
 
 ```bash
-ice2-data catalog build
-ice2-data catalog publish ../ice2-data-catalog
+ethos-data catalog build
+ethos-data catalog publish ../ethos-data-catalog
 ```
 
 See [Publish the catalogue](publish-the-catalogue.md) for what to check before
@@ -241,8 +241,8 @@ If the dataset was previously served from a local root, drop that override so
 it downloads for real:
 
 ```bash
-ice2-data config unset-root my-dataset
-ice2-data plan <collection>      # should now show files to download
+ethos-data config unset-root my-dataset
+ethos-data plan <collection>      # should now show files to download
 ```
 
 ## When something goes wrong
@@ -259,7 +259,7 @@ ice2-data plan <collection>      # should now show files to download
 | `rclone: couldn't fetch bearer token` | `bearer_token_command` returned empty — agent not running |
 | anonymous `curl` gives `401` | directory is not `0755` — chmod the parent, then **re-upload** (mode is not retroactive) |
 | rclone fails with `--immutable` | a published file changed — publish at a new path, never overwrite |
-| `upload` reports `0/N` for a sharded dataset | it could not read `manifests/*.json` — run `ice2-data catalog build <dataset>` first |
+| `upload` reports `0/N` for a sharded dataset | it could not read `manifests/*.json` — run `ethos-data catalog build <dataset>` first |
 | first read of a file takes minutes | locality is `NEARLINE` — staging from tape |
 
 ## Probing what you are allowed to do
@@ -267,7 +267,7 @@ ice2-data plan <collection>      # should now show files to download
 If this is a new VO, or the access model is unclear:
 
 ```bash
-ice2-data catalog check-store FZJ-ICE2
+ethos-data catalog check-store FZJ-ICE2
 ```
 
 Non-destructive: it uses a throwaway subdirectory and cleans up after itself.
@@ -281,3 +281,5 @@ to new files.
   reversed.
 - [Bootstrap a new catalogue](bootstrap-a-catalogue.md) — if the publication
   root does not exist yet.
+
+See [The catalogue lifecycle — ordering and failure boundaries](../explanation/architecture/lifecycle.md) for the system-level explanation.

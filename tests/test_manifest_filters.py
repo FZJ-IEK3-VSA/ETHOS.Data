@@ -1,4 +1,4 @@
-"""ice2:include / ice2:exclude -- narrowing a manifest to part of source_dir.
+"""ethos:include / ethos:exclude -- narrowing a manifest to part of source_dir.
 
 The case these exist for: source_dir is a shared download directory holding the
 dataset *and* the zip it came out of, a wget log, and somebody's test clip, and
@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pytest
 
-from ice2_data.maintain.manifest import expand_pattern, render_dataset
+from ethos_data.maintain.manifest import expand_pattern, render_dataset
 
-CATALOG = "name: t\nice2:catalog_role: source\nice2:publication_url: https://example.invalid/x\n"
+CATALOG = "name: t\nethos:catalog_role: source\nethos:publication_url: https://example.invalid/x\n"
 
 # Shaped like /shared_data/Global_Wind_Atlas/GWA_4.0: five rasters worth keeping,
 # a 67 GB derivative that is a different dataset, and the download plumbing.
@@ -73,14 +73,14 @@ def inventory(extra_yaml: str, tree=gwa_tree) -> list[str]:
         dataset_dir.mkdir(parents=True)
         (workspace / "catalog.yaml").write_text(CATALOG)
         (dataset_dir / "dataset.yaml").write_text(
-            f"name: d\ntitle: t\nsource_dir: {source}\nice2:remote_prefix: d\n" + extra_yaml)
+            f"name: d\ntitle: t\nsource_dir: {source}\nethos:remote_prefix: d\n" + extra_yaml)
 
         files = render_dataset(dataset_dir)
         package = json.loads(files["datapackage.json"])
         if "resources" in package:
             return sorted(resource["path"] for resource in package["resources"])
         paths: list[str] = []
-        for shard in package["ice2:shards"]:
+        for shard in package["ethos:shards"]:
             paths += [r["path"] for r in json.loads(files[shard["path"]])["resources"]]
         return sorted(paths)
     finally:
@@ -110,35 +110,35 @@ class TestSelection:
 
     def test_include_selects_only_what_it_names(self):
         listed = "".join(f'  - "{name}"\n' for name in GWA_RASTERS)
-        assert inventory(f"ice2:include:\n{listed}") == GWA_RASTERS
+        assert inventory(f"ethos:include:\n{listed}") == GWA_RASTERS
 
     def test_star_stays_inside_one_segment_and_matches_a_whole_name(self):
         # The point of borrowing the reader's matcher: *m.tif must anchor at the
         # end, so the 67 GB ..._mean_global.tif derivative is not swept in.
-        assert inventory('ice2:include:\n  - "wind_speed_cog_*m.tif"\n') == sorted(
+        assert inventory('ethos:include:\n  - "wind_speed_cog_*m.tif"\n') == sorted(
             name for name in GWA_RASTERS if name.endswith("m.tif"))
 
     def test_exclude_by_bare_folder_name_drops_the_subtree(self):
         assert inventory(
-            'ice2:exclude:\n  - "test"\n  - "url_list*.txt"\n  - "download.sh"\n'
+            'ethos:exclude:\n  - "test"\n  - "url_list*.txt"\n  - "download.sh"\n'
             '  - "wget-log"\n  - "54313655?private_link=abc"\n'
             '  - "*expanded_by_ERA5*"\n') == GWA_RASTERS
 
     def test_double_star_reaches_into_subdirectories(self):
         assert inventory(
-            'ice2:include:\n  - "**"\nice2:exclude:\n  - "**/wget-log"\n  - "test/"\n'
+            'ethos:include:\n  - "**"\nethos:exclude:\n  - "**/wget-log"\n  - "test/"\n'
             '  - "*expanded*"\n  - "url_list*"\n  - "download.sh"\n'
             '  - "54313655*"\n') == GWA_RASTERS
 
     def test_two_datasets_can_share_one_source_dir(self):
         # global-wind-atlas and global-wind-atlas-era5-expanded both live in
         # GWA_4.0; neither may see the other's files.
-        assert inventory('ice2:include:\n  - "*expanded_by_ERA5*"\n') == [
+        assert inventory('ethos:include:\n  - "*expanded_by_ERA5*"\n') == [
             "wind_speed_cog_100m_expanded_by_ERA5_x_mean_global.tif"]
 
     def test_filter_applies_before_sharding(self):
         assert inventory(
-            'ice2:shard_depth: 1\nice2:exclude:\n  - "**/*.zip"\n',
+            'ethos:shard_depth: 1\nethos:exclude:\n  - "**/*.zip"\n',
             tree=vintage_tree) == ["v1/data.tif", "v2/data.tif"]
 
 
@@ -147,29 +147,29 @@ class TestGuardRails:
 
     def test_include_matching_nothing_is_an_error_that_names_the_pattern(self):
         with pytest.raises(SystemExit, match="typo_"):
-            inventory('ice2:include:\n  - "wind_speed_cog_*.tif"\n  - "typo_*.tif"\n')
+            inventory('ethos:include:\n  - "wind_speed_cog_*.tif"\n  - "typo_*.tif"\n')
 
     def test_exclude_matching_nothing_is_only_a_warning(self, capsys):
         # The stray it named may simply have been cleaned up since.
-        assert inventory('ice2:exclude:\n  - "already-gone.txt"\n')
+        assert inventory('ethos:exclude:\n  - "already-gone.txt"\n')
         assert "matches nothing" in capsys.readouterr().err
 
     def test_empty_list_is_refused_rather_than_ignored(self):
         with pytest.raises(SystemExit, match="empty list"):
-            inventory("ice2:include: []\n")
+            inventory("ethos:include: []\n")
 
     def test_wrong_type_is_refused(self):
         with pytest.raises(SystemExit, match="must be a list"):
-            inventory('ice2:include: "*.tif"\n')
+            inventory('ethos:include: "*.tif"\n')
 
     def test_filtering_everything_out_is_an_error(self):
         with pytest.raises(SystemExit, match="filtered out every one"):
-            inventory('ice2:exclude:\n  - "**"\n')
+            inventory('ethos:exclude:\n  - "**"\n')
 
     def test_shapefile_companions_survive_an_include_of_just_the_shp(self):
         # A .shp without its .dbf/.shx is unreadable, and an include list is
         # exactly where somebody would forget them.
-        assert inventory('ice2:include:\n  - "*.shp"\n', tree=shapefile_tree) == [
+        assert inventory('ethos:include:\n  - "*.shp"\n', tree=shapefile_tree) == [
             "sites.dbf", "sites.prj", "sites.shp", "sites.shx"]
 
 

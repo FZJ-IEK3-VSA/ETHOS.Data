@@ -1,13 +1,15 @@
 # Publish the catalogue
 
-The public catalogue is **generated**. `ice2-data catalog publish` regenerates it
+The public catalogue is **generated**. `ethos-data catalog publish` regenerates it
 from the source catalogue, and anything it no longer generates is deleted from
-the target — so the public repository can never drift from what this command
-would produce.
+the target. This guide covers metadata generation for catalogue maintainers.
+Before releasing new downloadable entries, complete the upload and verification
+steps in [Accept a dataset proposal](accept-a-dataset.md). `publish` does not
+test storage readiness or push a repository.
 
 ```bash
-ice2-data catalog build                        # regenerate every manifest first
-ice2-data catalog publish ../ice2-data-catalog
+ethos-data catalog build                        # regenerate every manifest first
+ethos-data catalog publish ../ethos-data-catalog
 ```
 
 !!! danger "Only ever point `publish` at the public repo"
@@ -22,17 +24,17 @@ ice2-data catalog publish ../ice2-data-catalog
 
 ## What it emits
 
-For every dataset marked `ice2:visibility: public`:
+For every dataset marked `ethos:visibility: public`:
 
 - `datacatalog.json` — the index, with the per-dataset totals, access class,
   remote prefix and licence status that let a consumer answer questions without
   loading any inventory;
 - `datasets/<name>/datapackage.json` (and `manifests/*.json` for a sharded
-  dataset) — the inventory, with `source_dir`, `ice2:embargo` and
-  `ice2:license_note` **stripped**;
+  dataset) — the inventory, with `source_dir`, `ethos:embargo` and
+  `ethos:license_note` and `ethos:uploaded` **stripped**;
 - the README table.
 
-It stamps `ice2:catalog_role: published` into the generated index. Tools read
+It stamps `ethos:catalog_role: published` into the generated index. Tools read
 that key rather than guessing from which files happen to be lying around, so
 running a maintainer command inside the wrong checkout gets you a straight
 answer instead of a confusing missing-file error.
@@ -40,33 +42,37 @@ answer instead of a confusing missing-file error.
 ## Check for a leak before committing
 
 This is the failure that matters. `source_dir` points at a maintainer's
-workstation, `ice2:embargo` says what is being withheld and until when, and
-`ice2:license_note` may name an unresolved legal question:
+workstation, `ethos:embargo` says what is being withheld and until when, and
+`ethos:license_note` may name an unresolved legal question:
 
 ```bash
-grep -rn 'source_dir\|ice2:embargo\|ice2:license_note' ../ice2-data-catalog   # want no output
+rg -n 'source_dir|ethos:embargo|ethos:license_note|ethos:uploaded' ../ethos-data-catalog   # expect no output
 ```
 
 A `hidden` dataset must not be mentioned at all. Then read the actual diff:
 
 ```bash
-cd ../ice2-data-catalog && git diff
+cd ../ethos-data-catalog && git diff
 ```
 
-Commit and push **both** repositories — the source catalogue and the public
-one. They are two commits, and forgetting the second one is the most common way
-for a published dataset to be invisible.
+Commit the source and generated public revisions as a reviewed pair. The
+internal catalogue is deployed as a complete filesystem tree on the cluster,
+with its source history synchronized with JuGit; the public view is released
+on GitHub. See [Catalogue hosting](catalogue-hosting.md) for versioned trees,
+consumer pins, and release distribution. These deployment actions are separate
+from `publish`.
 
 ## In CI
 
 ```bash
-ice2-data catalog build --check                         # fail if any manifest is stale
-ice2-data catalog publish ../ice2-data-catalog --check  # fail if the public repo is out of date
+ethos-data catalog build --check                         # fail if any manifest is stale
+ethos-data catalog publish ../ethos-data-catalog --check  # fail if the public repo is out of date
 ```
 
 Both are non-destructive; `--check` reports and exits non-zero rather than
-writing. The pair is what keeps "generated" from becoming "generated once, in
-2026, by someone who has left".
+writing. Candidate datasets with a `source_dir` need a runner that can read the
+candidate bytes; uploaded datasets retain their recorded inventory. See
+[Run catalogue checks in CI](catalogue-ci.md).
 
 ## The public repository's history
 
@@ -75,14 +81,14 @@ distinction has bitten people:
 
 !!! danger "Never create the public repo by cloning the internal one"
     A public checkout that began as a copy of the internal repository still
-    carries every `ice2:embargo` block, every `source_dir`, and every hidden
+    carries every `ethos:embargo` block, every `source_dir`, and every hidden
     dataset's `dataset.yaml`, one `git log` away from anyone who clones it.
     No amount of publishing removes them.
 
     Create it as a fresh `git init`, and confirm before the first push:
 
     ```bash
-    cd ../ice2-data-catalog
+    cd ../ethos-data-catalog
     git log --oneline                                   # only commits you made here
     git log --all --diff-filter=A --name-only | sort -u # every file ever added
     git remote -v                                       # the PUBLIC remote
@@ -95,15 +101,18 @@ See [Bootstrap a new catalogue](bootstrap-a-catalogue.md).
 Two edits in `datasets/<name>/dataset.yaml`:
 
 ```yaml
-ice2:access: public
-ice2:visibility: public
-# and delete the ice2:embargo block
+ethos:access: public
+ethos:visibility: public
+# and delete the ethos:embargo block
 ```
 
-Then `ice2-data catalog build && ice2-data catalog publish ../ice2-data-catalog`. The
-dataset name and every checksum stay the same, so everything that already
-referenced it keeps working — including a collections file pinned to an older
-catalogue, which simply did not see it before.
+Rebuild, establish that the bytes are publicly readable, and generate the
+public view. If the bytes have not been uploaded, follow
+[Upload a dataset](upload-a-dataset.md) first; otherwise verify the existing
+upload before releasing the metadata. The dataset's resource keys and checksums
+can remain unchanged when only access and visibility change. Consumers need a
+catalogue version that includes the newly public entry; an older public pin
+which omitted the dataset will continue to omit it.
 
 ## See also
 

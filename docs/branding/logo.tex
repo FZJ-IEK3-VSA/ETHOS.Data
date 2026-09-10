@@ -1,0 +1,38 @@
+% Shared ETHOS product-logo layout, rendered with the local FZJ typeface.
+% render.py supplies ethosname, ethosicon, ethosdark and ethossymbolonly.
+\usepackage{fontspec}
+\usepackage{tikz}
+\setsansfont{WeissenhofGrotesk}[
+  Path=./, Extension=.otf,
+  UprightFont=*-Regular, BoldFont=*-Bold,
+  ItalicFont=*-Italic, BoldItalicFont=*-BoldItalic
+]
+\definecolor{navy}{HTML}{023D6B}
+\definecolor{iceblue}{HTML}{ADBDE3}
+\ifnum\ethosdark=1
+  \colorlet{wordmark}{white}
+\else
+  \colorlet{wordmark}{navy}
+\fi
+\input{icons.tex}
+\newsavebox{\wordbox}
+
+\begin{document}
+\sbox{\wordbox}{\sffamily\bfseries\fontsize{70}{70}\selectfont\ethosname}
+\begin{tikzpicture}[x=1pt,y=-1pt]
+  \ifnum\ethossymbolonly=1
+    \path[use as bounding box] (0,0) rectangle (112,112);
+  \else
+    \path[use as bounding box] (0,0) rectangle ({148pt+\wd\wordbox},112);
+  \fi
+  \begin{scope}[shift={(8,8)},line width=6pt,line cap=round,line join=round]
+    \fill[iceblue] (0,0) rectangle (96,96);
+    \csname ethosicon\ethosicon\endcsname
+  \end{scope}
+  \ifnum\ethossymbolonly=0
+    \node[anchor=base west,inner sep=0pt,text=wordmark,
+          font=\sffamily\bfseries\fontsize{70}{70}\selectfont]
+      at (136,80) {\ethosname};
+  \fi
+\end{tikzpicture}
+\end{document}

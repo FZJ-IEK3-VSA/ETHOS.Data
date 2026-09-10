@@ -1,20 +1,20 @@
 # Maintainer tooling
 
-`ice2_data.maintain` is the writing half of the format: the code that produces
-the descriptors `ice2_data.catalog` reads. Consumers never import it — the
-`ice2_data` package itself stays a read-only library.
+`ethos_data.maintain` is the writing half of the format: the code that produces
+the descriptors `ethos_data.catalog` reads. Consumers never import it — the
+`ethos_data` package itself stays a read-only library.
 
-Both halves ship in one distribution on purpose. The `ice2:` extensions are a
+Both halves ship in one distribution on purpose. The `ethos:` extensions are a
 format, and a format whose writer and reader live in separate repositories
 drifts silently.
 
 The command-line entry point is
-[`ice2-data catalog`](../cli/catalog.md); this page documents the functions
+[`ethos-data catalog`](../cli/catalog.md); this page documents the functions
 behind it.
 
 ## Locating a catalogue
 
-::: ice2_data.maintain
+::: ethos_data.maintain
     options:
       members:
         - find_catalog_root
@@ -27,7 +27,7 @@ behind it.
 
 ## Building manifests
 
-::: ice2_data.maintain.manifest
+::: ethos_data.maintain.manifest
     options:
       members:
         - run
@@ -55,7 +55,7 @@ behind it.
 
 ## Publishing
 
-::: ice2_data.maintain.publish
+::: ethos_data.maintain.publish
     options:
       members:
         - run
@@ -68,7 +68,7 @@ behind it.
 
 ## The cache namespace
 
-::: ice2_data.maintain.namespace
+::: ethos_data.maintain.namespace
     options:
       members:
         - run
@@ -81,7 +81,7 @@ behind it.
 
 ## Uploading
 
-::: ice2_data.maintain.upload
+::: ethos_data.maintain.upload
     options:
       members:
         - run

@@ -1,63 +1,24 @@
-% Who does what with ice2-data. Sits at the top of how-to/index.md, so a reader
-% can find their own row before reading thirteen guide titles.
-% Dashed ovals write; solid ovals only read.
-\begin{tikzpicture}[
-  node distance=5mm and 22mm,
-  % Uniform width, so each actor's column reads as a column rather than as a
-  % ragged pile. Without it the ellipses size to their labels and the left
-  % edges wander by a centimetre.
-  usecase/.append style={text width=34mm, minimum width=0mm},
-  writecase/.append style={text width=34mm, minimum width=0mm},
-]
-
-% ---- actors, one per group of the guide index ---------------------------
-\node[actor] (user) {Data user};
-\node[actor, below=32mm of user] (author) {Library author};
-\node[actor, below=46mm of author] (maint) {Catalogue\\maintainer};
-
-% ---- what a data user does ----------------------------------------------
-\node[usecase, right=of user, yshift=16mm]  (fetch)  {Fetch a collection};
-\node[usecase, right=of user, yshift=4mm]   (cache)  {Put the cache somewhere};
-\node[usecase, right=of user, yshift=-8mm]  (local)  {Use data already on disk};
-\node[usecase, right=of user, yshift=-20mm] (check)  {Check and repair the cache};
-
-\foreach \t in {fetch,cache,local,check} \draw[link] (user) -- (\t);
-
-% ---- what a library author does -----------------------------------------
-\node[usecase, right=of author, yshift=8mm]   (coll)  {Write a collections file};
-\node[usecase, right=of author, yshift=-4mm]  (stage) {Stage uncatalogued data};
-\node[usecase, right=of author, yshift=-16mm] (ci)    {Run it in CI};
-
-\foreach \t in {coll,stage,ci} \draw[link] (author) -- (\t);
-
-% ---- what a catalogue maintainer does -----------------------------------
-\node[writecase, right=of maint, yshift=22mm]  (describe) {Describe a dataset};
-\node[writecase, right=of maint, yshift=10mm]  (upload)   {Upload a dataset};
-\node[writecase, right=of maint, yshift=-2mm]  (publish)  {Publish the catalogue};
-\node[writecase, right=of maint, yshift=-14mm] (withdraw) {Withdraw a dataset};
-\node[writecase, right=of maint, yshift=-26mm] (boot)     {Bootstrap a catalogue};
-
-\foreach \t in {describe,upload,publish,withdraw,boot} \draw[link] (maint) -- (\t);
-
-% The one relation worth drawing: a library can only name a dataset the
-% catalogue already describes. Routed around the right-hand side -- straight
-% through the middle would cross three unrelated use cases.
-\draw[uses] (coll.east) -- ++(10mm,0) |- (describe.east)
-  node[edgelabel, pos=0.28, right, xshift=1mm]{needs};
-
-% ---- system boundary -----------------------------------------------------
-\begin{scope}[on background layer]
-  \node[boundarybox, fit=(fetch)(cache)(local)(check)(coll)(stage)(ci)
-                        (describe)(upload)(publish)(withdraw)(boot)] (sys) {};
-\end{scope}
-\node[boundarylabel, anchor=north west] at (sys.north west) {ice2-data};
-
-% ---- legend --------------------------------------------------------------
-\node[usecase, text width=16mm, minimum height=7mm, font=\sffamily\scriptsize,
-      anchor=north west, yshift=-9mm] (l1) at (sys.south west) {reads};
-\node[writecase, text width=16mm, minimum height=7mm, font=\sffamily\scriptsize,
-      right=5mm of l1] (l2) {writes};
-\node[note, right=5mm of l2, align=left, text width=52mm]
-  {every writing command lives under\\\texttt{ice2-data catalog ...}};
-
+% Role-based entry points; a role may be held by the same person.
+\begin{tikzpicture}[node distance=12mm and 13mm]
+\node[actor, text width=29mm] (user) {Data user};
+\node[artifact, text width=86mm, right=of user, align=left] (get)
+  {Discover collections and select task inputs\\
+   Obtain data; configure local access\\
+   Check integrity and diagnose unavailable files};
+\node[actor, text width=29mm, below=22mm of user] (author) {Package\\maintainer};
+\node[artifact, text width=86mm, right=of author, align=left] (integrate)
+  {Wire collections into examples, workflows, and tests\\
+   Stage development data and propose catalogue additions\\
+   Keep verified repository copies; test deliberate local edits};
+\node[actor, text width=29mm, below=22mm of author] (maint) {Catalogue\\maintainer};
+\node[artifact, text width=86mm, right=of maint, align=left] (publish)
+  {Review proposals and build the internal catalogue\\
+   Upload and verify bytes; release public metadata\\
+   Serve cluster snapshots; diagnose and repair tooling};
+\draw[link] (user) -- (get);
+\draw[link] (author) -- (integrate);
+\draw[link] (maint) -- (publish);
+\node[note, below=8mm of publish, text width=90mm]
+  {Package maintainers propose changes. Catalogue maintainers accept and release them.\\
+   dCache remains authoritative; repository test data is a local copy.};
 \end{tikzpicture}

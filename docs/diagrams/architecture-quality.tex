@@ -1,0 +1,17 @@
+\begin{tikzpicture}
+\node[actor, text width=25mm, minimum height=18mm] (root) at (0,0) {Quality\\goals};
+\node[artifact, text width=40mm, minimum height=14mm] (trace) at (5,4) {Traceability\\and integrity};
+\node[artifact, text width=40mm, minimum height=14mm] (control) at (5,2) {Controlled access\\and publication};
+\node[artifact, text width=40mm, minimum height=14mm] (reuse) at (5,0) {Reuse\\and availability};
+\node[artifact, text width=40mm, minimum height=14mm] (maint) at (5,-2) {Safe maintenance};
+\node[artifact, text width=40mm, minimum height=14mm] (scale) at (5,-4) {Metadata scalability};
+\node[artifact, text width=57mm, minimum height=14mm] (traceq) at (12,4) {Q2: hash checks; Q10: pinned inputs\\Q9: explicit local divergence};
+\node[artifact, text width=57mm, minimum height=14mm] (controlq) at (12,2) {Q3: restricted access fails safely\\Q4: internal metadata stripped};
+\node[artifact, text width=57mm, minimum height=14mm] (reuseq) at (12,0) {Q1: shared file reuse\\Q8: required offline tests};
+\node[artifact, text width=57mm, minimum height=14mm] (maintq) at (12,-2) {Q6: batch preflight before transfer\\Q7: manifest-limited upload};
+\node[artifact, text width=57mm, minimum height=14mm] (scaleq) at (12,-4) {Q5: inventories stay lazy};
+\foreach \n in {trace,control,reuse,maint,scale}{
+  \draw[link] (root.east) -- ++(8mm,0) |- (\n.west);
+  \draw[link] (\n.east) -- (\n q.west);
+}
+\end{tikzpicture}

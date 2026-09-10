@@ -1,7 +1,7 @@
 # Contributing
 
-`ice2-data` lives at
-[iek-3/shared-code/ice2-data](https://jugit.fz-juelich.de/iek-3/shared-code/ice2-data)
+`ethos-data` lives at
+[iek-3/shared-code/ethos-data](https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data)
 on jugit. Issues, merge requests and questions are all welcome.
 
 ## What lives where
@@ -11,9 +11,9 @@ saves most of the confusion:
 
 | Repository | Holds | Change it when |
 |---|---|---|
-| **ice2-data** (this one) | the code: the reader (`ice2_data`) and the writer (`ice2_data.maintain`) | the *format* or the *tooling* changes |
-| **ice2-data-catalog-internal** | metadata only: `catalog.yaml`, `datasets/*/dataset.yaml`, generated manifests | a *dataset* is added, described, embargoed or withdrawn |
-| **ice2-data-catalog** | the generated public subset | never by hand — it is overwritten by `ice2-data catalog publish` |
+| **ethos-data** (this one) | the code: the reader (`ethos_data`) and the writer (`ethos_data.maintain`) | the *format* or the *tooling* changes |
+| **ethos-data-catalog-internal** | metadata only: `catalog.yaml`, `datasets/*/dataset.yaml`, generated manifests | a *dataset* is added, described, embargoed or withdrawn |
+| **ethos-data-catalog** | the generated public subset | never by hand — it is overwritten by `ethos-data catalog publish` |
 
 A tool that *consumes* data (RESKit, say) changes none of these: it only edits
 its own `collections.yaml`. See
@@ -28,10 +28,10 @@ to notice.
 ## Development setup
 
 ```bash
-git clone https://jugit.fz-juelich.de/iek-3/shared-code/ice2-data.git
-cd ice2-data
+git clone https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data.git
+cd ethos-data
 mamba env create -f environment.yml
-mamba activate ice2_data_env
+mamba activate ethos_data_env
 pip install -e . --no-deps
 pytest
 ```
@@ -62,17 +62,17 @@ See [Caches, classes and roots](explanation/caches-and-access.md).
 
 ## Changing the catalogue format
 
-`ice2:` keys are the format's extension points, and both halves have to move
+`ethos:` keys are the format's extension points, and both halves have to move
 together:
 
-1. Emit it in `ice2_data/maintain/manifest.py`.
-2. Read it in `ice2_data/catalog.py`.
-3. Decide whether `ice2_data/maintain/publish.py` should **strip** it from the
-   public catalogue (`source_dir`, `ice2:embargo` and `ice2:license_note` are
+1. Emit it in `ethos_data/maintain/manifest.py`.
+2. Read it in `ethos_data/catalog.py`.
+3. Decide whether `ethos_data/maintain/publish.py` should **strip** it from the
+   public catalogue (`source_dir`, `ethos:embargo` and `ethos:license_note` are
    stripped; a leak of any of them is the failure that matters).
 4. Document it in [File formats](reference/schemas.md).
 
-Manifests are generated, never hand-edited. `ice2-data catalog build --check` fails
+Manifests are generated, never hand-edited. `ethos-data catalog build --check` fails
 if any is stale, which is what CI should run.
 
 ## Documentation
@@ -89,10 +89,41 @@ section by construction:
 
 If a page would fit two of those, it is two pages.
 
+### Architecture documentation
+
+The [architecture guide](explanation/architecture/index.md) follows the twelve named arc42 sections
+within Diátaxis Explanation, alongside the Data concepts pages. Write first for data users and catalogue
+maintainers; keep module details in the implementation view, command procedures
+in how-to guides, and exhaustive fields and options in reference.
+
+When changing access rules, resource identity, metadata formats, publication
+ordering, or external interfaces, update the relevant architecture explanation
+and quality scenario in the same change. Reuse existing explanations rather than
+copying them into an arc42 chapter. Record significant new decisions with context,
+alternatives, consequences, and status; distinguish proposals from implemented
+behaviour. Verify guarantees against code and tests, including failure paths.
+
+Validate documentation with `mkdocs build --strict`. When a diagram changes,
+render and inspect both themes before committing the source and generated SVGs.
+
+### Logo
+
+The ETHOS logo family uses the shared layout in `docs/branding/logo.tex`,
+package symbols in `docs/branding/icons.tex`, and names in
+`docs/branding/packages.json`. The typeface is Weissenhof Grotesk from the local
+`docs/font/` directory. Rebuild ETHOS.DATA with `python docs/branding/render.py`,
+or all eight package designs with `python docs/branding/render.py --all --preview`.
+The preview option uses `rsvg-convert` for review sheets and PNG favicons.
+
+Tooling, proportions and asset usage are described in `docs/branding/README.md`.
+Commit the outlined SVGs in `docs/assets/branding/`; documentation builds use
+these files directly. Local fonts and design references are excluded from the
+generated site.
+
 ### Diagrams
 
 Diagrams are TikZ. Sources live in `docs/diagrams/*.tex`, sharing the palette
-and node vocabulary in `ice2style.tex`; the rendered SVGs live in
+and node vocabulary in `ethosstyle.tex`; the rendered SVGs live in
 `docs/assets/diagrams/` and **are committed**.
 
 ```bash

@@ -1,113 +1,71 @@
 # How-to guides
 
-Task-focused recipes. They assume you already know what `ice2-data` does and
-which knob you want to turn — if you are still finding your feet,
-[Your first fetch](../tutorials/first-fetch.md) walks the whole thing end to
-end. For *why* a rule exists, see [Explanation](../explanation/index.md).
-
-## Who does what
+Choose a task within your current role. Data users obtain inputs; package
+maintainers integrate and propose them; catalogue maintainers accept and
+release them. The same person can have more than one role. For a guided first
+experience, start with the [tutorials](../tutorials/index.md).
 
 <figure markdown="span">
-  ![Use cases by actor: data user, library author, catalogue maintainer](../assets/diagrams/usecases-overview-light.svg#only-light){ .diagram }
-  ![Use cases by actor: data user, library author, catalogue maintainer](../assets/diagrams/usecases-overview-dark.svg#only-dark){ .diagram }
-  <figcaption>Three actors, and the guides below grouped by which one you are.
-  Dashed use cases write; everything else only reads.</figcaption>
+  ![Tasks grouped by data users, package maintainers, and catalogue maintainers](../assets/diagrams/usecases-overview-light.svg#only-light){ .diagram }
+  ![Tasks grouped by data users, package maintainers, and catalogue maintainers](../assets/diagrams/usecases-overview-dark.svg#only-dark){ .diagram }
+  <figcaption>The three roles and their tasks, including the proposal handoff
+  from package maintenance to catalogue maintenance.</figcaption>
 </figure>
 
-The one crossing relation is worth noticing: a library can only name a dataset
-the catalogue already describes, so
-[Write a collections file](write-a-collections-file.md) depends on somebody
-having done [Describe a dataset](describe-a-dataset.md) first. If that somebody
-is also you, the [round-trip tutorial](../tutorials/add-a-dataset.md) walks both
-halves in order.
+## Data users
 
-## Find your task
+You use ETHOS.RESKit or another package and need data for an example, workflow,
+or analysis.
 
-| I want to… | Page |
+| Task | Guide |
 |---|---|
-| put the cache somewhere other than `~/.cache` | [Point the cache somewhere](configure-the-cache.md) |
-| set it once for a whole cluster | [Point the cache somewhere](configure-the-cache.md#on-a-cluster) |
-| use a dataset that is already on this machine | [Use data already on disk](use-data-already-on-disk.md) |
-| work with licensed data, or work *without* it | [Work with restricted data](restricted-data.md) |
-| find out whether my data is still intact | [Check and repair the cache](verify-and-repair.md) |
-| stop depending on a symlink into somebody's project folder | [Check and repair](verify-and-repair.md#materialize-turning-a-borrowed-dataset-into-one-you-own) |
-| cache downloaded data between CI runs | [Run it in CI](run-in-ci.md) |
-| declare which files my package needs | [Write a collections file](write-a-collections-file.md) |
-| use data that is not in the catalogue yet | [Stage uncatalogued data](stage-unpublished-data.md) |
-| add a dataset to the catalogue | [Describe a dataset](describe-a-dataset.md) |
-| put a dataset's bytes on dCache | [Upload a dataset](upload-a-dataset.md) |
-| regenerate the public catalogue | [Publish the catalogue](publish-the-catalogue.md) |
-| take a dataset out of publication, or delete it | [Withdraw a dataset](withdraw-a-dataset.md) |
-| start a catalogue from nothing | [Bootstrap a new catalogue](bootstrap-a-catalogue.md) |
+| Discover collections and fetch a task subset or all package inputs | [Get data for a task](get-data-for-a-task.md) |
+| Choose a cache directory or use a shared cluster cache | [Configure the cache](configure-the-cache.md) |
+| Read a catalogued dataset from an existing local directory | [Use data already on disk](use-data-already-on-disk.md) |
+| Set up licensed data or run an explicitly optional workflow without it | [Work with restricted data](restricted-data.md) |
+| Check integrity, repair downloads, or replace a borrowed symlink | [Verify and repair](verify-and-repair.md) |
+| Investigate missing data, catalogue versions, and unexpected paths | [Troubleshoot catalogue access](troubleshoot-catalogue.md) |
 
-## Getting data
+## Package maintainers
 
-<figure markdown="span">
-  ![Consumer use cases and the command for each](../assets/diagrams/usecases-getting-data-light.svg#only-light){ .diagram }
-  ![Consumer use cases and the command for each](../assets/diagrams/usecases-getting-data-dark.svg#only-dark){ .diagram }
-  <figcaption>What a data user does, and the command that does it.</figcaption>
-</figure>
+You maintain a package that consumes the catalogue. Developing or proposing
+new data does not require permission to write to the official catalogue or dCache.
 
-**[Point the cache somewhere](configure-the-cache.md)** — the six ways to set
-the cache directory, which one to pick, and how to set it once for a whole
-machine or a whole cluster.
+| Task | Guide |
+|---|---|
+| Declare data for examples, workflows, tests, or an aggregate collection | [Write a collections file](write-a-collections-file.md) |
+| Wire the API into the package | [Use it from your own package](../tutorials/use-from-a-library.md) |
+| Experiment with new data in a development cache | [Stage unpublished data](stage-unpublished-data.md) |
+| Prepare metadata, provenance, and byte access for review | [Propose a dataset](propose-a-dataset.md) |
+| Keep an official test-data snapshot in the repository and allow temporary local edits | [Keep test data in a repository](keep-test-data-in-a-repository.md) |
+| Run required tests and live integration tests locally and in CI | [Run package tests in CI](run-in-ci.md) |
+| Check a local copy against the accepted catalogue | [Verify and repair](verify-and-repair.md) |
 
-**[Use data already on disk](use-data-already-on-disk.md)** — read a dataset
-where it lies instead of downloading it: a cluster share, a private copy, or
-data that is catalogued but not yet uploaded.
+Start with [Develop and propose a dataset](../tutorials/develop-and-propose-data.md)
+for a small local example. The handoff to the next role is a reviewed proposal,
+not an upload by the package maintainer.
 
-**[Work with restricted data](restricted-data.md)** — licensed datasets that
-may never be copied into a shared cache, and how to carry on without them when
-you are not on the institute cluster.
+## Catalogue maintainers
 
-**[Check and repair the cache](verify-and-repair.md)** — `verify` for sizes and
-checksums, `--repair` to re-fetch what drifted, and `materialize` to turn a
-borrowed dataset into one the cache owns.
+You accept proposals into the source catalogue and release a public metadata
+view after the required data is available. These guides use `ethos-data catalog`.
 
-**[Run it in CI](run-in-ci.md)** — cache the downloaded data between runs, and
-pin the catalogue so a green build stays green.
+| Task | Guide |
+|---|---|
+| Review a submission and coordinate its release | [Accept a dataset proposal](accept-a-dataset.md) |
+| Write source metadata and control the inventory | [Describe a dataset](describe-a-dataset.md) |
+| Transfer and verify a selected set of datasets | [Upload a dataset](upload-a-dataset.md) |
+| Generate and review the public metadata | [Publish the catalogue](publish-the-catalogue.md) |
+| Deploy the internal filesystem catalogue and distribute public releases | [Catalogue hosting](catalogue-hosting.md) |
+| Register internal or licensed data without a public upload | [Add internal and restricted datasets](add-internal-and-restricted-data.md) |
+| Bridge old cluster storage with symlinks, then make independent copies | [Migrate cluster data](migrate-cluster-data.md) |
+| Check generated output in CI | [Run catalogue checks in CI](catalogue-ci.md) |
+| Unpublish or remove data | [Withdraw a dataset](withdraw-a-dataset.md) |
+| Create the initial catalogue and storage setup | [Bootstrap a catalogue](bootstrap-a-catalogue.md) |
+| Diagnose a reported catalogue or tool failure | [Troubleshoot catalogue access](troubleshoot-catalogue.md) |
 
-## Building on it
-
-**[Write a collections file](write-a-collections-file.md)** — the pattern
-grammar, `extends`, sidecars, and pinning a catalogue version.
-
-**[Stage uncatalogued data](stage-unpublished-data.md)** — develop against data
-that is still changing shape, using the ordinary API from day one, with no
-hard-coded paths to unpick later.
-
-## Maintaining a catalogue
-
-These use `ice2-data catalog`, the writing half of the package. Start with the
-[round-trip tutorial](../tutorials/add-a-dataset.md) if you have not done this
-before.
-
-<figure markdown="span">
-  ![The catalogue lifecycle: describe, build, upload, publish; and withdrawal in reverse](../assets/diagrams/usecases-maintainer-light.svg#only-light){ .diagram }
-  ![The catalogue lifecycle: describe, build, upload, publish; and withdrawal in reverse](../assets/diagrams/usecases-maintainer-dark.svg#only-dark){ .diagram }
-  <figcaption>The maintainer guides in the order the runbooks walk them. These
-  steps are ordered, and withdrawal deliberately runs them in reverse.</figcaption>
-</figure>
-
-**[Describe a dataset](describe-a-dataset.md)** — every `dataset.yaml` key,
-narrowing an inventory with `ice2:include`/`ice2:exclude`, and sharding a large
-one.
-
-**[Upload a dataset](upload-a-dataset.md)** — the one-time credential setup and
-the runbook for putting bytes on dCache, including what to do when it fails.
-
-**[Publish the catalogue](publish-the-catalogue.md)** — generate the public
-subset, and check that nothing internal leaked into it.
-
-**[Withdraw a dataset](withdraw-a-dataset.md)** — unpublish, then delete. The
-order is the opposite of publishing, and it matters.
-
-**[Bootstrap a new catalogue](bootstrap-a-catalogue.md)** — day zero: before
-`catalog.yaml` exists, before the dCache folder exists.
-
----
-
-For the commands and flags themselves, see
-[`ice2-data`](../reference/cli/ice2-data.md) and
-[`ice2-data catalog`](../reference/cli/catalog.md); for the config keys,
-[Configuration](../reference/configuration.md).
+For implementation responsibilities and failure boundaries, see
+[Architecture](../explanation/architecture/index.md). For flags and file keys,
+see the [consumer CLI](../reference/cli/ethos-data.md),
+[maintainer CLI](../reference/cli/catalog.md), and
+[configuration reference](../reference/configuration.md).

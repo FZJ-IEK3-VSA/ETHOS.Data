@@ -11,14 +11,14 @@ Declared per dataset in the catalogue:
 |---|---|---|
 | `public` | on dCache with `o+rx` | anyone downloads it |
 | `internal` | held by ICE-2, not published (yet) | VO credentials, or a local root |
-| `restricted` | licensed; may never be copied | resolved in place, never downloaded |
+| `restricted` | licensed; requires an authorised local installation | resolved in place, never downloaded |
 
 ## Three cache roots
 
 | Root | Holds | Default |
 |---|---|---|
 | **public** | public and internal data — links to data already on this machine, plus real directories for anything downloaded | the per-user OS cache directory |
-| **restricted** | licensed data, held as real files we own and can make read-only; never downloaded, never written to | **none** |
+| **restricted** | licensed data or administrator-managed links to its installation; retrieval only reads it in place | **none** |
 | **staging** | optional: work in progress that is not catalogued yet, shadowing the catalogue during development | **none** |
 
 Two of those have no built-in default on purpose. Where licensed bytes land is
@@ -92,7 +92,7 @@ reaching one means a bug or a race — a link created between planning and
 fetching. `download` checks again anyway, because the consequence would be
 writing into shared project storage that the cache only borrows.
 
-The same reasoning runs the other way in `ice2-data catalog link-cache`, which
+The same reasoning runs the other way in `ethos-data catalog link-cache`, which
 refuses to replace a real directory with a link: that directory is data the
 cache owns, and replacing it would silently discard it.
 
@@ -101,11 +101,11 @@ cache owns, and replacing it would silently discard it.
 | Situation | Use |
 |---|---|
 | a dataset the whole machine already has | a namespace link, built by a maintainer |
-| a private copy, or one dataset in an odd place | `ice2-data config set-root` |
-| licensed data you have access to | `ice2-data config set-restricted-cache` |
+| a private copy, or one dataset in an odd place | `ethos-data config set-root` |
+| licensed data you have access to | `ethos-data config set-restricted-cache` |
 | licensed data you do not have | `--skip-unavailable` |
 | data that is not catalogued yet | the [staging root](../how-to/stage-unpublished-data.md) |
-| a link that is about to break | `ice2-data materialize` |
+| a link that is about to break | `ethos-data materialize` |
 
 ## See also
 

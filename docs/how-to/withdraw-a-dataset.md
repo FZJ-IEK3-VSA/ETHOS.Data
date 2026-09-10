@@ -22,16 +22,16 @@ resolving it mid-way gets a broken reference instead of a clean "not published".
 
 ### 1. Take it out of the catalogue
 
-In `datasets/<name>/dataset.yaml`, either set `ice2:visibility: hidden` and add
-the required `ice2:embargo` block (see
+In `datasets/<name>/dataset.yaml`, either set `ethos:visibility: hidden` and add
+the required `ethos:embargo` block (see
 [Describe a dataset](describe-a-dataset.md#datasets-that-are-not-ready-to-publish)),
 or delete the dataset directory entirely if it is never coming back.
 
 ### 2. Republish
 
 ```bash
-ice2-data catalog build
-ice2-data catalog publish ../ice2-data-catalog
+ethos-data catalog build
+ethos-data catalog publish ../ethos-data-catalog
 ```
 
 This removes it from the public `datacatalog.json` and deletes its
@@ -69,7 +69,7 @@ Want `404`.
 ## The namespace API alternative
 
 Useful for scripting a deletion into something else — this is what
-`ice2-data catalog check-store` uses to clean up after itself. **Delete the files
+`ethos-data catalog check-store` uses to clean up after itself. **Delete the files
 inside a directory before the directory itself**: a single `DELETE` on a
 non-empty directory fails rather than recursing.
 

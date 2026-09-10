@@ -19,13 +19,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ice2_data.maintain import upload
-from ice2_data.maintain.manifest import render_dataset, write_dataset
+from ethos_data.maintain import upload
+from ethos_data.maintain.manifest import render_dataset, write_dataset
 
 CATALOG = (
     "name: t\n"
-    "ice2:catalog_role: source\n"
-    "ice2:publication_url: https://example.invalid/ice2-data-files\n"
+    "ethos:catalog_role: source\n"
+    "ethos:publication_url: https://example.invalid/ice2-data-files\n"
 )
 
 
@@ -40,12 +40,12 @@ def make_catalog(root: Path, datasets: dict[str, dict]) -> Path:
         dataset_dir = root / "datasets" / name
         dataset_dir.mkdir(parents=True)
         meta = {"name": name, "title": name, "source_dir": str(source),
-                "ice2:remote_prefix": name}
+                "ethos:remote_prefix": name}
         meta.update(extra)
         # The catalogue refuses to build a restricted dataset that declares a
         # remote prefix -- it is never uploaded, so it has nowhere to be.
-        if meta.get("ice2:access") == "restricted":
-            del meta["ice2:remote_prefix"]
+        if meta.get("ethos:access") == "restricted":
+            del meta["ethos:remote_prefix"]
         (dataset_dir / "dataset.yaml").write_text(yaml.safe_dump(meta))
         write_dataset(dataset_dir, render_dataset(dataset_dir))
     return root
@@ -97,7 +97,7 @@ class TestNamingDatasets:
         make_catalog(workspace, {"gwa": {}})
         published = workspace / "public"
         (published / "datasets" / "gwa").mkdir(parents=True)
-        (published / "datacatalog.json").write_text('{"ice2:catalog_role": "published"}')
+        (published / "datacatalog.json").write_text('{"ethos:catalog_role": "published"}')
 
         with pytest.raises(SystemExit, match="published catalogue"):
             upload.resolve_name(workspace, str(published / "datasets" / "gwa"))
@@ -115,7 +115,7 @@ class TestSubsetIsCheckedBeforeAnythingUploads:
             self, workspace, no_rclone):
         # The failure a shell loop cannot prevent: `a` is fine, `b` may never be
         # published, and a loop would already have uploaded `a` before finding out.
-        make_catalog(workspace, {"a": {}, "b": {"ice2:access": "restricted"}})
+        make_catalog(workspace, {"a": {}, "b": {"ethos:access": "restricted"}})
 
         with pytest.raises(SystemExit, match="restricted"):
             upload.run(workspace, make_args(["a", "b"]))

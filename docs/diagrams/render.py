@@ -34,7 +34,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE.parent / "assets" / "diagrams"
-STYLE = HERE / "ice2style.tex"
+STYLE = HERE / "ethosstyle.tex"
 
 PREAMBLE = r"""\documentclass[border=4pt]{standalone}
 \def\icetwodark{%d}
@@ -52,7 +52,7 @@ def need(tool: str) -> str:
             f"{tool} not found on PATH.\n"
             "The diagram toolchain is a dev dependency, not a docs-build one:\n"
             "    mamba env update -f environment.yml\n"
-            "    mamba activate ice2_data_env\n"
+            "    mamba activate ethos_data_env\n"
             "Committed SVGs mean `mkdocs build` never needs it."
         )
     return found

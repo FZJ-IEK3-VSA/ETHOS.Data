@@ -1,0 +1,93 @@
+% Shared TikZ styles for every ethos-data diagram.
+%
+% Rendered twice, once per theme: docs/diagrams/render.py sets \icetwodark before
+% \input-ing this file, and the palette below switches. That is necessary rather
+% than tidy -- pdftocairo converts text to vector paths, so there is no text left
+% in the SVG for CSS to recolour, and a single render would be unreadable in one
+% of the two themes. The pages pick between the pair with Material's
+% "#only-light" / "#only-dark" URL-fragment convention.
+%
+% Palette is the FZJ one already used by docs/stylesheets/extra.css:
+%   #023d6b  primary blue      #35b0ab  accent teal
+% plus greys chosen to keep contrast on both grounds.
+
+\usepackage{tikz}
+\usetikzlibrary{positioning,shapes.geometric,arrows.meta,calc,fit,backgrounds}
+\usepackage{xcolor}
+\usepackage[T1]{fontenc}
+
+% Diagram labels must never hyphenate: "Check and re-pair the cache" is how a
+% short label inside a fixed-width node breaks, and it reads as a different word.
+\hyphenpenalty=10000
+\exhyphenpenalty=10000
+
+\providecommand{\icetwodark}{0}
+
+\ifnum\icetwodark=1
+  \definecolor{ink}{HTML}{E6E8EA}        % body text on the slate ground
+  \definecolor{muted}{HTML}{9AA4AE}
+  \definecolor{brand}{HTML}{4E9FD8}      % primary, lightened for dark
+  \definecolor{accent}{HTML}{35B0AB}
+  \definecolor{fillsoft}{HTML}{1E2A33}
+  \definecolor{fillbrand}{HTML}{16324A}
+  \definecolor{fillaccent}{HTML}{123B39}
+  \definecolor{boundary}{HTML}{55606B}
+\else
+  \definecolor{ink}{HTML}{1B1F23}
+  \definecolor{muted}{HTML}{5A6673}
+  \definecolor{brand}{HTML}{023D6B}
+  \definecolor{accent}{HTML}{21918C}
+  \definecolor{fillsoft}{HTML}{F2F4F6}
+  \definecolor{fillbrand}{HTML}{DCE7F1}
+  \definecolor{fillaccent}{HTML}{D8EEEC}
+  \definecolor{boundary}{HTML}{AAB4BF}
+\fi
+
+\tikzset{
+  every picture/.style={
+    line width=0.7pt,
+    >={Stealth[length=2.6mm,width=2mm]},
+  },
+  % -- use case diagram vocabulary ---------------------------------------
+  actor/.style={
+    draw=brand, fill=fillbrand, text=ink, rounded corners=1.2mm,
+    minimum width=26mm, minimum height=9mm, align=center, font=\sffamily\small,
+  },
+  usecase/.style={
+    draw=accent, fill=fillaccent, text=ink, ellipse,
+    minimum width=42mm, minimum height=11mm, align=center,
+    font=\sffamily\footnotesize, inner sep=1.2mm,
+  },
+  % A use case that writes. Dashed rim, so "this one changes something" is
+  % visible without reading the label.
+  writecase/.style={
+    usecase, draw=brand, fill=fillbrand, dashed,
+  },
+  store/.style={
+    draw=muted, fill=fillsoft, text=ink, cylinder, shape aspect=0.28,
+    shape border rotate=90, minimum width=24mm, minimum height=13mm,
+    align=center, font=\sffamily\footnotesize, inner sep=1.2mm,
+  },
+  artifact/.style={
+    draw=muted, fill=fillsoft, text=ink, minimum width=30mm, minimum height=9mm,
+    align=center, font=\sffamily\footnotesize, inner sep=1.4mm,
+  },
+  boundarybox/.style={
+    draw=boundary, dash pattern=on 2pt off 2pt, rounded corners=2mm,
+    inner sep=6mm,
+  },
+  boundarylabel/.style={
+    text=muted, font=\sffamily\scriptsize\bfseries, inner sep=1.2mm,
+  },
+  link/.style={draw=muted, -},
+  flow/.style={draw=brand, ->},
+  flowaccent/.style={draw=accent, ->},
+  % <<include>> / <<extend>> and other relations between use cases.
+  uses/.style={draw=muted, ->, dash pattern=on 2pt off 2pt},
+  edgelabel/.style={
+    text=muted, font=\sffamily\scriptsize, inner sep=1pt,
+    fill=none, midway,
+  },
+  cmd/.style={font=\ttfamily\scriptsize, text=ink},
+  note/.style={text=muted, font=\sffamily\scriptsize, align=center},
+}

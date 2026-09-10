@@ -1,0 +1,17 @@
+\begin{tikzpicture}[node distance=12mm]
+\node[actor, text width=45mm] (user) {Consuming package\\e.g. ETHOS.RESKit};
+\node[actor, text width=45mm, right=25mm of user] (maint) {Catalogue maintainer\\ethos-data catalog};
+\node[artifact, text width=45mm, below=of user] (reader) {ethos-data reader\\select and locate resources};
+\node[artifact, text width=45mm, below=of maint] (source) {Source catalogue\\YAML and built inventories};
+\node[artifact, text width=45mm, below=of reader] (pub) {Published catalogue\\JSON metadata};
+\node[store, text width=45mm, below=of source] (remote) {Remote storage\\dataset bytes};
+\node[store, text width=45mm, left=20mm of reader] (local) {Local roots\\cached or existing bytes};
+\draw[flow] (user) -- node[edgelabel,right]{request} (reader);
+\draw[flow] (maint) -- node[edgelabel,right]{describe / build} (source);
+\draw[flow] (pub) -- node[edgelabel,left]{metadata} (reader);
+\draw[flowaccent] (local) -- node[edgelabel,above]{files} (reader);
+\draw[flowaccent] (remote.west) -- node[edgelabel,pos=0.22,above,sloped]{bytes} (reader.south east);
+\draw[flow] (source.south west) -- node[edgelabel,pos=0.22,above,sloped]{publish} (pub.east);
+\draw[flowaccent] (maint.east) -- ++(10mm,0) |- node[pos=0.25,note,right]{upload\\source files} (remote.east);
+\node[note, below=8mm of pub, text width=60mm] {Arrows show requests or supplied content.\\Metadata and dataset bytes travel separately.};
+\end{tikzpicture}

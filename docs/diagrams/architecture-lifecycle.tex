@@ -1,0 +1,14 @@
+\begin{tikzpicture}[node distance=8mm]
+\node[artifact, text width=70mm] (describe) {Describe dataset in source YAML};
+\node[artifact, text width=70mm, below=of describe] (build) {Build descriptors and inventories};
+\node[artifact, text width=70mm, below=of build] (check) {Validate all selected upload datasets};
+\node[artifact, text width=70mm, below=of check] (upload) {For each dataset: transfer manifest files\\then verify remote access and size};
+\node[artifact, text width=70mm, below=of upload] (review) {Review results and readiness};
+\node[artifact, text width=70mm, below=of review] (publish) {Generate public catalogue checkout};
+\node[actor, text width=70mm, below=of publish] (release) {Review and release catalogue version};
+\foreach \a/\b in {describe/build,build/check,check/upload,upload/review,review/publish,publish/release}
+  \draw[flow] (\a) -- (\b);
+\node[note, right=8mm of check, text width=38mm, align=left] {Preflight failure:\\no transfers started.};
+\node[note, right=8mm of upload, text width=38mm, align=left] {Later failure:\\earlier transfers remain.\\No batch rollback.};
+\node[note, right=8mm of release, text width=38mm, align=left] {Release is a separate\\maintainer action.};
+\end{tikzpicture}

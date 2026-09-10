@@ -1,13 +1,13 @@
-# `ice2-data catalog`
+# `ethos-data catalog`
 
-The maintainer counterpart to [`ice2-data`](ice2-data.md). Everything here
+The maintainer counterpart to [`ethos-data`](ethos-data.md). Everything here
 **writes** — to a catalogue checkout, or to the storage behind it — which is why
 it is a separate command rather than more subcommands on the consumer tool. The
 two have different audiences, and nothing a data *user* runs should be one typo
 away from republishing a catalogue.
 
 ```
-ice2-data catalog [--catalog-root DIR] <command> ...
+ethos-data catalog [--catalog-root DIR] <command> ...
 ```
 
 The catalogue to act on is found by searching **upward** from the current
@@ -25,16 +25,16 @@ Regenerate `datapackage.json` (and `manifests/*.json` for a sharded dataset)
 from each `dataset.yaml`, plus the catalogue-wide `datacatalog.json`.
 
 ```bash
-ice2-data catalog build my-dataset      # one
-ice2-data catalog build                 # all
-ice2-data catalog build --check         # CI: fail if any manifest is out of date
+ethos-data catalog build my-dataset      # one
+ethos-data catalog build                 # all
+ethos-data catalog build --check         # CI: fail if any manifest is out of date
 ```
 
 Walks `source_dir`, computes a SHA-256 per file, applies
-`ice2:include`/`ice2:exclude`, pulls in shapefile companions, and excludes VCS
+`ethos:include`/`ethos:exclude`, pulls in shapefile companions, and excludes VCS
 plumbing, `__pycache__` and root `README*`/`LICENSE*`/`CHANGELOG*`.
 
-An `ice2:include` pattern matching nothing **fails**; an `ice2:exclude` pattern
+An `ethos:include` pattern matching nothing **fails**; an `ethos:exclude` pattern
 matching nothing only warns. See
 [Describe a dataset](../../how-to/describe-a-dataset.md#the-asymmetry-is-deliberate).
 
@@ -48,13 +48,13 @@ Generate the public catalogue from this source one, into a checkout of the
 public repository.
 
 ```bash
-ice2-data catalog publish ../ice2-data-catalog
-ice2-data catalog publish ../ice2-data-catalog --check
+ethos-data catalog publish ../ethos-data-catalog
+ethos-data catalog publish ../ethos-data-catalog --check
 ```
 
 Emits `datacatalog.json`, each public `datasets/<name>/datapackage.json` with
-`source_dir`, `ice2:embargo` and `ice2:license_note` stripped, and the README
-table — for every dataset marked `ice2:visibility: public`. Anything it no
+`source_dir`, `ethos:embargo` and `ethos:license_note` stripped, and the README
+table — for every dataset marked `ethos:visibility: public`. Anything it no
 longer generates is deleted from the target.
 
 !!! danger "It wipes everything in its target except `.git`"
@@ -71,17 +71,17 @@ Put datasets' bytes on dCache, then verify them anonymously. Needs `rclone`
 and `oidc-agent` on `PATH`.
 
 ```bash
-ice2-data catalog upload my-dataset --dry-run
-ice2-data catalog upload my-dataset
-ice2-data catalog upload my-dataset --verify-only
+ethos-data catalog upload my-dataset --dry-run
+ethos-data catalog upload my-dataset
+ethos-data catalog upload my-dataset --verify-only
 ```
 
 Name one dataset, or any subset of the catalogue. Each is uploaded and verified
 in turn, in the order given, and a run ends with a per-dataset summary:
 
 ```bash
-ice2-data catalog upload global-wind-atlas-v4 global-solar-atlas
-ice2-data catalog upload datasets/global-wind-atlas-v4   # a path works too
+ethos-data catalog upload global-wind-atlas-v4 global-solar-atlas
+ethos-data catalog upload datasets/global-wind-atlas-v4   # a path works too
 ```
 
 Every dataset named is loaded and checked **before any of them is uploaded**, so
@@ -100,7 +100,7 @@ second.
 | `--remote NAME` | `HIFIS` | rclone remote name |
 | `--oidc-profile NAME` | `HIFIS` | oidc-agent profile |
 | `--vo-path PATH` | `Helmholtz/FZJ-ICE2` | namespace path of the VO |
-| `--root NAME` | last segment of `catalog.yaml`'s `ice2:publication_url` | publication root under the VO |
+| `--root NAME` | last segment of `catalog.yaml`'s `ethos:publication_url` | publication root under the VO |
 
 A dataset may be named by directory name or by path — a path must point into
 the source catalogue's `datasets/`, so naming one in the *published* catalogue
@@ -124,8 +124,8 @@ Build the public cache as a directory of symbolic links to data already on this
 machine, one entry per dataset with a `source_dir`.
 
 ```bash
-ice2-data catalog link-cache --root /projects5/ice2_data_cache_public --dry-run
-ice2-data catalog link-cache --root /projects5/ice2_data_cache_public --prune
+ethos-data catalog link-cache --root /projects5/ice2_data_cache_public --dry-run
+ethos-data catalog link-cache --root /projects5/ice2_data_cache_public --prune
 ```
 
 | Flag | |
@@ -135,7 +135,7 @@ ice2-data catalog link-cache --root /projects5/ice2_data_cache_public --prune
 | `--prune` | also remove links for datasets no longer in the catalogue |
 
 Nothing is copied or moved. **Real directories are never touched** — an entry
-downloaded from dCache or produced by `ice2-data materialize` is data the cache
+downloaded from dCache or produced by `ethos-data materialize` is data the cache
 owns, and replacing it with a link would discard it.
 
 See [Use data already on disk](../../how-to/use-data-already-on-disk.md#the-maintainer-side-link-cache).
@@ -146,7 +146,7 @@ Probe what this account can do on dCache InfiniteSpace. Default VO:
 `FZJ-ICE2`.
 
 ```bash
-ice2-data catalog check-store FZJ-ICE2
+ethos-data catalog check-store FZJ-ICE2
 ```
 
 Non-destructive: it uses a throwaway subdirectory and cleans up after itself. It
@@ -165,3 +165,6 @@ checkout.
 - [Publish the catalogue](../../how-to/publish-the-catalogue.md)
 - [Bootstrap a new catalogue](../../how-to/bootstrap-a-catalogue.md)
 - [API: maintainer tooling](../api/maintain.md)
+
+
+For the complete cluster migration, see [Migrate cluster data](../../how-to/migrate-cluster-data.md). Restricted entries are registered through [Add internal and restricted datasets](../../how-to/add-internal-and-restricted-data.md).

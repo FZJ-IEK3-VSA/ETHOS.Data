@@ -1,6 +1,6 @@
 # Installation
 
-`ice2-data` is a small pure-Python package. Its only runtime dependencies are
+`ethos-data` is a small pure-Python package. Its only runtime dependencies are
 [pooch](https://www.fatiando.org/pooch/) (hash-verified downloads), PyYAML and
 [platformdirs](https://platformdirs.readthedocs.io/) (cross-platform config and
 cache locations), so it installs cleanly next to whatever scientific stack you
@@ -10,29 +10,29 @@ Installing it gives you **two commands**:
 
 | Command | For | Needs |
 |---------|-----|-------|
-| `ice2-data` | reading the catalogue: listing, planning, fetching, verifying | nothing beyond the package |
-| `ice2-data catalog` | writing it: describing datasets, uploading bytes, publishing | `rclone` and `oidc-agent` on `PATH`, and only for `upload` / `check-store` |
+| `ethos-data` | reading the catalogue: listing, planning, fetching, verifying | nothing beyond the package |
+| `ethos-data catalog` | writing it: describing datasets, uploading bytes, publishing | `rclone` and `oidc-agent` on `PATH`, and only for `upload` / `check-store` |
 
 ## Install
 
 The package is not on PyPI or conda-forge yet — install it from the repository:
 
 ```bash
-pip install git+https://jugit.fz-juelich.de/iek-3/shared-code/ice2-data.git
+pip install git+https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data.git
 ```
 
 Or, if you are declaring it as a dependency of your own package:
 
 ```toml
 dependencies = [
-  "ice2-data>=0.1.0",
+  "ethos-data>=0.1.0",
 ]
 ```
 
 ### Optional extras
 
 ```bash
-pip install "ice2-data[progress]"      # tqdm progress bars during a fetch
+pip install "ethos-data[progress]"      # tqdm progress bars during a fetch
 ```
 
 Without `tqdm`, `fetch(..., progressbar=True)` still works — pooch just falls
@@ -43,10 +43,10 @@ back to silence.
 With conda/mamba, using the environment file in the repository:
 
 ```bash
-git clone https://jugit.fz-juelich.de/iek-3/shared-code/ice2-data.git
-cd ice2-data
+git clone https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data.git
+cd ethos-data
 mamba env create -f environment.yml
-mamba activate ice2_data_env
+mamba activate ethos_data_env
 pip install -e . --no-deps
 ```
 
@@ -60,7 +60,7 @@ uv pip install -e .
 
 ## The maintainer tools
 
-`ice2-data catalog upload` and `ice2-data catalog check-store` shell out to
+`ethos-data catalog upload` and `ethos-data catalog check-store` shell out to
 [`rclone`](https://rclone.org/) and
 [`oidc-agent`](https://indigo-dc.gitbook.io/oidc-agent/). They pull in no extra
 Python dependencies, which is why there is no install extra to remember:
@@ -76,7 +76,7 @@ The one-time credential setup is in
 ## Check the installation
 
 ```bash
-ice2-data config show
+ethos-data config show
 ```
 
 This prints the cache directories in use, **why** each was chosen, and every
@@ -85,21 +85,21 @@ network, so it is the fastest way to confirm the install works — and the first
 thing to run when data turns up somewhere unexpected.
 
 ```bash
-python -c "import ice2_data; print(ice2_data.__version__)"
+python -c "import ethos_data; print(ethos_data.__version__)"
 ```
 
 ## Where data will go
 
 Nothing more is required for public data: the cache defaults to your OS's
-per-user cache directory (`~/.cache/ice2-data` on Linux). If you want it
+per-user cache directory (`~/.cache/ethos-data` on Linux). If you want it
 somewhere with room — a project filesystem, a scratch volume — see
 [Point the cache somewhere](how-to/configure-the-cache.md).
 
 ## Development install
 
 ```bash
-git clone https://jugit.fz-juelich.de/iek-3/shared-code/ice2-data.git
-cd ice2-data
+git clone https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data.git
+cd ethos-data
 pip install -e .
 pytest
 ```
@@ -124,5 +124,5 @@ mkdocs serve        # live preview on http://localhost:8000
 mkdocs build        # static site into ./site
 ```
 
-`ice2-data` itself must be importable for the API reference pages to render, so
+`ethos-data` itself must be importable for the API reference pages to render, so
 run these from an environment where the package is installed (`pip install -e .`).

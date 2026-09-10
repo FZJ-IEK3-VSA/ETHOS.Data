@@ -3,7 +3,7 @@ requires = ["setuptools>=64.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ice2-data"
+name = "ethos_data"
 version = "0.1.0"
 description = "Shared, deduplicating data access for ICE-2 scientific software"
 readme = "README.md"
@@ -19,14 +19,14 @@ dependencies = [
 progress = ["tqdm"]
 
 [project.scripts]
-# One executable. The maintainer commands are `ice2-data catalog ...`; they need
+# One executable. The maintainer commands are `ethos-data catalog ...`; they need
 # no extra Python dependencies -- only `rclone` and `oidc-agent` on PATH, and
 # only for `upload` / `check-store` -- so there is no install extra to gate them.
 # There was a second entry point, `ice2-catalog`, until the two were unified.
-ice2-data = "ice2_data.cli:main"
+ethos-data = "ethos_data.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"ice2_data.maintain" = ["scripts/*.sh"]
+"ethos_data.maintain" = ["scripts/*.sh"]

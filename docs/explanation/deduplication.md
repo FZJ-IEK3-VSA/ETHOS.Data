@@ -2,7 +2,7 @@
 
 A dozen scientific tools at one institute need overlapping input data: ERA5
 reanalysis, land cover, wind atlases, bathymetry. The naive arrangement gives
-each tool its own downloader and its own copy of the data. `ice2-data` exists
+each tool its own downloader and its own copy of the data. `ethos-data` exists
 because that arrangement fails in a specific, predictable way — and because the
 obvious fixes for it fail worse.
 
@@ -22,7 +22,7 @@ the same bytes to different paths is the disk usage you were trying to avoid.
 
 ## The split
 
-`ice2-data` separates the two things that were tangled together:
+`ethos-data` separates the two things that were tangled together:
 
 | | Lives in | Says |
 |---|---|---|
@@ -75,7 +75,7 @@ detail: a change there does not fail loudly, it just quietly stops the
 deduplication and nobody finds out for months.
 
 The same reasoning explains a smaller decision. A collection's `files:` patterns
-and a dataset's `ice2:include` patterns are matched by *the same function*,
+and a dataset's `ethos:include` patterns are matched by *the same function*,
 `path_matches`. If the writer and the reader globbed differently, a pattern
 could select a file when a manifest was built and miss it when a collection was
 resolved — a difference that shows up as a missing file, far from its cause.
@@ -85,11 +85,11 @@ resolved — a difference that shows up as a missing file, far from its cause.
 A collections file pins its catalogue with a URL:
 
 ```yaml
-catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ice2-data-catalog/v2026.09/datacatalog.json
+catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ethos-data-catalog/v2026.09/datacatalog.json
 ```
 
 A **tag**, not a branch. A released version of a tool must resolve to the same
-bytes forever, or "reproducible" means nothing. `ice2-data` enforces the
+bytes forever, or "reproducible" means nothing. `ethos-data` enforces the
 distinction where it matters — a pinned URL's contents cannot change, so the
 catalogue is cached on disk indefinitely; a URL naming `main`, `master`, `HEAD`,
 `latest`, `dev` or `develop` is recognised as moving and re-fetched every time.

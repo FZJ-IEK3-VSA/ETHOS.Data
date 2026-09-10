@@ -1,0 +1,71 @@
+% One 96 x 96 square per package. Shared FZJ colours and stroke weights;
+% silhouettes, not colour alone, distinguish the favicons.
+
+% DATA: catalogue records with an index column and their associated data.
+\newcommand{\ethosicondata}{%
+  \foreach \y in {16,40,64} {
+    \fill[navy] (16,\y) rectangle ++(16,16);
+    \fill[navy] (40,\y) rectangle ++(40,16);
+  }
+}
+
+% FINE: four energy-system components connected through one optimisation hub.
+\newcommand{\ethosiconfine}{%
+  \draw[navy] (22,22) -- (74,74) (74,22) -- (22,74);
+  \foreach \x/\y in {22/22,74/22,22/74,74/74} {
+    \fill[navy] (\x,\y) circle[radius=10pt];
+  }
+  \fill[navy] (48,32) -- (64,48) -- (48,64) -- (32,48) -- cycle;
+  \fill[iceblue] (43,43) rectangle (53,53);
+}
+
+% GLAES: land cells selected by an eligibility boundary.
+\newcommand{\ethosiconglaes}{%
+  \foreach \x/\y in {14/14,38/14,62/14,14/38,38/38,14/62} {
+    \fill[navy] (\x,\y) rectangle ++(20,20);
+  }
+  \draw[navy,line width=9pt] (46,68) -- (58,80) -- (82,48);
+}
+
+% RESKit: renewable generation, represented by a wind turbine.
+\newcommand{\ethosiconreskit}{%
+  \draw[navy,line width=7pt] (48,45) -- (48,81);
+  \fill[navy] (42,39) -- (49,11) -- (55,15) -- (54,40) -- cycle;
+  \fill[navy] (54,40) -- (80,54) -- (76,61) -- (51,50) -- cycle;
+  \fill[navy] (47,51) -- (19,63) -- (15,56) -- (40,40) -- cycle;
+  \fill[navy] (48,44) circle[radius=8pt];
+  \draw[navy] (34,82) -- (62,82);
+}
+
+% HiSim: energy flows within a house.
+\newcommand{\ethosiconhisim}{%
+  \draw[navy,line width=8pt] (15,45) -- (48,16) -- (81,45);
+  \draw[navy,line width=7pt] (25,40) -- (25,80) -- (71,80) -- (71,40);
+  \fill[navy] (51,40) -- (37,60) -- (47,60) -- (43,73)
+    -- (61,51) -- (50,51) -- cycle;
+}
+
+% PeNALPS: places and a transition in a Petri net.
+\newcommand{\ethosiconpenalps}{%
+  \draw[navy] (24,28) -- (48,28) -- (48,68) -- (72,68);
+  \fill[navy] (40,37) rectangle (56,59);
+  \fill[navy] (24,28) circle[radius=13pt];
+  \fill[iceblue] (24,28) circle[radius=5pt];
+  \fill[navy] (72,68) circle[radius=13pt];
+  \fill[iceblue] (72,68) circle[radius=5pt];
+}
+
+% GeoKit: spatial layers sharing a geographic extent.
+\newcommand{\ethosicongeokit}{%
+  \draw[navy,line width=7pt] (16,54) -- (48,72) -- (80,54);
+  \draw[navy,line width=7pt] (16,69) -- (48,87) -- (80,69);
+  \fill[navy] (12,35) -- (48,15) -- (84,35) -- (48,55) -- cycle;
+  \fill[iceblue] (48,26) -- (64,35) -- (48,44) -- (32,35) -- cycle;
+}
+
+% TSAM: fine time slices grouped into wider representative periods.
+\newcommand{\ethosicontsam}{%
+  \foreach \x/\width in {10/4,18/4,26/4,36/8,50/12,68/18} {
+    \fill[navy] (\x,12) rectangle ++(\width,72);
+  }
+}

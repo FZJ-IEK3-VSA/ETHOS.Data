@@ -1,0 +1,25 @@
+\begin{tikzpicture}
+\node[actor, text width=34mm, minimum height=13mm] (selection) at (0,0) {Selection};
+\node[actor, text width=34mm, minimum height=13mm] (retrieval) at (5,0) {Retrieval};
+\node[actor, text width=34mm, minimum height=13mm] (access) at (10,0) {Access policy};
+\node[artifact, text width=34mm, minimum height=13mm] (staging) at (0,-2.7) {Staging};
+\node[artifact, text width=34mm, minimum height=13mm] (bundles) at (5,-2.7) {Repository bundles};
+\node[artifact, text width=34mm, minimum height=13mm] (integrity) at (10,-2.7) {Local integrity tools\\\texttt{verify / materialize}};
+\node[artifact, text width=34mm, minimum height=13mm] (catalog) at (0,-5.5) {Catalogue model\\shared block};
+\node[artifact, text width=34mm, minimum height=13mm] (pooch) at (5,-5.5) {Pooch / filesystem\\external};
+\node[artifact, text width=34mm, minimum height=13mm] (config) at (10,-5.5) {Configuration\\shared block};
+\draw[flow] (selection) -- node[edgelabel,right]{development overlay} (staging);
+\draw[flow] (bundles.north west) -- node[edgelabel,above,sloped]{canonical selection} (selection.south east);
+\draw[flow] (retrieval) -- node[edgelabel,above]{locations} (access);
+\draw[flow] (selection.west) -- ++(-7mm,0) |- (catalog.west);
+\draw[flow] (staging) -- node[edgelabel,right]{overlay} (catalog);
+\draw[flow] (bundles) -- node[edgelabel,right]{export / local checks} (pooch);
+\draw[flow] (integrity.north) -- node[edgelabel,left]{locations} (access.south);
+\draw[flow] (access.east) -- ++(7mm,0) |- (config.east);
+\draw[flow] (retrieval.south east) -- (7.3,-1.2) -- (7.3,-4.3) -- (pooch.north east);
+\node[note, rotate=90] at (7.55,-2.9) {verified fetch};
+\begin{scope}[on background layer]
+\node[boundarybox, fit=(selection)(access)(staging)(integrity), label={[boundarylabel]above:Data access -- level 2}] {};
+\end{scope}
+\node[note, text width=140mm] at (5,-7) {Consumer entry points coordinate Selection then Retrieval.\\Resource metadata and roots also serve local tools; supplementary dependencies are omitted.};
+\end{tikzpicture}

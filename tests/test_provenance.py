@@ -1,4 +1,4 @@
-"""ice2:origin, contributors and multi-licence datasets.
+"""ethos:origin, contributors and multi-licence datasets.
 
 The case these exist for: most of the catalogue is mirrored data whose terms are
 somebody else's, but some of it is ours -- the GeoTIFF conversions in
@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ice2_data.maintain.manifest import (
+from ethos_data.maintain.manifest import (
     apply_resource_licenses,
     render_dataset,
     validate_licenses,
@@ -25,57 +25,57 @@ from ice2_data.maintain.manifest import (
 )
 
 
-# -- ice2:origin -----------------------------------------------------------
+# -- ethos:origin -----------------------------------------------------------
 
 def test_origin_defaults_to_downloaded():
     """The common case, and the conservative one: claim no authorship."""
     meta = {}
     assert validate_provenance("d", meta) == "downloaded"
-    assert meta["ice2:origin"] == "downloaded"
+    assert meta["ethos:origin"] == "downloaded"
 
 
 def test_downloaded_needs_no_author():
-    """Every dataset written before ice2:origin existed must keep building."""
+    """Every dataset written before ethos:origin existed must keep building."""
     assert validate_provenance("d", {"sources": [{"title": "up"}]}) == "downloaded"
 
 
 def test_unknown_origin_is_rejected():
     with pytest.raises(SystemExit, match="must be one of"):
-        validate_provenance("d", {"ice2:origin": "invented"})
+        validate_provenance("d", {"ethos:origin": "invented"})
 
 
 @pytest.mark.parametrize("origin", ["created", "derived"])
 def test_authorship_claim_must_name_an_author(origin):
     """Claiming the data was made here without saying by whom is not a claim."""
     with pytest.raises(SystemExit, match="has to say by whom"):
-        validate_provenance("d", {"ice2:origin": origin})
+        validate_provenance("d", {"ethos:origin": origin})
 
 
 def test_derived_needs_sources_and_a_derivation():
     author = [{"title": "A Researcher", "roles": ["author"]}]
 
     with pytest.raises(SystemExit, match="derived FROM"):
-        validate_provenance("d", {"ice2:origin": "derived", "contributors": author})
+        validate_provenance("d", {"ethos:origin": "derived", "contributors": author})
 
-    with pytest.raises(SystemExit, match="needs ice2:derivation"):
+    with pytest.raises(SystemExit, match="needs ethos:derivation"):
         validate_provenance("d", {
-            "ice2:origin": "derived",
+            "ethos:origin": "derived",
             "contributors": author,
             "sources": [{"title": "upstream"}],
         })
 
     assert validate_provenance("d", {
-        "ice2:origin": "derived",
+        "ethos:origin": "derived",
         "contributors": author,
         "sources": [{"title": "upstream"}],
-        "ice2:derivation": "gdalwarp to EPSG:3035, nearest neighbour.",
+        "ethos:derivation": "gdalwarp to EPSG:3035, nearest neighbour.",
     }) == "derived"
 
 
 def test_created_needs_only_an_author():
     """Created from scratch has no upstream to name -- that is the difference."""
     assert validate_provenance("d", {
-        "ice2:origin": "created",
+        "ethos:origin": "created",
         "contributors": [{"title": "A Researcher", "roles": ["author"]}],
     }) == "created"
 
@@ -121,13 +121,13 @@ def test_licenses_must_be_a_list():
 
 def test_applies_to_must_be_a_list_of_patterns():
     with pytest.raises(SystemExit, match="list of glob patterns"):
-        validate_licenses("d", {"licenses": [{"name": "MIT", "ice2:applies_to": "*.tif"}]})
+        validate_licenses("d", {"licenses": [{"name": "MIT", "ethos:applies_to": "*.tif"}]})
 
 
 def test_narrowed_licence_lands_on_matching_resources_only():
     resources = [{"path": "originals/a.nc"}, {"path": "converted/a.tif"}]
     apply_resource_licenses("d", resources, [
-        {"name": "CC-BY-4.0", "ice2:applies_to": ["originals/**"]},
+        {"name": "CC-BY-4.0", "ethos:applies_to": ["originals/**"]},
         {"name": "CC0-1.0"},
     ])
     assert resources[0]["licenses"] == [{"name": "CC-BY-4.0"}]
@@ -138,7 +138,7 @@ def test_narrowed_licence_lands_on_matching_resources_only():
 def test_applies_to_strips_itself_from_the_resource_copy():
     """On the file it was attached to, applies_to answers nobody's question."""
     resources = [{"path": "a.nc"}]
-    apply_resource_licenses("d", resources, [{"name": "MIT", "ice2:applies_to": ["*.nc"]}])
+    apply_resource_licenses("d", resources, [{"name": "MIT", "ethos:applies_to": ["*.nc"]}])
     assert resources[0]["licenses"] == [{"name": "MIT"}]
 
 
@@ -146,12 +146,12 @@ def test_applies_to_matching_nothing_is_an_error():
     """Silently licensing no files is how data ships under terms nobody applied."""
     with pytest.raises(SystemExit, match="matches none of"):
         apply_resource_licenses("d", [{"path": "a.nc"}],
-                                [{"name": "MIT", "ice2:applies_to": ["nope/**"]}])
+                                [{"name": "MIT", "ethos:applies_to": ["nope/**"]}])
 
 
 def test_uncovered_files_warn_when_every_licence_is_narrowed(capsys):
     resources = [{"path": "a.nc"}, {"path": "b.tif"}]
-    apply_resource_licenses("d", resources, [{"name": "MIT", "ice2:applies_to": ["*.nc"]}])
+    apply_resource_licenses("d", resources, [{"name": "MIT", "ethos:applies_to": ["*.nc"]}])
     assert "covered by no licence at all" in capsys.readouterr().err
 
 
@@ -172,21 +172,21 @@ def test_build_renders_package_and_resource_licences():
             "name": "demo",
             "title": "Mixed provenance",
             "source_dir": str(source),
-            "ice2:access": "public",
-            "ice2:visibility": "public",
-            "ice2:origin": "derived",
-            "ice2:derivation": "gdalwarp, lossless.",
+            "ethos:access": "public",
+            "ethos:visibility": "public",
+            "ethos:origin": "derived",
+            "ethos:derivation": "gdalwarp, lossless.",
             "sources": [{"title": "upstream", "path": "https://example.invalid/"}],
             "contributors": [{"title": "A Researcher", "roles": ["author"]}],
             "licenses": [
-                {"name": "CC-BY-4.0", "ice2:applies_to": ["originals/**"]},
+                {"name": "CC-BY-4.0", "ethos:applies_to": ["originals/**"]},
                 {"name": "CC0-1.0"},
             ],
         }))
 
         package = json.loads(render_dataset(dataset_dir)["datapackage.json"])
 
-    assert package["ice2:origin"] == "derived"
+    assert package["ethos:origin"] == "derived"
     assert [c["title"] for c in package["contributors"]] == ["A Researcher"]
     # Both licences stay at package level, so a reader that never looks at a
     # resource still sees the full set.

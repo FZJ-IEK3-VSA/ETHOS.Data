@@ -1,204 +1,115 @@
 # Your first fetch
 
-By the end of this page you will have downloaded a collection of files into a
-shared cache, checked them against their checksums, and read them back from
-Python. It takes about ten minutes and needs no credentials — published data is
-served over plain HTTPS.
+You use ETHOS.RESKit and want to obtain the data needed by a workflow. This
+lesson discovers its collections, fetches a selected input, and reads the
+returned paths in Python. It assumes `ethos-data` and RESKit are installed in
+your active environment and that you are in a RESKit source checkout containing
+`reskit/data/collections.yaml`. For another package, use its shipped collections
+file and collection names.
 
-## 1. Install, and see where data would go
+Publicly downloadable data needs no storage credentials. You do not need
+access to the internal catalogue repository. If your cluster provides a local
+catalogue instead, use the override in
+[Get data for a task](../how-to/get-data-for-a-task.md#use-the-clusters-internal-catalogue).
 
-```bash
-pip install git+https://jugit.fz-juelich.de/iek-3/shared-code/ice2-data.git
-```
-
-```bash
-ice2-data config show
-```
-
-```title="Output (abridged)"
-the two settings that matter:
-
-  public cache      /home/you/.cache/ice2-data
-                    from built-in default (per-user OS cache directory)
-  restricted cache  (not set -- licensed datasets will refuse to resolve)
-                    ice2-data config set-restricted-cache /path --scope environment
-```
-
-Nothing has been configured, and nothing needs to be: the **public cache**
-falls back to your OS's per-user cache directory. That is the folder every
-ICE-2 tool on this machine will share.
-
-!!! tip "`config show` is the diagnostic"
-    It prints not just the answer but the reasoning — every config file that
-    was consulted, in precedence order, and which one won. When data turns up
-    somewhere you did not expect, this is the first thing to run.
-
-If `~/.cache` is on a small volume, put the cache somewhere with room now:
+## 1. See where data will go
 
 ```bash
-ice2-data config set-cache /data/ice2-data
+ethos-data config show
 ```
 
-## 2. Point at a catalogue
-
-`ice2-data` reads two things: a **catalogue**, describing datasets, and a
-**collections file**, naming which slices of them you want. A tool ships its
-own collections file; the catalogue is pinned inside it.
-
-If you are working inside a tool's repository — RESKit, say — there is one
-already, and you can skip this step. Otherwise, point at one explicitly with
-`-c`:
+The output shows the public cache, configured local roots, any staging root,
+and the configuration source for each setting. With no configuration, the
+public cache uses your operating system's per-user cache directory. If that
+volume is too small, choose a location with enough space before fetching:
 
 ```bash
-cd /path/to/ice2-data-catalog-internal
-ice2-data -c probe-collections.yaml list
+ethos-data config set-cache /data/ethos-data
 ```
 
-```title="Output"
-catalogue: /projects2/.../ice2-data-catalog-internal/datacatalog.json
-cache:     /projects2/.../ice2-data-cache-new
+Replace the example path with a writable directory on your machine. The cache
+can be shared by several consuming packages.
 
-  probe                          25 files      8.5 MB   Everything synthetic -- the full upload/download round trip
-  probe-refused                   2 files        58 B   Must FAIL with a useful message, never a mystery missing file
-  probe-shards                    3 files     72.0 KB   One shard prefix only -- proves a sharded manifest resolves lazily
-  probe-small                     7 files     14.7 KB   A handful of files, for a fast first check
-```
-
-Four collections, with file counts and sizes. Note what did **not** happen: no
-dataset inventory was downloaded to produce this. The catalogue index carries
-the totals, and a dataset's file list is fetched only when something actually
-asks for it — which is what keeps `list` instant on a catalogue containing
-170,000-file datasets.
-
-!!! note "Getting tired of typing `-c`"
-    `ice2-data config set-collections <path> --scope project` pins one for the
-    directory you are working in. Careful: it applies everywhere the project
-    config is found, not just in that one folder — see
-    [Point the cache somewhere](../how-to/configure-the-cache.md).
-
-## 3. Look before you leap
+## 2. Discover the package's collections
 
 ```bash
-ice2-data -c probe-collections.yaml info probe-small
+ethos-data -c reskit/data/collections.yaml list
 ```
 
-```title="Output"
-probe-small: 7 files, 14.7 KB
+The collections file declares the package's selections and pins its catalogue.
+RESKit includes collections such as `test_suite`, `onshore_wind`, `solar`, and
+`all`. This lesson uses `onshore_wind`; inspect its size before proceeding.
 
-  probe-basic/probe-notes.txt                                           114 B
-  probe-basic/timeseries.csv                                           1.5 KB
-  probe-basic/vectors/probe_sites.cpg                                     6 B
-  probe-basic/vectors/probe_sites.dbf                                  4.0 KB
-  probe-basic/vectors/probe_sites.prj                                    91 B
-  probe-basic/vectors/probe_sites.shp                                  8.0 KB
-  probe-basic/vectors/probe_sites.shx                                  1.0 KB
-```
+Catalogue metadata may be retrieved from the configured host. This step does
+not download the selected dataset bytes.
 
-`info` says what a collection *contains*. Notice that the collections file asks
-for `probe_sites.shp` and gets five files: a shapefile without its `.dbf` and
-`.shx` is unreadable, so companions are pulled in automatically rather than
-being something every collections file has to remember to spell out.
-
-`plan` says what a fetch would *do*:
+## 3. Inspect the selection and transfer estimate
 
 ```bash
-ice2-data -c probe-collections.yaml plan probe-small
+ethos-data -c reskit/data/collections.yaml info onshore_wind
+ethos-data -c reskit/data/collections.yaml plan onshore_wind
 ```
 
-```title="Output"
-public cache:    /projects2/.../ice2-data-cache-new
-already cached:     7 files     14.7 KB
-to download:        0 files         0 B
-```
+`info` lists the files. Selecting `turbinePlacements.shp` also selects the
+recorded shapefile companions, such as `.dbf` and `.shx`, needed to read it.
 
-`plan` touches no network. It is the command to run when you want to know what
-a job is about to cost — or, as here, to discover that somebody else already
-paid for it.
+`plan` shows the cache location, files already present, files used in place,
+and estimated downloads. Planning can load remote descriptors and shards; it
+does not fetch dataset bytes. Its size checks are a quick estimate rather than
+a checksum verification.
 
-## 4. Fetch it
+## 4. Fetch the collection
 
 ```bash
-ice2-data -c probe-collections.yaml fetch probe-small
+ethos-data -c reskit/data/collections.yaml fetch onshore_wind
 ```
 
-Files land at `<cache>/<dataset>/<resource path>` — here,
-`.../probe-basic/vectors/probe_sites.shp`. Every downloaded file is verified
-against the SHA-256 in the manifest as it arrives; a corrupt transfer is
-retried, not silently kept.
+A downloaded file is stored under `<cache>/<dataset>/<resource path>` and
+checked against its recorded checksum. A dataset configured for local access
+is read in place. Run the same fetch again: valid cached downloads are reused.
+This also works when another package originally fetched the same resources.
 
-**Run it a second time.** Nothing transfers. Files already present and matching
-their recorded checksum are skipped — including files a *different* tool
-fetched earlier into the same cache. That is the whole point of the design:
-there is nothing to synchronise, because two tools resolving the same catalogue
-compute the same path and the second one simply finds the file there.
-
-## 5. Do it from Python
+## 5. Obtain the paths from Python
 
 ```python
-from ice2_data import fetch
+from reskit import data
 
-files = fetch("probe-small", collections="probe-collections.yaml")
+files = data.fetch("onshore_wind")
+turbines = files.one("turbinePlacements.shp")
 ```
 
-`files` is a `DataFiles` — an ordinary `dict` mapping
-`"<dataset>/<resource path>"` to a `pathlib.Path`, in catalogue order, with two
-conveniences on top:
-
-```python
-files.paths                       # [Path, Path, ...] — hand the lot to a workflow
-files.one("probe_sites.shp")      # one file, by the end of its name
-```
-
-`.one()` raises if the suffix is ambiguous or absent, so a typo fails loudly
-instead of handing back the wrong raster.
+`files` maps resource keys such as `reskit-test-data/turbinePlacements.shp` to
+`pathlib.Path` objects. Its `.paths` property returns all paths, while
+`.one("suffix")` returns one unambiguous match and raises for an absent or
+ambiguous suffix. The result can be passed to the corresponding workflow or
+reader:
 
 ```python
 import geopandas as gpd
 
-sites = gpd.read_file(files.one("probe_sites.shp"))
+sites = gpd.read_file(turbines)
 ```
 
-## 6. Check what is on disk
+If a package does not provide a wrapper, the underlying call is:
 
-Downloads are verified as they arrive, but data can drift afterwards — most
-often when a cache entry points into shared project storage that somebody else
-reorganises.
+```python
+from ethos_data import fetch
+
+files = fetch("onshore_wind", collections="reskit/data/collections.yaml")
+```
+
+## 6. Check the stored files
 
 ```bash
-ice2-data -c probe-collections.yaml verify probe-small
+ethos-data -c reskit/data/collections.yaml verify onshore_wind --deep
 ```
 
-```title="Output"
-verifying 7 files from probe-small (sizes)
+This compares checksums, including for catalogued files read in place. Without
+`--deep`, verification compares sizes. Inspect failures before choosing a
+[repair operation](../how-to/verify-and-repair.md).
 
-ok: 7
-
-7 file(s) match the catalogue.
-```
-
-That compared sizes, which is cheap enough to run often. Add `--deep` to
-compare checksums — it reads every byte, so it is the check to run before you
-publish a result rather than the one to run every morning. `--repair` re-fetches
-whatever no longer matches.
-
-## What you now know
-
-| You ran | It answered |
-|---|---|
-| `ice2-data config show` | where data goes, and why |
-| `ice2-data list` | what collections exist |
-| `ice2-data info <name>` | which files one contains |
-| `ice2-data plan <name>` | what a fetch would download |
-| `ice2-data fetch <name>` | download it |
-| `ice2-data verify <name>` | is what is on disk still what the catalogue describes |
-
-## Next
-
-- Your data should live somewhere other than `~/.cache`, or you are on a
-  cluster: [Point the cache somewhere](../how-to/configure-the-cache.md).
-- You maintain a package that needs input data:
-  [Use it from your own package](use-from-a-library.md).
-- You have data other people should be able to fetch:
-  [Add a dataset to the catalogue](add-a-dataset.md).
-- You want to know why the cache is shaped like this:
-  [Why one catalogue](../explanation/deduplication.md).
+You have now followed selection, transfer, reuse, and verification. Continue
+with [Get data for a task](../how-to/get-data-for-a-task.md) for smaller subsets
+and the package's `all` collection, or
+[Troubleshoot catalogue access](../how-to/troubleshoot-catalogue.md) if your
+configuration or available data differs from the lesson.

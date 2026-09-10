@@ -8,7 +8,7 @@ See [Check and repair the cache](../../how-to/verify-and-repair.md) and
 
 ## Verification
 
-::: ice2_data.verify
+::: ethos_data.verify
     options:
       members:
         - verify
@@ -22,7 +22,7 @@ See [Check and repair the cache](../../how-to/verify-and-repair.md) and
 
 ## Materialization
 
-::: ice2_data.materialize
+::: ethos_data.materialize
     options:
       members:
         - materialize
@@ -34,7 +34,7 @@ See [Check and repair the cache](../../how-to/verify-and-repair.md) and
 
 ## Staging
 
-::: ice2_data.staging
+::: ethos_data.staging
     options:
       members:
         - add
@@ -47,6 +47,21 @@ See [Check and repair the cache](../../how-to/verify-and-repair.md) and
         - apply_staging
         - synthesize
         - StagedDataset
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+## Repository test-data bundles
+
+::: ethos_data.bundles
+    options:
+      members:
+        - export_bundle
+        - load_bundle
+        - Bundle
+        - BundleFinding
+        - BundleError
+        - ModifiedBundleWarning
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

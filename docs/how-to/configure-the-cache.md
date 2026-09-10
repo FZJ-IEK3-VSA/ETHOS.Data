@@ -5,7 +5,7 @@ same mechanism on Linux, macOS and Windows. Nothing needs configuring for
 public data. This page is for when you want it somewhere specific.
 
 ```bash
-ice2-data config show
+ethos-data config show
 ```
 
 prints the folder in use, **why** it was chosen, and every place that was
@@ -19,8 +19,8 @@ The first one that applies wins:
 | | How | Good for |
 |---|---|---|
 | 1 | `--root /path` on the command line, or `root=` in Python | one-off runs |
-| 2 | the `ICE2_DATA_DIR` environment variable | CI, batch jobs, SLURM |
-| 3 | a file called `ice2-data.yaml` in your project folder | a setting you want to see and commit |
+| 2 | the `ETHOS_DATA_DIR` environment variable | CI, batch jobs, SLURM |
+| 3 | a file called `ethos-data.yaml` in your project folder | a setting you want to see and commit |
 | 4 | your personal setting | all your work, every project |
 | 5 | a setting inside the conda environment | a shared install someone else manages |
 | 6 | a machine-wide setting | a cluster, set by an admin |
@@ -33,11 +33,11 @@ An ordinary file, in the folder you work in, that you can open, read, edit and
 commit. Run this from the folder you want it to appear in:
 
 ```bash
-ice2-data config set-cache /data/my-analysis/ice2-data --scope project
+ethos-data config set-cache /data/my-analysis/ethos-data --scope project
 ```
 
-```yaml title="ice2-data.yaml"
-cache_dir: /data/my-analysis/ice2-data
+```yaml title="ethos-data.yaml"
+cache_dir: /data/my-analysis/ethos-data
 ```
 
 It is found from anywhere *inside* the project — the same way `git` finds a
@@ -54,10 +54,10 @@ that one file instead of creating a second.
 For a personal setting that follows you across projects, drop `--scope`:
 
 ```bash
-ice2-data config set-cache /data/ice2-data
+ethos-data config set-cache /data/ethos-data
 ```
 
-`ice2-data config unset-cache` goes back to the default.
+`ethos-data config unset-cache` goes back to the default.
 
 ## On a cluster
 
@@ -65,17 +65,30 @@ An admin sets the cache once, site-wide, and everybody else gets it with no
 setup at all:
 
 ```bash
-ice2-data config set-cache /projects2/shared/ice2-data --scope site
+ethos-data config set-cache /projects2/shared/ethos-data --scope site
 ```
 
 A batch job that needs node-local scratch can still override for one run with
-`ICE2_DATA_DIR`, without touching anybody else's configuration.
+`ETHOS_DATA_DIR`, without touching anybody else's configuration.
 
 If the cluster already holds copies of the datasets, an admin can also build
 the cache as a directory of links to them — see
-[`ice2-data catalog link-cache`](use-data-already-on-disk.md#the-maintainer-side-link-cache).
-Users then point `public_cache` at that directory and nothing is ever
-downloaded.
+[`ethos-data catalog link-cache`](use-data-already-on-disk.md#the-maintainer-side-link-cache).
+Users then point `public_cache` at that directory. Files present through its
+namespace links are read in place; other selected public data may still need
+downloading.
+
+The catalogue location is a separate setting. If the administrator exposes a
+reviewed internal catalogue on the filesystem, CLI users can select it with:
+
+```bash
+ethos-data config set-catalog /shared/ice2/catalogue/current/datacatalog.json --scope project
+```
+
+This is an example path. RESKit's Python wrapper accepts the same path through
+`RESKIT_DATA_CATALOG`; see [Get data for a task](get-data-for-a-task.md).
+For reproducible runs, use a versioned catalogue directory rather than
+`current`. See [Catalogue hosting](catalogue-hosting.md) for the operator setup.
 
 ## The three roots
 
@@ -88,9 +101,9 @@ There are actually three cache roots, and you are expected to set at most two:
 | **staging cache** | work in progress that is not catalogued yet | **none**, opt-in |
 
 ```bash
-ice2-data config set-public-cache     /path --scope site
-ice2-data config set-restricted-cache /path --scope environment
-ice2-data config set-staging-cache    /path            # only while developing
+ethos-data config set-public-cache     /path --scope site
+ethos-data config set-restricted-cache /path --scope environment
+ethos-data config set-staging-cache    /path            # only while developing
 ```
 
 `set-cache` is an alias for `set-public-cache`, kept because it is in scripts,
@@ -107,12 +120,12 @@ Every `config set-*` command takes `--scope`:
 
 | Scope | File | Use for |
 |---|---|---|
-| `project` | `./ice2-data.yaml`, searched upward from the cwd | a setting you want visible and committable |
+| `project` | `./ethos-data.yaml`, searched upward from the cwd | a setting you want visible and committable |
 | `user` (default) | your per-user config directory | all your own work |
-| `environment` | `<sys.prefix>/etc/ice2-data/config.yaml` | a conda env somebody else manages |
+| `environment` | `<sys.prefix>/etc/ethos-data/config.yaml` | a conda env somebody else manages |
 | `site` | the machine-wide config directory | a cluster, set by an admin |
 
-Precedence runs in that order. `ice2-data config show` prints every file it
+Precedence runs in that order. `ethos-data config show` prints every file it
 consults with an exists/not-present flag, so a setting that is being shadowed
 is visible rather than mysterious.
 
@@ -125,12 +138,12 @@ developing against the internal catalogue instead of a published tag, say — se
 it once:
 
 ```bash
-ice2-data config set-catalog /path/to/ice2-data-catalog-internal/datacatalog.json --scope project
+ethos-data config set-catalog /path/to/ethos-data-catalog-internal/datacatalog.json --scope project
 ```
 
 Same scopes and precedence as the cache directory. It takes a local path or an
 `http(s)` URL, and is overridden by `--catalog` / `catalog=` for a single run.
-`ice2-data config unset-catalog` removes it.
+`ethos-data config unset-catalog` removes it.
 
 ## Pinning a default collections file
 
@@ -138,14 +151,14 @@ To stop passing `-c` every time — while working inside a repository that will
 never grow its own `collections.yaml`, for instance:
 
 ```bash
-ice2-data config set-collections /path/to/probe-collections.yaml --scope project
+ethos-data config set-collections /path/to/probe-collections.yaml --scope project
 ```
 
 !!! warning "This applies everywhere the project config is found"
     Not just in that one directory — the same walk-up rule as `cache_dir`. If
-    you later run a bare `ice2-data list` somewhere that has its own real
+    you later run a bare `ethos-data list` somewhere that has its own real
     `collections.yaml` (RESKit's, say), you would still get the pinned one
-    unless you pass `-c` explicitly. `ice2-data config unset-collections`
+    unless you pass `-c` explicitly. `ethos-data config unset-collections`
     removes it, and `config show` always says which file is in effect and why.
 
 ## Fetching from a different door
@@ -155,28 +168,28 @@ through DESY's high-throughput door instead — worth it for bulk transfers and
 CI, not for interactive use:
 
 ```bash
-ice2-data config set-publication-url https://hifis-storage-ht.desy.de:2880/Helmholtz/FZJ-ICE2/ice2-data-files
+ethos-data config set-publication-url https://hifis-storage-ht.desy.de:2880/Helmholtz/FZJ-ICE2/ice2-data-files
 ```
 
 The catalogue does not change; only this machine's route to the bytes does.
 
 ## Reading the output
 
-```title="ice2-data config show (abridged)"
+```title="ethos-data config show (abridged)"
 the two settings that matter:
 
-  public cache      /projects2/2026-j-belina-ResKit-Update/ice2-data-cache-new
-                    from project config /projects2/2026-j-belina-ResKit-Update/ice2-data.yaml
+  public cache      /projects2/2026-j-belina-ResKit-Update/ethos-data-cache-new
+                    from project config /projects2/2026-j-belina-ResKit-Update/ethos-data.yaml
   restricted cache  (not set -- licensed datasets will refuse to resolve)
-                    ice2-data config set-restricted-cache /path --scope environment
+                    ethos-data config set-restricted-cache /path --scope environment
 
 precedence for each, first match wins:
   1. explicit --root / root=      (public cache only)
-  2. $ICE2_DATA_DIR          (unset)   [public]
-  3. project config           /projects2/2026-j-belina-ResKit-Update/ice2-data.yaml  [exists]
-  4. user config              /home/you/.config/ice2-data/config.yaml  [not present]
-  5. environment config       /home/you/miniforge3/envs/env/etc/ice2-data/config.yaml  [not present]
-  6. site config              /etc/xdg/ice2-data/config.yaml  [not present]
+  2. $ETHOS_DATA_DIR          (unset)   [public]
+  3. project config           /projects2/2026-j-belina-ResKit-Update/ethos-data.yaml  [exists]
+  4. user config              /home/you/.config/ethos-data/config.yaml  [not present]
+  5. environment config       /home/you/miniforge3/envs/env/etc/ethos-data/config.yaml  [not present]
+  6. site config              /etc/xdg/ethos-data/config.yaml  [not present]
   7. built-in default          per-user OS cache directory (public only)
 
 public cache holds 0 link(s) and 2 real director(ies):

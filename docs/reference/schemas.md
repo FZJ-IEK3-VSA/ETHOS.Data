@@ -8,9 +8,9 @@ edited by hand.
 | [`collections.yaml`](#collectionsyaml) | you, in your tool | the consuming package |
 | [`dataset.yaml`](#datasetyaml) | a maintainer | `datasets/<name>/` in the source catalogue |
 | [`catalog.yaml`](#catalogyaml) | a maintainer, once | the catalogue root |
-| [`datapackage.json` / `datacatalog.json`](#generated-descriptors) | `ice2-data catalog build` | generated |
+| [`datapackage.json` / `datacatalog.json`](#generated-descriptors) | `ethos-data catalog build` | generated |
 
-Institute-specific keys use the `ice2:` prefix — the
+Institute-specific keys use the `ethos:` prefix — the
 [Data Package](https://datapackage.org/) standard's extension mechanism.
 
 ---
@@ -21,7 +21,7 @@ Lives in the consuming package. Names *slices* of the catalogue, and contains
 no file paths, sizes, checksums or URLs.
 
 ```yaml
-catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ice2-data-catalog/v2026.09/datacatalog.json
+catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ethos-data-catalog/v2026.09/datacatalog.json
 
 collections:
   onshore_wind:
@@ -38,7 +38,7 @@ collections:
 |---|---|---|
 | `catalog` | string | local path or `http(s)` URL to a `datacatalog.json`. A relative path is resolved against **this file**. An `@ref` suffix pins a version (a git tag; stripped for local paths). Required unless the caller supplies one. |
 | `collections` | mapping | collection name → definition |
-| `collections.<name>.title` | string | one line, shown by `ice2-data list` |
+| `collections.<name>.title` | string | one line, shown by `ethos-data list` |
 | `collections.<name>.include` | list | `{dataset, files}` entries |
 | `collections.<name>.include[].dataset` | string | a dataset name in the catalogue |
 | `collections.<name>.include[].files` | list of globs | omit, or use `["**"]`, for everything |
@@ -104,55 +104,55 @@ contributors:                                 # repeatable
 licenses:                                     # repeatable
   - name: CC-BY-4.0                           # `name` and/or `path` -- at least one
     path: https://creativecommons.org/licenses/by/4.0/
-    ice2:applies_to: ["originals/**"]         # repeatable; omit to cover every file
+    ethos:applies_to: ["originals/**"]         # repeatable; omit to cover every file
   - name: CC0-1.0
     path: https://creativecommons.org/publicdomain/zero/1.0/
 
-ice2:retrieved: "2026-09-01"
-ice2:contact: your-username
-ice2:attribution: >-
+ethos:retrieved: "2026-09-01"
+ethos:contact: your-username
+ethos:attribution: >-
   The statement anyone redistributing this data has to reproduce.
-ice2:coverage_note: >-
+ethos:coverage_note: >-
   What this mirror does not hold, and why.
-ice2:upstream:                                # omit while upstream still serves it
+ethos:upstream:                                # omit while upstream still serves it
   status: withdrawn                           # available|superseded|withdrawn|on-request
   checked: "2026-09-01"
   note: >-
     What happened, what was checked, and any route that remains.
 
 # ---- provenance --------------------------------------------------------
-ice2:origin: downloaded                       # default: downloaded | derived | created
-ice2:derivation: >-                           # if origin: derived
+ethos:origin: downloaded                       # default: downloaded | derived | created
+ethos:derivation: >-                           # if origin: derived
   The method, parameters and inputs, in enough detail to redo it.
 
 # ---- where the bytes are -----------------------------------------------
 source_dir: /benchtop/shared_data/MyDataset   # required
-ice2:remote_prefix: my-dataset                # default: the value of `name`
+ethos:remote_prefix: my-dataset                # default: the value of `name`
 
 # ---- classification ----------------------------------------------------
-ice2:access: public                           # default: public | internal | restricted
-ice2:visibility: public                       # default: public | hidden
-ice2:embargo:                                 # if visibility: hidden
+ethos:access: public                           # default: public | internal | restricted
+ethos:visibility: public                       # default: public | hidden
+ethos:embargo:                                 # if visibility: hidden
   until: "2027-01-01"
   reason: Under peer review until publication.
   becomes: public
-ice2:license_status: resolved                 # default: derived | resolved | unresolved | unknown
-ice2:license_note: >-
+ethos:license_status: resolved                 # default: derived | resolved | unresolved | unknown
+ethos:license_note: >-
   Internal working note on the licence. Stripped from the published catalogue.
-ice2:restriction: >-                          # if access: restricted
+ethos:restriction: >-                          # if access: restricted
   Why it is restricted, and how somebody entitled to it gets a copy.
 
 # ---- inventory control -------------------------------------------------
-ice2:include:                                 # repeatable
+ethos:include:                                 # repeatable
   - "rasters/**"
-ice2:exclude:                                 # repeatable
+ethos:exclude:                                 # repeatable
   - "**/*.tmp"
-ice2:shard_depth: 1
+ethos:shard_depth: 1
 ```
 
 Real descriptors use a fraction of this. Nothing above is filler, but a mirrored
 public dataset typically needs identity, `source_dir`, `licenses` and
-`ice2:attribution`, and nothing from the last three groups.
+`ethos:attribution`, and nothing from the last three groups.
 
 Two conventions worth naming, because they recur:
 
@@ -160,17 +160,17 @@ Two conventions worth naming, because they recur:
   `contributors` and `licenses` are Frictionless lists and hold as many entries
   as the truth requires — a dataset with three sources needs no special key, and
   neither does one under two licences. Where a list needs *narrowing* rather than
-  extending, that is `ice2:applies_to`, described under [Licences](#licences).
+  extending, that is `ethos:applies_to`, described under [Licences](#licences).
 - **`default:` means the build writes the value in**, not that it is merely
-  assumed. An omitted `ice2:access` becomes `public` in the generated
+  assumed. An omitted `ethos:access` becomes `public` in the generated
   `datapackage.json`, so a reader never has to know the defaulting rules.
 
 ### Identity
 
 **`name`** — *string, required.* The dataset name, as collections files
-reference it. Also the default for `ice2:remote_prefix`.
+reference it. Also the default for `ethos:remote_prefix`.
 
-**`title`** — *string.* A short human-readable title. Shown by `ice2-data list`.
+**`title`** — *string.* A short human-readable title. Shown by `ethos-data list`.
 
 **`description`** — *string.* What it is and what it is for.
 
@@ -194,7 +194,7 @@ disk**. Two live examples, both of which cost real time to get right:
 - `esa-cci-landcover` has no DOI at all; CEDA's own "cite this dataset as" text
   ends in the catalogue UUID URL. `id` is that URL.
 
-When you conclude a dataset has no DOI, **write down why** in `ice2:license_note`
+When you conclude a dataset has no DOI, **write down why** in `ethos:license_note`
 — including the near-miss DOI you rejected, if there was one. Otherwise the next
 person re-runs the same search and reaches the opposite answer.
 
@@ -234,9 +234,9 @@ not "unversioned".
 ### Provenance: where it came from
 
 **`sources`** — *list of `{title, path}`.* Frictionless: where it came from, or
-what it was derived from. Required when `ice2:origin` is `derived`.
+what it was derived from. Required when `ethos:origin` is `derived`.
 
-**`ice2:retrieved`** — *string, an ISO date, quoted.* The date **the bytes were
+**`ethos:retrieved`** — *string, an ISO date, quoted.* The date **the bytes were
 fetched from upstream**. Not the date the dataset was added to the catalogue, not
 the date it was uploaded to the store, and *not* the files' mtime — a bulk copy
 between filesystems rewrites every mtime and is not a retrieval. Where a download
@@ -250,7 +250,7 @@ The field is documentation — nothing in the code reads it. It exists so a
 consumer can tell how stale a mirror is likely to be relative to a product that
 has since been revised.
 
-**`ice2:upstream`** — *mapping `{status, checked, note}`, published.* Whether the
+**`ethos:upstream`** — *mapping `{status, checked, note}`, published.* Whether the
 original source still serves **this delivery**. Omit it while upstream does — its
 presence is the signal.
 
@@ -267,8 +267,8 @@ presence is the signal.
 `available` may not be. `note` should say what was checked and what route
 remains, so the next person can tell a real dead end from a search that gave up.
 
-This is **published, not stripped**, unlike `ice2:license_note` and
-`ice2:embargo`. Two reasons. A consumer deciding whether to depend on the mirror
+This is **published, not stripped**, unlike `ethos:license_note` and
+`ethos:embargo`. Two reasons. A consumer deciding whether to depend on the mirror
 needs to know they cannot simply fetch the same bytes themselves. And when
 upstream is gone, **this mirror is the copy of record** — losing it is not a
 recoverable accident, which is a preservation fact the public catalogue should
@@ -276,10 +276,10 @@ state rather than hide.
 
 It is not a licence field and grants nothing. That the publisher stopped
 distributing something does not change the terms it was distributed under; keep
-that reasoning in `licenses` and `ice2:license_note`.
+that reasoning in `licenses` and `ethos:license_note`.
 
 ```yaml
-ice2:upstream:
+ethos:upstream:
   status: on-request
   checked: "2026-09-07"
   note: >-
@@ -297,48 +297,48 @@ that matters, say in the descriptor what independent evidence exists — a
 comparison against a successor release, publisher-written statistics that still
 match the pixels, whatever was actually done.
 
-**`ice2:coverage_note`** — *string, published.* What a user would otherwise assume
+**`ethos:coverage_note`** — *string, published.* What a user would otherwise assume
 is here and is not. A mirror that holds one reference year of a six-year delivery,
 or the map layer but not the quality flags, needs to say so — otherwise the only
 way to discover the gap is to go looking for a file and conclude upstream never
 made it. State the scope positively *and* name what was left out:
 
 ```yaml
-ice2:coverage_note: >-
+ethos:coverage_note: >-
   This mirror holds the CLC2018 reference year of the version-20 100 m raster
   delivery. It does not hold the 1990, 2000, 2006 or 2012 reference years, nor
   any of the change layers the delivery also contains.
 ```
 
-**`ice2:contact`** — *string, a username or team name.* The person to ask **about
+**`ethos:contact`** — *string, a username or team name.* The person to ask **about
 this dataset**, when the answer is not in the descriptor: where it came from, why
 these files and not others, whether the licence question was really settled.
 
 It is deliberately per-dataset rather than inherited from `catalog.yaml`, because
 the useful answer is usually one person — whoever ran the download — and not the
 maintainer team. Fall back to the team only when no individual owns it. Like
-`ice2:retrieved`, no code reads it.
+`ethos:retrieved`, no code reads it.
 
 
 
-**`ice2:origin`** — *string, one of `downloaded`, `derived`, `created`; default
+**`ethos:origin`** — *string, one of `downloaded`, `derived`, `created`; default
 `downloaded`.* How this dataset came to exist.
 
-It is declared, never inferred — the same rule as `ice2:catalog_role`. "Somebody
+It is declared, never inferred — the same rule as `ethos:catalog_role`. "Somebody
 here made this" is a claim with licensing consequences, and deducing it from the
 presence of an author would make it true by accident. `downloaded` is the default
 because it is both the common case and the conservative one: claiming less about
 authorship than is true is safe, claiming more is not.
 
-**`ice2:derivation`** — *string; required when `ice2:origin` is `derived`.* The
+**`ethos:derivation`** — *string; required when `ethos:origin` is `derived`.* The
 method, parameters and inputs, in enough detail to redo it.
 
 **`contributors`** — *list of `{title, roles, organization, path, email}`.*
 Frictionless. Each entry needs a `title`; the rest are optional.
 
 ```yaml
-ice2:origin: derived
-ice2:derivation: >-
+ethos:origin: derived
+ethos:derivation: >-
   The GeoTIFFs are lossless gdalwarp conversions of the netCDF beside them,
   reprojected to EPSG:3035 with nearest-neighbour resampling.
 
@@ -357,19 +357,19 @@ spec is worse than one told which it follows. Valid roles are `author`,
 
 What the build enforces:
 
-| `ice2:origin` | Requires |
+| `ethos:origin` | Requires |
 |---|---|
 | `downloaded` (default) | nothing — every dataset written before this key existed still builds |
 | `created` | at least one contributor with `roles: [author]` |
-| `derived` | an author, **plus** `sources` (derived from what) and `ice2:derivation` (by what method) |
+| `derived` | an author, **plus** `sources` (derived from what) and `ethos:derivation` (by what method) |
 
 ### Licences
 
-**`ice2:attribution`** — *string.* The attribution statement a redistributor must
+**`ethos:attribution`** — *string.* The attribution statement a redistributor must
 reproduce. Kept in the published catalogue, because it binds whoever takes the
 data next.
 
-**`licenses`** — *list of `{name, path, title, ice2:applies_to}`.* A Frictionless
+**`licenses`** — *list of `{name, path, title, ethos:applies_to}`.* A Frictionless
 list, so several need no extension — only checking. Each entry needs `name` (an
 [Open Definition id](http://licenses.opendefinition.org/)) or `path` (a URL); a
 bare `title` reads as a licence and identifies nothing.
@@ -387,7 +387,7 @@ licenses:
     path: https://creativecommons.org/publicdomain/zero/1.0/
 ```
 
-**`ice2:applies_to`** — *list of globs.* When the files are not all under the
+**`ethos:applies_to`** — *list of globs.* When the files are not all under the
 same terms, narrow an entry:
 
 ```yaml
@@ -395,31 +395,31 @@ licenses:
   # The upstream originals we mirror.
   - name: CC-BY-4.0
     path: https://creativecommons.org/licenses/by/4.0/
-    ice2:applies_to: ["originals/**"]
+    ethos:applies_to: ["originals/**"]
   # Everything else: our conversions, and the documentation.
   - name: CC0-1.0
     path: https://creativecommons.org/publicdomain/zero/1.0/
 ```
 
-Patterns use the same matcher as `ice2:include` and a collection's `files:`. A
+Patterns use the same matcher as `ethos:include` and a collection's `files:`. A
 pattern matching **nothing fails the build** — silently licensing no files is how
 a dataset ends up published under terms nobody applied. If every entry is
 narrowed and some files are left over, the build warns: those files would be
 described by no licence at all.
 
-**`ice2:document`** — *path, relative to the dataset directory.* An archived copy
+**`ethos:document`** — *path, relative to the dataset directory.* An archived copy
 of the licence itself, stored beside `dataset.yaml` (by convention in
 `licenses/`) and carried into the published catalogue verbatim.
 
-**`ice2:document_sha256`** — *hex digest of that file.*
+**`ethos:document_sha256`** — *hex digest of that file.*
 
 ```yaml
 licenses:
   - title: >-
       Terms and Conditions for use of Land Cover CCI datasets
     path: https://artefacts.ceda.ac.uk/licences/specific_licences/esacci_landcover_terms_and_conditions.pdf
-    ice2:document: licenses/esacci_landcover_terms_and_conditions.pdf
-    ice2:document_sha256: a2b89ca5649815e1a0696b3b4220351409159328e4e4dbd4116d066bec5e8377
+    ethos:document: licenses/esacci_landcover_terms_and_conditions.pdf
+    ethos:document_sha256: a2b89ca5649815e1a0696b3b4220351409159328e4e4dbd4116d066bec5e8377
 ```
 
 **A licence that exists only as a URL is a licence that can disappear**, and this
@@ -441,18 +441,18 @@ Two things worth knowing:
   as ordinary resources and need no archiving. `esa-cci-landcover`'s
   `00README_catalogue_and_licence.txt` and `landcover`'s `license/` directory both
   travel with the data. Archive the documents those *point at*, not the pointers.
-- **`ice2:document` is carried into the published catalogue** — `publish` copies
+- **`ethos:document` is carried into the published catalogue** — `publish` copies
   the file next to the descriptor, and fails loudly if it is missing. It is the
   one part of the public tree that is not generated text, so the renderer handles
   bytes for it.
 
-**`ice2:license_status`** — *string, one of `resolved`, `unresolved`, `unknown`;
+**`ethos:license_status`** — *string, one of `resolved`, `unresolved`, `unknown`;
 derived.* A present `licenses:` block implies `resolved`; otherwise the build
 takes what you wrote, defaulting to `unknown`. Set it to `unresolved` when nobody
 has read the upstream terms yet. Promoted into `datacatalog.json` so that warning
 about licensing costs no inventory fetch.
 
-**`ice2:license_note`** — *string.* Internal working note on the licence — what
+**`ethos:license_note`** — *string.* Internal working note on the licence — what
 was checked, what is still open, which document settles it. Stripped from the
 published catalogue.
 
@@ -466,16 +466,16 @@ absolute one is used exactly as written, symbolic links and all, so it can name
 the curated namespace rather than the physical mount. Stripped from anything
 published.
 
-**`ice2:remote_prefix`** — *string; default: the value of `name`.* Folder name on
+**`ethos:remote_prefix`** — *string; default: the value of `name`.* Folder name on
 the public store. **Must not be set** for restricted data — the build rejects it,
 because restricted bytes are never uploaded.
 
 ### Classification
 
-**`ice2:access`** — *string, one of `public`, `internal`, `restricted`; default
+**`ethos:access`** — *string, one of `public`, `internal`, `restricted`; default
 `public`.* Who may read the bytes; picks the cache root.
 
-**`ice2:visibility`** — *string, one of `public`, `hidden`; default `public`.*
+**`ethos:visibility`** — *string, one of `public`, `hidden`; default `public`.*
 Whether it appears in the published catalogue.
 
 These two are independent: a dataset can be listed publicly while its bytes stay
@@ -484,13 +484,13 @@ it can be hidden while colleagues use it daily. The one combination the build
 rejects is `access: public` with `visibility: hidden` — if the bytes are
 downloadable by anyone, list the dataset.
 
-**`ice2:embargo`** — *mapping `{until, reason, becomes}`; required when
+**`ethos:embargo`** — *mapping `{until, reason, becomes}`; required when
 `visibility: hidden`.* `until` may be `"unspecified"`, but only with an explicit
 reason. Without this block a dataset stays hidden by accident forever. Stripped
 from the published catalogue: what is being withheld, and until when, is nobody
 else's business.
 
-**`ice2:restriction`** — *string; for `access: restricted`.* Why it is
+**`ethos:restriction`** — *string; for `access: restricted`.* Why it is
 restricted, and how a user entitled to the data gets it.
 
 This is the one field here that a user actually sees. When a restricted dataset
@@ -499,11 +499,11 @@ this note between the refusal and the instructions:
 
 ```
 dataset 'thewindpower-turbines' is restricted and is never downloaded.
-  <ice2:restriction goes here>
+  <ethos:restriction goes here>
 No restricted cache is configured on this machine.
 
 If you have access to the licensed copy, say where it is:
-    ice2-data config set-restricted-cache ...
+    ethos-data config set-restricted-cache ...
 ```
 
 So write it for the person who just hit the wall, not for the auditor: which
@@ -513,13 +513,13 @@ them nothing they did not just learn from the line above it.
 
 ### Inventory control
 
-**`ice2:include`** — *list of globs.* Only these files are the dataset. A pattern
+**`ethos:include`** — *list of globs.* Only these files are the dataset. A pattern
 matching nothing **fails the build**.
 
-**`ice2:exclude`** — *list of globs.* Applied after `include`. A pattern matching
+**`ethos:exclude`** — *list of globs.* Applied after `include`. A pattern matching
 nothing only warns.
 
-**`ice2:shard_depth`** — *int.* Split the inventory into `manifests/<prefix>.json`
+**`ethos:shard_depth`** — *int.* Split the inventory into `manifests/<prefix>.json`
 at this directory depth. Must not be negative, and must be shallow enough that
 some file is actually nested that deep.
 
@@ -534,32 +534,32 @@ See [Describe a dataset](../how-to/describe-a-dataset.md).
 
 ## `catalog.yaml`
 
-One per catalogue, at its root. Hand-written; `ice2-data catalog build` merges it
+One per catalogue, at its root. Hand-written; `ethos-data catalog build` merges it
 with the generated dataset list into `datacatalog.json`.
 
 ```yaml
-name: ice2-data-catalog
-title: ICE-2 Input Data Catalogue
+name: ethos-data-catalog
+title: ETHOS.Data Catalogue
 description: >-
   What this catalogue is, who maintains it, and what it is for.
 
-ice2:publication_url: https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ice2-data-files
-ice2:contact: iek-3-data
-ice2:catalog_role: source
+ethos:publication_url: https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ice2-data-files
+ethos:contact: iek-3-data
+ethos:catalog_role: source
 ```
 
 | Key | | |
 |---|---|---|
 | `name`, `title`, `description` | | catalogue identity. Both catalogues share a `name` — the public one is a subset *view* of the same catalogue |
-| `ice2:publication_url` | | root of the public data store. Every resource URL is `<publication_url>/<remote_prefix>/<resource path>`. Override per machine with `ice2-data config set-publication-url` |
-| `ice2:contact` | | team or username |
-| `ice2:catalog_role` | `source` \| `published` | always `source` in a hand-written file — `build` defaults it and **rejects** any other value. `ice2-data catalog publish` stamps `published` into the generated copy |
+| `ethos:publication_url` | | root of the public data store. Every resource URL is `<publication_url>/<remote_prefix>/<resource path>`. Override per machine with `ethos-data config set-publication-url` |
+| `ethos:contact` | | team or username |
+| `ethos:catalog_role` | `source` \| `published` | always `source` in a hand-written file — `build` defaults it and **rejects** any other value. `ethos-data catalog publish` stamps `published` into the generated copy |
 
 ---
 
 ## Generated descriptors
 
-Never hand-edit these. `ice2-data catalog build --check` fails if any is stale.
+Never hand-edit these. `ethos-data catalog build --check` fails if any is stale.
 
 ### `datacatalog.json`
 
@@ -571,10 +571,10 @@ everything that can be answered **without** loading an inventory:
 | `name`, `title` | identity |
 | `version` | the publisher's release string, when the dataset declares one |
 | `path` | `datasets/<dir>/datapackage.json`, relative to the index |
-| `ice2:access`, `ice2:visibility` | classification |
-| `ice2:total_bytes`, `ice2:file_count` | size, without parsing the inventory |
-| `ice2:remote_prefix` | where the bytes are |
-| `ice2:license_status` | promoted so that warning about licensing is free |
+| `ethos:access`, `ethos:visibility` | classification |
+| `ethos:total_bytes`, `ethos:file_count` | size, without parsing the inventory |
+| `ethos:remote_prefix` | where the bytes are |
+| `ethos:license_status` | promoted so that warning about licensing is free |
 
 Those promotions are what make laziness worth having: locating a file, or
 warning about a licence, would otherwise pull the whole inventory in.
@@ -582,17 +582,17 @@ warning about a licence, would otherwise pull the whole inventory in.
 ### `datapackage.json`
 
 A Data Package descriptor per dataset. Either a `resources` array, or — for a
-sharded dataset — an `ice2:shards` index.
+sharded dataset — an `ethos:shards` index.
 
 | Key | |
 |---|---|
 | `resources[]` | `{name, path, bytes, hash, mediatype}` per file |
 | `resources[].hash` | `"sha256:…"` — the same `alg:hash` convention pooch reads, so the value passes straight through to the downloader |
-| `resources[].ice2:sidecars` | companion files that must travel with this one (shapefile `.dbf`, `.shx`, …) |
+| `resources[].ethos:sidecars` | companion files that must travel with this one (shapefile `.dbf`, `.shx`, …) |
 | `resources[].licenses` | present only on files a narrowed licence matched — see below |
-| `licenses`, `contributors`, `sources`, `ice2:origin`, `ice2:derivation` | passed through from `dataset.yaml` unchanged |
-| `ice2:total_bytes`, `ice2:file_count` | totals |
-| `ice2:shard_depth`, `ice2:shards` | present **instead of** `resources` when sharded |
+| `licenses`, `contributors`, `sources`, `ethos:origin`, `ethos:derivation` | passed through from `dataset.yaml` unchanged |
+| `ethos:total_bytes`, `ethos:file_count` | totals |
+| `ethos:shard_depth`, `ethos:shards` | present **instead of** `resources` when sharded |
 
 #### How a narrowed licence renders
 
@@ -602,7 +602,7 @@ package's. So a `dataset.yaml` with one narrowed entry and one general one:
 ```json
 {
   "licenses": [
-    { "name": "CC-BY-4.0", "ice2:applies_to": ["originals/**"] },
+    { "name": "CC-BY-4.0", "ethos:applies_to": ["originals/**"] },
     { "name": "CC0-1.0" }
   ],
   "resources": [
@@ -614,13 +614,13 @@ package's. So a `dataset.yaml` with one narrowed entry and one general one:
 
 Two things to notice.
 
-**Every licence stays in the package-level array**, `ice2:applies_to` and all.
+**Every licence stays in the package-level array**, `ethos:applies_to` and all.
 A reader that only looks at the package therefore sees the complete set —
 conservative, and true. Dropping the narrowed ones would leave a dataset whose
 licence list omits most of its licences, and would break the `license_status`
 derivation, which asks only whether `licenses` is non-empty.
 
-**The resource-level copy drops `ice2:applies_to`.** It is a build-time
+**The resource-level copy drops `ethos:applies_to`.** It is a build-time
 instruction about which files to attach to; on the file it was attached to, it
 answers a question nobody is asking.
 
@@ -629,8 +629,8 @@ build warns when every entry is narrowed and files are left over.
 
 ### `manifests/<prefix>.json`
 
-One shard of a sharded inventory: a `resources` array plus `ice2:shard`,
-`ice2:file_count` and `ice2:total_bytes`. Files sitting at the dataset root,
+One shard of a sharded inventory: a `resources` array plus `ethos:shard`,
+`ethos:file_count` and `ethos:total_bytes`. Files sitting at the dataset root,
 above any shard directory, land in `_root`.
 
 Shard paths in the index are relative to the **dataset** directory, not the

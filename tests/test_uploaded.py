@@ -1,4 +1,4 @@
-"""ice2:uploaded -- retiring source_dir once dCache is the source of truth.
+"""ethos:uploaded -- retiring source_dir once dCache is the source of truth.
 
 The case this exists for: source_dir points at a shared-storage mount that
 nobody promises to keep around forever. Once a dataset has been uploaded and
@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ice2_data.maintain.manifest import render_dataset, write_dataset
+from ethos_data.maintain.manifest import render_dataset, write_dataset
 
 
 def make_dataset(workspace: Path, extra_meta: dict, files: dict[str, bytes]) -> tuple[Path, Path]:
@@ -33,20 +33,20 @@ def make_dataset(workspace: Path, extra_meta: dict, files: dict[str, bytes]) -> 
 
     dataset_dir = workspace / "datasets" / "d"
     dataset_dir.mkdir(parents=True)
-    meta = {"name": "d", "title": "t", "source_dir": str(source), "ice2:remote_prefix": "d"}
+    meta = {"name": "d", "title": "t", "source_dir": str(source), "ethos:remote_prefix": "d"}
     meta.update(extra_meta)
     (dataset_dir / "dataset.yaml").write_text(yaml.safe_dump(meta))
     return dataset_dir, source
 
 
 def freeze(dataset_dir: Path, title: str | None = None) -> None:
-    """Build once normally, then rewrite dataset.yaml to declare ice2:uploaded."""
+    """Build once normally, then rewrite dataset.yaml to declare ethos:uploaded."""
     files = render_dataset(dataset_dir)
     write_dataset(dataset_dir, files)
 
     meta = yaml.safe_load((dataset_dir / "dataset.yaml").read_text())
     del meta["source_dir"]
-    meta["ice2:uploaded"] = True
+    meta["ethos:uploaded"] = True
     if title is not None:
         meta["title"] = title
     (dataset_dir / "dataset.yaml").write_text(yaml.safe_dump(meta))
@@ -86,7 +86,7 @@ class TestFreezingAfterUpload:
     def test_uploaded_and_source_dir_together_is_rejected(self):
         workspace = Path(tempfile.mkdtemp())
         try:
-            dataset_dir, _ = make_dataset(workspace, {"ice2:uploaded": True}, {"a.txt": b"hello"})
+            dataset_dir, _ = make_dataset(workspace, {"ethos:uploaded": True}, {"a.txt": b"hello"})
             with pytest.raises(SystemExit, match="never read again"):
                 render_dataset(dataset_dir)
         finally:
@@ -98,7 +98,7 @@ class TestFreezingAfterUpload:
             dataset_dir = workspace / "datasets" / "d"
             dataset_dir.mkdir(parents=True)
             (dataset_dir / "dataset.yaml").write_text(yaml.safe_dump({
-                "name": "d", "title": "t", "ice2:remote_prefix": "d", "ice2:uploaded": True,
+                "name": "d", "title": "t", "ethos:remote_prefix": "d", "ethos:uploaded": True,
             }))
             with pytest.raises(SystemExit, match="no datapackage.json to freeze"):
                 render_dataset(dataset_dir)
@@ -111,7 +111,7 @@ class TestFreezingAfterUpload:
             dataset_dir = workspace / "datasets" / "d"
             dataset_dir.mkdir(parents=True)
             (dataset_dir / "dataset.yaml").write_text(
-                yaml.safe_dump({"name": "d", "title": "t", "ice2:remote_prefix": "d"}))
+                yaml.safe_dump({"name": "d", "title": "t", "ethos:remote_prefix": "d"}))
             with pytest.raises(SystemExit, match="source_dir is required"):
                 render_dataset(dataset_dir)
         finally:
@@ -123,7 +123,7 @@ class TestFreezingAfterUpload:
         try:
             dataset_dir, source = make_dataset(
                 workspace,
-                {"licenses": [{"name": "CC-BY-4.0", "ice2:applies_to": ["a.txt"]}]},
+                {"licenses": [{"name": "CC-BY-4.0", "ethos:applies_to": ["a.txt"]}]},
                 {"a.txt": b"hello"},
             )
             write_dataset(dataset_dir, render_dataset(dataset_dir))
@@ -141,7 +141,7 @@ class TestFreezingAfterUpload:
         try:
             dataset_dir, source = make_dataset(
                 workspace,
-                {"ice2:shard_depth": 1},
+                {"ethos:shard_depth": 1},
                 {"2019/a.tif": b"x", "2020/a.tif": b"y"},
             )
             before_files = render_dataset(dataset_dir)
@@ -152,8 +152,8 @@ class TestFreezingAfterUpload:
             after_files = render_dataset(dataset_dir)
             before_package = json.loads(before_files["datapackage.json"])
             after_package = json.loads(after_files["datapackage.json"])
-            assert after_package["ice2:shards"] == before_package["ice2:shards"]
-            for shard in after_package["ice2:shards"]:
+            assert after_package["ethos:shards"] == before_package["ethos:shards"]
+            for shard in after_package["ethos:shards"]:
                 assert after_files[shard["path"]] == before_files[shard["path"]]
         finally:
             shutil.rmtree(workspace)

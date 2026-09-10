@@ -13,15 +13,15 @@ The **staging root** is that middle ground.
 Staging has no default location, on purpose — it is opt-in by nature:
 
 ```bash
-ice2-data config set-staging-cache /scratch/me/ice2-staging
+ethos-data config set-staging-cache /scratch/me/ethos-staging
 ```
 
 ## Use it
 
 ```bash
-ice2-data staging add my-new-dataset /scratch/me/new-data --note "regenerated 2026-09-04"
-ice2-data staging list
-ice2-data staging remove my-new-dataset
+ethos-data staging add my-new-dataset /scratch/me/new-data --note "regenerated 2026-09-04"
+ethos-data staging list
+ethos-data staging remove my-new-dataset
 ```
 
 An entry here **shadows the catalogue completely** for that dataset name. It is
@@ -39,9 +39,14 @@ collections:
         files: ["**"]
 ```
 
-and the calling code never knows the difference:
+The collections file must also name a valid catalogue, or the caller must
+supply one; staging adds or shadows datasets after that index is loaded. See
+[Develop and propose a dataset](../tutorials/develop-and-propose-data.md) for an
+entirely local example. Python and CLI collection access both use the overlay:
 
 ```python
+from ethos_data import fetch
+
 files = fetch("my_workflow", collections="collections.yaml")
 ```
 
@@ -55,12 +60,12 @@ files = fetch("my_workflow", collections="collections.yaml")
 ## What you give up
 
 Sizes come from `stat`. There are **no checksums**, so nothing about staged data
-can be verified, `ice2-data verify` reports it as `unverifiable`, and every job
+can be verified, `ethos-data verify` reports it as `unverifiable`, and every job
 that reads it emits a warning:
 
 ```title="UserWarning"
 dataset 'my-new-dataset' is being read from the staging root
-(/scratch/me/ice2-staging), not from the catalogue. Staged data is not
+(/scratch/me/ethos-staging), not from the catalogue. Staged data is not
 checksummed and is not reproducible -- do not publish results based on it.
 ```
 
@@ -75,10 +80,10 @@ A development convenience must not become a way to launder data into a result:
 concern, so a staging entry with the same name as a restricted dataset is
 ignored for it.
 
-**Staged data is never uploaded.** These datasets exist only on this machine.
-`ice2-data catalog` never sees them, because the staging root is a consumer-side
-idea the maintainer tooling knows nothing about — there is no path by which a
-staged directory can reach dCache.
+**Staging does not upload data.** `ethos-data catalog` does not discover or
+promote staging entries automatically. Publishing a candidate requires a
+separate reviewed source description whose `source_dir` points to the accepted
+bytes, followed by an explicit maintainer upload.
 
 ## A broken link counts as staged
 
@@ -91,15 +96,25 @@ useful outcome.
 
 When the data is ready:
 
-1. Describe it properly — [Describe a dataset](describe-a-dataset.md).
-2. `ice2-data catalog build <name>` and upload it —
-   [Upload a dataset](upload-a-dataset.md).
-3. `ice2-data catalog publish ../ice2-data-catalog`.
-4. `ice2-data staging remove <name>`.
+1. [Propose the dataset](propose-a-dataset.md), including source metadata,
+   provenance, inventory, validation, and a location the reviewer can read.
+2. The catalogue maintainer [accepts the proposal](accept-a-dataset.md), builds
+   the inventory, uploads and verifies the bytes, and releases metadata.
+3. Choose that accepted catalogue version in your package.
+4. Remove the entry with `ethos-data staging remove <name>` and remove any
+   dataset-specific root override used for development.
+5. Rerun the workflow against the official version and check that no staging
+   warning remains.
 
-**Nothing in the calling code changes.** The collections file already names the
-dataset; it now resolves through the catalogue instead of through the staging
-root, with checksums, and the warning stops.
+If the accepted identifier and resource paths are unchanged, the calling code
+keeps the same resource keys. The collection now resolves through official
+metadata and the recorded checksums. Package maintainers need no storage
+credentials for this handoff.
+
+For a temporary edit to an existing repository test-data copy, use
+[Keep test data in a repository](keep-test-data-in-a-repository.md). That
+workflow preserves the canonical inventory while explicitly allowing selected
+local bytes to differ; staging instead takes its inventory from current files.
 
 ## Staging vs. a configured root
 

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   ice2-data — Forschungszentrum Jülich Brand Theme
+   ethos-data — Forschungszentrum Jülich Brand Theme
 
    Shares its palette, syntax colours and institutional footer with
    ETHOS.TSAM, ETHOS.GLAES and RESKit, so the ICE-2 docs sites read as one
@@ -140,9 +140,8 @@
  * is then the same rendered width on all of them. Keep `.hero-logo--jsa`
  * identical across the repos so the ICE-2 header is the same size everywhere.
  *
- * There is only one logo in this row (ice2-data has no product mark of its
- * own), so the basis is the JSA lockup's share of the column on the sites that
- * do have two — the header lands at the same size as it does there. */
+ * The product mark occupies the remaining space beside the institutional
+ * lockup. On small screens both get their own row so the lettering can breathe. */
 .landing-logos {
   display: flex;
   align-items: center;
@@ -167,6 +166,32 @@
 
 .landing-logos > .hero-logo-link > .hero-logo--jsa {
   width: 100%;
+}
+
+.landing-logos > .hero-product-logo {
+  flex: 0 0 31.7%;
+  min-width: 0;
+  line-height: 0;
+}
+
+.hero-product-logo > .hero-logo--ethos-data {
+  width: 100%;
+}
+
+@media (max-width: 44rem) {
+  .landing-logos {
+    flex-wrap: wrap;
+    gap: 1.25rem;
+  }
+
+  .landing-logos > .hero-product-logo {
+    flex-basis: 100%;
+  }
+
+  .landing-logos > .hero-logo-link {
+    flex-basis: 100%;
+    max-width: 28rem;
+  }
 }
 
 /* -- Anchor target highlight --------------------------------------------

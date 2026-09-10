@@ -18,15 +18,15 @@
 % The commands, right of each use case. Deliberately literal: the guides are
 % task-shaped, and this is the bridge from task to keystrokes.
 \node[cmd, right=13mm of see, align=left]   (c1)
-  {ice2-data list\\ice2-data info \textit{name}};
+  {ethos-data list\\ethos-data info \textit{name}};
 \node[cmd, right=13mm of where, align=left] (c2)
-  {ice2-data config show\\ice2-data config set-cache \textit{dir}};
+  {ethos-data config show\\ethos-data config set-cache \textit{dir}};
 \node[cmd, right=13mm of get, align=left]   (c3)
-  {ice2-data plan \textit{name}\\ice2-data fetch \textit{name}};
+  {ethos-data plan \textit{name}\\ethos-data fetch \textit{name}};
 \node[cmd, right=13mm of trust, align=left] (c4)
-  {ice2-data verify --all\\ice2-data verify --deep --repair};
+  {ethos-data verify --all\\ethos-data verify --deep --repair};
 \node[cmd, right=13mm of own, align=left]   (c5)
-  {ice2-data materialize \textit{dataset}};
+  {ethos-data materialize \textit{dataset}};
 
 \foreach \a/\b in {see/c1,where/c2,get/c3,trust/c4,own/c5}
   \draw[uses] (\a) -- (\b);
@@ -37,7 +37,7 @@
   {Read data already here};
 \draw[link] (user.south) |- (inplace.west);
 \node[cmd, right=13mm of inplace, align=left] (c6)
-  {ice2-data config set-root \textit{ds dir}};
+  {ethos-data config set-root \textit{ds dir}};
 \draw[uses] (inplace) -- (c6);
 
 \begin{scope}[on background layer]

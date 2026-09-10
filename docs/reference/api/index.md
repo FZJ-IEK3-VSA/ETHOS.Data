@@ -1,6 +1,6 @@
 # API Reference
 
-`ice2_data`'s public API. Most callers need only [`fetch`][ice2_data.fetch] —
+`ethos_data`'s public API. Most callers need only [`fetch`][ethos_data.fetch] —
 and, if they are wrapping it in a package of their own, `load_collections` and
 `download`. The rest is here for completeness.
 
@@ -9,14 +9,14 @@ and, if they are wrapping it in a package of their own, `load_collections` and
 | [Catalogue and collections](catalog.md) | `Catalog`, `Dataset`, `Resource`, `Collections`, `load_catalog`, `load_collections` |
 | [Configuration and access](configuration.md) | cache roots, scopes, provenance, `Location`, `locate`, `AccessError` |
 | [Integrity and staging](integrity.md) | `verify`, `repair`, `Finding`, `materialize`, the staging root |
-| [Maintainer tooling](maintain.md) | `ice2_data.maintain` — building, publishing, uploading |
+| [Maintainer tooling](maintain.md) | `ethos_data.maintain` — building, publishing, uploading |
 
-Consumers never import `ice2_data.maintain`; `ice2_data` itself is a read-only
+Consumers never import `ethos_data.maintain`; `ethos_data` itself is a read-only
 library.
 
 ## Fetching
 
-::: ice2_data
+::: ethos_data
     options:
       members:
         - fetch
@@ -32,7 +32,7 @@ The module behind `fetch`. It is called `retrieval`, not `fetch`, so that it
 can never shadow the function above — the same reason `selection` is not called
 `collections`.
 
-::: ice2_data.retrieval
+::: ethos_data.retrieval
     options:
       members:
         - DataFiles

@@ -50,7 +50,7 @@ docs/diagrams/*.synctex.gz
 # Maintainer-side strays. `catalog upload` writes an rclone --files-from listing
 # to a tempdir, and an oidc-agent socket symlink can be dropped into whatever
 # directory the agent was started from; neither belongs in the repository.
-ice2-upload-*.txt
+ethos-data-upload-*.txt
 oidc-agent.sock
 
 # Editors and OS.
