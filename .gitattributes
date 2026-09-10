@@ -1,0 +1,5 @@
+# Store and check out every text file with LF line endings, on every platform
+# and whatever core.autocrlf says. The same checkout is used from Linux and,
+# through the network share, from Windows, so a CRLF must never reach the tree
+# (a shell script with CRLF endings does not run on Linux).
+* text=auto eol=lf
