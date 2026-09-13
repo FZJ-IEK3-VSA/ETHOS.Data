@@ -19,7 +19,7 @@ maintainer checkout; see [Propose a dataset](propose-a-dataset.md).
 Serve a complete, validated version directory separately from the working tree:
 
 ```text
-/shared/ice2/catalogue/
+/shared/ethos/catalogue/
   versions/<commit>/datacatalog.json
   versions/<commit>/datasets/...
   current -> versions/<commit>
@@ -33,27 +33,20 @@ revision must not be paired with inventories from another.
 Point a CLI invocation at the convenient alias:
 
 ```bash
-ethos-data --catalog /shared/ice2/catalogue/current/datacatalog.json \
-  -c collections.yaml list
+ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json -p reskit list
 ```
 
 An administrator may set a site default; an individual can set a user default:
 
 ```bash
-ethos-data config set-catalog /shared/ice2/catalogue/current/datacatalog.json
+ethos-data config set-catalog /shared/ethos/catalogue/current/datacatalog.json
 ```
 
-For a package wrapper, use its explicit catalogue argument or documented override.
-For the current RESKit wrapper:
-
-```bash
-export RESKIT_DATA_CATALOG=/shared/ice2/catalogue/current/datacatalog.json
-```
-
-CLI configuration and a package-specific override are different interfaces. Do
-not assume that setting a CLI default overrides a catalogue explicitly selected
-by a consuming package. For a published calculation, record and use the concrete
-`versions/<commit>/datacatalog.json` path rather than the moving `current` alias.
+This setting, or `ETHOS_DATA_CATALOG`, replaces the catalogue version a package
+pins, in the CLI and the Python API alike; see
+[Add the internal data catalogue](add-internal-catalogue.md). For a published
+calculation, record and use the concrete `versions/<commit>/datacatalog.json`
+path rather than the moving `current` alias.
 
 Grant readers filesystem read access to the served metadata, and reserve writes
 for maintainers. Filesystem access to an internal catalogue does not grant access
@@ -70,7 +63,7 @@ repository and release archive.
 Pin consumers to a tag or commit in the generated public GitHub repository:
 
 ```yaml
-catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ethos-data-catalog/v2026.09/datacatalog.json
+catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/v2026.09/datacatalog.json
 ```
 
 The URL is an example of the existing format; select a revision actually released

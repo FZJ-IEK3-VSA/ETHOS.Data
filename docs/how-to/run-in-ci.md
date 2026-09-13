@@ -50,9 +50,9 @@ restore/save it with your CI provider's cache mechanism:
 
 ```bash
 export ETHOS_DATA_DIR="$PWD/.cache/ethos-data"
-ethos-data -c reskit/data/collections.yaml plan test_suite
-ethos-data -c reskit/data/collections.yaml fetch test_suite
-ethos-data -c reskit/data/collections.yaml verify test_suite --deep
+ethos-data -p reskit plan test_suite
+ethos-data -p reskit fetch test_suite
+ethos-data -p reskit verify test_suite --deep
 pytest -m data_network
 ```
 

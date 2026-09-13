@@ -8,15 +8,13 @@ maintainers, and catalogue maintainers.
 
 ```bash
 ethos-data config show
-ethos-data -c reskit/data/collections.yaml list
-ethos-data -c reskit/data/collections.yaml plan onshore_wind
+ethos-data -p reskit list
+ethos-data -p reskit plan onshore_wind
 ```
 
-Replace the RESKit paths and names for your package. Include `--catalog` if the
-workflow supplies an override. `config show` does not need a catalogue;
-`list` and `plan` may retrieve remote metadata. A package-specific variable
-such as `RESKIT_DATA_CATALOG` is interpreted by the package wrapper, so pass its
-value as `--catalog` when reproducing the request through the CLI.
+Replace the RESKit names for your package. Include `--catalog` if the workflow
+supplies one. `config show` needs no catalogue and names the catalogue in use;
+`list` and `plan` may retrieve remote metadata.
 
 ## Match the symptom to the next check
 
@@ -42,7 +40,7 @@ descriptor suspected of being cached incorrectly, bypass the metadata cache
 for a diagnostic request:
 
 ```bash
-ETHOS_CATALOG_NO_CACHE=1 ethos-data -c reskit/data/collections.yaml list
+ETHOS_CATALOG_NO_CACHE=1 ethos-data -p reskit list
 ```
 
 This does not change the pin or fetch dataset bytes. Prefer a commit URL or an

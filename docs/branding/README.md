@@ -4,7 +4,7 @@ This is a shared design proposal for the ETHOS packages. Every logo places a
 square package symbol on the left and its name in Weissenhof Grotesk Bold on the
 right. The standalone symbol is also its favicon. The initial eight designs
 cover the five public frameworks listed on the institute's model-services page,
-plus GeoKit, TSAM and ETHOS.DATA, the new name for ice2-data.
+plus GeoKit, TSAM and ETHOS.Data, the new name for ice2-data.
 
 ## Shared rules
 
@@ -37,7 +37,7 @@ Systems Analysis artwork and footer; the new symbols identify software packages.
 
 | Wordmark | Symbol | Meaning |
 |---|---|---|
-| ETHOS.DATA | Indexed records | Shared catalogue and data cache |
+| ETHOS.Data | Indexed records | Shared catalogue and data cache |
 | ETHOS.FINE | Connected components and a hub | Integrated energy-system optimisation |
 | ETHOS.GLAES | Land cells and a check | Land availability and eligibility |
 | ETHOS.RESKit | Wind turbine | Renewable energy generation |
@@ -63,7 +63,7 @@ All exports are in `docs/assets/branding/`.
 | `ethos-<package>-favicon-16.png` | Raster favicon at 16 pixels |
 | `ethos-<package>-favicon-32.png` | Raster favicon at 32 pixels |
 | `ethos-<package>-favicon-48.png` | Raster favicon at 48 pixels |
-| `ethos-data-logo-preview.svg` / `.png` | ETHOS.DATA on both backgrounds |
+| `ethos-data-logo-preview.svg` / `.png` | ETHOS.Data on both backgrounds |
 | `ethos-family-light-preview.svg` / `.png` | All wordmarks at a common scale |
 | `ethos-family-dark-preview.svg` / `.png` | The same family on a dark background |
 | `ethos-family-favicons-preview.svg` / `.png` | Each symbol at 16, 32, 48 and 64 pixels |
@@ -72,7 +72,7 @@ Use the icon where a complete name would become too small. Keep its padding and
 preserve the logo's aspect ratio. In a family comparison, use equal icon heights
 rather than forcing different-length wordmarks to the same total width.
 
-ETHOS.DATA's documentation uses the new assets. The other package exports are
+ETHOS.Data's documentation uses the new assets. The other package exports are
 prepared here for review and later adoption in their respective repositories.
 The distribution name and Python imports (`ethos_data`) and the CLI (`ethos-data`)
 use the new name as well.
@@ -87,7 +87,7 @@ conda activate reskit_env_data_09_2026
 python docs/branding/render.py --all --preview
 ```
 
-The default renders ETHOS.DATA only. `--all` renders every package in
+The default renders ETHOS.Data only. `--all` renders every package in
 `packages.json`; `--preview` also creates PNG favicons and review sheets.
 
 `logo.tex` controls the shared typography, colours and spacing. `icons.tex`

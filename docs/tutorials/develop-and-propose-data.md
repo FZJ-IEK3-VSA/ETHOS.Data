@@ -114,10 +114,9 @@ print(candidate.name, candidate.stat().st_size,
       "sha256:" + hashlib.sha256(candidate.read_bytes()).hexdigest())
 ```
 
-Supply the CSV, this inventory, the draft metadata, and the validation result
-through the project's submission channel. [Propose a dataset](../how-to/propose-a-dataset.md)
-describes a real submission, including provenance and byte access. You do not
-need to upload this teaching example to complete the lesson.
+With real data, you would now hand the CSV, this inventory, the draft metadata,
+and the validation result to a catalogue maintainer. This teaching example stays
+on your machine.
 
 ## 5. End the experiment
 
@@ -132,7 +131,17 @@ For real data, after acceptance you would instead choose the released
 catalogue, remove the development override, and rerun the workflow against the
 verified official copy.
 
-For edits to a repository copy of **already catalogued** test data, use the
-test-data bundle workflow described in [Run package tests in CI](../how-to/run-in-ci.md).
-It retains the accepted checksums while allowing an explicit temporary local
-divergence. New datasets whose inventory is still changing belong in staging.
+## What you did
+
+You read an uncatalogued input through the same `fetch` call a package uses,
+saw that staging follows the files on disk without checksums, and prepared the
+metadata and inventory a catalogue maintainer reviews.
+
+## Next
+
+- [Run a test with repository data](bundled-tests.md) — the next lesson:
+  catalogued test data in a repository, and deliberate local edits to it.
+- [Stage uncatalogued data](../how-to/stage-unpublished-data.md) — staging for
+  real data.
+- [Propose a dataset](../how-to/propose-a-dataset.md) — a real submission,
+  including provenance and access to the bytes.

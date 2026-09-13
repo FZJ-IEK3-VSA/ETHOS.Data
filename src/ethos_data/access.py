@@ -149,14 +149,12 @@ def _restricted_location(
         lines.append(f"  {note}")
     lines.append("No restricted cache is configured on this machine.")
     lines.append("")
-    lines.append("If you have access to the licensed copy, say where it is:")
-    lines.append("    ethos-data config set-restricted-cache /path/to/ice2_data_restricted "
-                 "--scope environment")
-    lines.append(f"    ethos-data config set-root {dataset.name} /path/to/{dataset.name} "
-                 "--scope environment    # just this one")
+    lines.append("If you have a copy, say where it is:")
+    lines.append("    ethos-data config set-restricted-cache /path/to/ethos_data_restricted")
+    lines.append(f"    ethos-data config set-root {dataset.name} /path/to/{dataset.name}"
+                 "    # just this one")
     lines.append("")
-    lines.append("If you do not -- working away from the institute cluster, say -- then "
-                 "carry on without it:")
+    lines.append("If you do not, carry on without it:")
     lines.append("    ethos-data ... --skip-unavailable")
     lines.append("    ethos-data config set-skip-unavailable true    # once, for this machine")
     lines.append("Datasets you cannot reach are then left out of the result and listed, "

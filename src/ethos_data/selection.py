@@ -22,7 +22,16 @@ from .catalog import Catalog, Resource, load_catalog
 if TYPE_CHECKING:
     from .config import Roots
 
-__all__ = ["Collections", "load_collections", "path_matches"]
+__all__ = [
+    "COLLECTIONS_FILENAME",
+    "ENTRY_POINT_GROUP",
+    "Collections",
+    "CollectionsNotFound",
+    "load_collections",
+    "package_collections",
+    "path_matches",
+    "registered_packages",
+]
 
 
 @dataclass
@@ -124,6 +133,8 @@ def load_collections(
 ) -> Collections:
     """Load a collections file with the configured development overlay.
 
+    The catalogue is ``catalog`` if given, else the file's own ``catalog:`` pin,
+    else the built-in public catalogue (``ethos_data.config.DEFAULT_CATALOG``).
     Set ``include_staging=False`` for canonical metadata, for example when
     exporting test fixtures. ``roots`` selects the overlay explicitly; otherwise
     the configured roots apply. A supplied catalogue is not modified.
@@ -135,15 +146,20 @@ def load_collections(
         resolved = catalog
     else:
         location = catalog or document.get("catalog")
-        if not location:
-            raise ValueError(f"{path} has no 'catalog:' key and none was supplied")
-        # A '@ref' suffix pins a catalogue version. Local paths ignore it; for a
-        # git host it selects the tag, which is what makes a tool reproducible.
-        location = str(location)
-        if not Path(location).exists() and "@" in location.rsplit("/", 1)[-1]:
-            location = location.rsplit("@", 1)[0]
-        if not location.startswith(("http://", "https://")):
-            location = str((path.parent / location).resolve())
+        if location:
+            # A '@ref' suffix pins a catalogue version. Local paths ignore it; for a
+            # git host it selects the tag, which is what makes a tool reproducible.
+            location = str(location)
+            if not Path(location).exists() and "@" in location.rsplit("/", 1)[-1]:
+                location = location.rsplit("@", 1)[0]
+            if not location.startswith(("http://", "https://")):
+                location = str((path.parent / location).resolve())
+        else:
+            # No pin: the public catalogue, so a collections file that selects
+            # only public data works with nothing configured anywhere.
+            from .config import DEFAULT_CATALOG
+
+            location = DEFAULT_CATALOG
         resolved = load_catalog(location)
 
     if include_staging:
@@ -151,3 +167,72 @@ def load_collections(
 
         resolved = with_staging(resolved, roots)
     return Collections(path=path, catalog=resolved, definitions=document.get("collections", {}))
+
+
+#: How a package ships its collections file. The entry point's name is what
+#: users type (``package="reskit"``, ``ethos-data -p reskit``); its value names the
+#: module whose directory holds ``collections.yaml``:
+#:
+#:     [project.entry-points."ethos_data.collections"]
+#:     reskit = "reskit.data"
+#:
+#: Registered in the package's own metadata, the file is found from any working
+#: directory, in a source checkout and an installed wheel alike -- which is the
+#: one job a per-package wrapper module used to exist for.
+ENTRY_POINT_GROUP = "ethos_data.collections"
+COLLECTIONS_FILENAME = "collections.yaml"
+
+
+class CollectionsNotFound(LookupError):
+    """No collections file where one was asked for: a package name nothing
+    registers, or a path with no file behind it."""
+
+
+def registered_packages() -> dict[str, str]:
+    """Installed packages that ship a collections file, as ``{name: module}``.
+
+    Read from package metadata alone, so listing them imports nothing.
+    """
+    from importlib.metadata import entry_points
+
+    found = entry_points()
+    if hasattr(found, "select"):
+        found = found.select(group=ENTRY_POINT_GROUP)
+    else:  # Python 3.9 returns a plain mapping of group -> entry points
+        found = found.get(ENTRY_POINT_GROUP, [])
+    return {entry.name: entry.value for entry in found}
+
+
+def package_collections(package: str) -> Path:
+    """The ``collections.yaml`` an installed package registered under ``package``."""
+    import importlib.util
+
+    registered = registered_packages()
+    if package not in registered:
+        known = ", ".join(sorted(registered)) or "none"
+        raise CollectionsNotFound(
+            f"no installed package ships ETHOS.Data collections under the name "
+            f"{package!r} (registered: {known}). A package registers its "
+            f"{COLLECTIONS_FILENAME} with an entry point in the "
+            f"{ENTRY_POINT_GROUP!r} group."
+        )
+    module = registered[package].partition(":")[0].strip()
+    try:
+        spec = importlib.util.find_spec(module)
+    except ModuleNotFoundError:
+        spec = None
+    if spec is None:
+        raise CollectionsNotFound(
+            f"{package!r} registers the module {module!r}, which cannot be imported here."
+        )
+    if spec.submodule_search_locations:
+        directory = Path(next(iter(spec.submodule_search_locations)))
+    else:
+        directory = Path(spec.origin).parent
+    location = directory / COLLECTIONS_FILENAME
+    if not location.is_file():
+        raise CollectionsNotFound(
+            f"{package!r} registers the module {module!r}, but there is no "
+            f"{COLLECTIONS_FILENAME} beside it ({location}). Ship it as package data."
+        )
+    return location

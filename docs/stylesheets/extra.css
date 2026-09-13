@@ -140,8 +140,10 @@
  * is then the same rendered width on all of them. Keep `.hero-logo--jsa`
  * identical across the repos so the ICE-2 header is the same size everywhere.
  *
- * The product mark occupies the remaining space beside the institutional
- * lockup. On small screens both get their own row so the lettering can breathe. */
+ * There is no ETHOS.Data product mark yet (see contributing.md#logo). When
+ * one is adopted it becomes a second flex item beside the institutional
+ * lockup, taking the remaining 31.7%; on small screens each then gets its own
+ * row so the lettering can breathe. */
 .landing-logos {
   display: flex;
   align-items: center;
@@ -168,26 +170,7 @@
   width: 100%;
 }
 
-.landing-logos > .hero-product-logo {
-  flex: 0 0 31.7%;
-  min-width: 0;
-  line-height: 0;
-}
-
-.hero-product-logo > .hero-logo--ethos-data {
-  width: 100%;
-}
-
 @media (max-width: 44rem) {
-  .landing-logos {
-    flex-wrap: wrap;
-    gap: 1.25rem;
-  }
-
-  .landing-logos > .hero-product-logo {
-    flex-basis: 100%;
-  }
-
   .landing-logos > .hero-logo-link {
     flex-basis: 100%;
     max-width: 28rem;

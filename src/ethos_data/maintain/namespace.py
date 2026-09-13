@@ -1,12 +1,12 @@
 """Building the public cache as a namespace of links, from the catalogue.
 
-    ethos-data catalog link-cache --root /projects5/ice2_data_cache_public --dry-run
-    ethos-data catalog link-cache --root /projects5/ice2_data_cache_public
+    ethos-data catalog link-cache --root /shared/ethos/public --dry-run
+    ethos-data catalog link-cache --root /shared/ethos/public
 
 The result is one entry per dataset, named for the dataset, pointing at wherever
 that data already sits on this machine:
 
-    ice2_data_cache_public/
+    /shared/ethos/public/
     |-- global-wind-atlas  -> /fast/central/shared_data/Global_Wind_Atlas/GWA_4.0
     |-- corine-land-cover  -> /fast/central/shared_data/2023_gears/.../clc2018
     `-- submarine-cables/     (a real directory, downloaded from dCache)

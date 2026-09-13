@@ -1,9 +1,9 @@
 [
   {
-    "slug": "ethos-data", "wordmark": "ETHOS.DATA", "icon": "data",
+    "slug": "ethos-data", "wordmark": "ETHOS.Data", "icon": "data",
     "purpose": "Shared data catalogue and cache",
     "symbol": "Catalogue records with an index column",
-    "source": "https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data"
+    "source": "https://github.com/FZJ-IEK3-VSA/ETHOS.Data"
   },
   {
     "slug": "ethos-fine", "wordmark": "ETHOS.FINE", "icon": "fine",

@@ -1,24 +1,101 @@
-% Role-based entry points; a role may be held by the same person.
-\begin{tikzpicture}[node distance=12mm and 13mm]
-\node[actor, text width=29mm] (user) {Data user};
-\node[artifact, text width=86mm, right=of user, align=left] (get)
-  {Discover collections and select task inputs\\
-   Obtain data; configure local access\\
-   Check integrity and diagnose unavailable files};
-\node[actor, text width=29mm, below=22mm of user] (author) {Package\\maintainer};
-\node[artifact, text width=86mm, right=of author, align=left] (integrate)
-  {Wire collections into examples, workflows, and tests\\
-   Stage development data and propose catalogue additions\\
-   Keep verified repository copies; test deliberate local edits};
-\node[actor, text width=29mm, below=22mm of author] (maint) {Catalogue\\maintainer};
-\node[artifact, text width=86mm, right=of maint, align=left] (publish)
-  {Review proposals and build the internal catalogue\\
-   Upload and verify bytes; release public metadata\\
-   Serve cluster snapshots; diagnose and repair tooling};
-\draw[link] (user) -- (get);
-\draw[link] (author) -- (integrate);
-\draw[link] (maint) -- (publish);
-\node[note, below=8mm of publish, text width=90mm]
-  {Package maintainers propose changes. Catalogue maintainers accept and release them.\\
-   dCache remains authoritative; repository test data is a local copy.};
+% Who does what with ETHOS.Data: one column per role, its tasks top to bottom.
+% The two handoffs between people are arrows -- a package maintainer's
+% collections file reaches data users, and their proposal reaches the catalogue
+% maintainer. Publication is not a handoff between people: it goes through the
+% shared catalogue and storage, so it is the band underneath that every column
+% reads from or writes to. Drawn as a third arrow from "Publish" back to the
+% other two columns, it would have had to cross the middle one.
+%
+% Solid ovals read or prepare; dashed ovals change the catalogue or shared
+% storage (the `writecase` convention in ethosstyle.tex). The chips under an
+% oval are variants of that one task, not separate tasks.
+\newcommand{\variants}[3]{% #1 task node, #2 left chip, #3 right chip
+  \coordinate (#1v) at ($(#1.south)+(0,-4.4mm)$);
+  \node[chip, anchor=east] (#1a) at ($(#1v)+(-0.9mm,0)$) {#2};
+  \node[chip, anchor=west] (#1b) at ($(#1v)+(0.9mm,0)$) {#3};
+  \draw[link] (#1.south) -- (#1a.north);
+  \draw[link] (#1.south) -- (#1b.north);
+}
+\begin{tikzpicture}[
+  node distance=4.5mm,
+  task/.style={usecase, text width=33mm, minimum width=0mm, minimum height=9mm, inner sep=0.8mm},
+  wtask/.style={writecase, text width=33mm, minimum width=0mm, minimum height=9mm, inner sep=0.8mm},
+  chip/.style={draw=muted, fill=fillsoft, text=ink, rounded corners=1mm,
+    font=\sffamily\scriptsize, inner sep=1mm, minimum height=4.6mm},
+  role/.style={actor, text width=44mm, font=\sffamily\small\bfseries},
+  roleline/.style={note, text width=50mm},
+  lane/.style={draw=boundary, rounded corners=2mm, inner sep=3mm},
+  handoff/.style={flow, rounded corners=1.5mm},
+  handofflabel/.style={edgelabel, rotate=90, anchor=south},
+  feed/.style={flowaccent, line width=1.3pt},
+]
+
+% ---- data user -------------------------------------------------------------
+\node[role] (u) at (0mm,0) {Data user};
+\node[roleline, below=1mm of u] (us) {runs ETHOS tools and workflows};
+\node[task, below=5mm of us] (u1) {Set up the machine};
+\variants{u1}{public cache}{restricted cache}
+\node[task, below=6.8mm of u1v] (u2) {Fetch data};
+\node[task, below=of u2] (u3) {Check data integrity};
+
+% ---- package maintainer ----------------------------------------------------
+\node[role] (p) at (66mm,0) {Package maintainer};
+\node[roleline, below=1mm of p] (ps) {builds a package on the catalogue};
+\node[task, below=5mm of ps] (p1) {Select catalogued data with a collections file};
+\node[task, below=of p1] (p2) {Stage uncatalogued data};
+\node[task, below=of p2] (p3) {Propose a dataset};
+\node[task, below=of p3] (p4) {Keep catalogued test data in the repository};
+\node[task, below=of p4] (p5) {Use data in CI};
+\variants{p5}{from dCache}{repository copy}
+\node[note, below=3.2mm of p5v] (p5c) {or both};
+
+% ---- catalogue maintainer --------------------------------------------------
+\node[role] (c) at (132mm,0) {Catalogue maintainer};
+\node[roleline, below=1mm of c] (cs) {curates the catalogue and its storage};
+\node[wtask, below=5mm of cs] (c1) {Accept a dataset proposal};
+\variants{c1}{as public data}{as restricted data}
+\node[wtask, below=6.8mm of c1v] (c2) {Upload public data};
+\node[wtask, below=of c2] (c3) {Add restricted data};
+\node[wtask, below=of c3] (c4) {Publish the catalogue};
+\variants{c4}{internal}{public}
+\node[wtask, below=6.8mm of c4v] (c5) {Link data already on disk into the cache};
+\node[wtask, below=of c5] (c6) {Copy data that was linked};
+
+% ---- lanes, all ending at the same height -----------------------------------
+\path let \p1=(c6.south), \p2=(p5c.south), \p3=(u3.south)
+  in coordinate (floor) at (0, {min(\y1,\y2,\y3)-1mm});
+\begin{scope}[on background layer]
+  \node[lane, fit=(u)(us)(u1)(u1a)(u1b)(u2)(u3)(u |- floor)] (U) {};
+  \node[lane, fit=(p)(ps)(p1)(p2)(p3)(p4)(p5)(p5a)(p5b)(p5c)(p |- floor)] (P) {};
+  \node[lane, fit=(c)(cs)(c1)(c1a)(c1b)(c2)(c3)(c4)(c4a)(c4b)(c5)(c6)(c |- floor)] (C) {};
+\end{scope}
+
+% ---- handoffs between people -----------------------------------------------
+\draw[handoff] (p1.west) -- ++(-6.5mm,0) |- (u2.east)
+  node[handofflabel, pos=0.25] {collections file};
+\draw[handoff] (p3.east) -- ++(6.5mm,0) |- (c1.west)
+  node[handofflabel, pos=0.25] {proposal};
+
+% ---- the shared catalogue and storage ----------------------------------------
+\coordinate (bandtop) at ($(floor)+(0,-22mm)$);
+\node[store, anchor=north, text width=36mm] (s1) at (u |- bandtop)
+  {Caches on the machine\\{\scriptsize public $\cdot$ restricted}};
+\node[store, anchor=north, text width=36mm] (s2) at (p |- bandtop)
+  {Catalogue versions\\{\scriptsize internal $\cdot$ public}};
+\node[store, anchor=north, text width=36mm] (s3) at (c |- bandtop)
+  {dCache\\{\scriptsize published data}};
+\coordinate (bandN) at ($(s1.north)+(0,5mm)$);
+\coordinate (bandS) at ($(s1.south)+(0,-3mm)$);
+\draw[draw=boundary, dash pattern=on 2pt off 2pt, rounded corners=2mm]
+  (U.west |- bandN) rectangle (C.east |- bandS);
+\node[boundarylabel, anchor=north west] at (U.west |- bandN) {shared catalogue and storage};
+
+\draw[feed] (u |- bandN) -- node[edgelabel, right] {fetch, verify} (u |- U.south);
+\draw[feed] (p |- bandN) -- node[edgelabel, right] {select, pin, test} (p |- P.south);
+\draw[feed] (c |- C.south) -- node[edgelabel, right] {publish, upload, link} (c |- bandN);
+
+\node[note, anchor=north, text width=170mm] at ($(p |- bandS)+(0,-3mm)$)
+  {Solid ovals read or prepare data; dashed ovals change the catalogue or shared
+   storage. Chips are variants of one task. One person can hold several roles.};
+
 \end{tikzpicture}

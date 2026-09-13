@@ -9,7 +9,7 @@ test storage readiness or push a repository.
 
 ```bash
 ethos-data catalog build                        # regenerate every manifest first
-ethos-data catalog publish ../ethos-data-catalog
+ethos-data catalog publish ../ETHOS.Data-Catalogue
 ```
 
 !!! danger "Only ever point `publish` at the public repo"
@@ -46,13 +46,13 @@ workstation, `ethos:embargo` says what is being withheld and until when, and
 `ethos:license_note` may name an unresolved legal question:
 
 ```bash
-rg -n 'source_dir|ethos:embargo|ethos:license_note|ethos:uploaded' ../ethos-data-catalog   # expect no output
+rg -n 'source_dir|ethos:embargo|ethos:license_note|ethos:uploaded' ../ETHOS.Data-Catalogue   # expect no output
 ```
 
 A `hidden` dataset must not be mentioned at all. Then read the actual diff:
 
 ```bash
-cd ../ethos-data-catalog && git diff
+cd ../ETHOS.Data-Catalogue && git diff
 ```
 
 Commit the source and generated public revisions as a reviewed pair. The
@@ -66,7 +66,7 @@ from `publish`.
 
 ```bash
 ethos-data catalog build --check                         # fail if any manifest is stale
-ethos-data catalog publish ../ethos-data-catalog --check  # fail if the public repo is out of date
+ethos-data catalog publish ../ETHOS.Data-Catalogue --check  # fail if the public repo is out of date
 ```
 
 Both are non-destructive; `--check` reports and exits non-zero rather than
@@ -88,7 +88,7 @@ distinction has bitten people:
     Create it as a fresh `git init`, and confirm before the first push:
 
     ```bash
-    cd ../ethos-data-catalog
+    cd ../ETHOS.Data-Catalogue
     git log --oneline                                   # only commits you made here
     git log --all --diff-filter=A --name-only | sort -u # every file ever added
     git remote -v                                       # the PUBLIC remote

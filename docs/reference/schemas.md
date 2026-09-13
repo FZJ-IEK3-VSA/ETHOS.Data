@@ -21,7 +21,7 @@ Lives in the consuming package. Names *slices* of the catalogue, and contains
 no file paths, sizes, checksums or URLs.
 
 ```yaml
-catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ethos-data-catalog/v2026.09/datacatalog.json
+catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/v2026.09/datacatalog.json
 
 collections:
   onshore_wind:
@@ -346,7 +346,7 @@ contributors:
   - title: A Researcher
     roles: [author]
     organization: Forschungszentrum Jülich, ICE-2
-  - title: ICE-2 RESKit maintainers
+  - title: ETHOS.RESKit maintainers
     roles: [maintainer]
 ```
 
@@ -538,7 +538,7 @@ One per catalogue, at its root. Hand-written; `ethos-data catalog build` merges 
 with the generated dataset list into `datacatalog.json`.
 
 ```yaml
-name: ethos-data-catalog
+name: ETHOS.Data-Catalogue
 title: ETHOS.Data Catalogue
 description: >-
   What this catalogue is, who maintains it, and what it is for.

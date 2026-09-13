@@ -8,8 +8,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Packaging output. `pip install -e .` rewrites the egg-info on every install,
-# so a committed copy is a permanent phantom diff.
+# Packaging output. The build backend is hatchling, which writes no egg-info;
+# the pattern stays so a stray setuptools build is never committed either.
 build/
 dist/
 *.egg-info/

@@ -149,13 +149,13 @@ the cluster, build the public cache as a directory of links to them so nothing
 has to be downloaded at all:
 
 ```bash
-ethos-data catalog link-cache --root /projects5/ice2_data_cache_public --dry-run
-ethos-data catalog link-cache --root /projects5/ice2_data_cache_public
-ethos-data config set-cache /projects5/ice2_data_cache_public --scope site
+ethos-data catalog link-cache --root /shared/ethos/public --dry-run
+ethos-data catalog link-cache --root /shared/ethos/public
+ethos-data config set-cache /shared/ethos/public --scope site
 ```
 
 Users then get the whole catalogue with no setup. See
-[Use data already on disk](use-data-already-on-disk.md#the-maintainer-side-link-cache).
+[Migrate cluster data](migrate-cluster-data.md#2-create-the-shared-namespace-as-links).
 
 ## See also
 

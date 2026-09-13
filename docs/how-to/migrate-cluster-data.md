@@ -8,8 +8,8 @@ same cache paths so consuming packages keep working.
 | Stage | Example cache entry | Extra storage |
 |---|---|---|
 | Existing installation | `/legacy/climate-inputs` | Original files only |
-| Migration bridge | `/shared/ice2/public/climate-inputs -> /legacy/climate-inputs` | A symlink; bytes remain in the original directory |
-| Independent copy | `/shared/ice2/public/climate-inputs/…` | Copied manifest files; original remains until retirement |
+| Migration bridge | `/shared/ethos/public/climate-inputs -> /legacy/climate-inputs` | A symlink; bytes remain in the original directory |
+| Independent copy | `/shared/ethos/public/climate-inputs/…` | Copied manifest files; original remains until retirement |
 
 The first workflow is for **public and internal datasets**. For licensed files,
 use the [restricted-data procedure](#restricted-data) below. These are maintainer
@@ -23,7 +23,7 @@ catalogue. Set `source_dir: /legacy/climate-inputs`, the appropriate access and
 visibility, and any include/exclude patterns. Then build and inspect its inventory:
 
 ```bash
-ethos-data catalog --catalog-root /shared/ice2/ethos-data-catalog-internal build climate-inputs
+ethos-data catalog --catalog-root /shared/ethos/ethos-data-catalog-internal build climate-inputs
 ```
 
 See [Add internal and restricted datasets](add-internal-and-restricted-data.md)
@@ -34,10 +34,10 @@ itself about to be generated from that `source_dir`.
 ## 2. Create the shared namespace as links
 
 ```bash
-ethos-data catalog --catalog-root /shared/ice2/ethos-data-catalog-internal \
-  link-cache --root /shared/ice2/public --dry-run
-ethos-data catalog --catalog-root /shared/ice2/ethos-data-catalog-internal \
-  link-cache --root /shared/ice2/public
+ethos-data catalog --catalog-root /shared/ethos/ethos-data-catalog-internal \
+  link-cache --root /shared/ethos/public --dry-run
+ethos-data catalog --catalog-root /shared/ethos/ethos-data-catalog-internal \
+  link-cache --root /shared/ethos/public
 ```
 
 `link-cache` considers the **whole source catalogue**, not just the last dataset
@@ -51,8 +51,8 @@ For a single dataset, or one already marked uploaded with no `source_dir`, creat
 an explicit link instead:
 
 ```bash
-mkdir -p /shared/ice2/public
-ln -sT /legacy/climate-inputs /shared/ice2/public/climate-inputs
+mkdir -p /shared/ethos/public
+ln -sT /legacy/climate-inputs /shared/ethos/public/climate-inputs
 ```
 
 These are Linux cluster commands. `-T` treats the destination as the link name
@@ -64,7 +64,7 @@ its frozen dCache inventory should stay frozen.
 Configure the cache for consumers:
 
 ```bash
-ethos-data config set-public-cache /shared/ice2/public --scope user
+ethos-data config set-public-cache /shared/ethos/public --scope user
 ```
 
 A cluster administrator can choose `--scope site`. Remove obsolete per-dataset
@@ -84,11 +84,11 @@ Create a maintainer collection selecting every manifest resource of this dataset
 Use a concrete catalogue version containing that inventory:
 
 ```bash
-ethos-data --catalog /shared/ice2/catalogue/versions/REV/datacatalog.json \
-  --root /shared/ice2/public -c /shared/ice2/maintenance-collections.yaml \
+ethos-data --catalog /shared/ethos/catalogue/versions/REV/datacatalog.json \
+  --root /shared/ethos/public -c /shared/ethos/maintenance-collections.yaml \
   plan check_climate_inputs
-ethos-data --catalog /shared/ice2/catalogue/versions/REV/datacatalog.json \
-  --root /shared/ice2/public -c /shared/ice2/maintenance-collections.yaml \
+ethos-data --catalog /shared/ethos/catalogue/versions/REV/datacatalog.json \
+  --root /shared/ethos/public -c /shared/ethos/maintenance-collections.yaml \
   verify check_climate_inputs --deep
 ```
 
@@ -102,10 +102,10 @@ in-place fetch checks existence; it does not substitute for this hash check.
 While the original source still exists and is stable:
 
 ```bash
-ethos-data --catalog /shared/ice2/catalogue/versions/REV/datacatalog.json \
-  --root /shared/ice2/public materialize climate-inputs --dry-run
-ethos-data --catalog /shared/ice2/catalogue/versions/REV/datacatalog.json \
-  --root /shared/ice2/public materialize climate-inputs
+ethos-data --catalog /shared/ethos/catalogue/versions/REV/datacatalog.json \
+  --root /shared/ethos/public materialize climate-inputs --dry-run
+ethos-data --catalog /shared/ethos/catalogue/versions/REV/datacatalog.json \
+  --root /shared/ethos/public materialize climate-inputs
 ```
 
 Name the dataset explicitly: `--all` operates on all dataset-level links in the
@@ -127,10 +127,10 @@ been deleted.** A copy is needed on disk before space from that target can be fr
 ## 5. Verify independence and update maintenance metadata
 
 ```bash
-test ! -L /shared/ice2/public/climate-inputs
-test -d /shared/ice2/public/climate-inputs
-ethos-data --catalog /shared/ice2/catalogue/versions/REV/datacatalog.json \
-  --root /shared/ice2/public -c /shared/ice2/maintenance-collections.yaml \
+test ! -L /shared/ethos/public/climate-inputs
+test -d /shared/ethos/public/climate-inputs
+ethos-data --catalog /shared/ethos/catalogue/versions/REV/datacatalog.json \
+  --root /shared/ethos/public -c /shared/ethos/maintenance-collections.yaml \
   verify check_climate_inputs --deep
 ```
 
@@ -159,9 +159,9 @@ an authorised installation without copying it, either with `config set-root`, or
 with an administrator-managed directory symlink in the restricted namespace:
 
 ```bash
-mkdir -p /shared/ice2/restricted
-ln -sT /legacy/licensed-example /shared/ice2/restricted/licensed-example
-ethos-data config set-restricted-cache /shared/ice2/restricted --scope user
+mkdir -p /shared/ethos/restricted
+ln -sT /legacy/licensed-example /shared/ethos/restricted/licensed-example
+ethos-data config set-restricted-cache /shared/ethos/restricted --scope user
 ```
 
 The reader uses these files in place. Keep the namespace and target accessible
@@ -181,11 +181,11 @@ original directory ownership and ACL layout. Then, with the original files
 stable and a quiet period arranged for the final path switch:
 
 ```bash
-ETHOS_RESTRICTED_DIR=/shared/ice2/restricted \
-  ethos-data --catalog /shared/ice2/catalogue/versions/REV/datacatalog.json \
+ETHOS_RESTRICTED_DIR=/shared/ethos/restricted \
+  ethos-data --catalog /shared/ethos/catalogue/versions/REV/datacatalog.json \
   materialize licensed-example --dry-run
-ETHOS_RESTRICTED_DIR=/shared/ice2/restricted \
-  ethos-data --catalog /shared/ice2/catalogue/versions/REV/datacatalog.json \
+ETHOS_RESTRICTED_DIR=/shared/ethos/restricted \
+  ethos-data --catalog /shared/ethos/catalogue/versions/REV/datacatalog.json \
   materialize licensed-example
 ```
 
@@ -195,11 +195,11 @@ place. The space requirements and brief path-switch interval from step 4 also
 apply here.
 
 ```bash
-test ! -L /shared/ice2/restricted/licensed-example
-test -d /shared/ice2/restricted/licensed-example
-ETHOS_RESTRICTED_DIR=/shared/ice2/restricted \
-  ethos-data --catalog /shared/ice2/catalogue/versions/REV/datacatalog.json \
-  -c /shared/ice2/maintenance-collections.yaml verify check_licensed_example --deep
+test ! -L /shared/ethos/restricted/licensed-example
+test -d /shared/ethos/restricted/licensed-example
+ETHOS_RESTRICTED_DIR=/shared/ethos/restricted \
+  ethos-data --catalog /shared/ethos/catalogue/versions/REV/datacatalog.json \
+  -c /shared/ethos/maintenance-collections.yaml verify check_licensed_example --deep
 ```
 
 Require every expected file to pass, check the resulting access permissions, and

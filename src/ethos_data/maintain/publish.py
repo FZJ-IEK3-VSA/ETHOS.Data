@@ -10,8 +10,8 @@ Fields that only make sense to a maintainer are stripped on the way out --
 crucially the embargo block, which would otherwise announce the existence and
 release date of data nobody outside is supposed to know about.
 
-    ethos-data catalog publish ../ethos-data-catalog
-    ethos-data catalog publish ../ethos-data-catalog --check   # CI: is it current?
+    ethos-data catalog publish ../ETHOS.Data-Catalogue
+    ethos-data catalog publish ../ETHOS.Data-Catalogue --check   # CI: is it current?
 
 Publishing an embargoed dataset is then two edits in dataset.yaml
 (visibility: public, access: public), a rebuild, an upload, and a re-run of this.
@@ -50,7 +50,7 @@ GENERATED_GITIGNORE = """__pycache__/
 oidc-agent.sock
 """
 
-GENERATED_README = """# ethos-data-catalog
+GENERATED_README = """# ETHOS.Data-Catalogue
 
 Public catalogue of datasets published by Forschungszentrum Jülich, Institute of
 Climate and Energy Systems (ICE-2).

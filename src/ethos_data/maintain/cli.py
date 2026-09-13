@@ -73,7 +73,7 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
 
     publisher = catalog_sub.add_parser(
         "publish", help="generate the public catalogue from this source one")
-    publisher.add_argument("target", help="path to a checkout of the public ethos-data-catalog repo")
+    publisher.add_argument("target", help="path to a checkout of the public ETHOS.Data-Catalogue repo")
     publisher.add_argument("--check", action="store_true",
                            help="fail if the target is out of date; write nothing")
 
@@ -111,7 +111,7 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         help="build the shared cache as links to data already on this machine")
     linker.add_argument("--root", required=True,
                         help="the public cache directory to build "
-                             "(e.g. /projects5/ice2_data_cache_public)")
+                             "(e.g. /shared/ethos/public)")
     linker.add_argument("--dry-run", action="store_true",
                         help="show what would change, write nothing")
     linker.add_argument("--prune", action="store_true",

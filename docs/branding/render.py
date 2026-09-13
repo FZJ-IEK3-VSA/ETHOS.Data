@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render the ETHOS logo family with Tectonic and the local FZJ typeface.
 
-    python docs/branding/render.py --preview       # ETHOS.DATA
+    python docs/branding/render.py --preview       # ETHOS.Data
     python docs/branding/render.py --all --preview # whole family
 
 Only outlined SVGs and rendered PNGs are exported. Local fonts and reference

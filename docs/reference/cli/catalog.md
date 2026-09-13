@@ -48,8 +48,8 @@ Generate the public catalogue from this source one, into a checkout of the
 public repository.
 
 ```bash
-ethos-data catalog publish ../ethos-data-catalog
-ethos-data catalog publish ../ethos-data-catalog --check
+ethos-data catalog publish ../ETHOS.Data-Catalogue
+ethos-data catalog publish ../ETHOS.Data-Catalogue --check
 ```
 
 Emits `datacatalog.json`, each public `datasets/<name>/datapackage.json` with
@@ -124,8 +124,8 @@ Build the public cache as a directory of symbolic links to data already on this
 machine, one entry per dataset with a `source_dir`.
 
 ```bash
-ethos-data catalog link-cache --root /projects5/ice2_data_cache_public --dry-run
-ethos-data catalog link-cache --root /projects5/ice2_data_cache_public --prune
+ethos-data catalog link-cache --root /shared/ethos/public --dry-run
+ethos-data catalog link-cache --root /shared/ethos/public --prune
 ```
 
 | Flag | |
@@ -138,7 +138,7 @@ Nothing is copied or moved. **Real directories are never touched** — an entry
 downloaded from dCache or produced by `ethos-data materialize` is data the cache
 owns, and replacing it with a link would discard it.
 
-See [Use data already on disk](../../how-to/use-data-already-on-disk.md#the-maintainer-side-link-cache).
+See [Migrate cluster data](../../how-to/migrate-cluster-data.md#2-create-the-shared-namespace-as-links).
 
 ## `check-store [vo]`
 

@@ -1,207 +1,89 @@
-# Point the cache somewhere
+# Configure the cache
 
-Data goes to your OS's per-user cache directory unless told otherwise — the
-same mechanism on Linux, macOS and Windows. Nothing needs configuring for
-public data. This page is for when you want it somewhere specific.
+ETHOS.Data keeps data in two caches:
+
+| Cache | Holds | Default |
+|---|---|---|
+| **public cache** | everything downloaded from the catalogue | your operating system's per-user cache directory |
+| **restricted cache** | your private copy of licensed or proprietary datasets | none |
+
+Public data needs no configuration. Set a cache only to put it somewhere else.
+
+## Four Configuration Options
+
+The first option that is set wins.
+
+| | Option | Public cache | Restricted cache | Applies to |
+|---|---|---|---|---|
+| 1 | command-line option or Python argument | `--root DIR` / `root=DIR` | — | one command or call |
+| 2 | environment variable | `ETHOS_DATA_DIR` | `ETHOS_RESTRICTED_DIR` | one shell or job |
+| 3 | project file | `config set-public-cache DIR --scope project` | `config set-restricted-cache DIR --scope project` | one project folder |
+| 4 | personal setting | `config set-public-cache DIR` | `config set-restricted-cache DIR` | all your work |
+
+### 1. For one command or call
+
+```bash
+ethos-data --root /data/ethos-data -p reskit fetch onshore_wind
+```
+
+```python
+ethos_data.fetch("onshore_wind", package="reskit", root="/data/ethos-data")
+```
+
+### 2. For one shell or job
+
+```bash
+export ETHOS_DATA_DIR=/scratch/me/ethos-data
+export ETHOS_RESTRICTED_DIR=/data/licensed
+```
+
+In PowerShell, use `$env:ETHOS_DATA_DIR = "D:\ethos-data"`.
+
+### 3. For one project
+
+Run in the project folder:
+
+```bash
+ethos-data config set-public-cache /data/my-project/ethos-data --scope project
+ethos-data config set-restricted-cache /data/licensed --scope project
+```
+
+This writes `ethos-data.yaml` into the current folder:
+
+```yaml title="ethos-data.yaml"
+public_cache: /data/my-project/ethos-data
+restricted_cache: /data/licensed
+```
+
+The file applies to this folder and every folder below it. Commit it to share
+the setting with your team.
+
+### 4. For all your work
+
+```bash
+ethos-data config set-public-cache /data/ethos-data
+ethos-data config set-restricted-cache /data/licensed
+```
+
+## Check the result
 
 ```bash
 ethos-data config show
 ```
 
-prints the folder in use, **why** it was chosen, and every place that was
-checked along the way. It answers most "why is my data going there?" questions
-on its own, including naming the exact config file that decided it.
+The output lists each cache and the option that set it.
 
-## Six ways, strongest first
-
-The first one that applies wins:
-
-| | How | Good for |
-|---|---|---|
-| 1 | `--root /path` on the command line, or `root=` in Python | one-off runs |
-| 2 | the `ETHOS_DATA_DIR` environment variable | CI, batch jobs, SLURM |
-| 3 | a file called `ethos-data.yaml` in your project folder | a setting you want to see and commit |
-| 4 | your personal setting | all your work, every project |
-| 5 | a setting inside the conda environment | a shared install someone else manages |
-| 6 | a machine-wide setting | a cluster, set by an admin |
-
-Falling off the end gives you the per-user OS cache directory.
-
-## Most people want option 3
-
-An ordinary file, in the folder you work in, that you can open, read, edit and
-commit. Run this from the folder you want it to appear in:
+## Remove a setting
 
 ```bash
-ethos-data config set-cache /data/my-analysis/ethos-data --scope project
+ethos-data config unset-public-cache
+ethos-data config unset-restricted-cache --scope project
 ```
 
-```yaml title="ethos-data.yaml"
-cache_dir: /data/my-analysis/ethos-data
-```
-
-It is found from anywhere *inside* the project — the same way `git` finds a
-repository from a subfolder — and setting it again from a subfolder updates
-that one file instead of creating a second.
-
-!!! warning "'Project' means the whole subtree, not that one directory"
-    A project config is found by walking **up** from the current directory. If
-    you pin a setting in `~/work/`, it applies to every repository underneath
-    it too, including ones with their own `collections.yaml`. That is usually
-    what you want for `cache_dir` and almost never what you want for
-    `collections` — see [below](#pinning-a-default-collections-file).
-
-For a personal setting that follows you across projects, drop `--scope`:
-
-```bash
-ethos-data config set-cache /data/ethos-data
-```
-
-`ethos-data config unset-cache` goes back to the default.
-
-## On a cluster
-
-An admin sets the cache once, site-wide, and everybody else gets it with no
-setup at all:
-
-```bash
-ethos-data config set-cache /projects2/shared/ethos-data --scope site
-```
-
-A batch job that needs node-local scratch can still override for one run with
-`ETHOS_DATA_DIR`, without touching anybody else's configuration.
-
-If the cluster already holds copies of the datasets, an admin can also build
-the cache as a directory of links to them — see
-[`ethos-data catalog link-cache`](use-data-already-on-disk.md#the-maintainer-side-link-cache).
-Users then point `public_cache` at that directory. Files present through its
-namespace links are read in place; other selected public data may still need
-downloading.
-
-The catalogue location is a separate setting. If the administrator exposes a
-reviewed internal catalogue on the filesystem, CLI users can select it with:
-
-```bash
-ethos-data config set-catalog /shared/ice2/catalogue/current/datacatalog.json --scope project
-```
-
-This is an example path. RESKit's Python wrapper accepts the same path through
-`RESKIT_DATA_CATALOG`; see [Get data for a task](get-data-for-a-task.md).
-For reproducible runs, use a versioned catalogue directory rather than
-`current`. See [Catalogue hosting](catalogue-hosting.md) for the operator setup.
-
-## The three roots
-
-There are actually three cache roots, and you are expected to set at most two:
-
-| Root | Holds | Default |
-|---|---|---|
-| **public cache** | public and internal data — links to data already here, plus real directories for anything downloaded | per-user OS cache directory |
-| **restricted cache** | licensed data, never downloaded, never written to | **none**, deliberately |
-| **staging cache** | work in progress that is not catalogued yet | **none**, opt-in |
-
-```bash
-ethos-data config set-public-cache     /path --scope site
-ethos-data config set-restricted-cache /path --scope environment
-ethos-data config set-staging-cache    /path            # only while developing
-```
-
-`set-cache` is an alias for `set-public-cache`, kept because it is in scripts,
-job files and shell profiles from when there was only one root.
-
-The two that have no default have none on purpose: where licensed bytes land is
-a decision somebody has to make out loud, and staging is opt-in by nature. See
-[Caches, classes and roots](../explanation/caches-and-access.md) for why the
-configuration is two settings rather than one per dataset.
-
-## Scopes
-
-Every `config set-*` command takes `--scope`:
-
-| Scope | File | Use for |
-|---|---|---|
-| `project` | `./ethos-data.yaml`, searched upward from the cwd | a setting you want visible and committable |
-| `user` (default) | your per-user config directory | all your own work |
-| `environment` | `<sys.prefix>/etc/ethos-data/config.yaml` | a conda env somebody else manages |
-| `site` | the machine-wide config directory | a cluster, set by an admin |
-
-Precedence runs in that order. `ethos-data config show` prints every file it
-consults with an exists/not-present flag, so a setting that is being shadowed
-is visible rather than mysterious.
-
-## Pinning a default catalogue
-
-A collections file pins its own catalogue (`catalog:` at the top of the YAML),
-which is enough for most use. To work against a *different* one every time
-without editing that file or exporting an environment variable in every shell —
-developing against the internal catalogue instead of a published tag, say — set
-it once:
-
-```bash
-ethos-data config set-catalog /path/to/ethos-data-catalog-internal/datacatalog.json --scope project
-```
-
-Same scopes and precedence as the cache directory. It takes a local path or an
-`http(s)` URL, and is overridden by `--catalog` / `catalog=` for a single run.
-`ethos-data config unset-catalog` removes it.
-
-## Pinning a default collections file
-
-To stop passing `-c` every time — while working inside a repository that will
-never grow its own `collections.yaml`, for instance:
-
-```bash
-ethos-data config set-collections /path/to/probe-collections.yaml --scope project
-```
-
-!!! warning "This applies everywhere the project config is found"
-    Not just in that one directory — the same walk-up rule as `cache_dir`. If
-    you later run a bare `ethos-data list` somewhere that has its own real
-    `collections.yaml` (RESKit's, say), you would still get the pinned one
-    unless you pass `-c` explicitly. `ethos-data config unset-collections`
-    removes it, and `config show` always says which file is in effect and why.
-
-## Fetching from a different door
-
-Public downloads go to whatever the catalogue declares. To fetch the same bytes
-through DESY's high-throughput door instead — worth it for bulk transfers and
-CI, not for interactive use:
-
-```bash
-ethos-data config set-publication-url https://hifis-storage-ht.desy.de:2880/Helmholtz/FZJ-ICE2/ice2-data-files
-```
-
-The catalogue does not change; only this machine's route to the bytes does.
-
-## Reading the output
-
-```title="ethos-data config show (abridged)"
-the two settings that matter:
-
-  public cache      /projects2/2026-j-belina-ResKit-Update/ethos-data-cache-new
-                    from project config /projects2/2026-j-belina-ResKit-Update/ethos-data.yaml
-  restricted cache  (not set -- licensed datasets will refuse to resolve)
-                    ethos-data config set-restricted-cache /path --scope environment
-
-precedence for each, first match wins:
-  1. explicit --root / root=      (public cache only)
-  2. $ETHOS_DATA_DIR          (unset)   [public]
-  3. project config           /projects2/2026-j-belina-ResKit-Update/ethos-data.yaml  [exists]
-  4. user config              /home/you/.config/ethos-data/config.yaml  [not present]
-  5. environment config       /home/you/miniforge3/envs/env/etc/ethos-data/config.yaml  [not present]
-  6. site config              /etc/xdg/ethos-data/config.yaml  [not present]
-  7. built-in default          per-user OS cache directory (public only)
-
-public cache holds 0 link(s) and 2 real director(ies):
-```
-
-The last line is worth reading: **links** are datasets read in place from
-elsewhere on the machine, **real directories** are data this cache downloaded
-and owns. Which one a dataset is decides whether `fetch` writes to it — see
-[Caches, classes and roots](../explanation/caches-and-access.md).
+Use the same `--scope` you set it with.
 
 ## See also
 
-- [Configuration reference](../reference/configuration.md) — every key, every
-  environment variable, every default.
-- [Use data already on disk](use-data-already-on-disk.md).
+- [Work with restricted data](restricted-data.md)
+- [Configuration reference](../reference/configuration.md) — every key, scope
+  and default.

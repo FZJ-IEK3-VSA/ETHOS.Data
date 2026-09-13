@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
 
-site_name: ETHOS.DATA
-site_description: Shared, deduplicating data access for ICE-2 scientific software
+site_name: ETHOS.Data
+site_description: Shared, deduplicating data access for ETHOS tools and workflows
 site_author: ICE-2 Jülich Systems Analysis
 
 # The canonical URL is whatever the host serves this from. GitLab CI sets
@@ -11,9 +11,9 @@ site_author: ICE-2 Jülich Systems Analysis
 # root-absolute asset paths point at a host that does not serve this site.
 site_url: !ENV [SITE_URL, CI_PAGES_URL, "http://localhost:8000/"]
 
-repo_url: https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data
-repo_name: iek-3/shared-code/ethos-data
-edit_uri: edit/initial_dev/docs/
+repo_url: https://github.com/FZJ-IEK3-VSA/ETHOS.Data
+repo_name: FZJ-IEK3-VSA/ETHOS.Data
+edit_uri: edit/main/docs/
 
 # NOTE: no `copyright:` key, deliberately. docs/overrides/partials/copyright.html
 # renders config.copyright as a plain line ABOVE the institutional logo band, so
@@ -34,8 +34,9 @@ validation:
 theme:
     name: material
     custom_dir: docs/overrides
-    logo: assets/branding/ethos-data-icon.svg
-    favicon: assets/branding/ethos-data-icon.svg
+    # No `logo:` or `favicon:` yet: the ETHOS.Data mark in docs/branding/ is a
+    # proposal with no rendered assets, and a path to a file that does not exist
+    # shows a broken image in every page header. See contributing.md#logo.
     font:
         text: Roboto
         code: Roboto Mono
@@ -131,7 +132,8 @@ markdown_extensions:
 #   diagrams/   TikZ sources and the render script. The rendered SVGs they
 #               produce live in assets/diagrams/ and ARE published; the .tex
 #               and the renderer are edit-time tooling.
-#   branding/   Logo source and renderer; exports live in assets/branding/.
+#   branding/   Logo proposal and renderer; exports go to assets/branding/
+#               once the logo is adopted (none exist yet).
 #   font/       Local font files and design references, used only for rendering.
 # The leading slash anchors to the docs root. Without it, gitignore semantics
 # match a directory of that name at ANY depth -- and `diagrams/` then also
@@ -161,12 +163,13 @@ nav:
           - Contributing: contributing.md
           - Legal Notice: legal-notice.md
 
+    # Lessons only. A page that gets one real task done belongs under How-to
+    # guides even when it is written for newcomers; see contributing.md.
     - Tutorials:
           - Overview: tutorials/index.md
           - Data users:
                 - Your first fetch: tutorials/first-fetch.md
           - Package maintainers:
-                - Use data in your package: tutorials/use-from-a-library.md
                 - Develop and propose a dataset: tutorials/develop-and-propose-data.md
                 - Run a test with repository data: tutorials/bundled-tests.md
           - Catalogue maintainers:
@@ -175,12 +178,14 @@ nav:
     - How-to guides:
           - Overview: how-to/index.md
           - Data users:
-                - Get data for a task: how-to/get-data-for-a-task.md
                 - Configure the cache: how-to/configure-the-cache.md
-                - Use data already on disk: how-to/use-data-already-on-disk.md
                 - Work with restricted data: how-to/restricted-data.md
+                - Add the internal data catalogue: how-to/add-internal-catalogue.md
+                - Get data for a task: how-to/get-data-for-a-task.md
+                - Use data already on disk: how-to/use-data-already-on-disk.md
                 - Check and repair the cache: how-to/verify-and-repair.md
           - Package maintainers:
+                - Use ETHOS.Data in your package: how-to/use-from-a-package.md
                 - Write a collections file: how-to/write-a-collections-file.md
                 - Stage uncatalogued data: how-to/stage-unpublished-data.md
                 - Propose a dataset: how-to/propose-a-dataset.md
@@ -189,11 +194,11 @@ nav:
           - Catalogue maintainers:
                 - Accept a dataset proposal: how-to/accept-a-dataset.md
                 - Describe a dataset: how-to/describe-a-dataset.md
-                - Add internal and restricted datasets: how-to/add-internal-and-restricted-data.md
-                - Migrate cluster data from symlinks: how-to/migrate-cluster-data.md
                 - Upload a dataset: how-to/upload-a-dataset.md
+                - Add internal and restricted datasets: how-to/add-internal-and-restricted-data.md
                 - Publish the catalogue: how-to/publish-the-catalogue.md
                 - Serve catalogues on the cluster and GitHub: how-to/catalogue-hosting.md
+                - Migrate cluster data from symlinks: how-to/migrate-cluster-data.md
                 - Check catalogue changes in CI: how-to/catalogue-ci.md
                 - Diagnose catalogue problems: how-to/troubleshoot-catalogue.md
                 - Withdraw a dataset: how-to/withdraw-a-dataset.md

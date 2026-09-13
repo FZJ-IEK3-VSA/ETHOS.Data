@@ -24,7 +24,7 @@ the standard's extension mechanism is for. They are listed in
 
 ## Two catalogues, one format
 
-| | `ethos-data-catalog-internal` | `ethos-data-catalog` |
+| | `ethos-data-catalog-internal` | `ETHOS.Data-Catalogue` |
 |---|---|---|
 | Role | `source` | `published` |
 | Holds | `catalog.yaml`, `datasets/*/dataset.yaml`, `source_dir`, embargoed datasets | the generated public subset |

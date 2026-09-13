@@ -1,8 +1,7 @@
 # API Reference
 
-`ethos_data`'s public API. Most callers need only [`fetch`][ethos_data.fetch] —
-and, if they are wrapping it in a package of their own, `load_collections` and
-`download`. The rest is here for completeness.
+`ethos_data`'s public API. Most callers need only [`path`][ethos_data.path] and
+[`fetch`][ethos_data.fetch]. The rest is here for completeness.
 
 | Topic | Contents |
 |-------|----------|
@@ -14,14 +13,28 @@ and, if they are wrapping it in a package of their own, `load_collections` and
 Consumers never import `ethos_data.maintain`; `ethos_data` itself is a read-only
 library.
 
-## Fetching
+## Getting data
 
 ::: ethos_data
     options:
       members:
+        - path
         - fetch
         - fetch_one
         - resolve
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+## Collections shipped by packages
+
+::: ethos_data.selection
+    options:
+      members:
+        - package_collections
+        - registered_packages
+        - CollectionsNotFound
+        - ENTRY_POINT_GROUP
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

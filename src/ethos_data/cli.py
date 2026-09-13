@@ -44,8 +44,9 @@ from .bundles import BundleError, export_bundle, load_bundle
 from .access import AccessError, cache_entries
 from .catalog import UnknownDataset, load_catalog
 from .maintain.cli import add_catalog_parser, dispatch as _catalog_dispatch
+from .config import DEFAULT_CATALOG
 from .retrieval import download, plan
-from .selection import load_collections
+from .selection import CollectionsNotFound, load_collections, package_collections, registered_packages
 
 
 def _human(num_bytes: int) -> str:
@@ -67,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     try:
         return _main(argv)
-    except (AccessError, UnknownDataset, BundleError) as error:
+    except (AccessError, UnknownDataset, BundleError, CollectionsNotFound) as error:
         # UnknownDataset stringifies like a KeyError (quoted), which reads badly
         # on a terminal line that already says "error:".
         message = error.args[0] if error.args else error
@@ -80,15 +81,20 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-c", "--collections", default=None,
                         help="path to a collections file (default: collections.yaml, "
                              "or a configured default -- see `ethos-data config show`)")
+    parser.add_argument("-p", "--package", default=None,
+                        help="use the collections file an installed package ships, e.g. -p reskit")
     parser.add_argument("--catalog", default=None, help="override the catalogue location")
     parser.add_argument("--root", default=None, help="override the public cache directory")
     parser.add_argument("--skip-unavailable", action="store_true", default=None,
                         help="carry on without data this machine has no access to "
-                             "(licensed datasets away from the institute cluster), "
+                             "(licensed data you have no copy of), "
                              "listing what was left out instead of stopping")
 
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("list", help="list the collections this file defines")
+    pather = sub.add_parser(
+        "path", help="print the absolute path of a file or folder, fetching it if necessary")
+    pather.add_argument("key", help="<dataset>/<file or folder>, or a dataset name")
 
     bundle = sub.add_parser("bundle", help="repository copies of catalogued test data")
     bundle_sub = bundle.add_subparsers(dest="bundle_command", required=True)
@@ -225,9 +231,8 @@ def _bundle_command(args) -> int:
                 raise BundleError("--source-root must be a unique DATASET=PATH entry")
             roots[name] = directory
         configured = resolve_catalog(args.catalog)
-        selected = resolve_collections(args.collections)
         bundle = export_bundle(
-            selected[0] if selected else "collections.yaml",
+            _collections_file(args),
             args.bundle_collections, args.target,
             catalog=configured[0] if configured else None,
             dataset_roots=roots,
@@ -247,14 +252,29 @@ def _bundle_command(args) -> int:
     return 0
 
 
+def _collections_file(args) -> str:
+    """The collections file to read: the one -p's package ships, else -c, a
+    configured default, or ./collections.yaml."""
+    if args.package and args.collections:
+        raise CollectionsNotFound("give -c/--collections or -p/--package, not both")
+    if args.package:
+        return str(package_collections(args.package))
+    resolved = resolve_collections(args.collections)
+    chosen = resolved[0] if resolved else "collections.yaml"
+    if not Path(chosen).is_file():
+        packages = ", ".join(sorted(registered_packages())) or "none installed"
+        raise CollectionsNotFound(
+            f"no collections file at {chosen}. Name an installed package with -p "
+            f"(registered: {packages}), or a file with -c."
+        )
+    return chosen
+
+
 def _load(args, roots):
     """The collections file, with the catalogue it pins and staging applied."""
     resolved_catalog = resolve_catalog(args.catalog)
     catalog = resolved_catalog[0] if resolved_catalog else None
-    resolved_collections = resolve_collections(args.collections)
-    collections_file = resolved_collections[0] if resolved_collections else "collections.yaml"
-    loaded = load_collections(collections_file, catalog=catalog, roots=roots)
-    return loaded
+    return load_collections(_collections_file(args), catalog=catalog, roots=roots)
 
 
 def _main(argv: list[str] | None = None) -> int:
@@ -272,6 +292,17 @@ def _main(argv: list[str] | None = None) -> int:
         return _catalog_dispatch(args)
 
     roots = resolve_roots(args.root)
+
+    if args.command == "path":
+        from . import path as fetch_path
+
+        try:
+            print(fetch_path(args.key, package=args.package, catalog=args.catalog, root=roots))
+        except KeyError as error:
+            # A key naming no file or folder: a message, like UnknownDataset.
+            print(f"error: {error.args[0] if error.args else error}", file=sys.stderr)
+            return 2
+        return 0
 
     if args.command == "materialize":
         return _materialize_command(args, roots)
@@ -430,8 +461,11 @@ def _materialize_command(args, roots) -> int:
     resolved_catalog = resolve_catalog(args.catalog)
     if resolved_catalog:
         catalog = load_catalog(resolved_catalog[0])
-    else:
+    elif (args.package or args.collections or resolve_collections()
+          or Path("collections.yaml").is_file()):
         catalog = _load(args, roots).catalog
+    else:
+        catalog = load_catalog(DEFAULT_CATALOG)
 
     names = list(args.datasets)
     if args.all or not names:
@@ -719,9 +753,11 @@ def _config_show() -> int:
 
     catalog = resolve_catalog()
     if catalog:
-        print(f"\ndefault catalog: {catalog[0]}  (from {catalog[1]})")
-        print("  used instead of whatever -c/--collections pins for itself; "
-              "--catalog overrides both")
+        print(f"\ncatalogue: {catalog[0]}  (from {catalog[1]})")
+        print("  used instead of whatever -c/-p pins for itself; --catalog overrides it")
+    else:
+        print("\ncatalogue: the version -c/-p pins, else the built-in public catalogue")
+        print(f"  {DEFAULT_CATALOG}")
     collections = resolve_collections()
     if collections:
         exists = "" if Path(collections[0]).is_file() else "   [MISSING]"

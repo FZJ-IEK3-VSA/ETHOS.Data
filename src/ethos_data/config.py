@@ -88,7 +88,22 @@ __all__ = [
     "resolve_publication_url",
     "set_option",
     "unset_option",
+    "CATALOG_ENV_VAR",
+    "DEFAULT_CATALOG",
 ]
+
+#: The public catalogue, used whenever nothing else names one -- so that public
+#: data needs no configuration at all. It follows a moving branch; a package
+#: that must resolve to the same bytes release after release pins a version in
+#: its own collections file instead.
+DEFAULT_CATALOG = (
+    "https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json"
+)
+#: Point every tool in one shell or job at another catalogue -- the internal one,
+#: say -- without editing a file. Wins over config files and over the version a
+#: collections file pins; an explicit ``catalog=`` / ``--catalog`` wins over it.
+#: One variable for every package, where each used to need its own.
+CATALOG_ENV_VAR = "ETHOS_DATA_CATALOG"
 
 #: The public cache. Named for the era when there was only one root; kept
 #: because it is in scripts, job files and people's shell profiles.
@@ -424,10 +439,11 @@ def resolve_publication_url(catalog_default: str = "") -> tuple[str, str]:
 
 
 def resolve_catalog(explicit: str | None = None) -> tuple[str, str] | None:
-    """Optional default catalogue location, resolved the same way as the caches.
+    """Optional catalogue override: explicit, then $ETHOS_DATA_CATALOG, then config.
 
-    Returns ``None`` if nothing is configured, so a caller falls back to
-    whatever a collections.yaml pins for itself via its own ``catalog:`` key.
+    Returns ``None`` if nothing is set, so a caller falls back to whatever a
+    collections.yaml pins for itself via its own ``catalog:`` key, and after that
+    to ``DEFAULT_CATALOG``.
 
     Deliberately returns a plain string rather than a ``Resolved`` -- a
     catalogue location is as often an http(s) URL as a local path, and
@@ -436,6 +452,11 @@ def resolve_catalog(explicit: str | None = None) -> tuple[str, str] | None:
     """
     if explicit:
         return explicit, "explicit argument"
+    from_env = os.environ.get(CATALOG_ENV_VAR)
+    if from_env:
+        if not from_env.startswith(("http://", "https://")):
+            from_env = str(Path(from_env).expanduser())
+        return from_env, f"${CATALOG_ENV_VAR}"
     settings, origin = load_config()
     catalog = settings.get("catalog")
     if not catalog:

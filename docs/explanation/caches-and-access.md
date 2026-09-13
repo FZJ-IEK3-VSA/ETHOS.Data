@@ -33,7 +33,7 @@ is read in place** follows from whether its entry in that root is a symbolic
 link:
 
 ```
-ice2_data_cache_public/
+/shared/ethos/public/
 |-- global-wind-atlas  -> /fast/central/shared_data/Global_Wind_Atlas/GWA_4.0     (in place)
 |-- corine-land-cover  -> /fast/central/shared_data/2023_gears/.../clc2018        (in place)
 `-- submarine-cables/                                                             (downloaded)

@@ -56,7 +56,7 @@ complete.
 
 ```bash
 ethos-data catalog build
-ethos-data catalog publish ../ethos-data-catalog
+ethos-data catalog publish ../ETHOS.Data-Catalogue
 ```
 
 The target must be the dedicated generated public checkout: `publish` clears

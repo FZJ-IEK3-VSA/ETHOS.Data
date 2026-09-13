@@ -78,7 +78,7 @@ so the links are listed explicitly *before* anything happens:
 ```title="Output"
 these links will be removed so a download has somewhere to land
 (other people share this cache -- they will be re-fetching too):
-    /projects5/ice2_data_cache_public/global-wind-atlas -> /fast/central/shared_data/GWA_4.0
+    /shared/ethos/public/global-wind-atlas -> /fast/central/shared_data/GWA_4.0
 ```
 
 Which is what `--dry-run` is for. Run it first.

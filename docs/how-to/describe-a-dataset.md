@@ -4,7 +4,7 @@ A dataset is described once, in the source catalogue
 (`ethos-data-catalog-internal`), by a hand-written `dataset.yaml` plus a
 generated manifest. Tools never describe files themselves — they only say which
 datasets they need. For the whole round trip in order, see
-[Add a dataset to the catalogue](../tutorials/add-a-dataset.md).
+[Accept a dataset proposal](accept-a-dataset.md).
 
 Package maintainers can use this schema to draft a
 [dataset proposal](propose-a-dataset.md) without write access to the source
@@ -186,7 +186,7 @@ contributors:
   - title: A Researcher
     roles: [author]
     organization: Forschungszentrum Jülich, ICE-2
-  - title: ICE-2 RESKit maintainers
+  - title: ETHOS.RESKit maintainers
     roles: [maintainer]
 ```
 
@@ -313,7 +313,7 @@ title: RESKit test fixtures
 description: >-
   What the family is.
 homepage: https://github.com/FZJ-IEK3-VSA/RESKit
-ethos:contact: ICE-2 RESKit maintainers
+ethos:contact: ETHOS.RESKit maintainers
 ethos:attribution: >-
   Carried by every member.
 ```

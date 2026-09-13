@@ -64,8 +64,8 @@ and [Work with restricted data](../../how-to/restricted-data.md).
 ### Failure boundaries
 
 Selection rejects unknown datasets and collections. A pattern that matches no
-resources can produce an empty selection; package wrappers must check that their
-required inputs were selected. Bundle export rejects empty collections. If Access
+resources can produce an empty selection; consuming packages must check that
+their required inputs were selected. Bundle export rejects empty collections. If Access
 policy finds inaccessible required data,
 Retrieval fails before returning an apparently complete result. Explicitly
 skipping unavailable data changes the returned keys, so the consuming workflow

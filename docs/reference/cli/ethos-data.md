@@ -4,7 +4,7 @@ The consumer-side command: reading the catalogue, planning, fetching, verifying.
 It never writes to a catalogue — that is [`ethos-data catalog`](catalog.md).
 
 ```
-ethos-data [-c COLLECTIONS] [--catalog LOCATION] [--root DIR] [--skip-unavailable]
+ethos-data [-c COLLECTIONS | -p PACKAGE] [--catalog LOCATION] [--root DIR] [--skip-unavailable]
           <command> ...
 ```
 
@@ -17,14 +17,20 @@ not as a traceback.
 | Option | |
 |---|---|
 | `-c`, `--collections PATH` | path to a collections file. Default: `collections.yaml` in the current directory, or a configured default — see `config show`. |
-| `--catalog LOCATION` | override the catalogue the collections file pins. A local path or an `http(s)` URL. |
+| `-p`, `--package NAME` | the collections file an installed package registers under `NAME`, e.g. `-p reskit`. Not combined with `-c`. |
+| `--catalog LOCATION` | the catalogue to use for this run. A local path or an `http(s)` URL. |
 | `--root DIR` | override the public cache directory for this run. |
-| `--skip-unavailable` | carry on without data this machine cannot reach (licensed datasets away from the institute cluster), listing what was left out instead of stopping. |
+| `--skip-unavailable` | carry on without data this machine cannot reach (licensed data you have no copy of), listing what was left out instead of stopping. |
+
+The catalogue is the first of: `--catalog`, `$ETHOS_DATA_CATALOG`, a configured
+catalogue (`config set-catalog`), the collections file's `catalog:` pin, and
+the built-in public catalogue
+`https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json`.
 
 ## `list`
 
 ```bash
-ethos-data list
+ethos-data -p reskit list
 ethos-data -c probe-collections.yaml list
 ```
 
@@ -41,6 +47,20 @@ cache:     /path/to/cache
 A collection naming a dataset the catalogue does not describe is reported as
 `[unresolvable]` with the reason, and the rest are still listed. Exit status is
 `1` if any collection was unresolvable.
+
+## `path <key>`
+
+```bash
+ethos-data path reskit-test-data/placements/turbine_placements.csv
+ethos-data path reskit-test-data/era5
+ethos-data -p reskit path reskit-test-data/era5     # the catalogue version RESKit pins
+```
+
+Print the absolute local path of a file or folder, fetching it first if it is
+not on this machine yet. `<key>` is `<dataset>/<file>`, `<dataset>/<folder>`,
+a dataset name, or a dataset family name. A shapefile is fetched together with
+its companion files. Needs no collections file. The Python equivalent is
+[`ethos_data.path`][ethos_data.path].
 
 ## `info <collection>`
 
@@ -141,8 +161,8 @@ ethos-data staging remove <name> [--force]
 ### `config show`
 
 The resolved cache directories, why each was chosen, every config file
-consulted with an exists flag, the datasets read from a local root, and any
-pinned catalogue or collections file. Needs no catalogue and no network.
+consulted with an exists flag, the datasets read from a local root, and the
+catalogue and collections file in use. Needs no catalogue and no network.
 
 ### Setting a cache root
 
@@ -160,11 +180,11 @@ Each has a matching `unset-…`. `--scope` is one of `project`, `user` (default)
 
 | Command | |
 |---|---|
-| `config set-root <dataset> <directory>` | escape hatch: use one dataset from a local directory |
+| `config set-root <dataset> <directory>` | read one dataset from a local directory |
 | `config unset-root <dataset>` | stop using a local directory for it |
 | `config set-skip-unavailable true\|false` | carry on without licensed data this machine cannot reach |
 | `config unset-skip-unavailable` | remove the setting |
-| `config set-catalog <location>` | permanently point at a catalogue, so `--catalog` is not needed every time |
+| `config set-catalog <location>` | use this catalogue instead of the one a collections file pins, or the built-in public one |
 | `config unset-catalog` | remove it |
 | `config set-collections <path>` | permanently point at a collections file, so `-c` is not needed every time |
 | `config unset-collections` | remove it |
@@ -180,6 +200,7 @@ file locations.
 | `ETHOS_DATA_DIR` | the public cache directory |
 | `ETHOS_RESTRICTED_DIR` | the restricted cache directory |
 | `ETHOS_STAGING_DIR` | the staging directory |
+| `ETHOS_DATA_CATALOG` | the catalogue, for every tool in this shell or job |
 | `ETHOS_SKIP_UNAVAILABLE` | carry on without unreachable data |
 | `ETHOS_CATALOG_NO_CACHE` | never cache a fetched catalogue descriptor on disk |
 
@@ -189,7 +210,7 @@ file locations.
 |---|---|
 | `0` | success |
 | `1` | a collection could not be resolved, or `verify` found problems |
-| `2` | an `AccessError` or an unknown dataset — printed as a message, not a traceback |
+| `2` | an `AccessError`, an unknown dataset or package, or no collections file — printed as a message, not a traceback |
 
 ## `bundle`
 
@@ -198,7 +219,7 @@ metadata. dCache remains authoritative. Bundle reads use only local files and
 never overwrite fixtures or fall back to downloads.
 
 ```bash
-ethos-data -c collections.yaml bundle export tests/data-bundle test_suite --source-revision v2026.09
+ethos-data -p reskit bundle export tests/data-bundle test_suite --source-revision v2026.09
 ethos-data bundle verify tests/data-bundle test_suite
 ethos-data bundle fetch tests/data-bundle test_suite
 ethos-data bundle fetch tests/data-bundle test_suite --allow-modified
@@ -214,5 +235,5 @@ ethos-data bundle fetch tests/data-bundle test_suite --allow-modified
 | `fetch --allow-modified` | Explicit development override for changed bytes; warns and retains original metadata. Missing files still fail. |
 
 Global cache, staging, and skip-unavailable settings do not redirect bundle reads.
-`-c` and `--catalog` select inputs for export only. Invalid bundle inputs exit 2.
+`-c`, `-p` and `--catalog` select inputs for export only. Invalid bundle inputs exit 2.
 See [Keep test data in a repository](../../how-to/keep-test-data-in-a-repository.md).

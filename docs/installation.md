@@ -18,7 +18,7 @@ Installing it gives you **two commands**:
 The package is not on PyPI or conda-forge yet — install it from the repository:
 
 ```bash
-pip install git+https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data.git
+pip install git+https://github.com/FZJ-IEK3-VSA/ETHOS.Data.git
 ```
 
 Or, if you are declaring it as a dependency of your own package:
@@ -43,8 +43,8 @@ back to silence.
 With conda/mamba, using the environment file in the repository:
 
 ```bash
-git clone https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data.git
-cd ethos-data
+git clone https://github.com/FZJ-IEK3-VSA/ETHOS.Data.git
+cd ETHOS.Data
 mamba env create -f environment.yml
 mamba activate ethos_data_env
 pip install -e . --no-deps
@@ -98,8 +98,8 @@ somewhere with room — a project filesystem, a scratch volume — see
 ## Development install
 
 ```bash
-git clone https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data.git
-cd ethos-data
+git clone https://github.com/FZJ-IEK3-VSA/ETHOS.Data.git
+cd ETHOS.Data
 pip install -e .
 pytest
 ```

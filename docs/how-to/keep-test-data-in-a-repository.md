@@ -15,7 +15,7 @@ you test changed local bytes before proposing an update to the authoritative dat
 Choose a collection containing the test inputs, pin its catalogue, and export it:
 
 ```bash
-ethos-data -c reskit/data/collections.yaml bundle export tests/data-bundle test_suite \
+ethos-data -p reskit bundle export tests/data-bundle test_suite \
   --source-revision v2026.09
 ```
 
@@ -26,7 +26,7 @@ must already point to the desired version.
 To use files already present in the repository as the source, avoid downloading:
 
 ```bash
-ethos-data -c reskit/data/collections.yaml bundle export tests/data-bundle test_suite \
+ethos-data -p reskit bundle export tests/data-bundle test_suite \
   --source-root reskit-test-data=reskit/data/test_cache/data --source-revision v2026.09
 ```
 

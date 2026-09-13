@@ -1,12 +1,13 @@
-# ethos-data
+# ETHOS.Data
 
-Shared data access for ICE-2 scientific software.
+Shared data access for ETHOS tools and workflows.
 
-One institute-wide input data catalogue ([ethos-data-catalog](../ethos-data-catalog-internal))
+One institute-wide input data catalogue,
+[ETHOS.Data-Catalogue](https://github.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue),
 describes the datasets: file paths, sizes, SHA-256 checksums, original sources
 and licences, as [Frictionless Data Packages](https://datapackage.org/).
-Each software project declares only which *slices* of those datasets it needs,
-in its own `collections.yaml`.
+Each software package declares only which *slices* of those datasets it needs,
+in a `collections.yaml` it ships with itself.
 
 ## Why this shape
 
@@ -24,16 +25,26 @@ drift and the sharing would silently stop.
 ## Usage
 
 ```python
-from ethos_data import fetch
+import ethos_data
 
-paths = fetch("test_suite", collections="collections.yaml")
+placements = ethos_data.path("reskit-test-data/placements/turbine_placements.csv")
+files = ethos_data.fetch("test_suite", package="reskit")
 ```
 
 ```bash
-ethos-data -c collections.yaml list                # what is on offer
-ethos-data -c collections.yaml info test_suite     # what is in a collection
-ethos-data -c collections.yaml plan test_suite     # what a fetch would download
-ethos-data -c collections.yaml fetch test_suite    # download it
+ethos-data -p reskit list                  # what is on offer
+ethos-data -p reskit info test_suite       # what is in a collection
+ethos-data -p reskit plan test_suite       # what a fetch would download
+ethos-data -p reskit fetch test_suite      # download it
+ethos-data path reskit-test-data/era5      # the local path of a file or folder
+```
+
+The public catalogue is built in. A package makes its collections available
+under `-p` / `package=` with one entry point:
+
+```toml
+[project.entry-points."ethos_data.collections"]
+reskit = "reskit.data"      # the module whose directory holds collections.yaml
 ```
 
 ## Documentation
@@ -48,10 +59,11 @@ mkdocs build      # static site into ./site
 
 | | |
 |---|---|
-| [Your first fetch](docs/tutorials/first-fetch.md) | install, point at a catalogue, download a collection |
-| [Use it from your own package](docs/tutorials/use-from-a-library.md) | `collections.yaml` and the thin wrapper module pattern |
-| [Add a dataset to the catalogue](docs/tutorials/add-a-dataset.md) | the maintainer round trip, end to end |
-| [How-to guides](docs/how-to/index.md) | cache configuration, local data, restricted data, verify/repair, CI, uploading, publishing |
+| [Your first fetch](docs/tutorials/first-fetch.md) | find a package's collections, fetch one, use the paths from Python |
+| [Get data for a task](docs/how-to/get-data-for-a-task.md) | `ethos_data.path()` in scripts, and the command line |
+| [Use ETHOS.Data in your package](docs/how-to/use-from-a-package.md) | ship and register a `collections.yaml` |
+| [Add a dataset to the catalogue](docs/tutorials/add-a-dataset.md) | the maintainer round trip, on a practice catalogue |
+| [How-to guides](docs/how-to/index.md) | cache configuration, internal catalogue, restricted data, verify/repair, CI, uploading, publishing |
 | [Explanation](docs/explanation/index.md) | why one catalogue; caches, classes and roots; the catalogue format; licensing |
 | [Reference](docs/reference/cli/ethos-data.md) | both CLIs, configuration keys, file formats, glossary, API |
 
@@ -63,10 +75,10 @@ that generates and publishes it lives here, so that the descriptors written and
 the descriptors read can never drift apart.
 
 ```bash
-ethos-data catalog build                        # regenerate manifests from dataset.yaml
-ethos-data catalog publish ../ethos-data-catalog # emit the public subset
-ethos-data catalog upload <dataset>             # put the bytes on dCache, then verify
-ethos-data catalog check-store                 # probe dCache permissions
+ethos-data catalog build                            # regenerate manifests from dataset.yaml
+ethos-data catalog publish ../ETHOS.Data-Catalogue  # emit the public subset
+ethos-data catalog upload <dataset>                 # put the bytes on dCache, then verify
+ethos-data catalog check-store                      # probe dCache permissions
 ```
 
 `upload` and `check-store` need `rclone` and `oidc-agent` on PATH. Nothing

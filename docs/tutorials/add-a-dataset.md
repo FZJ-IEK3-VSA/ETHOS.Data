@@ -1,271 +1,248 @@
 # Add a dataset to the catalogue
 
-You are the catalogue maintainer accepting data that other packages will ask
-for by name. This is the round trip from an accepted proposal to a released
-entry: describe it, build its manifest, upload and verify the bytes, and publish
-the metadata. Follow it with a small approved dataset.
+You are the catalogue maintainer. In this lesson you take a tiny dataset through
+the steps every catalogued dataset goes through — describe it, build its
+inventory, publish the catalogue — and then make it available on a shared
+machine: first by linking it into a cache, later by turning that link into a
+copy. Everything happens in a practice catalogue on your own machine. Nothing is
+uploaded to dCache and nothing is published anywhere.
 
-Package maintainers who are still developing their candidate should start with
-[Develop and propose a dataset](develop-and-propose-data.md); that path needs
-no upload credentials or write access to the source catalogue.
+You need an installed `ethos-data` and a shell: bash, zsh, or Git Bash on
+Windows. Step 5 creates a symbolic link, which on Windows requires Developer
+Mode.
 
-Everything here uses `ethos-data catalog`, the writing half of the package. It finds
-the catalogue to act on by searching upward from the current directory for
-`catalog.yaml`, so run these from anywhere inside a catalogue checkout.
-
-!!! info "Which repository"
-    Datasets are described in **`ethos-data-catalog-internal`** — the source
-    catalogue. The public `ethos-data-catalog` is *generated* from it and must
-    never be edited by hand. If you do not have a catalogue at all yet, start
-    with [Bootstrap a new catalogue](../how-to/bootstrap-a-catalogue.md).
-
-## 1. Review and describe it
-
-Start with the contributor's [proposal](../how-to/propose-a-dataset.md): confirm
-provenance, redistribution, selected files, validation results, and access to
-the candidate bytes. Use the following description as a template, replacing its
-example values with the reviewed metadata.
+## 1. Set up the practice catalogue
 
 ```bash
-cd /path/to/ethos-data-catalog-internal
-mkdir datasets/my-dataset
+mkdir catalogue-lesson
+cd catalogue-lesson
+mkdir -p source-catalogue/datasets/station-temperatures public-catalogue incoming/station-temperatures
+printf 'station,value\nA,12.5\nB,13.0\n' > incoming/station-temperatures/temperatures.csv
+printf 'downloaded 2026-09-11\n' > incoming/station-temperatures/download.log
 ```
 
-`datasets/my-dataset/dataset.yaml`:
+`incoming/station-temperatures` plays the part of the data a package maintainer
+proposed: a CSV, and next to it a download log that is not part of the dataset.
+`source-catalogue` is your practice copy of the internal source catalogue, and
+`public-catalogue` will receive the public view generated from it.
+
+Create `source-catalogue/catalog.yaml`:
 
 ```yaml
-name: my-dataset
-title: A short human-readable title
-description: >-
-  What this is, and what it is used for.
+name: practice-catalogue
+ethos:catalog_role: source
+ethos:publication_url: https://example.invalid/practice
+```
 
-# Where the files are on YOUR machine, for building the inventory.
-# Never published.
-source_dir: /benchtop/shared_data/MyDataset
+The publication URL is deliberately unreachable: no bytes are downloaded in
+this lesson.
 
-# Who may read the bytes:  public | internal | restricted
+## 2. Describe the dataset
+
+Create `source-catalogue/datasets/station-temperatures/dataset.yaml`:
+
+```yaml
+name: station-temperatures
+title: Synthetic station temperatures
+description: Two invented observations, used to practise catalogue maintenance.
+source_dir: ../../../incoming/station-temperatures
 ethos:access: public
-# Whether the dataset is listed in the public catalogue:  public | hidden
 ethos:visibility: public
-
-# Folder name on the public store. Omit for restricted data.
-ethos:remote_prefix: my-dataset
-
-sources:
-  - title: Where the data originally came from
-    path: https://doi.org/...
-
-licenses:
-  - name: CC-BY-4.0
-    path: https://creativecommons.org/licenses/by/4.0/
-
-ethos:retrieved: "2026-09-01"
-ethos:contact: your-username
-```
-
-Two of those keys carry more weight than they look:
-
-**`source_dir` is a statement about one machine** and is stripped from anything
-published. It exists so the manifest can be built from real files; it is not
-part of the dataset's identity.
-
-**`licenses:`** — if the redistribution terms have not been checked yet, leave
-it out and write `ethos:license_status: unresolved` instead. Every download then
-warns until somebody answers the question. An absent licence is a question, not
-a default; see [Licensing and immutability](../explanation/licensing.md).
-
-It is a **list**, so a dataset under several sets of terms needs no extension,
-and one entry can narrow itself to some of the files with `ethos:applies_to` —
-for upstream originals sitting beside conversions you made. See
-[More than one licence](../how-to/describe-a-dataset.md#more-than-one-licence).
-
-### If you made this data rather than downloading it
-
-The default assumption is that a dataset was mirrored as obtained. If it was
-not, say so — this is what tells a consumer whose rights they are dealing with:
-
-```yaml
-ethos:origin: created        # downloaded (default) | derived | created
+ethos:remote_prefix: station-temperatures-v1
+ethos:origin: created
 contributors:
-  - title: A Researcher
+  - title: Your name
     roles: [author]
-    organization: Forschungszentrum Jülich, ICE-2
-```
-
-Claiming `derived` or `created` obliges you to name an author; `derived` also
-needs `sources` (from what) and `ethos:derivation` (by what method). See
-[Say who made it](../how-to/describe-a-dataset.md#say-who-made-it).
-
-### When `source_dir` holds more than the dataset
-
-The common case is a shared download directory that also holds the zip the data
-was extracted from, a `wget-log`, and a colleague's test clip — on storage you
-may not have the write access, or the standing, to tidy up. Narrow the
-inventory instead of moving files:
-
-```yaml
-ethos:include:
-  - "wind_speed_cog_10m.tif"
-  - "wind_speed_cog_*0m.tif"
-
 ethos:exclude:
-  - "**/*.zip"        # the download archives, duplicates of what was extracted
-  - "test"            # a whole folder
-  - "wget-log"
+  - download.log
+licenses:
+  - name: CC0-1.0
+    path: https://creativecommons.org/publicdomain/zero/1.0/
 ```
 
-Because the filter is per dataset, **two datasets may share one `source_dir`**
-and each describe its own half. Full semantics in
-[Describe a dataset](../how-to/describe-a-dataset.md#narrowing-the-inventory).
+`source_dir` points at the files on this machine, relative to the dataset's own
+directory. It is what the inventory is built from, and it is never published.
+`ethos:exclude` leaves the download log out of the dataset without moving or
+deleting it. `ethos:origin: created` says that you made this data, which is why
+an author is named.
 
-## 2. Build the inventory
+## 3. Build the inventory
 
 ```bash
-ethos-data catalog build my-dataset
+cd source-catalogue
+ethos-data catalog build station-temperatures
 ```
 
-This walks `source_dir`, computes a SHA-256 per file, and writes
-`datapackage.json`. It also pulls shapefile companions in automatically and
-excludes VCS plumbing, `__pycache__` and root `README*`/`LICENSE*`/`CHANGELOG*`
-from the manifest, reporting how many files each filter removed so the number
-is never a surprise.
+```title="Output"
+  station-temperatures: 1 of 2 files under …/catalogue-lesson/incoming/station-temperatures selected, 1 filtered out
+  station-temperatures                   1 files     0.000 GB  public/public
+  datacatalog.json           1 datasets
+```
 
-!!! warning "Manifests are generated, never hand-edited"
-    `datapackage.json` and anything under `manifests/` are outputs. If one is
-    wrong, fix `dataset.yaml` and rebuild. `ethos-data catalog build --check` fails if
-    any manifest is stale, which is what CI should run.
+The log was filtered out. Open `datasets/station-temperatures/datapackage.json`:
+its one resource records the path, size and SHA-256 hash of `temperatures.csv`.
+The `datacatalog.json` next to `catalog.yaml` now lists the dataset.
 
-For a dataset of tens of thousands of files, add `ethos:shard_depth: N` and the
-inventory is split into `manifests/<directory-prefix>.json` files instead of
-one array, so a consumer selecting one tile does not parse the whole thing. See
-[sharding](../explanation/catalogue-format.md#sharding).
-
-## 3. Upload the bytes
+Change the data behind the inventory, and ask whether the catalogue still
+describes it:
 
 ```bash
-ethos-data catalog upload my-dataset --dry-run   # see what would transfer
-ethos-data catalog upload my-dataset             # do it, then verify
+printf 'station,value\nA,12.5\nB,14.0\n' > ../incoming/station-temperatures/temperatures.csv
+ethos-data catalog build --check
 ```
 
-The upload itself is one `rclone` call. The part that matters is what happens
-afterwards: `upload` sets `0755` on the dataset's prefix, then **HEADs every
-file in the manifest with no credentials at all** and reports anything
-unreadable or the wrong size. That is the only check that actually proves a
-stranger can download what you just published.
-
-```title="Want to see"
-readable       12/12
-storage locality of docs/README.md: ONLINE
+```title="Output (abridged)"
+Out of date (re-run `ethos-data catalog build`):
+  datasets/station-temperatures/datapackage.json
 ```
 
-It refuses `restricted` datasets outright, requires `--allow-internal` for
-`internal` ones, and warns on unresolved licensing.
-
-This step needs `rclone` and `oidc-agent`, and a one-time credential setup —
-see [Upload a dataset](../how-to/upload-a-dataset.md), which is the full
-runbook including the troubleshooting table.
-
-!!! danger "Published paths are immutable"
-    `upload` passes `rclone --immutable`, which fails loudly on an attempted
-    overwrite. If a dataset's bytes genuinely change, publish them at a **new
-    path** — someone may already have the old ones cached and hash-verified.
-
-After successful upload and verification, set `ethos:uploaded: true` in
-`dataset.yaml` and remove `source_dir`. Rebuild to preserve the accepted
-inventory while recording that dCache is the authoritative copy, including for
-test data. Retain the generated descriptor and shards in the source repository.
-
-## 4. Publish the catalogue entry
+`--check` writes nothing and exits with an error; it is what a catalogue's CI
+runs. Rebuild, and check again:
 
 ```bash
-ethos-data catalog build                        # rebuild everything
-ethos-data catalog publish ../ethos-data-catalog
+ethos-data catalog build station-temperatures
+ethos-data catalog build --check
+```
+
+This time the check ends with `All manifests up to date.` Rebuilding is how an
+inventory follows its files only until the dataset is uploaded. After that its
+published paths are immutable, and changed bytes get new paths.
+
+## 4. Publish the public view
+
+```bash
+ethos-data catalog publish ../public-catalogue
+```
+
+```title="Output"
+Published to …/catalogue-lesson/public-catalogue
+  + .gitignore
+  + README.md
+  + datacatalog.json
+  + datasets/station-temperatures/datapackage.json
+
+Review and commit in the public repo, then push.
 ```
 
 `publish` regenerates the public catalogue from every dataset marked
-`ethos:visibility: public`: `datacatalog.json`, each public
-`datasets/<name>/datapackage.json` with `source_dir`, `ethos:embargo` and
-`ethos:license_note` stripped, and the README table. Anything it no longer
-generates is deleted from the target, so the public repo can never drift from
-what this command would produce.
-
-Inspect the diff before committing. The failure that matters is a leak:
+`ethos:visibility: public`, and strips the fields that only make sense to a
+maintainer. Check that none of them leaked:
 
 ```bash
-rg -n 'source_dir|ethos:embargo|ethos:license_note|ethos:uploaded' ../ethos-data-catalog   # expect no output
+grep -rn -E 'source_dir|ethos:uploaded|ethos:license_note|ethos:embargo' ../public-catalogue
 ```
 
-After the checks pass, commit and release the paired source and public
-revisions. Deploy the complete reviewed internal tree to the cluster and
-synchronize its revision with JuGit; publish the generated public tree through
-the agreed GitHub release process. See
-[Catalogue hosting](../how-to/catalogue-hosting.md).
+No output means no leak. You now have both views of the catalogue: the
+internal one in `source-catalogue/datacatalog.json`, and the public one in
+`public-catalogue`. A hidden dataset would appear only in the first.
 
-!!! danger "Only ever point `publish` at the public repo"
-    It wipes everything in its target except `.git` before regenerating.
-    Against this repository, or with the wrong path, it deletes every
-    hand-written `dataset.yaml` and `catalog.yaml`. Git-tracked files come back
-    with `git checkout HEAD -- <path>`; working-tree-only files do not.
+## 5. Link the data into a shared cache
 
-## 5. Let a tool ask for it
+On a machine that several people or projects share, data already on disk does
+not need to be downloaded at all. Link it into the cache everybody uses:
 
-In the consuming tool's `collections.yaml`:
+```bash
+ethos-data catalog link-cache --root ../shared-cache --dry-run
+ethos-data catalog link-cache --root ../shared-cache
+cd ..
+```
+
+```title="Output (abridged)"
+  link         station-temperatures             -> …/catalogue-lesson/incoming/station-temperatures
+
+1 change(s) applied.
+```
+
+`shared-cache/station-temperatures` is now a symbolic link to
+`incoming/station-temperatures`. Nothing was copied.
+
+## 6. Read the dataset as a data user
+
+Create `collections.yaml` in `catalogue-lesson`:
 
 ```yaml
+catalog: public-catalogue/datacatalog.json
 collections:
-  offshore_siting:
-    title: Constraint layers for offshore siting
+  temperatures:
     include:
-      - dataset: my-dataset
-        files: ["*.shp"]
+      - dataset: station-temperatures
 ```
 
-Give the package maintainer the released catalogue version so they can update
-the pin and remove development overrides. Ordinary workflows need only the
-collection declaration; a small repository test-data snapshot may additionally
-carry generated metadata and files for offline tests. dCache remains the
-authoritative store for those files.
+Plan the collection the way a data user would, with the shared cache as the
+public cache:
 
-## Data that is not ready to publish
-
-Set `ethos:visibility: hidden` and say why:
-
-```yaml
-ethos:access: internal
-ethos:visibility: hidden
-ethos:embargo:
-  until: "2027-06-30"          # or "unspecified", with a reason
-  reason: "Pending publication of the accompanying paper"
-  becomes: public
+```bash
+ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
+  --root shared-cache plan temperatures
 ```
 
-Colleagues can then use it from the internal catalogue, while
-`ethos-data catalog publish` withholds it from the public one. The `embargo` block is
-**required**, so that nothing stays hidden by accident.
+```title="Output"
+public cache:    shared-cache
+used in place:      1 files        28 B  (namespace link, never copied)
+already cached:     0 files         0 B
+to download:        0 files         0 B
+```
 
-To release it later, set `ethos:access` and `ethos:visibility` to `public`, delete
-the `ethos:embargo` block, and rebuild. For bytes already marked uploaded, use
-`ethos-data catalog upload my-dataset --verify-only` to establish public
-readability; for a candidate not uploaded yet, perform the upload in step 3.
-Then generate and release the public metadata in step 4. Resource keys and
-checksums can remain unchanged when only access and visibility change, but
-consumers need a public catalogue version that includes the new entry.
+`--catalog` repeats the pin from the collections file, so that a catalogue you
+may have configured for your everyday work cannot take its place. Now fetch the
+collection and check it against the catalogue:
 
-## What you now know
+```bash
+ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
+  --root shared-cache fetch temperatures
+ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
+  --root shared-cache verify temperatures --deep
+```
+
+The fetch reports `1 used in place`, and verification ends with
+`1 file(s) match the catalogue.`
+
+## 7. Turn the link into a copy
+
+A link is only as durable as the directory it points at. Before that storage is
+reorganised or retired, replace the link with a verified copy that the cache
+owns:
+
+```bash
+ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
+  --root shared-cache materialize station-temperatures --dry-run
+ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
+  --root shared-cache materialize station-temperatures
+```
+
+```title="Output (abridged)"
+  materialized   station-temperatures  1 files, 28 bytes copied from …/catalogue-lesson/incoming/station-temperatures
+```
+
+`shared-cache/station-temperatures` is now a real directory, and
+`.ethos-data-materialized.json` inside it records where the copy came from. Run
+the `plan` command from step 6 again: the file is now `already cached` rather
+than `used in place`. `incoming/station-temperatures` is still there;
+`materialize` never deletes the original.
+
+## What you did
 
 | You ran | It did |
 |---|---|
-| `ethos-data catalog build <name>` | walked `source_dir`, hashed every file, wrote the manifest |
-| `ethos-data catalog upload <name>` | put the bytes on dCache, then proved anonymous readers can get them |
-| `ethos-data catalog publish <target>` | regenerated the public catalogue, stripping everything internal |
+| `ethos-data catalog build` | inventoried `source_dir`, left out the excluded log, hashed the rest |
+| `ethos-data catalog build --check` | compared the inventory with the files, and wrote nothing |
+| `ethos-data catalog publish` | generated the public view without maintainer-only fields |
+| `ethos-data catalog link-cache` | linked data already on disk into a shared cache |
+| `ethos-data materialize` | replaced that link with a verified copy |
+
+A real catalogue has one more step between building and publishing:
+`ethos-data catalog upload` puts public bytes on dCache and proves that anyone
+can download them. It needs storage credentials, so this lesson left it out.
+
+When you are done, delete the `catalogue-lesson` directory.
 
 ## Next
 
-- [Accept a dataset proposal](../how-to/accept-a-dataset.md) — the review
-  checklist and package-maintainer handoff.
-- [Describe a dataset](../how-to/describe-a-dataset.md) — every `dataset.yaml`
-  key, and the include/exclude semantics in full.
-- [Upload a dataset](../how-to/upload-a-dataset.md) — credentials, the doors,
-  and what to do when it fails.
-- [Withdraw a dataset](../how-to/withdraw-a-dataset.md) — and why the order is
-  the opposite of publishing.
+- [Accept a dataset proposal](../how-to/accept-a-dataset.md) — the checklist for
+  a real submission, from review to release.
+- [Upload a dataset](../how-to/upload-a-dataset.md) — credentials, transfer, and
+  verification.
+- [Add internal and restricted datasets](../how-to/add-internal-and-restricted-data.md)
+  — data that is not uploaded publicly.
+- [Migrate cluster data](../how-to/migrate-cluster-data.md) — linking and
+  copying on real shared storage.

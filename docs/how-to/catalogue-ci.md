@@ -8,7 +8,7 @@ the maintainer tooling installed:
 
 ```bash
 ethos-data catalog build --check
-ethos-data catalog publish ../ethos-data-catalog --check
+ethos-data catalog publish ../ETHOS.Data-Catalogue --check
 ```
 
 Both commands compare generated output and fail if it is stale without writing

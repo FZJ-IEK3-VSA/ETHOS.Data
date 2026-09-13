@@ -1,16 +1,10 @@
 # Your first fetch
 
-You use ETHOS.RESKit and want to obtain the data needed by a workflow. This
-lesson discovers its collections, fetches a selected input, and reads the
-returned paths in Python. It assumes `ethos-data` and RESKit are installed in
-your active environment and that you are in a RESKit source checkout containing
-`reskit/data/collections.yaml`. For another package, use its shipped collections
-file and collection names.
-
-Publicly downloadable data needs no storage credentials. You do not need
-access to the internal catalogue repository. If your cluster provides a local
-catalogue instead, use the override in
-[Get data for a task](../how-to/get-data-for-a-task.md#use-the-clusters-internal-catalogue).
+You use ETHOS.RESKit and want the data one of its workflows needs. In this
+lesson you find the collections RESKit declares, fetch one, and use the files
+from Python. It assumes `ethos-data` and RESKit are installed in your active
+environment; nothing else needs to be set up. For another package, replace
+`reskit` and the names below with that package's.
 
 ## 1. See where data will go
 
@@ -18,98 +12,96 @@ catalogue instead, use the override in
 ethos-data config show
 ```
 
-The output shows the public cache, configured local roots, any staging root,
-and the configuration source for each setting. With no configuration, the
-public cache uses your operating system's per-user cache directory. If that
-volume is too small, choose a location with enough space before fetching:
+The first lines name the public cache and where that setting came from. With
+nothing configured, it is your operating system's per-user cache directory. If
+that disk is too small, choose another directory before fetching:
 
 ```bash
-ethos-data config set-cache /data/ethos-data
+ethos-data config set-public-cache /data/ethos-data
 ```
 
-Replace the example path with a writable directory on your machine. The cache
-can be shared by several consuming packages.
-
-## 2. Discover the package's collections
+## 2. Find the package's collections
 
 ```bash
-ethos-data -c reskit/data/collections.yaml list
+ethos-data -p reskit list
 ```
 
-The collections file declares the package's selections and pins its catalogue.
-RESKit includes collections such as `test_suite`, `onshore_wind`, `solar`, and
-`all`. This lesson uses `onshore_wind`; inspect its size before proceeding.
+`-p reskit` reads the collections file that RESKit ships. The list includes
+`test_suite`, `onshore_wind`, `solar` and `all`, each with its size. This
+lesson uses `onshore_wind`.
 
-Catalogue metadata may be retrieved from the configured host. This step does
-not download the selected dataset bytes.
-
-## 3. Inspect the selection and transfer estimate
+## 3. Look before you download
 
 ```bash
-ethos-data -c reskit/data/collections.yaml info onshore_wind
-ethos-data -c reskit/data/collections.yaml plan onshore_wind
+ethos-data -p reskit info onshore_wind
+ethos-data -p reskit plan onshore_wind
 ```
 
-`info` lists the files. Selecting `turbinePlacements.shp` also selects the
-recorded shapefile companions, such as `.dbf` and `.shx`, needed to read it.
-
-`plan` shows the cache location, files already present, files used in place,
-and estimated downloads. Planning can load remote descriptors and shards; it
-does not fetch dataset bytes. Its size checks are a quick estimate rather than
-a checksum verification.
+`info` lists the files in the collection. `plan` shows how many of them are
+already on this machine and how much would be downloaded. Neither downloads the
+data itself.
 
 ## 4. Fetch the collection
 
 ```bash
-ethos-data -c reskit/data/collections.yaml fetch onshore_wind
+ethos-data -p reskit fetch onshore_wind
 ```
 
-A downloaded file is stored under `<cache>/<dataset>/<resource path>` and
-checked against its recorded checksum. A dataset configured for local access
-is read in place. Run the same fetch again: valid cached downloads are reused.
-This also works when another package originally fetched the same resources.
+Run the same command again: it reports that every file is already present and
+downloads nothing. Another package asking for the same files later finds them
+too.
 
-## 5. Obtain the paths from Python
+## 5. Use the files from Python
+
+Get the path of one file, and of one folder:
 
 ```python
-from reskit import data
+import ethos_data
 
-files = data.fetch("onshore_wind")
-turbines = files.one("turbinePlacements.shp")
+placements = ethos_data.path("reskit-test-data/placements/turbine_placements.csv")
+era5_folder = ethos_data.path("reskit-test-data/era5")
+print(placements)
+print(era5_folder)
 ```
 
-`files` maps resource keys such as `reskit-test-data/turbinePlacements.shp` to
-`pathlib.Path` objects. Its `.paths` property returns all paths, while
-`.one("suffix")` returns one unambiguous match and raises for an absent or
-ambiguous suffix. The result can be passed to the corresponding workflow or
-reader:
+Both are absolute paths into the cache. Hand them to RESKit as you would any
+other path:
 
 ```python
-import geopandas as gpd
+import pandas as pd
 
-sites = gpd.read_file(turbines)
+sites = pd.read_csv(placements)
 ```
 
-If a package does not provide a wrapper, the underlying call is:
+Now get the whole collection at once:
 
 ```python
-from ethos_data import fetch
-
-files = fetch("onshore_wind", collections="reskit/data/collections.yaml")
+files = ethos_data.fetch("onshore_wind", package="reskit")
+print(len(files), "files")
 ```
+
+`files` maps each key, such as `reskit-test-data/era5/…`, to its path.
 
 ## 6. Check the stored files
 
 ```bash
-ethos-data -c reskit/data/collections.yaml verify onshore_wind --deep
+ethos-data -p reskit verify onshore_wind --deep
 ```
 
-This compares checksums, including for catalogued files read in place. Without
-`--deep`, verification compares sizes. Inspect failures before choosing a
-[repair operation](../how-to/verify-and-repair.md).
+Every file is compared with the checksum recorded in the catalogue, and the
+command ends with the number of files that match.
 
-You have now followed selection, transfer, reuse, and verification. Continue
-with [Get data for a task](../how-to/get-data-for-a-task.md) for smaller subsets
-and the package's `all` collection, or
-[Troubleshoot catalogue access](../how-to/troubleshoot-catalogue.md) if your
-configuration or available data differs from the lesson.
+## What you did
+
+You found a package's collections, looked at one before downloading it,
+fetched it, got file and folder paths from Python, and verified the result —
+without configuring a catalogue or a collections file.
+
+## Next
+
+- [Get data for a task](../how-to/get-data-for-a-task.md) — the same calls for
+  your own scripts and notebooks.
+- [Configure the cache](../how-to/configure-the-cache.md) — put the cache
+  somewhere specific.
+- [Troubleshoot catalogue access](../how-to/troubleshoot-catalogue.md) — when
+  something differs from this lesson.

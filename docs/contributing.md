@@ -1,8 +1,8 @@
 # Contributing
 
 `ethos-data` lives at
-[iek-3/shared-code/ethos-data](https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data)
-on jugit. Issues, merge requests and questions are all welcome.
+[FZJ-IEK3-VSA/ETHOS.Data](https://github.com/FZJ-IEK3-VSA/ETHOS.Data)
+on GitHub. Issues, pull requests and questions are all welcome.
 
 ## What lives where
 
@@ -13,11 +13,11 @@ saves most of the confusion:
 |---|---|---|
 | **ethos-data** (this one) | the code: the reader (`ethos_data`) and the writer (`ethos_data.maintain`) | the *format* or the *tooling* changes |
 | **ethos-data-catalog-internal** | metadata only: `catalog.yaml`, `datasets/*/dataset.yaml`, generated manifests | a *dataset* is added, described, embargoed or withdrawn |
-| **ethos-data-catalog** | the generated public subset | never by hand — it is overwritten by `ethos-data catalog publish` |
+| **ETHOS.Data-Catalogue** | the generated public subset | never by hand — it is overwritten by `ethos-data catalog publish` |
 
 A tool that *consumes* data (RESKit, say) changes none of these: it only edits
 its own `collections.yaml`. See
-[Use it from your own package](tutorials/use-from-a-library.md).
+[Use ETHOS.Data in your package](how-to/use-from-a-package.md).
 
 Both halves of the format — the code that writes descriptors and the code that
 reads them — deliberately live in this one distribution. A format whose writer
@@ -28,8 +28,8 @@ to notice.
 ## Development setup
 
 ```bash
-git clone https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data.git
-cd ethos-data
+git clone https://github.com/FZJ-IEK3-VSA/ETHOS.Data.git
+cd ETHOS.Data
 mamba env create -f environment.yml
 mamba activate ethos_data_env
 pip install -e . --no-deps
@@ -89,6 +89,12 @@ section by construction:
 
 If a page would fit two of those, it is two pages.
 
+Tutorials and how-to guides are the pair that blur most easily. A page that
+gets one real task done is a how-to guide, even when it is written for
+newcomers. A tutorial never sends the reader into a how-to guide halfway
+through the lesson, and a how-to guide does not stop to teach; each links to
+the other only as a next step.
+
 ### Architecture documentation
 
 The [architecture guide](explanation/architecture/index.md) follows the twelve named arc42 sections
@@ -108,17 +114,20 @@ render and inspect both themes before committing the source and generated SVGs.
 
 ### Logo
 
-The ETHOS logo family uses the shared layout in `docs/branding/logo.tex`,
-package symbols in `docs/branding/icons.tex`, and names in
-`docs/branding/packages.json`. The typeface is Weissenhof Grotesk from the local
-`docs/font/` directory. Rebuild ETHOS.DATA with `python docs/branding/render.py`,
-or all eight package designs with `python docs/branding/render.py --all --preview`.
-The preview option uses `rsvg-convert` for review sheets and PNG favicons.
+These pages show no ETHOS.Data product logo yet: the ETHOS logo family is a
+design proposal that has not been adopted. Its sources stay in `docs/branding/`
+— the shared layout in `logo.tex`, package symbols in `icons.tex`, and names in
+`packages.json`. Tooling, proportions and asset usage are described in
+`docs/branding/README.md`. The typeface is Weissenhof Grotesk, read from a local
+`docs/font/` directory that is not part of the repository.
 
-Tooling, proportions and asset usage are described in `docs/branding/README.md`.
-Commit the outlined SVGs in `docs/assets/branding/`; documentation builds use
-these files directly. Local fonts and design references are excluded from the
-generated site.
+Once the logo is adopted, render it with `python docs/branding/render.py` (or
+all eight package designs with `python docs/branding/render.py --all --preview`,
+which uses `rsvg-convert` for review sheets and PNG favicons), commit the
+outlined SVGs in `docs/assets/branding/`, and only then reference them — from
+`theme.logo` and `theme.favicon` in `mkdocs.yml` and from the logo row on the
+landing page. A reference to an asset that does not exist does not fail
+`mkdocs build --strict`; it shows a broken image on every page.
 
 ### Diagrams
 

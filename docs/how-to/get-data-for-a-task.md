@@ -1,89 +1,60 @@
 # Get data for a task
 
-Use the collections shipped by your package to select its input data. You do
-not need a checkout of the internal catalogue or credentials for public data.
-The examples below run from an ETHOS.RESKit source checkout; replace the
-collections path and names for another package.
+Get the input data an ETHOS tool or workflow needs, from a script or from the
+command line. The examples use ETHOS.RESKit; replace `reskit` and the dataset
+names with those of your package.
 
-## Discover and inspect collections
+## In a script or notebook
 
-```bash
-ethos-data -c reskit/data/collections.yaml list
-ethos-data -c reskit/data/collections.yaml info onshore_wind
-ethos-data -c reskit/data/collections.yaml plan onshore_wind
-```
-
-`list` shows the available collection names. `info` lists selected files,
-including sidecars. `plan` estimates how many bytes need downloading and shows
-files used in place or unavailable on this machine. These commands do not
-download dataset bytes, but may retrieve catalogue metadata and inventory
-shards if these are remote and not cached.
-
-## Fetch the task's inputs
-
-```bash
-ethos-data -c reskit/data/collections.yaml fetch onshore_wind
-```
-
-From Python:
+Get the path of a file or folder:
 
 ```python
-from reskit import data
+import ethos_data
 
-files = data.fetch("onshore_wind")
-turbines = files.one("turbinePlacements.shp")
+placements = ethos_data.path("reskit-test-data/placements/turbine_placements.csv")
+era5_folder = ethos_data.path("reskit-test-data/era5")
 ```
 
-Downloaded files go into the configured cache. Existing valid cached files
-are reused, including files another package fetched previously. Configured
-local roots are read in place; see [Use data already on disk](use-data-already-on-disk.md).
+`path()` downloads the data the first time and returns the absolute path of the
+copy in the cache. The key is `<dataset>/<file>` for a file, and
+`<dataset>/<folder>` or `<dataset>` for a folder. Asking for a `.shp` also
+fetches its `.dbf`, `.shx` and other companion files.
 
-## Fetch everything the package declares
+To use the catalogue version the package pins, add the package:
 
-RESKit declares an aggregate collection called `all`:
+```python
+era5_folder = ethos_data.path("reskit-test-data/era5", package="reskit")
+```
+
+Get a whole collection the package declares:
+
+```python
+files = ethos_data.fetch("onshore_wind", package="reskit")
+```
+
+`files` maps each key to its path. `files.paths` lists all paths, and
+`files.one("gwa100-like.tif")` returns the one file whose key ends with that
+name.
+
+## On the command line
 
 ```bash
-ethos-data -c reskit/data/collections.yaml plan all
-ethos-data -c reskit/data/collections.yaml fetch all
+ethos-data -p reskit list                  # the package's collections
+ethos-data -p reskit info onshore_wind     # the files in one collection
+ethos-data -p reskit plan onshore_wind     # what a fetch would download
+ethos-data -p reskit fetch onshore_wind    # download it
+ethos-data path reskit-test-data/era5      # print the path of a file or folder
 ```
 
-`all` is a collection name defined by RESKit, not a special command to download
-the entire institute catalogue. Another package may use a different name or
-have no aggregate collection. Inspect `list` and the package documentation
-before choosing. Package maintainers can define aggregates using
-[`extends`](write-a-collections-file.md).
-
-For a selection smaller than an existing collection, write a small personal
-collections file with the same catalogue pin and narrower `files` patterns.
-This changes what you request without editing the catalogue or package files.
-
-## Use the cluster's internal catalogue
-
-If your administrator provides a filesystem catalogue, point the consumer at
-its generated `datacatalog.json`. For example:
+RESKit's `all` collection holds every input the package uses:
 
 ```bash
-ethos-data -c reskit/data/collections.yaml \
-  --catalog /shared/ice2/catalogue/current/datacatalog.json list
+ethos-data -p reskit fetch all
 ```
 
-The path is an example; use the one your cluster provides. For RESKit's Python
-wrapper, the corresponding override is:
+## If a dataset is not available
 
-```bash
-export RESKIT_DATA_CATALOG=/shared/ice2/catalogue/current/datacatalog.json
-```
-
-This chooses metadata. It does not grant access to restricted data or configure
-the cache. Use [Configure the cache](configure-the-cache.md) and
-[Work with restricted data](restricted-data.md) for those settings. A `current`
-path may advance; use a versioned catalogue directory to reproduce a run.
-
-## If a selection is unavailable
-
-An unknown dataset can mean the wrong catalogue version, an internal dataset
-absent from the public view, or a dataset not yet accepted. An access error can
-mean a missing local root for licensed data. Use
-[Troubleshoot catalogue access](troubleshoot-catalogue.md) to distinguish them.
-Only use `--skip-unavailable` when your workflow can explicitly handle omitted
-inputs; required data should cause the run to fail.
+- Licensed or proprietary data: [Work with restricted data](restricted-data.md).
+- Data that is only in the internal catalogue:
+  [Add the internal data catalogue](add-internal-catalogue.md).
+- Anything else: [Troubleshoot catalogue access](troubleshoot-catalogue.md).

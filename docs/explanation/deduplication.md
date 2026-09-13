@@ -85,7 +85,7 @@ resolved — a difference that shows up as a missing file, far from its cause.
 A collections file pins its catalogue with a URL:
 
 ```yaml
-catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ethos-data-catalog/v2026.09/datacatalog.json
+catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/v2026.09/datacatalog.json
 ```
 
 A **tag**, not a branch. A released version of a tool must resolve to the same

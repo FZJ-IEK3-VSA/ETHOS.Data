@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools>=64.0.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "ethos_data"
-version = "0.1.0"
-description = "Shared, deduplicating data access for ICE-2 scientific software"
+dynamic = ["version"]
+description = "Shared, deduplicating data access for ETHOS tools and workflows"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
@@ -25,8 +25,17 @@ progress = ["tqdm"]
 # There was a second entry point, `ice2-catalog`, until the two were unified.
 ethos-data = "ethos_data.cli:main"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.hatch.version]
+# One source for the version: ethos_data.__version__. With a second copy here,
+# the installed metadata and the imported package could disagree silently.
+path = "src/ethos_data/__init__.py"
 
-[tool.setuptools.package-data]
-"ethos_data.maintain" = ["scripts/*.sh"]
+[tool.hatch.build.targets.wheel]
+# Hatchling ships every non-ignored file under the package directory, so the
+# maintainer scripts (maintain/scripts/*.sh) need no package-data entry.
+packages = ["src/ethos_data"]
+
+[tool.hatch.build.targets.sdist]
+# Without this the sdist takes everything .gitignore does not exclude -- docs,
+# local fonts, diagram sources. Source and tests are what a rebuild needs.
+include = ["/src", "/tests"]

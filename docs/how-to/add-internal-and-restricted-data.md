@@ -30,7 +30,7 @@ dataset's restricted access class.
 ## 2. Describe the existing bytes
 
 Work in a maintainer checkout, for example
-`/shared/ice2/ethos-data-catalog-internal`. The paths and names in this guide are
+`/shared/ethos/ethos-data-catalog-internal`. The paths and names in this guide are
 examples; substitute the actual cluster paths. Keep edits out of the versioned
 catalogue directory currently served to readers.
 
@@ -89,8 +89,8 @@ the next steps configure their location separately.
 From anywhere, pass the source checkout to the maintainer command:
 
 ```bash
-ethos-data catalog --catalog-root /shared/ice2/ethos-data-catalog-internal build licensed-example
-ethos-data catalog --catalog-root /shared/ice2/ethos-data-catalog-internal build licensed-example --check
+ethos-data catalog --catalog-root /shared/ethos/ethos-data-catalog-internal build licensed-example
+ethos-data catalog --catalog-root /shared/ethos/ethos-data-catalog-internal build licensed-example --check
 ```
 
 Review `datasets/licensed-example/datapackage.json`, any generated shards, and
@@ -114,12 +114,12 @@ Or let the cluster administrator establish a restricted namespace and configure
 its root for readers:
 
 ```text
-/shared/ice2/restricted/
+/shared/ethos/restricted/
   licensed-example/inputs/...
 ```
 
 ```bash
-ethos-data config set-restricted-cache /shared/ice2/restricted --scope user
+ethos-data config set-restricted-cache /shared/ethos/restricted --scope user
 ```
 
 An administrator can use `--scope site` for a machine default. A directory that
@@ -134,10 +134,10 @@ permissions must still restrict internal directories to the appropriate users.
 ## 5. Verify a complete dataset and use it from a package
 
 Create a maintainer collections file, such as
-`/shared/ice2/maintenance-collections.yaml`:
+`/shared/ethos/maintenance-collections.yaml`:
 
 ```yaml
-catalog: /shared/ice2/ethos-data-catalog-internal/datacatalog.json
+catalog: /shared/ethos/ethos-data-catalog-internal/datacatalog.json
 collections:
   check_licensed_example:
     include:
@@ -146,10 +146,10 @@ collections:
 ```
 
 ```bash
-ethos-data --catalog /shared/ice2/ethos-data-catalog-internal/datacatalog.json \
-  -c /shared/ice2/maintenance-collections.yaml plan check_licensed_example
-ethos-data --catalog /shared/ice2/ethos-data-catalog-internal/datacatalog.json \
-  -c /shared/ice2/maintenance-collections.yaml verify check_licensed_example --deep
+ethos-data --catalog /shared/ethos/ethos-data-catalog-internal/datacatalog.json \
+  -c /shared/ethos/maintenance-collections.yaml plan check_licensed_example
+ethos-data --catalog /shared/ethos/ethos-data-catalog-internal/datacatalog.json \
+  -c /shared/ethos/maintenance-collections.yaml verify check_licensed_example --deep
 ```
 
 Confirm the plan names the intended in-place location and verification reports
@@ -157,9 +157,9 @@ all expected files as `ok`. Do not accept an empty selection or skipped required
 files as validation. Inspect `ethos-data config show` for per-dataset overrides
 and active staging if the location is unexpected.
 
-The package maintainer can then select this dataset in a package collection and
-point their wrapper at the served internal catalogue, for example through
-`RESKIT_DATA_CATALOG`. See [Catalogue hosting](catalogue-hosting.md) and
+The package maintainer can then select this dataset in a package collection.
+Users read it through the served internal catalogue; see
+[Add the internal data catalogue](add-internal-catalogue.md) and
 [Write a collections file](write-a-collections-file.md).
 
 ## 6. Add more files later

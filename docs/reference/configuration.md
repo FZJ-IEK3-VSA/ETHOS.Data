@@ -60,23 +60,23 @@ Written into a config file, or into `ethos-data.yaml` for the project scope.
 | `staging_cache` | `config set-staging-cache` | work in progress that shadows the catalogue |
 | `skip_unavailable` | `config set-skip-unavailable` | `true` to carry on without data this machine cannot reach |
 | `dataset_roots` | `config set-root <dataset> <dir>` | a mapping of dataset name to directory. Roots from different scopes **combine** rather than clobbering each other |
-| `catalog` | `config set-catalog` | a default catalogue location, so `--catalog` is not needed every time |
+| `catalog` | `config set-catalog` | the catalogue to use instead of a collections file's pin or the built-in public catalogue |
 | `collections` | `config set-collections` | a default collections file, so `-c` is not needed every time |
 | `publication_url` | `config set-publication-url` | fetch bytes from a different door than the catalogue declares |
 
 A minimal project file:
 
 ```yaml title="ethos-data.yaml"
-cache_dir: /data/my-analysis/ethos-data
+public_cache: /data/my-analysis/ethos-data
 ```
 
 A fuller one:
 
 ```yaml title="ethos-data.yaml"
-public_cache: /projects5/ice2_data_cache_public
-restricted_cache: /projects5/ice2_data_restricted
+public_cache: /shared/ethos/public
+restricted_cache: /shared/ethos/restricted
 skip_unavailable: false
-catalog: /projects2/ethos-data-catalog-internal/datacatalog.json
+catalog: /shared/ethos/catalogue/current/datacatalog.json
 dataset_roots:
   submarine-cables: /benchtop/shared_data/SubmarineCables
 ```
@@ -88,6 +88,7 @@ dataset_roots:
 | `ETHOS_DATA_DIR` | `public_cache` |
 | `ETHOS_RESTRICTED_DIR` | `restricted_cache` |
 | `ETHOS_STAGING_DIR` | `staging_cache` |
+| `ETHOS_DATA_CATALOG` | `catalog` |
 | `ETHOS_SKIP_UNAVAILABLE` | `skip_unavailable` |
 | `ETHOS_CATALOG_NO_CACHE` | if set, a fetched catalogue descriptor is never cached on disk |
 
@@ -111,8 +112,12 @@ read in place follows from whether its entry is a symbolic link. See
 Strongest first:
 
 1. `--catalog` on the command line, or `catalog=` in Python
-2. the `catalog:` key in a config file (`config set-catalog`)
-3. the `catalog:` key at the top of the collections file
+2. `$ETHOS_DATA_CATALOG`
+3. the `catalog:` key in a config file (`config set-catalog`)
+4. the `catalog:` key at the top of the collections file — for `-p` /
+   `package=`, the file the package ships
+5. the built-in public catalogue,
+   `https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json`
 
 A local relative path in a collections file is resolved **relative to that
 file**, not to the caller's working directory. A `@ref` suffix pins a version:
@@ -126,9 +131,22 @@ recognised as moving and re-fetched every time.
 
 Strongest first:
 
-1. `-c` / `--collections` on the command line
+1. `-c` / `--collections` on the command line, or `-p` / `--package` for the
+   file an installed package registers
 2. the `collections:` key in a config file (`config set-collections`)
 3. `collections.yaml` in the current directory
+
+In Python, `fetch()` and `resolve()` take either `collections=` (a path) or
+`package=` (a registered package name). `path()` needs neither.
+
+A package registers its collections file with an entry point in the
+`ethos_data.collections` group; the entry point's value names the module whose
+directory holds `collections.yaml`:
+
+```toml title="pyproject.toml"
+[project.entry-points."ethos_data.collections"]
+reskit = "reskit.data"
+```
 
 !!! warning
     A project-scope `collections` setting applies everywhere the project config

@@ -31,7 +31,7 @@ or delete the dataset directory entirely if it is never coming back.
 
 ```bash
 ethos-data catalog build
-ethos-data catalog publish ../ethos-data-catalog
+ethos-data catalog publish ../ETHOS.Data-Catalogue
 ```
 
 This removes it from the public `datacatalog.json` and deletes its

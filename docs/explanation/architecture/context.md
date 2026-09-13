@@ -38,7 +38,7 @@ missing optional dataset is acceptable to the calculation.
 The package does not host a central data service of its own, run calculations,
 or automatically provision licensed datasets. For first use, follow
 [Your first fetch](../../tutorials/first-fetch.md); for integration, see
-[Use it from your own package](../../tutorials/use-from-a-library.md).
+[Use ETHOS.Data in your package](../../how-to/use-from-a-package.md).
 
 The intended internal metadata source is a generated catalogue on cluster
 storage, synchronised with JuGit. Public metadata is a reviewed, stripped view
