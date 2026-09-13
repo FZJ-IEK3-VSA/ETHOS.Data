@@ -344,7 +344,12 @@ def export_bundle(
                     url=f"{publication}/{prefix}/{resource.path}", known_hash=resource.hash,
                     fname=destination.name, path=destination.parent, progressbar=progressbar,
                 )
-        (temporary / MANIFEST).write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        # newline as well as encoding: a bundle is committed to the package that
+        # ships it, so a manifest written on Windows must not differ from the
+        # same manifest written on Linux in every line.
+        (temporary / MANIFEST).write_text(
+            json.dumps(document, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8", newline="\n")
         bundle = load_bundle(temporary)
         for name in members:
             bundle.fetch(name)

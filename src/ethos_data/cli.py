@@ -58,6 +58,33 @@ def _human(num_bytes: int) -> str:
     return f"{value:.1f} TB"
 
 
+def _use_utf8_output() -> None:
+    """Let this command's output survive being redirected on Windows.
+
+    Attached to a console, Python already writes Windows' own UTF-16 console
+    API. Redirect or pipe the same command and ``sys.stdout`` falls back to the
+    *locale* encoding instead -- cp1252 on a German machine -- so a catalogue
+    holding a dataset titled in Chinese, or an attribution naming Forschungs-
+    zentrum Jülich, turned ``ethos-data list > datasets.txt`` into a
+    UnicodeEncodeError traceback while the same command printed fine on screen.
+
+    Done here rather than in the library: a command line tool owns its own
+    streams, an imported module does not.
+    """
+    if os.name != "nt":
+        return
+    for stream in (sys.stdout, sys.stderr):
+        # Absent when the stream has been replaced by something that is not a
+        # TextIOWrapper -- a test harness capturing output, most often.
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8")
+        except (OSError, ValueError):  # pragma: no cover - stream already closed
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point.  Turns a refusal into a message, not a traceback.
 
@@ -66,6 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     user needs plus the command that fixes it. Wrapped in a stack trace, that
     reads like a crash and the advice gets lost in the noise.
     """
+    _use_utf8_output()
     try:
         return _main(argv)
     except (AccessError, UnknownDataset, BundleError, CollectionsNotFound) as error:

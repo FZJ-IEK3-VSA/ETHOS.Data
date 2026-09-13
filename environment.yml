@@ -2,13 +2,23 @@ name: ethos_data_env
 channels:
   - conda-forge
 dependencies:
-  - python 
+  - python >=3.10
   - pooch
   - pyyaml
   - platformdirs
   - tqdm
-  - oidc-agent
   - rclone
+  # oidc-agent is deliberately NOT listed, because conda-forge skips it on
+  # Windows -- upstream builds the CLI there only against the MSYS2 POSIX
+  # runtime and recommends WSL instead -- and an environment.yml has no
+  # per-platform selectors, so naming it here makes `mamba env create` fail
+  # outright on Windows rather than just omitting it.
+  #
+  # Only `ethos-data catalog upload` and `catalog check-store` need it, and both
+  # want it on PATH rather than importable. Install it alongside:
+  #     mamba install -n <env> oidc-agent      # Linux and macOS
+  # On Windows, run those two commands from WSL. Everything else in the package
+  # -- the whole read side, and `catalog build` / `publish` -- works without it.
   # dev
   - pytest
   - ruff

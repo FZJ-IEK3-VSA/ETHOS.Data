@@ -4,7 +4,7 @@
 [pooch](https://www.fatiando.org/pooch/) (hash-verified downloads), PyYAML and
 [platformdirs](https://platformdirs.readthedocs.io/) (cross-platform config and
 cache locations), so it installs cleanly next to whatever scientific stack you
-already have. Python 3.9 or newer.
+already have. Python 3.10 or newer.
 
 Installing it gives you **two commands**:
 
@@ -68,6 +68,15 @@ Python dependencies, which is why there is no install extra to remember:
 ```bash
 mamba install -c conda-forge rclone oidc-agent
 ```
+
+!!! warning "On Windows: `upload` and `check-store` need WSL"
+
+    conda-forge has no `oidc-agent` for Windows — upstream builds the CLI there
+    only against the MSYS2 POSIX runtime, and recommends WSL instead — so that
+    command fails on Windows and `environment.yml` does not list the package.
+    Install `rclone` alone, and run those two commands from a WSL shell, where
+    the Linux package works. `check-store` is a shell script and also wants a
+    `bash` on `PATH`; the one Git for Windows ships will do.
 
 Everything else — `build`, `publish`, `link-cache` — needs only the package.
 The one-time credential setup is in

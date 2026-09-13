@@ -249,7 +249,11 @@ class TestMembersDifferInAccess:
             from ethos_data.maintain.publish import render
 
             files = render(catalog)
-            written = sorted(str(p) for p in files)
+            # as_posix, not str: render() keys are relative Paths, which stringify
+            # with backslashes on Windows. The catalogue they describe is a git
+            # tree addressed with forward slashes on every platform, so that is
+            # the spelling to compare against.
+            written = sorted(p.as_posix() for p in files)
             assert "datasets/family/alpha/datapackage.json" in written
             assert "datasets/family/datapackage.json" in written
             assert not any("beta" in p for p in written)

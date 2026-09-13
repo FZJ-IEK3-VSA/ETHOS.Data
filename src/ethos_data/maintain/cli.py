@@ -27,7 +27,9 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from . import resolve_catalog_root
@@ -41,8 +43,27 @@ def check_store(vo: str) -> int:
     It reproduces exactly what a maintainer types by hand against curl and
     rclone; rewriting it in Python would make it a worse diagnostic, because the
     commands it prints on failure would no longer be the ones it ran.
+
+    Invoked through ``bash`` rather than executed directly. Windows has no
+    concept of an executable bit and cannot run a ``.sh`` from CreateProcess at
+    all -- ``os.access(..., X_OK)`` answers yes for any readable file there, so
+    the direct call sailed past the guard and died in the kernel instead. Git
+    for Windows and the WSL distributions both put a usable bash on PATH.
     """
     script = SCRIPTS / "check_dcache_access.sh"
+    if os.name == "nt":
+        bash = shutil.which("bash")
+        if bash is None:
+            print(
+                "check-store needs bash, which is not on PATH.\n"
+                "It is a shell script on purpose -- it prints the very curl and rclone\n"
+                "commands it ran, so that a failure can be retried by hand.\n"
+                "Install Git for Windows (which ships one) or run it from WSL:\n"
+                f"    bash {script} {vo}",
+                file=sys.stderr,
+            )
+            return 1
+        return subprocess.run([bash, str(script), vo]).returncode
     if not os.access(script, os.X_OK):
         script.chmod(0o755)
     return subprocess.run([str(script), vo]).returncode

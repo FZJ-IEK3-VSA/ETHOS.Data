@@ -66,14 +66,14 @@ def _read(location: str) -> tuple[str, str]:
     """
     if not location.startswith(("http://", "https://")):
         path = Path(location).expanduser().resolve()
-        return path.read_text(), path.parent.as_posix() + "/"
+        return path.read_text(encoding="utf-8"), path.parent.as_posix() + "/"
 
     base = location.rsplit("/", 1)[0] + "/"
     cacheable = _pinned(location)
     cached = _cache_path(location) if cacheable else None
 
     if cached is not None and cached.is_file():
-        return cached.read_text(), base
+        return cached.read_text(encoding="utf-8"), base
 
     request = urllib.request.Request(location, headers={"Accept-Encoding": "gzip"})
     with urllib.request.urlopen(request, timeout=60) as response:
@@ -86,7 +86,12 @@ def _read(location: str) -> tuple[str, str]:
         cached.parent.mkdir(parents=True, exist_ok=True)
         # Write-then-rename: two processes racing must never see a half file.
         temporary = cached.with_suffix(cached.suffix + f".{os.getpid()}.part")
-        temporary.write_text(text)
+        # Both arguments are load-bearing: the descriptor came off the wire as
+        # UTF-8 with LF, and the cached copy has to be the same file. Left to its
+        # defaults write_text encodes with the locale codec and rewrites every
+        # newline as CRLF on Windows, so the same catalogue would cache
+        # differently depending on which machine fetched it.
+        temporary.write_text(text, encoding="utf-8", newline="\n")
         temporary.replace(cached)
     return text, base
 

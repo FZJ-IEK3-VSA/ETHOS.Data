@@ -35,7 +35,6 @@ remove the staging entry. Nothing in the calling code changes.
 from __future__ import annotations
 
 import json
-import os
 import time
 import warnings
 from dataclasses import dataclass, replace
@@ -43,7 +42,7 @@ from pathlib import Path
 
 from .access import AccessError
 from .catalog import Catalog, Dataset, Resource
-from .config import Roots, resolve_staging_cache
+from .config import Roots, current_user, resolve_staging_cache
 
 __all__ = [
     "NEW",
@@ -136,7 +135,7 @@ def _read_index(root: Path) -> dict:
     if not path.is_file():
         return {}
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except ValueError:
         # A corrupt index costs provenance, not data -- the entries on disk are
         # the truth. Say so rather than refusing to work.
@@ -146,7 +145,9 @@ def _read_index(root: Path) -> dict:
 
 
 def _write_index(root: Path, index: dict) -> None:
-    _index_path(root).write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
+    _index_path(root).write_text(
+        json.dumps(index, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8", newline="\n")
 
 
 def iter_files(directory: Path):
@@ -200,7 +201,7 @@ def add(
         "target": str(source),
         "note": note,
         "added": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        "added_by": os.environ.get("USER", ""),
+        "added_by": current_user(),
         "copied": bool(copy),
     }
     _write_index(staging, index)

@@ -87,7 +87,7 @@ def public_datasets(catalog_root: Path) -> list[tuple[Path, dict]]:
         descriptor_path = dataset_dir / "datapackage.json"
         if not descriptor_path.is_file():
             continue
-        package = json.loads(descriptor_path.read_text())
+        package = json.loads(descriptor_path.read_text(encoding="utf-8"))
         if package.get("ethos:visibility", "public") != "public":
             continue
         # A namespace is published only if it still has a published member. A
@@ -106,7 +106,7 @@ def _has_public_member(namespace_dir: Path) -> bool:
         descriptor = member / "datapackage.json"
         if not descriptor.is_file():
             continue
-        package = json.loads(descriptor.read_text())
+        package = json.loads(descriptor.read_text(encoding="utf-8"))
         if package.get(NAMESPACE_KEY):
             continue
         if package.get("ethos:visibility", "public") == "public":
@@ -120,7 +120,7 @@ def strip(package: dict) -> dict:
 
 def render(catalog_root: Path) -> dict[Path, str]:
     """Build the complete public tree in memory: {relative path -> str | bytes}."""
-    catalog_meta = yaml.safe_load((catalog_root / "catalog.yaml").read_text())
+    catalog_meta = yaml.safe_load((catalog_root / "catalog.yaml").read_text(encoding="utf-8"))
     for key in STRIP_FROM_PACKAGE:
         catalog_meta.pop(key, None)
     # Overwritten, not inherited: this copy is generated whatever the source says.
@@ -162,7 +162,7 @@ def render(catalog_root: Path) -> dict[Path, str]:
                     f"{public_package['name']}: shard {shard['path']} is missing. Run:\n"
                     f"    ethos-data catalog build {dataset_name_for(datasets_dir(catalog_root), dataset_dir)}"
                 )
-            files[here / shard["path"]] = source.read_text()
+            files[here / shard["path"]] = source.read_text(encoding="utf-8")
 
         entries.append(
             {
@@ -220,7 +220,7 @@ def run(catalog_root: Path, target: str, check: bool = False) -> int:
     if check:
         stale = [
             rel for rel, text in files.items()
-            if not (destination_root / rel).is_file() or (destination_root / rel).read_text() != text
+            if not (destination_root / rel).is_file() or (destination_root / rel).read_text(encoding="utf-8") != text
         ]
         # Anything in the target that we no longer generate is also staleness --
         # a dataset withdrawn from publication must actually disappear.
@@ -258,11 +258,15 @@ def run(catalog_root: Path, target: str, check: bool = False) -> int:
         destination = destination_root / rel
         destination.parent.mkdir(parents=True, exist_ok=True)
         # Licence documents are carried verbatim and may be PDFs, so the rendered
-        # tree is not text-only. Everything else is generated text.
+        # tree is not text-only. Everything else is generated text, and both
+        # arguments below are load-bearing: this README says "Jülich", which
+        # write_text left to its defaults would encode with the locale codec and
+        # line-end as CRLF on Windows, so the public catalogue would differ byte
+        # for byte depending on who published it.
         if isinstance(content, bytes):
             destination.write_bytes(content)
         else:
-            destination.write_text(content)
+            destination.write_text(content, encoding="utf-8", newline="\n")
 
     print(f"Published to {destination_root}")
     for rel in sorted(files, key=str):

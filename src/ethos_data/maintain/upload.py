@@ -33,6 +33,7 @@ Guard rails:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -90,8 +91,8 @@ def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path | None
             f"{dataset_name!r} has no datapackage.json yet. Run:\n"
             f"    ethos-data catalog build {dataset_name}"
         )
-    meta = yaml.safe_load(meta_file.read_text())
-    package = json.loads(package_file.read_text())
+    meta = yaml.safe_load(meta_file.read_text(encoding="utf-8"))
+    package = json.loads(package_file.read_text(encoding="utf-8"))
     raw_source_dir = meta.get("source_dir")
     # A dataset marked ethos:uploaded: true has none -- dCache is already the
     # source of truth, and there is nothing local left to read bytes from.
@@ -199,12 +200,23 @@ def resolve_name(catalog_root: Path, argument: str) -> str:
     # a described dataset, that is what it is.
     if not Path(argument).is_absolute() and (datasets / argument / "dataset.yaml").is_file():
         return argument
-    if "/" not in argument:
+    # Anything still holding a separator is a path. Both of them, not just "/":
+    # on Windows shell completion produces `datasets\global-wind-atlas-v4`, and
+    # testing for "/" alone took that for a dataset name and reported it missing
+    # -- the one form of the argument a Windows user is most likely to type.
+    if not any(sep and sep in argument for sep in (os.sep, os.altsep, "/")):
         return argument
 
     path = Path(argument).expanduser().resolve()
-    if path.is_relative_to(datasets) and (path / "dataset.yaml").is_file():
-        return dataset_name_for(datasets, path)
+    # Resolve BOTH sides before asking whether one contains the other. Only the
+    # argument used to be resolved, so the two were not always written the same
+    # way: `resolve()` expands a Windows 8.3 short name, and %TEMP% is one for
+    # any account whose name holds a dot, so `C:\Users\JA60A~1.BEL\...` and
+    # `C:\Users\j.belina\...` named the same directory and compared unequal. A
+    # symlinked home or /tmp does the same thing on Linux.
+    resolved_datasets = datasets.expanduser().resolve()
+    if path.is_relative_to(resolved_datasets) and (path / "dataset.yaml").is_file():
+        return dataset_name_for(resolved_datasets, path)
 
     # Naming a directory in the *published* catalogue is the easy mistake to
     # make: it has the same datasets/<name> layout, so the path looks right, but
@@ -254,10 +266,20 @@ def upload_one(args, plan: Plan, base_url: str, root: str, bearer) -> int:
         # ethos:exclude in play they are not, and `rclone copy <dir>` would
         # publish the strays the manifest deliberately leaves out -- silently,
         # since verification only ever looks for files it knows about.
+
+        # A nested dataset's name is `reskit-test-data/era5`, and a slash is a
+        # directory separator in a filename on every platform -- on Windows not
+        # a legal character in one at all. Flatten it, or naming such a dataset
+        # fails in mkstemp before a single byte is uploaded.
+        stem = plan.name.replace("/", "-").replace(os.sep, "-")
         handle, listing_path = tempfile.mkstemp(
-            prefix=f"ethos-data-upload-{plan.name}-", suffix=".txt", text=True)
-        with open(handle, "w") as listing_file:
-            listing_file.writelines(f"{resource['path']}\n" for resource in resources)
+            prefix=f"ethos-data-upload-{stem}-", suffix=".txt")
+        # rclone reads --files-from as UTF-8, one path per line. Written as bytes
+        # because a text-mode write on Windows would end every line CRLF, and
+        # rclone would then look for files whose names end in a carriage return.
+        with open(handle, "wb") as listing_file:
+            listing_file.writelines(
+                f"{resource['path']}\n".encode() for resource in resources)
         listing = Path(listing_path)
         command = [
             "rclone", "copy", str(plan.source_dir), destination,
@@ -322,7 +344,7 @@ def upload_one(args, plan: Plan, base_url: str, root: str, bearer) -> int:
 
 
 def run(catalog_root: Path, args) -> int:
-    catalog_meta = yaml.safe_load((catalog_root / "catalog.yaml").read_text())
+    catalog_meta = yaml.safe_load((catalog_root / "catalog.yaml").read_text(encoding="utf-8"))
     base_url = catalog_meta["ethos:publication_url"].rstrip("/")
 
     # The upload destination and the URL we verify afterwards have to name the

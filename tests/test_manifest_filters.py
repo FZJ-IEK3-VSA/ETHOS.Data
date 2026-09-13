@@ -10,6 +10,7 @@ Run with pytest, or directly:  python tests/test_manifest_filters.py
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -20,23 +21,41 @@ from ethos_data.maintain.manifest import expand_pattern, render_dataset
 
 CATALOG = "name: t\nethos:catalog_role: source\nethos:publication_url: https://example.invalid/x\n"
 
+#: What wget leaves behind when the download URL carried a query string. Windows
+#: does not allow "?" in a filename, so this one can only be planted -- and only
+#: needs excluding -- on the platforms that can hold it. The datasets themselves
+#: live on Linux; a maintainer on Windows still has to be able to run the suite.
+QUERY_STRING_FILE = "54313655?private_link=abc"
+CAN_HOLD_QUERY_STRING = os.name != "nt"
+
 # Shaped like /shared_data/Global_Wind_Atlas/GWA_4.0: five rasters worth keeping,
 # a 67 GB derivative that is a different dataset, and the download plumbing.
-GWA_FILES = [
+GWA_RASTERS = sorted([
     "wind_speed_cog_10m.tif",
     "wind_speed_cog_50m.tif",
     "wind_speed_cog_100m.tif",
     "wind_speed_cog_150m.tif",
     "wind_speed_cog_200m.tif",
     "wind_speed_cog_100m.tif.aux.xml",
+])
+GWA_FILES = GWA_RASTERS + [
     "wind_speed_cog_100m_expanded_by_ERA5_x_mean_global.tif",
     "url_list.txt",
     "url_list2.txt",
     "download.sh",
     "wget-log",
-    "54313655?private_link=abc",
-]
-GWA_RASTERS = sorted(GWA_FILES[:6])
+] + ([QUERY_STRING_FILE] if CAN_HOLD_QUERY_STRING else [])
+
+
+def _exclude_query_string(pattern: str) -> str:
+    """An exclude line for the wget query-string file, where one can exist.
+
+    Named rather than left in unconditionally: an exclude that matches nothing
+    is only a warning, so the test would still pass on Windows -- while quietly
+    no longer checking anything, which is the failure mode these tests exist to
+    prevent elsewhere in the catalogue.
+    """
+    return f"  - {pattern}\n" if CAN_HOLD_QUERY_STRING else ""
 
 
 def gwa_tree(root: Path) -> None:
@@ -121,14 +140,14 @@ class TestSelection:
     def test_exclude_by_bare_folder_name_drops_the_subtree(self):
         assert inventory(
             'ethos:exclude:\n  - "test"\n  - "url_list*.txt"\n  - "download.sh"\n'
-            '  - "wget-log"\n  - "54313655?private_link=abc"\n'
-            '  - "*expanded_by_ERA5*"\n') == GWA_RASTERS
+            '  - "wget-log"\n' + _exclude_query_string('"54313655?private_link=abc"')
+            + '  - "*expanded_by_ERA5*"\n') == GWA_RASTERS
 
     def test_double_star_reaches_into_subdirectories(self):
         assert inventory(
             'ethos:include:\n  - "**"\nethos:exclude:\n  - "**/wget-log"\n  - "test/"\n'
             '  - "*expanded*"\n  - "url_list*"\n  - "download.sh"\n'
-            '  - "54313655*"\n') == GWA_RASTERS
+            + _exclude_query_string('"54313655*"')) == GWA_RASTERS
 
     def test_two_datasets_can_share_one_source_dir(self):
         # global-wind-atlas and global-wind-atlas-era5-expanded both live in

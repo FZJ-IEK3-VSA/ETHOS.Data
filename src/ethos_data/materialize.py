@@ -37,7 +37,7 @@ from pathlib import Path
 
 from .access import RESTRICTED, access_class
 from .catalog import Catalog, Resource, UnknownDataset
-from .config import Roots
+from .config import Roots, current_user
 from .verify import sha256_of, _expected_digest
 
 __all__ = ["MaterializeReport", "materialize", "plan_materialize", "PROVENANCE_FILE"]
@@ -238,8 +238,8 @@ def _materialize_one(
             "bytes": copied_bytes,
             "verified": verify_hashes,
             "when": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-            "by": os.environ.get("USER", ""),
-        }, indent=2) + "\n")
+            "by": current_user(),
+        }, indent=2) + "\n", encoding="utf-8", newline="\n")
 
         # A directory cannot be renamed onto a symbolic link, so the link has to
         # go first. The window between the two is the only moment the dataset is

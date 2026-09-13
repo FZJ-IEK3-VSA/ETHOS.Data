@@ -47,6 +47,7 @@ there?" is the question people actually ask.
 
 from __future__ import annotations
 
+import getpass
 import os
 import sys
 from dataclasses import dataclass, replace
@@ -220,6 +221,23 @@ def writable_config_path(scope: str = "user") -> Path:
     return config_path(scope)
 
 
+#: Prefixes every config file we write, so somebody who opens one knows what it is.
+CONFIG_HEADER = "# ethos-data configuration. See `ethos-data config show`.\n"
+
+
+def _write(path: Path, document: dict) -> None:
+    """Write a configuration file: UTF-8, LF, on every platform.
+
+    Both arguments are load-bearing. Left to its defaults ``write_text`` encodes
+    with the *locale* codec -- cp1252 on a German Windows, which cannot spell a
+    cache path containing anything outside it -- and rewrites every "\\n" as
+    "\\r\\n". A project-scope ethos-data.yaml is committed and shared, so its
+    bytes must not depend on who wrote it.
+    """
+    text = CONFIG_HEADER + yaml.safe_dump(document, default_flow_style=False, sort_keys=True)
+    path.write_text(text, encoding="utf-8", newline="\n")
+
+
 def config_sources() -> list[tuple[str, Path, bool]]:
     """Every config file we consult, in precedence order, with existence flags."""
     sources = []
@@ -247,7 +265,7 @@ def load_config() -> tuple[dict, dict[str, str]]:
         if not exists:
             continue
         try:
-            document = yaml.safe_load(path.read_text()) or {}
+            document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as error:
             raise ValueError(f"{path} is not valid YAML: {error}") from None
         if not isinstance(document, dict):
@@ -372,6 +390,22 @@ def resolve_cache_dir(explicit: str | Path | None = None) -> Resolved:
     return resolve_public_cache(explicit)
 
 
+def current_user() -> str:
+    """Who is running this, for the provenance records that say so.
+
+    ``$USER`` is a POSIX convention; Windows sets ``$USERNAME`` instead, so
+    reading ``$USER`` directly signed every Windows-written provenance record
+    with an empty string. ``getpass.getuser`` knows both, and falls back to the
+    password database. An unattended account may have neither, and a provenance
+    record with no name is still worth writing -- so this reports "" rather
+    than raising, exactly as the environment lookup it replaces did.
+    """
+    try:
+        return getpass.getuser()
+    except (OSError, KeyError, ImportError):
+        return ""
+
+
 def dataset_roots() -> dict[str, str]:
     """Per-dataset local roots for this machine.
 
@@ -389,14 +423,11 @@ def dataset_roots() -> dict[str, str]:
 
 def set_dataset_root(dataset: str, path: str, scope: str = "user") -> Path:
     config_file = writable_config_path(scope)
-    document = yaml.safe_load(config_file.read_text()) if config_file.is_file() else {}
+    document = yaml.safe_load(config_file.read_text(encoding="utf-8")) if config_file.is_file() else {}
     document = document or {}
     document.setdefault("dataset_roots", {})[dataset] = str(Path(path).expanduser())
     config_file.parent.mkdir(parents=True, exist_ok=True)
-    config_file.write_text(
-        "# ethos-data configuration. See `ethos-data config show`.\n"
-        + yaml.safe_dump(document, default_flow_style=False, sort_keys=True)
-    )
+    _write(config_file, document)
     return config_file
 
 
@@ -404,17 +435,14 @@ def unset_dataset_root(dataset: str, scope: str = "user") -> Path | None:
     config_file = writable_config_path(scope)
     if not config_file.is_file():
         return None
-    document = yaml.safe_load(config_file.read_text()) or {}
+    document = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
     if dataset not in (document.get("dataset_roots") or {}):
         return None
     del document["dataset_roots"][dataset]
     if not document["dataset_roots"]:
         del document["dataset_roots"]
     if document:
-        config_file.write_text(
-            "# ethos-data configuration. See `ethos-data config show`.\n"
-            + yaml.safe_dump(document, default_flow_style=False, sort_keys=True)
-        )
+        _write(config_file, document)
     else:
         config_file.unlink()
     return config_file
@@ -487,13 +515,10 @@ def set_option(key: str, value: str, scope: str = "user") -> Path:
     path = writable_config_path(scope)
     document = {}
     if path.is_file():
-        document = yaml.safe_load(path.read_text()) or {}
+        document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     document[key] = value
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        "# ethos-data configuration. See `ethos-data config show`.\n"
-        + yaml.safe_dump(document, default_flow_style=False, sort_keys=True)
-    )
+    _write(path, document)
     return path
 
 
@@ -501,15 +526,12 @@ def unset_option(key: str, scope: str = "user") -> Path | None:
     path = writable_config_path(scope)
     if not path.is_file():
         return None
-    document = yaml.safe_load(path.read_text()) or {}
+    document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if key not in document:
         return None
     del document[key]
     if document:
-        path.write_text(
-            "# ethos-data configuration. See `ethos-data config show`.\n"
-            + yaml.safe_dump(document, default_flow_style=False, sort_keys=True)
-        )
+        _write(path, document)
     else:
         path.unlink()
     return path

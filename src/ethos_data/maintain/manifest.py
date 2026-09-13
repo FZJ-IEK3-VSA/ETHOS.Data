@@ -171,7 +171,7 @@ def load_hash_cache(dataset_dir: Path) -> dict:
     """
     path = dataset_dir / HASH_CACHE_NAME
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
 
@@ -179,7 +179,8 @@ def load_hash_cache(dataset_dir: Path) -> dict:
 def save_hash_cache(dataset_dir: Path, cache: dict) -> None:
     """Persist the hash cache. Best-effort: a cache write must not fail the build."""
     try:
-        (dataset_dir / HASH_CACHE_NAME).write_text(json.dumps(cache))
+        (dataset_dir / HASH_CACHE_NAME).write_text(
+            json.dumps(cache), encoding="utf-8", newline="\n")
     except OSError as error:
         print(f"warning: could not write {HASH_CACHE_NAME} in {dataset_dir}: {error}",
               file=sys.stderr)
@@ -423,7 +424,7 @@ def frozen_resources(name: str, dataset_dir: Path) -> list[dict]:
             f"{name}: {UPLOADED_KEY} is true but there is no datapackage.json to freeze. "
             f"Build once with source_dir set, upload it, then set {UPLOADED_KEY}: true."
         )
-    resources = resources_of(json.loads(package_file.read_text()), dataset_dir)
+    resources = resources_of(json.loads(package_file.read_text(encoding="utf-8")), dataset_dir)
     return [{k: v for k, v in resource.items() if k != LICENSES_KEY} for resource in resources]
 
 
@@ -706,7 +707,7 @@ def render_dataset(
     few keys a member takes from the namespace above it -- see INHERITED_KEYS.
     """
     name = name or dataset_dir.name
-    meta = yaml.safe_load((dataset_dir / "dataset.yaml").read_text())
+    meta = yaml.safe_load((dataset_dir / "dataset.yaml").read_text(encoding="utf-8"))
 
     # The name is derived from where the file sits, not trusted from inside it.
     # A dataset.yaml that disagrees with its own location is a rename half-done,
@@ -887,11 +888,17 @@ def write_dataset(dataset_dir: Path, files: dict[str, str]) -> None:
     A rebuild that drops a shard -- the tile it described was deleted upstream --
     has to delete the file too, or the index and the directory disagree and the
     stale shard is published forever.
+
+    Both arguments to ``write_text`` are load-bearing: left to its defaults it
+    encodes with the *locale* codec and rewrites every "\\n" as "\\r\\n" on
+    Windows. A catalogue is a git repository built and read on both platforms,
+    and a descriptor whose bytes depend on who ran the build is a diff in every
+    line of every file the next time somebody on the other one rebuilds it.
     """
     for relative, text in files.items():
         target = dataset_dir / relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(text)
+        target.write_text(text, encoding="utf-8", newline="\n")
 
     shard_root = dataset_dir / SHARD_DIR
     if not shard_root.is_dir():
@@ -911,7 +918,7 @@ def stale_files(dataset_dir: Path, files: dict[str, str]) -> list[Path]:
     stale = [
         dataset_dir / relative
         for relative, text in files.items()
-        if not (dataset_dir / relative).is_file() or (dataset_dir / relative).read_text() != text
+        if not (dataset_dir / relative).is_file() or (dataset_dir / relative).read_text(encoding="utf-8") != text
     ]
     shard_root = dataset_dir / SHARD_DIR
     if shard_root.is_dir():
@@ -927,7 +934,7 @@ def catalog_meta(catalog_root: Path) -> dict:
     find and expensive to find late: checksumming a multi-terabyte dataset only
     to reject the file that names the catalogue wastes the whole run.
     """
-    meta = yaml.safe_load((catalog_root / "catalog.yaml").read_text())
+    meta = yaml.safe_load((catalog_root / "catalog.yaml").read_text(encoding="utf-8"))
 
     # A catalogue you can run `build` in is by definition a source one: it has
     # the dataset.yaml files this reads. Default rather than demand it, so an
@@ -950,7 +957,7 @@ def build_catalog(catalog_root: Path, dataset_dirs: list[Path]) -> dict:
     datasets_root = datasets_dir(catalog_root)
     datasets = []
     for dataset_dir in sorted(dataset_dirs):
-        package = json.loads((dataset_dir / "datapackage.json").read_text())
+        package = json.loads((dataset_dir / "datapackage.json").read_text(encoding="utf-8"))
         if package.get(NAMESPACE_KEY):
             # A namespace row carries no access class, no remote prefix and no
             # licence status, because it has no bytes for any of those to be
@@ -1016,7 +1023,7 @@ def _inherited_for(root: Path, dataset_dir: Path) -> dict:
             chain.append(current)
         current = current.parent
     for parent in reversed(chain):
-        meta = yaml.safe_load((parent / "dataset.yaml").read_text()) or {}
+        meta = yaml.safe_load((parent / "dataset.yaml").read_text(encoding="utf-8")) or {}
         for key in INHERITED_KEYS:
             if key in meta:
                 inherited[key] = meta[key]
@@ -1055,7 +1062,7 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
                     on_disk = member / "datapackage.json"
                     if not on_disk.is_file():
                         continue
-                    package = json.loads(on_disk.read_text())
+                    package = json.loads(on_disk.read_text(encoding="utf-8"))
                 if package.get(NAMESPACE_KEY):
                     continue
                 total_bytes += package.get("ethos:total_bytes", 0)
@@ -1096,7 +1103,7 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
     catalog_text = dumps(build_catalog(catalog_root, all_dirs))
 
     if check:
-        if not catalog_path.exists() or catalog_path.read_text() != catalog_text:
+        if not catalog_path.exists() or catalog_path.read_text(encoding="utf-8") != catalog_text:
             stale.append(catalog_path)
         if stale:
             print("Out of date (re-run `ethos-data catalog build`):", file=sys.stderr)
@@ -1106,6 +1113,6 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
         print("All manifests up to date.")
         return 0
 
-    catalog_path.write_text(catalog_text)
+    catalog_path.write_text(catalog_text, encoding="utf-8", newline="\n")
     print(f"  {'datacatalog.json':<22} {len(all_dirs):>5} datasets")
     return 0

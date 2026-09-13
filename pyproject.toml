@@ -6,8 +6,15 @@ build-backend = "hatchling.build"
 name = "ethos_data"
 dynamic = ["version"]
 description = "Shared, deduplicating data access for ETHOS tools and workflows"
+authors = [
+    { name = "Julian belina", email = "j.belina@fz-juelich.de" }
+]
 readme = "README.md"
-requires-python = ">=3.9"
+# 3.10 is the floor because the package writes its own text files with an
+# explicit encoding *and* an explicit newline -- `Path.write_text(newline=...)`
+# arrived in 3.10 -- and because `entry_points().select()` replaced the mapping
+# form the collections lookup used to have to branch on.
+requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
   "pooch>=1.8.0",
@@ -37,5 +44,6 @@ packages = ["src/ethos_data"]
 
 [tool.hatch.build.targets.sdist]
 # Without this the sdist takes everything .gitignore does not exclude -- docs,
-# local fonts, diagram sources. Source and tests are what a rebuild needs.
-include = ["/src", "/tests"]
+# local fonts, diagram sources. Source and tests are what a rebuild needs, and
+# the licence, which has to travel with any copy of the source.
+include = ["/src", "/tests", "/LICENSE"]

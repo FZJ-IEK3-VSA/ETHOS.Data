@@ -40,7 +40,7 @@ def catalogue_role(path: Path) -> str | None:
     if not index.is_file():
         return None
     try:
-        return json.loads(index.read_text()).get(ROLE_KEY) or None
+        return json.loads(index.read_text(encoding="utf-8")).get(ROLE_KEY) or None
     except (OSError, ValueError):
         return None
 
@@ -206,5 +206,5 @@ def resources_of(package: dict, dataset_dir: Path) -> list[dict]:
                 f"{package['name']}: shard {shard['path']} is missing. Run:\n"
                 f"    ethos-data catalog build {package['name']}"
             )
-        resources.extend(json.loads(shard_file.read_text())["resources"])
+        resources.extend(json.loads(shard_file.read_text(encoding="utf-8"))["resources"])
     return resources

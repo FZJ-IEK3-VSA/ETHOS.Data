@@ -68,7 +68,7 @@ def _declared(catalog_root: Path) -> list[tuple[str, dict]]:
         descriptor = directory / "dataset.yaml"
         if not descriptor.is_file():
             continue
-        meta = yaml.safe_load(descriptor.read_text()) or {}
+        meta = yaml.safe_load(descriptor.read_text(encoding="utf-8")) or {}
         found.append((directory.name, meta))
     return found
 

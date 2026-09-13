@@ -86,6 +86,7 @@ else here has dependencies beyond the package's own.
 
 ## Licensing
 
-Datasets whose redistribution terms have not been confirmed carry
-`ethos:license_status: unresolved` in the catalogue, and `fetch()` emits a
-`UserWarning` on download. An absent licence is a question, not a default.
+`ethos-data` — the software in this repository — is under the
+[MIT License](LICENSE).
+
+**The licence of the software is not the licence of the data.** 

@@ -140,7 +140,7 @@ def load_collections(
     the configured roots apply. A supplied catalogue is not modified.
     """
     path = Path(path).expanduser().resolve()
-    document = yaml.safe_load(path.read_text()) or {}
+    document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
     if isinstance(catalog, Catalog):
         resolved = catalog
@@ -195,12 +195,10 @@ def registered_packages() -> dict[str, str]:
     """
     from importlib.metadata import entry_points
 
-    found = entry_points()
-    if hasattr(found, "select"):
-        found = found.select(group=ENTRY_POINT_GROUP)
-    else:  # Python 3.9 returns a plain mapping of group -> entry points
-        found = found.get(ENTRY_POINT_GROUP, [])
-    return {entry.name: entry.value for entry in found}
+    return {
+        entry.name: entry.value
+        for entry in entry_points().select(group=ENTRY_POINT_GROUP)
+    }
 
 
 def package_collections(package: str) -> Path:
