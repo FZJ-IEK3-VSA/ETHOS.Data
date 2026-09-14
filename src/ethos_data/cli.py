@@ -232,6 +232,9 @@ def _build_parser() -> argparse.ArgumentParser:
     material.add_argument("--from", dest="source", metavar="DIR", default=None,
                           help="copy from this directory instead of the entry's link target; "
                                "fills an entry that does not exist yet")
+    material.add_argument("--catalog-root", default=None,
+                          help="catalogue checkout to read source_dir from, when there is no "
+                               "entry and no --from (default: search upward for catalog.yaml)")
 
     linker = sub.add_parser(
         "link",
@@ -617,7 +620,7 @@ def _materialize_command(args, roots) -> int:
     reports = materialize(
         catalog, names, roots,
         force=args.force, verify_hashes=not args.no_verify, dry_run=args.dry_run,
-        source=args.source,
+        source=args.source, catalog_root=args.catalog_root,
     )
     for report in reports:
         print(f"  {report}")

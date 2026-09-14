@@ -6,9 +6,11 @@
 The result is one entry per dataset, named for the dataset, pointing at wherever
 that data already sits on this machine:
 
-    /shared/ethos/public/
-    |-- global-wind-atlas  -> /fast/central/shared_data/Global_Wind_Atlas/GWA_4.0
-    |-- corine-land-cover  -> /fast/central/shared_data/2023_gears/.../clc2018
+    <public cache>/
+    |-- global-wind-atlas  -> /legacy/shared/Global_Wind_Atlas/GWA_4.0
+    |-- corine-land-cover  -> /legacy/shared/landcover/clc2018
+    |-- test-data/era5     -> /legacy/shared/era5-subset   (a nested dataset,
+    |                                                       entry where its name says)
     `-- submarine-cables/     (a real directory, downloaded from dCache)
 
 Nothing is copied and nothing is moved: the entries cost a few hundred bytes in
@@ -32,7 +34,8 @@ from pathlib import Path
 
 import yaml
 
-from . import datasets_dir
+from ..catalog import license_settled
+from . import dataset_name_for, datasets_dir, is_namespace, iter_dataset_dirs
 
 __all__ = ["Action", "plan", "apply", "run"]
 
@@ -61,15 +64,28 @@ class Action:
 
 
 def _declared(catalog_root: Path) -> list[tuple[str, dict]]:
-    """Every dataset directory with a dataset.yaml, in name order."""
+    """Every dataset with a dataset.yaml, at any depth, by catalogue name.
+
+    Not a listing of the top level, because a nested family is described as a
+    dataset.yaml naming the family with the datasets that actually hold files
+    *below* it. Reading only the top level found the family node, reported it as
+    having no ``source_dir`` -- true, and not its job to have one -- and left
+    every member unlinked, which is the whole family missing from the cache.
+
+    The name is the path below ``datasets/``, so a member is ``family/member``
+    and its entry is ``<root>/family/member``: the same name the manifest
+    builder writes, the collections file uses, and the reader looks up.
+
+    Namespace nodes are dropped rather than reported: a namespace owns no files,
+    so "no source_dir" is not a finding about it.
+    """
     root = datasets_dir(catalog_root)
     found = []
-    for directory in sorted(p for p in root.iterdir() if p.is_dir()):
-        descriptor = directory / "dataset.yaml"
-        if not descriptor.is_file():
+    for directory in iter_dataset_dirs(root):
+        if is_namespace(directory):
             continue
-        meta = yaml.safe_load(descriptor.read_text(encoding="utf-8")) or {}
-        found.append((directory.name, meta))
+        meta = yaml.safe_load((directory / "dataset.yaml").read_text(encoding="utf-8")) or {}
+        found.append((dataset_name_for(root, directory), meta))
     return found
 
 
@@ -113,6 +129,16 @@ def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
                        "not as a link"))
             continue
 
+        if not license_settled(meta):
+            # Building this namespace is how a dataset reaches everybody on the
+            # machine. An absent licence is a question, not a permission, and
+            # answering it is one line in dataset.yaml.
+            actions.append(Action(
+                name, "skip", entry,
+                detail="unresolved licensing: record the terms in dataset.yaml before "
+                       "linking it into a shared cache"))
+            continue
+
         source = _source_of(catalog_root, name, meta)
         if source is None:
             actions.append(Action(name, "skip", entry, detail="no source_dir in dataset.yaml"))
@@ -139,11 +165,16 @@ def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
             actions.append(Action(name, "link", entry, source))
 
     if prune and root.is_dir():
-        for existing in sorted(root.iterdir()):
-            if existing.name in names or not existing.is_symlink():
+        # The reader's own walk, so that a nested entry is found where its name
+        # says it is (``family/member``) rather than not at all: listing the top
+        # level would see ``family``, never look inside it, and prune nothing.
+        from ..access import cache_entries
+
+        for name, existing in cache_entries(root):
+            if name in names or not existing.is_symlink():
                 continue
             actions.append(Action(
-                existing.name, "prune", existing,
+                name, "prune", existing,
                 detail="not in the catalogue any more"))
 
     return actions

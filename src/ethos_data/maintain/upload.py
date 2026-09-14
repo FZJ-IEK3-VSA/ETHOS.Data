@@ -44,7 +44,7 @@ from typing import NamedTuple
 
 import yaml
 
-from ..catalog import ROLE_PUBLISHED
+from ..catalog import ROLE_PUBLISHED, license_settled
 from . import catalogue_role, dataset_name_for, datasets_dir, iter_dataset_dirs, resources_of
 
 FRONTEND = "https://hifis-storage-web.desy.de/api/v1"
@@ -125,6 +125,24 @@ def preflight(name: str, package: dict, source_dir: Path | None, allow_internal:
             "prefix is really where you want it, and pass --allow-internal.\n"
             "It will NOT be made world-readable."
         )
+
+    # Ahead of the mechanical checks below, and no longer a warning. Publishing
+    # is the irreversible half of this: once the bytes are on dCache under terms
+    # nobody has read, "we were not sure" stops being a position anybody can
+    # take. It comes first because it is the reason that does not depend on how
+    # the dataset is configured -- being told about a missing prefix instead
+    # sends somebody off to fix the wrong thing. --verify-only is still allowed:
+    # rechecking what is already published copies nothing.
+    if not verify_only and not license_settled(package):
+        note = package.get("ethos:license_note", "")
+        raise SystemExit(
+            f"{name} has unresolved licensing and is not uploaded. {note}\n".rstrip() + "\n"
+            "Record the terms in its dataset.yaml -- a `licenses:` entry, or "
+            "`ethos:license_status: resolved` once somebody has read them -- and rebuild.\n"
+            "Development against it does not need an upload; stage it instead:\n"
+            f"    ethos-data staging add {name} <directory>"
+        )
+
     if not prefix:
         raise SystemExit(f"{name} declares no ethos:remote_prefix, so there is nowhere to put it.")
 
@@ -137,10 +155,6 @@ def preflight(name: str, package: dict, source_dir: Path | None, allow_internal:
             )
     elif not source_dir.is_dir():
         raise SystemExit(f"source_dir does not exist: {source_dir}")
-
-    if package.get("ethos:license_status") == "unresolved":
-        print(f"  ! {name} has unresolved licensing. Publishing it may not be permitted.")
-        print("    Settle the redistribution terms before making it world-readable.\n")
     return prefix
 
 

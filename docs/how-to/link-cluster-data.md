@@ -27,15 +27,24 @@ ethos:access: internal
 ethos:visibility: hidden
 ethos:embargo:
   until: "unspecified"
-  reason: Description and licence review not started.
+  reason: Description not finished; linked from existing storage.
   becomes: public
-ethos:license_status: unresolved
+licenses:
+  - name: CC-BY-4.0
+    path: https://creativecommons.org/licenses/by/4.0/
 ```
 
 `source_dir` is the only required key: `ethos:access` and `ethos:visibility`
 default to `public`, `ethos:origin` to `downloaded`, and the name comes from the
-directory. A hidden dataset needs the embargo block. Fill in licences and
-provenance later — [Describe a dataset](describe-a-dataset.md),
+directory. A hidden dataset needs the embargo block.
+
+**The licence is not deferrable.** A dataset with unresolved licensing is skipped
+by `link-cache` and refused by `link`, because a cache entry hands it to everyone
+reading that cache. Record a `licenses:` entry, or
+`ethos:license_status: resolved` once somebody has read the terms. To work with
+it before then, [stage it](stage-unpublished-data.md) — staging is not gated.
+Provenance and the rest can still follow later:
+[Describe a dataset](describe-a-dataset.md),
 [Add internal and restricted datasets](add-internal-and-restricted-data.md).
 
 ## 2. Create the links

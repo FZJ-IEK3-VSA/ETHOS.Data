@@ -59,6 +59,13 @@ Replace the example file selection and restriction message. Add actual `sources`
 `licenses`, and provenance using [Describe a dataset](describe-a-dataset.md).
 The unresolved marker is for metadata awaiting review, not permission to use or
 redistribute data. Do not substitute an open licence for a vendor agreement.
+
+While it says `unresolved`, the dataset cannot be linked into a cache
+(`ethos-data link`, `catalog link-cache`) or uploaded — those hand it to other
+people. Record the agreement as a `licenses:` entry naming it, or
+`ethos:license_status: resolved` once the review is done. Reading an
+already-present copy and [staging](stage-unpublished-data.md) still work; see
+[Licensing and immutability](../explanation/licensing.md).
 If the description may be public, set `ethos:visibility: public` and remove the
 embargo block; keep `ethos:access: restricted`.
 

@@ -19,6 +19,28 @@ permission — produces a catalogue where nobody can tell the datasets somebody
 cleared from the datasets nobody looked at, and the distinction only becomes
 visible when it is a problem.
 
+## Unresolved licensing stops distribution, not work
+
+A warning is the right answer for somebody who already has the data in front of
+them. It is the wrong answer at the moment the data is handed to other people,
+so the two operations that do that **refuse**:
+
+| Operation | With unresolved licensing |
+|---|---|
+| `ethos-data link`, `catalog link-cache` | refused — the dataset is skipped, nothing is linked |
+| `catalog upload` | refused — nothing is transferred (`--verify-only` still works) |
+| `ethos-data staging add` | **allowed** |
+| `fetch`, `path`, `verify` on data already here | allowed, with the warning |
+
+Staging is the deliberate exception, and the refusals name it. A staged dataset
+is one person's, on one machine; it shadows nothing for anybody else, it is
+never uploaded, and it verifies as `unverifiable` by construction. Development
+does not have to wait for a legal answer — publication does.
+
+A dataset counts as settled when it carries a `licenses:` entry, or an explicit
+`ethos:license_status: resolved`. Nothing else does, including silence: the
+default has to be "nobody has looked" rather than "nothing applies".
+
 The status is promoted into the catalogue **index**, so warning about licensing
 does not require loading every dataset descriptor. `ethos-data list` stays cheap.
 

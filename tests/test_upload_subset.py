@@ -39,8 +39,11 @@ def make_catalog(root: Path, datasets: dict[str, dict]) -> Path:
 
         dataset_dir = root / "datasets" / name
         dataset_dir.mkdir(parents=True)
+        # A licence, because upload refuses a dataset whose terms nobody has
+        # read. These tests are about *which* datasets a subset selects, so they
+        # declare one; the licensing tests override it through `extra`.
         meta = {"name": name, "title": name, "source_dir": str(source),
-                "ethos:remote_prefix": name}
+                "ethos:remote_prefix": name, "licenses": [{"name": "CC-BY-4.0"}]}
         meta.update(extra)
         # The catalogue refuses to build a restricted dataset that declares a
         # remote prefix -- it is never uploaded, so it has nowhere to be.

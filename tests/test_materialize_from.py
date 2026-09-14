@@ -27,7 +27,10 @@ def _resource(path: str, payload: bytes) -> Resource:
 
 def _catalog(access: str = 'public') -> Catalog:
     resources = {path: _resource(path, payload) for path, payload in CONTENT.items()}
-    dataset = Dataset('example', 'Example', entry={'ethos:access': access},
+    # license_status in the index: the cache commands refuse a dataset whose
+    # terms nobody has read, and these tests are about linking, not licensing.
+    dataset = Dataset('example', 'Example',
+                      entry={'ethos:access': access, 'ethos:license_status': 'resolved'},
                       _descriptor={'resources': []}, _resources=resources)
     return Catalog('local', {}, {'example': dataset})
 

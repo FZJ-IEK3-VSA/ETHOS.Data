@@ -29,6 +29,18 @@ dataset that has been uploaded has no ``source_dir`` left for
 ``ethos-data catalog link-cache`` to link from, so an explicit source is the only
 thing left to point at.
 
+With neither a link nor a ``--from``, the source catalogue's ``source_dir`` is
+used, exactly as ``ethos-data link`` uses it:
+
+    ethos-data materialize licensed-example           # from its source_dir
+
+That is the restricted-data workflow in one command. Licensed data belongs in
+the restricted cache as a **real, owned copy** rather than a link -- which is
+why ``catalog link-cache`` skips it -- so there is no link for a copy to follow
+and never was one. The entry still goes wherever the access class says, and
+``--all`` still walks the public cache only: copying licensed bytes is subject
+to that installation's terms, and is something somebody names on purpose.
+
 Only files the catalogue describes are copied. A cache is not a backup of
 somebody's project directory -- it holds the inventory the manifest lists, and
 copying the strays as well would quietly make the cache a second, divergent
@@ -51,6 +63,7 @@ from pathlib import Path
 from .access import entry_for
 from .catalog import Catalog, Resource, UnknownDataset
 from .config import Roots, current_user
+from .linking import LinkError, source_dir_for
 from .verify import sha256_of, _expected_digest
 
 __all__ = ["MaterializeReport", "materialize", "plan_materialize", "PROVENANCE_FILE"]
@@ -92,6 +105,7 @@ def plan_materialize(
     roots: "Roots | str | Path | None" = None,
     force: bool = False,
     source: "str | Path | None" = None,
+    catalog_root: "str | Path | None" = None,
 ) -> list[MaterializeReport]:
     """Classify each dataset without copying anything.
 
@@ -148,11 +162,23 @@ def plan_materialize(
                 continue
             target = given
         elif not was_link:
-            reports.append(MaterializeReport(
-                name, "absent",
-                f"no entry at {entry}; nothing to materialise. If the files are already on "
-                "this machine, name the directory with --from", entry=entry))
-            continue
+            # Nothing in the cache and no --from: the source catalogue knows
+            # where the bytes are. This is the whole workflow for restricted
+            # data, which belongs in the restricted cache as a real, owned copy
+            # rather than a link -- so there is no link here for a copy to
+            # follow, and never was one.
+            try:
+                target = source_dir_for(name, catalog_root)
+            except LinkError:
+                reports.append(MaterializeReport(
+                    name, "absent",
+                    f"no entry at {entry}, and no source_dir to copy from; name the "
+                    "directory with --from", entry=entry))
+                continue
+            if not target.is_dir():
+                reports.append(MaterializeReport(
+                    name, "cannot", f"source_dir does not exist: {target}", entry=entry))
+                continue
         else:
             target = entry.resolve()
             if not target.is_dir():
@@ -189,6 +215,7 @@ def materialize(
     dry_run: bool = False,
     on_file=None,
     source: "str | Path | None" = None,
+    catalog_root: "str | Path | None" = None,
 ) -> list[MaterializeReport]:
     """Replace symbolic-link cache entries with real, verified copies.
 
@@ -201,7 +228,8 @@ def materialize(
     takes it with exactly one.
     """
     roots = Roots.coerce(roots)
-    planned = plan_materialize(catalog, names, roots, force=force, source=source)
+    planned = plan_materialize(catalog, names, roots, force=force, source=source,
+                               catalog_root=catalog_root)
     if dry_run:
         return planned
 

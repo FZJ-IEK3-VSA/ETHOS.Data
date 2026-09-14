@@ -149,6 +149,11 @@ Without a directory, `source_dir` is read from the hand-written
 out of the descriptor when the manifest is built. An uploaded dataset has none
 by design, and is refused with the explicit form to use instead.
 
+A dataset with **unresolved licensing is refused**, and skipped by `--all`: a
+cache entry hands it to everyone reading that cache. Record the terms, or use
+[`staging add`](#staging), which is deliberately not gated. See
+[Licensing and immutability](../../explanation/licensing.md).
+
 `--all` is [`catalog link-cache`](catalog.md) pointed at the cache this machine
 reads, and skips restricted datasets for the same reason. Naming a restricted
 dataset explicitly does link it, in the restricted root — that is how an
@@ -175,6 +180,7 @@ Replace symbolic-link cache entries with real, verified copies.
 | `--force` | do not stop at entries that are already real directories |
 | `--no-verify` | skip checksum verification of each copied file (not advised) |
 | `--from DIR` | copy from this directory instead of the entry's link target |
+| `--catalog-root DIR` | catalogue checkout to read `source_dir` from, when there is no entry and no `--from` |
 
 Only files the catalogue describes are copied. Refuses if the copy would leave
 less than 2% of the filesystem free. Explicit dataset names use the root for
@@ -183,9 +189,13 @@ files requires permission under that installation's terms and an appropriately
 protected destination; see [Move linked data into the cache](../../how-to/move-linked-data-into-the-cache.md#restricted-data).
 `--from` names one dataset (not `--all`) and also fills an entry that does not
 exist yet, which is how a cache is seeded from bytes already on the machine
-instead of an upload and a download back. It will not write over a real
-directory the cache owns. Provenance is written to `.ethos-data-materialized.json`
-in the new directory; `was_a_link_at` is null when no link was replaced.
+instead of an upload and a download back. With no entry and no `--from`, the
+catalogue's `source_dir` is used — which is the restricted-data workflow in one
+command, since licensed data belongs in the restricted cache as a real, owned
+copy rather than a link. It will not write over a real directory the cache owns,
+and `--all` still walks the public cache only. Provenance is written to
+`.ethos-data-materialized.json` in the new directory; `was_a_link_at` is null
+when no link was replaced.
 
 ## `staging`
 

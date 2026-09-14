@@ -32,7 +32,29 @@ import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
-__all__ = ["Catalog", "Dataset", "Resource", "load_catalog"]
+__all__ = ["Catalog", "Dataset", "Resource", "load_catalog", "license_settled", "LICENSE_RESOLVED"]
+
+#: The one value of ``ethos:license_status`` that means somebody has read the
+#: upstream terms. Anything else -- "unresolved", "unknown", absent -- is a
+#: question nobody has answered yet.
+LICENSE_RESOLVED = "resolved"
+
+
+def license_settled(meta: dict) -> bool:
+    """Whether a descriptor states terms somebody has actually checked.
+
+    The same rule :attr:`Dataset.license_status` applies, asked of a plain
+    mapping -- a hand-written ``dataset.yaml`` or a generated
+    ``datapackage.json`` -- so that the half of the tooling that *writes* can
+    refuse to distribute a dataset before the question has been answered.
+
+    A ``licenses`` entry settles it: the builder already rejects one that names
+    no licence. Otherwise only an explicit ``resolved`` does, because the
+    default has to be "nobody has looked" rather than "nothing applies".
+    """
+    if meta.get("licenses"):
+        return True
+    return meta.get("ethos:license_status") == LICENSE_RESOLVED
 
 #: Refs that move.  A catalogue fetched from one of these must not be cached
 #: forever, or development against the internal catalogue silently goes stale.

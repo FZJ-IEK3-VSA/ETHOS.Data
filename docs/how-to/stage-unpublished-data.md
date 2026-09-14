@@ -72,6 +72,10 @@ Run the workflow again and check that no staging warning remains.
 
 Restricted datasets cannot be staged.
 
+Staging is also the way to work with a dataset whose licence is not settled yet:
+linking it into a cache and uploading it are refused, staging is not. See
+[Licensing and immutability](../explanation/licensing.md).
+
 ## See also
 
 - [Propose a dataset](propose-a-dataset.md) — get the dataset into the catalogue.

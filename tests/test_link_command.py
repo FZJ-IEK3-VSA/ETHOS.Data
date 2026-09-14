@@ -20,6 +20,9 @@ from ethos_data.linking import LinkError, link, unlink
 
 CONTENT = {'a.txt': b'first file', 'sub/b.txt': b'second file'}
 
+#: Linking into a cache needs terms somebody has read; see test_license_gate.py.
+LICENCE = 'licenses:\n  - name: CC-BY-4.0\n'
+
 
 def _catalog(access: str = 'public') -> Catalog:
     resources = {
@@ -27,7 +30,10 @@ def _catalog(access: str = 'public') -> Catalog:
                        'sha256:' + hashlib.sha256(payload).hexdigest(), 'text/plain')
         for path, payload in CONTENT.items()
     }
-    dataset = Dataset('example', 'Example', entry={'ethos:access': access},
+    # license_status in the index: the cache commands refuse a dataset whose
+    # terms nobody has read, and these tests are about linking, not licensing.
+    dataset = Dataset('example', 'Example',
+                      entry={'ethos:access': access, 'ethos:license_status': 'resolved'},
                       _descriptor={'resources': []}, _resources=resources)
     return Catalog('local', {}, {'example': dataset})
 
@@ -235,8 +241,8 @@ def test_cli_all_links_every_source_dir_into_the_configured_cache(tmp_path, monk
     monkeypatch.setenv('ETHOS_DATA_DIR', str(cache))
     one, two = _write(tmp_path / 'one'), _write(tmp_path / 'two')
     checkout = _checkout(tmp_path, {
-        'one': f'name: one\ntitle: One\nsource_dir: {one.as_posix()}\n',
-        'two': f'name: two\ntitle: Two\nsource_dir: {two.as_posix()}\n'})
+        'one': f'name: one\ntitle: One\nsource_dir: {one.as_posix()}\n{LICENCE}',
+        'two': f'name: two\ntitle: Two\nsource_dir: {two.as_posix()}\n{LICENCE}'})
 
     assert main(['link', '--all', '--catalog-root', str(checkout), '--dry-run']) == 0
     assert not (cache / 'one').exists()
@@ -267,6 +273,7 @@ def _cli_workspace(tmp_path, monkeypatch):
     catalog.write_text(json.dumps({'datasets': [{
         'name': 'example', 'title': 'Example', 'path': 'example/datapackage.json',
         'ethos:access': 'public', 'ethos:file_count': 1, 'ethos:total_bytes': 10,
+        'ethos:license_status': 'resolved',
     }]}))
     package = tmp_path / 'example'
     package.mkdir()

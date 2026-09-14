@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .access import entry_for
-from .catalog import Catalog
+from .catalog import LICENSE_RESOLVED, Catalog
 from .config import Roots
 
 __all__ = ["LinkError", "LinkReport", "link", "source_dir_for", "unlink"]
@@ -87,7 +87,13 @@ def source_dir_for(name: str, catalog_root: str | Path | None = None) -> Path:
     """
     from .maintain import datasets_dir, resolve_catalog_root
 
-    root = resolve_catalog_root(str(catalog_root) if catalog_root is not None else None)
+    try:
+        root = resolve_catalog_root(str(catalog_root) if catalog_root is not None else None)
+    except SystemExit as error:
+        # `resolve_catalog_root` is written for the maintainer commands, which
+        # exit on a missing checkout. Here it is one way of answering a question,
+        # so it becomes the same error every other failure in this module raises.
+        raise LinkError(str(error)) from None
     descriptor = datasets_dir(root) / name / "dataset.yaml"
     if not descriptor.is_file():
         raise LinkError(f"no dataset called {name!r} in {datasets_dir(root)}")
@@ -141,6 +147,38 @@ def _sample_missing(catalog: Catalog, name: str, target: Path) -> str:
         return ""
 
 
+def _require_settled_licence(catalog: Catalog, name: str) -> None:
+    """Refuse to put a dataset with unread terms into a cache other people read.
+
+    A cache entry is how a dataset reaches everybody sharing that cache, and an
+    absent licence is a question, not a permission. The reader has always warned
+    about this; a warning is the right answer when somebody already has the data
+    in front of them and the wrong one at the moment it is being handed out.
+
+    Staging is deliberately exempt, and named here because it is the answer to
+    "but I need to work with it now": a staging entry is one person's, shadows
+    nothing for anybody else, and is unverifiable by construction.
+    """
+    if catalog.dataset(name).license_status == LICENSE_RESOLVED:
+        return
+    try:
+        note = catalog.dataset(name).descriptor.get("ethos:license_note", "")
+    except Exception:
+        # The status is promoted into the index precisely so that asking this
+        # costs no fetch. The note is a nicety on top -- and it is stripped from
+        # published catalogues anyway -- so not having the descriptor to hand
+        # must not turn a clear refusal into a crash.
+        note = ""
+    raise LinkError(
+        f"{name!r} has unresolved licensing, so it is not linked into a cache other "
+        f"people read. {note}\n".rstrip() + "\n"
+        "Record the terms in its dataset.yaml -- a `licenses:` entry, or "
+        "`ethos:license_status: resolved` once somebody has read them -- and rebuild.\n"
+        "To work with it meanwhile, stage it instead:\n"
+        f"    ethos-data staging add {name} <directory>"
+    )
+
+
 def _refusal(name: str, target: Path, error: OSError) -> str:
     """Why the link could not be made, and what to do instead."""
     if os.name != "nt":
@@ -187,6 +225,8 @@ def link(
         entry = entry_for(catalog, roots, name)
     except ValueError as error:
         raise LinkError(str(error)) from None
+
+    _require_settled_licence(catalog, name)
 
     if directory is None:
         directory = source_dir_for(name, catalog_root)

@@ -106,9 +106,9 @@ Only after verification passes and every dependent has moved.
 
 ## Restricted data
 
-Copying licensed files is subject to that installation's terms. Where permitted,
-name the dataset explicitly — `--all` only finds public-cache links — and set the
-restricted namespace's permissions and default ACLs first.
+Licensed data belongs in the restricted cache as a real, owned copy rather than a
+link — which is why `link-cache` skips it — so there is no link for a copy to
+follow. Name the dataset and its `source_dir` is used:
 
 ```bash
 ETHOS_RESTRICTED_DIR=/shared/ethos/restricted \
@@ -118,6 +118,11 @@ ETHOS_RESTRICTED_DIR=/shared/ethos/restricted \
   ethos-data --catalog /shared/ethos/catalogue/versions/REV/datacatalog.json \
   materialize licensed-example
 ```
+
+Copying licensed files is subject to that installation's terms. Name the dataset
+explicitly — `--all` only finds public-cache links — and set the restricted
+namespace's permissions and default ACLs first. `--from` overrides the
+`source_dir`, and `--catalog-root` says which checkout to read it from.
 
 Verify as in step 4, against the restricted root, and check the resulting access
 rights. Never upload, stage or export licensed files.

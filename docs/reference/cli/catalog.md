@@ -106,7 +106,7 @@ A dataset may be named by directory name or by path — a path must point into
 the source catalogue's `datasets/`, so naming one in the *published* catalogue
 is refused with the name to use instead.
 
-Refuses `restricted` datasets outright, warns on unresolved licensing, and
+Refuses `restricted` datasets outright, refuses unresolved licensing, and
 passes `rclone --immutable` so a published path can never be overwritten. After
 transferring it HEADs every file in the manifest with **no credentials** and
 reports anything unreadable or the wrong size, plus the storage locality
