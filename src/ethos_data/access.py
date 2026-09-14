@@ -40,6 +40,7 @@ from .config import Roots, resolve_skip_unavailable
 __all__ = [
     "AccessError",
     "cache_entries",
+    "entry_for",
     "Location",
     "locate",
     "requires_local_root",
@@ -108,6 +109,26 @@ def access_class(dataset: Dataset) -> str:
 def requires_local_root(dataset: Dataset) -> bool:
     """Restricted data can only ever be used from a configured local root."""
     return access_class(dataset) == RESTRICTED
+
+
+def entry_for(catalog: Catalog, roots: Roots, name: str) -> Path:
+    """Where this dataset's cache entry belongs, whatever is or is not there.
+
+    The access class picks the root, exactly as :func:`locate` does -- so the
+    commands that *make* an entry cannot put one somewhere retrieval would never
+    look for it. Raises UnknownDataset for a name the catalogue does not
+    describe, and ValueError when a restricted dataset has no restricted cache:
+    there is nowhere to put it, and the public cache is the one place it may
+    never go.
+    """
+    root = roots.for_access(access_class(catalog.dataset(name)))
+    if root is None:
+        raise ValueError(
+            f"dataset {name!r} is restricted and no restricted cache is configured; "
+            "there is no entry for it. Set one with:\n"
+            "    ethos-data config set-restricted-cache /path/to/ethos_data_restricted"
+        )
+    return root / name
 
 
 def _staged(roots: Roots, name: str) -> Path | None:
@@ -237,7 +258,7 @@ def locate(
                 f"from.\n"
                 f"Either set ethos:publication_url in catalog.yaml, or, while the data is "
                 f"not yet uploaded, point at the copy on this machine:\n"
-                f"    ln -s /path/to/{dataset.name} {entry}\n"
+                f"    ethos-data link {dataset.name} /path/to/{dataset.name}\n"
                 f"or, for this one dataset only:\n"
                 f"    ethos-data config set-root {dataset.name} /path/to/{dataset.name} "
                 f"--scope environment"

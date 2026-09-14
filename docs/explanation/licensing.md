@@ -108,7 +108,7 @@ it fails with an explanation. An administrator may relocate an installation only
 where its terms permit that local copy, preserving access restrictions. Explicit
 `materialize <dataset>` supports this for a link in the restricted root; ordinary
 retrieval continues to read in place. See
-[Migrate cluster data](../how-to/migrate-cluster-data.md#restricted-data) and
+[Move linked data into the cache](../how-to/move-linked-data-into-the-cache.md#restricted-data) and
 [Work with restricted data](../how-to/restricted-data.md).
 
 ## Access and visibility are two questions

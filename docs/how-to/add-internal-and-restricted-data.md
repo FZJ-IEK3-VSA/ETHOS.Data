@@ -124,8 +124,9 @@ ethos-data config set-restricted-cache /shared/ethos/restricted --scope user
 
 An administrator can use `--scope site` for a machine default. A directory that
 is already an authorised installation need not be copied to register it. The
-[cluster migration guide](migrate-cluster-data.md#restricted-data) also describes
-a temporary symlink to that installation and its later relocation.
+[linking guide](link-cluster-data.md#restricted-data) describes a symlink to that
+installation, and [the move guide](move-linked-data-into-the-cache.md#restricted-data)
+its later relocation.
 
 For internal data, use `config set-root` or the public/internal namespace-link
 workflow in that guide. The public cache's name does not grant access: filesystem

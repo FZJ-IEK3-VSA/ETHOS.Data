@@ -45,6 +45,7 @@ from .config import (
 )
 from .retrieval import DataFiles, cache_dir, download, local_path, plan
 from .materialize import materialize
+from .linking import LinkError, link, unlink
 from .selection import (
     Collections,
     CollectionsNotFound,
@@ -85,6 +86,9 @@ __all__ = [
     "download",
     "fetch",
     "fetch_one",
+    "LinkError",
+    "link",
+    "unlink",
     "load_catalog",
     "load_collections",
     "local_path",

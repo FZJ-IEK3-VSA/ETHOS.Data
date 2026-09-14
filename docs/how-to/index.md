@@ -57,7 +57,8 @@ view after the required data is available. These guides use `ethos-data catalog`
 | Register internal or licensed data without a public upload | [Add internal and restricted datasets](add-internal-and-restricted-data.md) |
 | Generate and review the public metadata | [Publish the catalogue](publish-the-catalogue.md) |
 | Deploy the internal filesystem catalogue and distribute public releases | [Catalogue hosting](catalogue-hosting.md) |
-| Link data already on a shared machine into the cache, then make independent copies | [Migrate cluster data](migrate-cluster-data.md) |
+| Bridge data already on a shared machine into the cache as symlinks, without copying or uploading | [Link cluster data into the cache](link-cluster-data.md) |
+| Turn those links into copies the cache owns, and retire the old storage | [Move linked data into the cache](move-linked-data-into-the-cache.md) |
 | Check generated output in CI | [Run catalogue checks in CI](catalogue-ci.md) |
 | Unpublish or remove data | [Withdraw a dataset](withdraw-a-dataset.md) |
 | Create the initial catalogue and storage setup | [Bootstrap a catalogue](bootstrap-a-catalogue.md) |

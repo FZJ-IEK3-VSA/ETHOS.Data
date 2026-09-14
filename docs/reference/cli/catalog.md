@@ -138,7 +138,7 @@ Nothing is copied or moved. **Real directories are never touched** — an entry
 downloaded from dCache or produced by `ethos-data materialize` is data the cache
 owns, and replacing it with a link would discard it.
 
-See [Migrate cluster data](../../how-to/migrate-cluster-data.md#2-create-the-shared-namespace-as-links).
+See [Link cluster data into the cache](../../how-to/link-cluster-data.md#2-create-the-links).
 
 ## `check-store [vo]`
 
@@ -167,4 +167,4 @@ checkout.
 - [API: maintainer tooling](../api/maintain.md)
 
 
-For the complete cluster migration, see [Migrate cluster data](../../how-to/migrate-cluster-data.md). Restricted entries are registered through [Add internal and restricted datasets](../../how-to/add-internal-and-restricted-data.md).
+For the complete cluster migration, see [Link cluster data into the cache](../../how-to/link-cluster-data.md) and [Move linked data into the cache](../../how-to/move-linked-data-into-the-cache.md). Restricted entries are registered through [Add internal and restricted datasets](../../how-to/add-internal-and-restricted-data.md).

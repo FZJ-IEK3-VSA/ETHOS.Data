@@ -155,7 +155,7 @@ ethos-data config set-cache /shared/ethos/public --scope site
 ```
 
 Users then get the whole catalogue with no setup. See
-[Migrate cluster data](migrate-cluster-data.md#2-create-the-shared-namespace-as-links).
+[Link cluster data into the cache](link-cluster-data.md#2-create-the-links).
 
 ## See also
 

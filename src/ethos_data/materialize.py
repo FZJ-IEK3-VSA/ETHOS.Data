@@ -16,6 +16,19 @@ copy instead:
     ethos-data materialize global-wind-atlas          # one dataset
     ethos-data materialize --all --dry-run            # what it would cost
 
+The bytes do not have to come from the link. ``--from`` names the directory to
+copy instead, which is what fills a cache entry from data that is already on this
+machine:
+
+    ethos-data materialize global-wind-atlas --from /somewhere/GWA_4.0
+
+That is a shortcut for speed, not for trust -- the copy is checked against the
+same manifest either way. It exists because uploading a dataset and downloading
+it back is a slow way to put files somewhere they already are, and because a
+dataset that has been uploaded has no ``source_dir`` left for
+``ethos-data catalog link-cache`` to link from, so an explicit source is the only
+thing left to point at.
+
 Only files the catalogue describes are copied. A cache is not a backup of
 somebody's project directory -- it holds the inventory the manifest lists, and
 copying the strays as well would quietly make the cache a second, divergent
@@ -35,7 +48,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .access import RESTRICTED, access_class
+from .access import entry_for
 from .catalog import Catalog, Resource, UnknownDataset
 from .config import Roots, current_user
 from .verify import sha256_of, _expected_digest
@@ -62,21 +75,15 @@ class MaterializeReport:
     files: int = 0
     bytes: int = 0
     failures: list[str] = field(default_factory=list)
+    #: Whether the entry being replaced is a symbolic link. False when there was
+    #: no entry at all, which only ``--from`` can copy into -- and which decides
+    #: whether there is a link to remove before the copy is put in place, and one
+    #: to restore if that fails.
+    was_link: bool = False
 
     def __str__(self) -> str:
         head = f"{self.action:<14} {self.dataset}"
         return f"{head}  {self.detail}" if self.detail else head
-
-
-def _entry_for(catalog: Catalog, roots: Roots, name: str) -> Path:
-    """The cache entry for a dataset, in whichever root its class belongs to."""
-    root = roots.for_access(access_class(catalog.dataset(name)))
-    if root is None:
-        raise ValueError(
-            f"dataset {name!r} is restricted and no restricted cache is configured; "
-            "there is no entry to materialise."
-        )
-    return root / name
 
 
 def plan_materialize(
@@ -84,17 +91,23 @@ def plan_materialize(
     names: list[str],
     roots: "Roots | str | Path | None" = None,
     force: bool = False,
+    source: "str | Path | None" = None,
 ) -> list[MaterializeReport]:
     """Classify each dataset without copying anything.
+
+    ``source`` is a directory to copy from in place of whatever the entry points
+    at. It also makes an *absent* entry copyable, which is the only way to fill
+    one for a dataset that has no ``source_dir`` left to be linked from.
 
     Note that this pulls the full inventory of every dataset named, including
     every shard of a sharded one -- that is what "how many bytes is this" costs.
     """
     roots = Roots.coerce(roots)
+    given = Path(source).expanduser() if source is not None else None
     reports = []
     for name in sorted(set(names)):
         try:
-            entry = _entry_for(catalog, roots, name)
+            entry = entry_for(catalog, roots, name)
         except UnknownDataset:
             # A cache directory accumulates links nobody remembers making, and
             # ``--all`` walks the directory rather than the catalogue. One
@@ -110,11 +123,13 @@ def plan_materialize(
             reports.append(MaterializeReport(name, "cannot", str(error)))
             continue
 
-        if not entry.is_symlink():
-            if not entry.exists():
-                reports.append(MaterializeReport(
-                    name, "absent", f"no entry at {entry}; nothing to materialise", entry=entry))
-            elif force:
+        was_link = entry.is_symlink()
+
+        if not was_link and entry.exists():
+            # A real directory is data the cache already owns, and ``--from`` does
+            # not change that: "copy these bytes in" must never be a way to write
+            # over a verified copy that is already there.
+            if force:
                 reports.append(MaterializeReport(
                     name, "already real", f"{entry} is a real directory; --force re-copies "
                     "nothing, it is already owned", entry=entry))
@@ -123,18 +138,34 @@ def plan_materialize(
                     name, "already real", f"{entry} is already a real directory", entry=entry))
             continue
 
-        target = entry.resolve()
-        if not target.is_dir():
+        if given is not None:
+            # An explicit source replaces the link target, so a dangling link is
+            # no longer a dead end: having the bytes somewhere else is exactly
+            # the situation --from is for.
+            if not given.is_dir():
+                reports.append(MaterializeReport(
+                    name, "cannot", f"--from {given} is not a directory", entry=entry))
+                continue
+            target = given
+        elif not was_link:
             reports.append(MaterializeReport(
-                name, "dangling", f"{entry} points at {entry.readlink()}, which does not exist",
-                entry=entry, target=target))
+                name, "absent",
+                f"no entry at {entry}; nothing to materialise. If the files are already on "
+                "this machine, name the directory with --from", entry=entry))
             continue
+        else:
+            target = entry.resolve()
+            if not target.is_dir():
+                reports.append(MaterializeReport(
+                    name, "dangling", f"{entry} points at {entry.readlink()}, which does not exist",
+                    entry=entry, target=target))
+                continue
 
         resources = list(catalog.dataset(name).resources.values())
         total = sum(r.bytes for r in resources)
         reports.append(MaterializeReport(
             name, "would copy", f"{len(resources):,} files, {total:,} bytes from {target}",
-            entry=entry, target=target, files=len(resources), bytes=total))
+            entry=entry, target=target, files=len(resources), bytes=total, was_link=was_link))
     return reports
 
 
@@ -157,15 +188,20 @@ def materialize(
     verify_hashes: bool = True,
     dry_run: bool = False,
     on_file=None,
+    source: "str | Path | None" = None,
 ) -> list[MaterializeReport]:
     """Replace symbolic-link cache entries with real, verified copies.
 
     Copies into a temporary directory beside the entry, verifies it, and only
     then puts it in place. A failure part-way through leaves the original link
     untouched, so an interrupted run costs time and nothing else.
+
+    ``source`` copies from that directory rather than from the entry's link
+    target, and applies to every name given -- which is why the command line
+    takes it with exactly one.
     """
     roots = Roots.coerce(roots)
-    planned = plan_materialize(catalog, names, roots, force=force)
+    planned = plan_materialize(catalog, names, roots, force=force, source=source)
     if dry_run:
         return planned
 
@@ -232,7 +268,10 @@ def _materialize_one(
         (staging / PROVENANCE_FILE).write_text(json.dumps({
             "dataset": report.dataset,
             "materialized_from": str(target),
-            "was_a_link_at": str(entry),
+            # null when the entry was created by this copy rather than replacing
+            # a link -- the difference matters when tracing where a cache entry
+            # came from, and "it was a link at X" would be a false claim.
+            "was_a_link_at": str(entry) if report.was_link else None,
             "catalog": catalog.location,
             "files": copied,
             "bytes": copied_bytes,
@@ -244,17 +283,22 @@ def _materialize_one(
         # A directory cannot be renamed onto a symbolic link, so the link has to
         # go first. The window between the two is the only moment the dataset is
         # absent; everything is already copied and verified by this point, so it
-        # is as short as the filesystem can make it.
-        link_target = entry.readlink()
-        entry.unlink()
+        # is as short as the filesystem can make it. An entry that was never
+        # there has no such window: the rename is all there is.
+        link_target = entry.readlink() if report.was_link else None
+        if link_target is not None:
+            entry.unlink()
         try:
             staging.rename(entry)
         except OSError as error:
-            entry.symlink_to(link_target)
+            restored = ""
+            if link_target is not None:
+                entry.symlink_to(link_target)
+                restored = "; the link was restored"
             shutil.rmtree(staging, ignore_errors=True)
             return MaterializeReport(
                 report.dataset, "failed",
-                f"could not put the copy in place ({error}); the link was restored",
+                f"could not put the copy in place ({error}){restored}",
                 entry=entry, target=target)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)

@@ -228,6 +228,21 @@ def _build_parser() -> argparse.ArgumentParser:
                           help="do not stop at entries that are already real directories")
     material.add_argument("--no-verify", action="store_true",
                           help="skip checksum verification of each copied file (not advised)")
+    # `from` is a keyword, so the destination has to be named explicitly.
+    material.add_argument("--from", dest="source", metavar="DIR", default=None,
+                          help="copy from this directory instead of the entry's link target; "
+                               "fills an entry that does not exist yet")
+
+    linker = sub.add_parser(
+        "link",
+        help="point one dataset's cache entry at a directory already on this machine")
+    linker.add_argument("dataset")
+    linker.add_argument("directory")
+    linker.add_argument("--force", action="store_true",
+                        help="repoint an entry that is already a link")
+    unlinker = sub.add_parser(
+        "unlink", help="remove a cache entry that is a link; never a real directory")
+    unlinker.add_argument("dataset")
 
     add_catalog_parser(sub)
 
@@ -334,6 +349,9 @@ def _main(argv: list[str] | None = None) -> int:
 
     if args.command == "materialize":
         return _materialize_command(args, roots)
+
+    if args.command in ("link", "unlink"):
+        return _link_command(args, roots)
 
     loaded = _load(args, roots)
 
@@ -483,20 +501,63 @@ def _verify_command(args, loaded, roots) -> int:
     return 0 if not outcome["skipped"] else 1
 
 
+def _cache_catalog(args, roots):
+    """The catalogue for a command that works on cache entries by name.
+
+    These commands take a dataset name rather than a collection, so an explicit
+    --catalog wins; a collections file is consulted only because it pins the
+    catalogue version a project is working against.
+    """
+    resolved_catalog = resolve_catalog(args.catalog)
+    if resolved_catalog:
+        return load_catalog(resolved_catalog[0])
+    if (args.package or args.collections or resolve_collections()
+            or Path("collections.yaml").is_file()):
+        return _load(args, roots).catalog
+    return load_catalog(DEFAULT_CATALOG)
+
+
+def _link_command(args, roots) -> int:
+    from .linking import LinkError, link, unlink
+
+    catalog = _cache_catalog(args, roots)
+    try:
+        if args.command == "link":
+            report = link(catalog, args.dataset, args.directory, roots, force=args.force)
+        else:
+            report = unlink(catalog, args.dataset, roots)
+    except (LinkError, UnknownDataset) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+
+    # Flushed, because the warning below goes to stderr: unflushed, the two
+    # streams arrive in the opposite order and the warning reads as being about
+    # whatever came before it.
+    print(f"  {report}", flush=True)
+    if report.missing:
+        # Not a failure: the link is made, and the person who typed the path is
+        # the only one who can say whether it is the right level.
+        print(f"\nwarning: the catalogue lists {report.missing!r}, which is not under "
+              f"{report.target}.\n         Check this is the dataset's own directory, then "
+              f"run `ethos-data verify --deep`.", file=sys.stderr)
+    return 0
+
+
 def _materialize_command(args, roots) -> int:
     from .materialize import materialize
 
-    resolved_catalog = resolve_catalog(args.catalog)
-    if resolved_catalog:
-        catalog = load_catalog(resolved_catalog[0])
-    elif (args.package or args.collections or resolve_collections()
-          or Path("collections.yaml").is_file()):
-        catalog = _load(args, roots).catalog
-    else:
-        catalog = load_catalog(DEFAULT_CATALOG)
+    catalog = _cache_catalog(args, roots)
 
     names = list(args.datasets)
-    if args.all or not names:
+    if args.source is not None:
+        # One directory holds one dataset's files, so spreading it over several
+        # names -- or over whatever --all happens to find -- could only ever mean
+        # copying the same bytes into the wrong entries.
+        if args.all or len(names) != 1:
+            print("--from copies one named dataset:\n"
+                  "    ethos-data materialize <dataset> --from <directory>", file=sys.stderr)
+            return 2
+    elif args.all or not names:
         if not roots.public.is_dir():
             print(f"no public cache at {roots.public}")
             return 1
@@ -508,6 +569,7 @@ def _materialize_command(args, roots) -> int:
     reports = materialize(
         catalog, names, roots,
         force=args.force, verify_hashes=not args.no_verify, dry_run=args.dry_run,
+        source=args.source,
     )
     for report in reports:
         print(f"  {report}")

@@ -28,10 +28,24 @@ ethos-data config unset-root global-wind-atlas-v4
 
 The dataset is downloaded into the public cache the next time it is needed.
 
+## Or link it into the cache
+
+`set-root` is a setting in your own configuration. To put the directory in the
+cache itself, where everyone sharing that cache sees it:
+
+```bash
+ethos-data link global-wind-atlas-v4 /data/GWA_4.0
+ethos-data unlink global-wind-atlas-v4
+```
+
+The entry is a symbolic link, so the files are read in place and never written
+to. On Windows this needs Developer Mode or an elevated shell; `set-root` needs
+neither.
+
 ## Related tasks
 
 - Licensed or proprietary data: [Work with restricted data](restricted-data.md).
 - A shared cache that links to data on disk is set up by a catalogue
-  maintainer: [Migrate cluster data](migrate-cluster-data.md).
+  maintainer: [Link cluster data into the cache](link-cluster-data.md).
 - Turn a linked dataset into your own copy:
   [Verify and repair](verify-and-repair.md#materialize-turning-a-borrowed-dataset-into-one-you-own).

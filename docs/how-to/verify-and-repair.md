@@ -112,6 +112,12 @@ copy can always be traced back to where it came from.
 | `--dry-run` | report the cost, copy nothing |
 | `--force` | do not stop at entries that are already real directories |
 | `--no-verify` | skip checksum verification of each copied file (not advised) |
+| `--from DIR` | copy from this directory instead of the entry's link target |
+
+`--from` takes one named dataset and also fills an entry that does not exist
+yet — use it when the files are already on this machine and uploading them just
+to download them again would be the slow way round. The copy is checked against
+the manifest either way.
 
 Two refusals worth knowing about:
 
@@ -125,7 +131,7 @@ takes everyone else down with it.
 
 Explicitly naming a restricted dataset materializes its link in the restricted
 root; `--all` only discovers public-cache links. For permitted local copies of
-licensed files, follow the [restricted migration procedure](migrate-cluster-data.md#restricted-data)
+licensed files, follow the [restricted move procedure](move-linked-data-into-the-cache.md#restricted-data)
 to retain the installation's access restrictions.
 
 ## Which one do I want?
@@ -144,4 +150,5 @@ to retain the installation's access restrictions.
   from in the first place.
 - [Caches, classes and roots](../explanation/caches-and-access.md).
 
-- [Migrate cluster data](migrate-cluster-data.md) — verify a namespace link, make the copy, and retire the old storage.
+- [Link cluster data into the cache](link-cluster-data.md) — where a namespace link comes from, and how to check it.
+- [Move linked data into the cache](move-linked-data-into-the-cache.md) — make the copy and retire the old storage.

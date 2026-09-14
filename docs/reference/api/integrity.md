@@ -20,6 +20,19 @@ See [Check and repair the cache](../../how-to/verify-and-repair.md) and
       show_root_toc_entry: false
       heading_level: 3
 
+## Cache entries
+
+::: ethos_data.linking
+    options:
+      members:
+        - link
+        - unlink
+        - LinkReport
+        - LinkError
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
 ## Materialization
 
 ::: ethos_data.materialize

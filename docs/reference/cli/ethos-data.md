@@ -120,6 +120,36 @@ Statuses, worst first: `dangling`, `wrong checksum`, `wrong size`, `missing`,
 
 See [Check and repair the cache](../../how-to/verify-and-repair.md).
 
+## `link <dataset> <directory>`
+
+Make one dataset's cache entry a symbolic link to a directory already on this
+machine. The entry goes in the root for the dataset's access class, so a
+restricted dataset lands in the restricted cache or is refused.
+
+| Flag | |
+|---|---|
+| `--force` | repoint an entry that is already a link |
+
+The directory is recorded as given, not resolved. A real directory in the cache
+is never replaced: that is data the cache owns. If the catalogue's first listed
+file is not under the directory, the link is still made and a warning names the
+file — the usual cause is naming a level too high.
+
+For a whole catalogue at once, a maintainer uses
+[`catalog link-cache`](catalog.md); this command is for one dataset, including
+an uploaded one with no `source_dir` left to link from, and for restricted
+entries, which `link-cache` skips.
+
+On Windows a symbolic link needs Developer Mode or an elevated shell. Without
+either, use `config set-root` instead. A junction (`mklink /J`) is **not** a
+substitute: it is reported as an ordinary directory, so the cache would treat
+borrowed data as a copy it owns and could write downloads into it.
+
+## `unlink <dataset>`
+
+Remove a cache entry that is a symbolic link. The data it points at is not
+touched. A real directory is refused — it holds the cache's own copy.
+
 ## `materialize [datasets...]`
 
 Replace symbolic-link cache entries with real, verified copies.
@@ -130,13 +160,18 @@ Replace symbolic-link cache entries with real, verified copies.
 | `--dry-run` | show the cost, copy nothing |
 | `--force` | do not stop at entries that are already real directories |
 | `--no-verify` | skip checksum verification of each copied file (not advised) |
+| `--from DIR` | copy from this directory instead of the entry's link target |
 
 Only files the catalogue describes are copied. Refuses if the copy would leave
 less than 2% of the filesystem free. Explicit dataset names use the root for
 their access class, including the restricted root. A local copy of licensed
 files requires permission under that installation's terms and an appropriately
-protected destination; see [Migrate cluster data](../../how-to/migrate-cluster-data.md#restricted-data).
-Provenance is written to `.ethos-data-materialized.json` in the new directory.
+protected destination; see [Move linked data into the cache](../../how-to/move-linked-data-into-the-cache.md#restricted-data).
+`--from` names one dataset (not `--all`) and also fills an entry that does not
+exist yet, which is how a cache is seeded from bytes already on the machine
+instead of an upload and a download back. It will not write over a real
+directory the cache owns. Provenance is written to `.ethos-data-materialized.json`
+in the new directory; `was_a_link_at` is null when no link was replaced.
 
 ## `staging`
 

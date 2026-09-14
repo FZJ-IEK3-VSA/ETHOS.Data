@@ -198,7 +198,8 @@ nav:
                 - Add internal and restricted datasets: how-to/add-internal-and-restricted-data.md
                 - Publish the catalogue: how-to/publish-the-catalogue.md
                 - Serve catalogues on the cluster and GitHub: how-to/catalogue-hosting.md
-                - Migrate cluster data from symlinks: how-to/migrate-cluster-data.md
+                - Link cluster data into the cache: how-to/link-cluster-data.md
+                - Move linked data into the cache: how-to/move-linked-data-into-the-cache.md
                 - Check catalogue changes in CI: how-to/catalogue-ci.md
                 - Diagnose catalogue problems: how-to/troubleshoot-catalogue.md
                 - Withdraw a dataset: how-to/withdraw-a-dataset.md

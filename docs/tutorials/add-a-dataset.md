@@ -244,5 +244,6 @@ When you are done, delete the `catalogue-lesson` directory.
   verification.
 - [Add internal and restricted datasets](../how-to/add-internal-and-restricted-data.md)
   — data that is not uploaded publicly.
-- [Migrate cluster data](../how-to/migrate-cluster-data.md) — linking and
+- [Link cluster data into the cache](../how-to/link-cluster-data.md) and [Move
+  linked data into the cache](../how-to/move-linked-data-into-the-cache.md) — linking and
   copying on real shared storage.

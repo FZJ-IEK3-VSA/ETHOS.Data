@@ -278,7 +278,7 @@ ethos:license_note: "Terms unclear; enquiry sent to <contact> 2026-08-14."
   of the same pattern grammar.
 
 
-For internal-only or licensed entries, follow [Add internal and restricted datasets](add-internal-and-restricted-data.md). For an existing cluster layout, use [Migrate cluster data](migrate-cluster-data.md).
+For internal-only or licensed entries, follow [Add internal and restricted datasets](add-internal-and-restricted-data.md). For an existing cluster layout, use [Link cluster data into the cache](link-cluster-data.md).
 
 ## A dataset made of smaller datasets
 

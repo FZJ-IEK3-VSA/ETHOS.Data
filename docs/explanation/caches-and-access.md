@@ -101,6 +101,7 @@ cache owns, and replacing it would silently discard it.
 | Situation | Use |
 |---|---|
 | a dataset the whole machine already has | a namespace link, built by a maintainer |
+| one dataset whose files are already here | `ethos-data link <dataset> <directory>` |
 | a private copy, or one dataset in an odd place | `ethos-data config set-root` |
 | licensed data you have access to | `ethos-data config set-restricted-cache` |
 | licensed data you do not have | `--skip-unavailable` |
