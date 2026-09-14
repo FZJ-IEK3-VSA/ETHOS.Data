@@ -1,13 +1,22 @@
 # Move linked data into the cache
 
 Replace a [linked](link-cluster-data.md) cache entry with a verified copy the
-cache owns, then retire the storage it pointed at. The dataset keeps its name, so
-nothing that reads it through ETHOS.Data changes.
+cache owns. The dataset keeps its name, so nothing that reads it through
+ETHOS.Data changes.
 
 ```text
 before   /shared/ethos/public/climate-inputs -> /legacy/climate-inputs
 after    /shared/ethos/public/climate-inputs/    a directory the cache owns
+         /legacy/climate-inputs                  still there, untouched
 ```
+
+**The original is not deleted, and does not have to be.** Nothing on this page
+removes it, and having both is a supported state you can stay in for as long as
+the transition takes — which is usually longer than anyone predicts, because the
+question is not whether the copy works but whether anything still reads the old
+path. Retiring the old storage is a
+[separate decision](#6-retiring-the-original-when-you-are-ready), made later,
+by whoever owns it.
 
 Before starting:
 
@@ -83,26 +92,62 @@ ls -ld /shared/ethos/public/climate-inputs
 Every expected file must report `ok`, and the permissions must be the intended
 ones. Then rerun a representative package workflow.
 
-## 5. Update the descriptor
+## 5. Update the descriptor, usually not at all
 
-- **Still maintained from local files:** point `source_dir` at the new directory
-  and rebuild — but only after the entry has become a directory, or the next
-  `link-cache` run creates a self-link.
+**While the original still exists, change nothing.** `source_dir` keeps pointing
+at it, the catalogue keeps building from it, and the cache holds a copy. That is
+the state to sit in for as long as the transition takes.
+
+Two things worth knowing while both exist:
+
+- The original is still the build input. If somebody edits it, the next
+  `catalog build` records the new bytes and the cache copy then fails
+  `verify --deep` — which is how you find out, and the fix is to materialize
+  again.
+- `link-cache` will not touch the entry any more: it never replaces a real
+  directory with a link.
+
+Change the descriptor only when there is genuinely nothing local left to build
+from:
+
+- **The original has been removed:** the cache copy is now the permanent one, so
+  the inventory is final. Remove `source_dir` and declare it:
+
+    ```yaml
+    ethos:frozen: true
+    ```
+
+    Rebuilds then re-derive the metadata and leave the recorded paths, sizes and
+    hashes alone. **Do not point `source_dir` at the cache copy instead.** A
+    rebuild re-hashes whatever it is pointed at, so a copy that has quietly
+    corrupted would be written into the manifest as correct — and `verify --deep`,
+    the check that would have caught it, is exactly what those hashes are for.
+
+- **The dataset is maintained from local files somewhere else now:** point
+  `source_dir` at that directory and rebuild. Never at the cache entry itself:
+  the next `link-cache` run would create a self-link.
 - **Already uploaded:** keep `ethos:uploaded: true` and leave `source_dir` absent.
   A local copy does not change which copy is authoritative.
 
-`link-cache` leaves the entry alone from now on: it never replaces a real
-directory with a link.
+## 6. Retiring the original, when you are ready
 
-## 6. Retire the original
+Optional, and not on a schedule. The copy is finished and verified without it;
+keeping the old structure costs disk and nothing else. There is no state the
+tooling is waiting to reach — `link-cache`, `build`, `verify` and every consumer
+work the same whether or not the original is still there.
 
-Only after verification passes and every dependent has moved.
+When somebody does decide it can go, the checks are:
 
 - Find what still reads the old path: job scripts, configuration, per-dataset
-  roots at any scope, other links into the same tree.
-- Files outside the inventory were **not** copied; they exist only in the original.
+  roots at any scope, other links into the same tree, and code nobody has run
+  this year. This is the part that takes the time, and it is why the two coexist.
+- Files outside the inventory were **not** copied; they exist only in the
+  original. A successful materialize is not a backup of the project directory.
 - Catalogue revisions still served may name the old `source_dir` for rebuilds.
-- Nothing deletes the original for you.
+- Then [freeze the inventory](#5-update-the-descriptor-usually-not-at-all), so
+  the catalogue stops depending on a path that is about to stop existing.
+- **Nothing deletes the original for you**, at any point. Removing it is a
+  deliberate act by whoever owns that storage.
 
 ## Restricted data
 

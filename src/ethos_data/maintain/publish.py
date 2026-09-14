@@ -39,7 +39,9 @@ from . import NAMESPACE_KEY, dataset_name_for, datasets_dir, iter_dataset_dirs
 #   ethos:license_note   -- internal review notes, not a public statement
 #   source_dir          -- a path on someone's workstation
 #   ethos:uploaded       -- workflow bookkeeping about where the manifest came from
-STRIP_FROM_PACKAGE = ("ethos:embargo", "ethos:license_note", "source_dir", "ethos:uploaded")
+#   ethos:frozen         -- the same, without the claim about dCache
+STRIP_FROM_PACKAGE = ("ethos:embargo", "ethos:license_note", "source_dir", "ethos:uploaded",
+                      "ethos:frozen")
 
 # Written into the public tree so that a stray local artefact -- an oidc-agent
 # socket symlink, a __pycache__ -- cannot be committed by a careless `git add -A`.

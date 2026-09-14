@@ -169,7 +169,7 @@ drive:
 ## See also
 
 - [Move linked data into the cache](move-linked-data-into-the-cache.md) — replace
-  the link with a copy.
+  the link with a copy, without disturbing the original.
 - [Stage uncatalogued data](stage-unpublished-data.md) — data nobody is ready to
   describe yet.
 - [Caches, classes and roots](../explanation/caches-and-access.md).

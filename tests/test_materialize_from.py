@@ -62,6 +62,30 @@ def test_fills_an_entry_that_does_not_exist(workspace):
     assert (entry / 'sub/b.txt').read_bytes() == CONTENT['sub/b.txt']
 
 
+def test_the_original_is_left_exactly_as_it_was(workspace, tmp_path):
+    """The transition outlasts the copy, so nothing here may touch the source.
+
+    Old code still reads the original path, and nobody can say in advance when it
+    can go. Both forms are checked: copying from a link's target, and copying from
+    a directory named with --from.
+    """
+    cache, source, roots = workspace
+    linked = _write(tmp_path / 'linked')
+    (cache / 'example').symlink_to(linked, target_is_directory=True)
+
+    materialize(_catalog(), ['example'], roots)
+
+    assert linked.is_dir()
+    assert sorted(p.name for p in linked.rglob('*') if p.is_file()) == ['a.txt', 'b.txt']
+    assert (linked / 'a.txt').read_bytes() == CONTENT['a.txt']
+
+    (cache / 'example').rename(cache / 'done')  # clear the entry for the second form
+    materialize(_catalog(), ['example'], roots, source=source)
+
+    assert source.is_dir()
+    assert (source / 'a.txt').read_bytes() == CONTENT['a.txt']
+
+
 def test_records_that_no_link_was_replaced(workspace):
     cache, source, roots = workspace
     materialize(_catalog(), ['example'], roots, source=source)

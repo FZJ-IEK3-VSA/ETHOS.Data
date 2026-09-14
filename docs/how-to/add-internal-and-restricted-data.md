@@ -70,9 +70,23 @@ If the description may be public, set `ethos:visibility: public` and remove the
 embargo block; keep `ethos:access: restricted`.
 
 Restricted datasets have **no `ethos:remote_prefix`**; the builder rejects it.
-Keep `source_dir` and do not mark these files `ethos:uploaded: true`. That flag
-means the inventory has been frozen after upload to dCache, which is not the
-restricted-data workflow.
+Keep `source_dir` while there is a local directory to build from, and never mark
+these files `ethos:uploaded: true` — the builder rejects that too, because these
+bytes never reach dCache.
+
+If the authorised installation is later copied into the restricted cache, keep
+`source_dir` as long as the installation is still there — the two coexist for as
+long as the transition takes. Only when there is genuinely nothing local left to
+build from, remove `source_dir` and say so:
+
+```yaml
+ethos:frozen: true
+```
+
+The inventory then stands as recorded — paths, sizes and hashes — and rebuilds
+re-derive only the metadata. Those hashes are what `verify --deep` checks the
+permanent copy against, which is why they are not re-read from it. See
+[Move linked data into the cache](move-linked-data-into-the-cache.md#5-update-the-descriptor-usually-not-at-all).
 
 For an internal dataset, use the same source-directory/provenance pattern but
 replace the classification block:

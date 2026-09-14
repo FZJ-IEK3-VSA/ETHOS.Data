@@ -126,8 +126,10 @@ ethos:derivation: >-                           # if origin: derived
   The method, parameters and inputs, in enough detail to redo it.
 
 # ---- where the bytes are -----------------------------------------------
-source_dir: /benchtop/shared_data/MyDataset   # required
+source_dir: /legacy/shared/MyDataset           # required, unless frozen below
 ethos:remote_prefix: my-dataset                # default: the value of `name`
+ethos:uploaded: false                          # dCache holds it; drop source_dir
+ethos:frozen: false                            # inventory final; drop source_dir
 
 # ---- classification ----------------------------------------------------
 ethos:access: public                           # default: public | internal | restricted
@@ -469,6 +471,25 @@ published.
 **`ethos:remote_prefix`** — *string; default: the value of `name`.* Folder name on
 the public store. **Must not be set** for restricted data — the build rejects it,
 because restricted bytes are never uploaded.
+
+**`ethos:uploaded`** — *bool; default: false.* dCache now holds the copy this
+manifest's hashes describe. A rebuild reuses the recorded inventory instead of
+reading files, so `source_dir` must be removed at the same time — the build
+rejects both together. **Must not be set** for restricted data, which never
+reaches dCache; use `ethos:frozen` for that. Stripped from anything published.
+
+**`ethos:frozen`** — *bool; default: false.* The same freeze without the claim
+about dCache: the inventory is final and there is nothing local left to build
+from. For restricted data whose authorised installation is the permanent copy,
+and for data materialised into a cache after its original was retired. Implied by
+`ethos:uploaded`. Requires `source_dir` to be absent and a `datapackage.json` to
+already exist — build once, check it, then freeze. Stripped from anything
+published.
+
+Freezing rather than repointing `source_dir` at the copy is deliberate: a rebuild
+re-hashes whatever it is pointed at, so a corrupted copy would be recorded as
+correct and the check that would have caught it would be the thing that destroyed
+the evidence. Hashes taken from the original stay an independent witness.
 
 ### Classification
 

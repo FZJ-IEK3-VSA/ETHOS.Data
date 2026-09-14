@@ -122,6 +122,27 @@ DERIVATION_KEY = "ethos:derivation"
 #: the truth.
 UPLOADED_KEY = "ethos:uploaded"
 
+#: The same freeze, without the claim about dCache: the inventory is final and
+#: there is no local build input any more.
+#:
+#: Uploading is one way a dataset reaches that state and it is not the only one.
+#: Restricted data is never uploaded -- the authorised installation *is* the
+#: permanent copy, and this manifest's hashes are what says it is still intact --
+#: so once it has been moved into the restricted cache and the original retired,
+#: there is nothing left to build from and nothing that should be rebuilt. The
+#: same is true of public data materialised into a cache.
+#:
+#: Why freeze rather than repoint ``source_dir`` at the copy: a rebuild re-reads
+#: and re-hashes whatever it is pointed at. Pointed at the copy, it would record
+#: that copy's current bytes as the truth -- so a corrupted copy would be written
+#: into the manifest as correct, and the check that would have caught it is the
+#: thing that just destroyed the evidence. Hashes taken from the original are an
+#: independent witness; keeping them is the whole point.
+#:
+#: ``ethos:uploaded: true`` implies this. Both are maintainer bookkeeping and
+#: neither is published.
+FROZEN_KEY = "ethos:frozen"
+
 CONTRIBUTORS_KEY = "contributors"
 #: Data Package's suggested roles. `author` is the one that carries weight here:
 #: an origin of `derived` or `created` has to name who did it.
@@ -421,8 +442,9 @@ def frozen_resources(name: str, dataset_dir: Path) -> list[dict]:
     package_file = dataset_dir / "datapackage.json"
     if not package_file.is_file():
         raise SystemExit(
-            f"{name}: {UPLOADED_KEY} is true but there is no datapackage.json to freeze. "
-            f"Build once with source_dir set, upload it, then set {UPLOADED_KEY}: true."
+            f"{name}: the inventory is declared final but there is no datapackage.json to "
+            f"freeze. Build once with source_dir set, check the result, and only then set "
+            f"{FROZEN_KEY}: true (or {UPLOADED_KEY}: true) and remove source_dir."
         )
     resources = resources_of(json.loads(package_file.read_text(encoding="utf-8")), dataset_dir)
     return [{k: v for k, v in resource.items() if k != LICENSES_KEY} for resource in resources]
@@ -479,6 +501,17 @@ def validate_classification(name: str, meta: dict) -> tuple[str, str]:
         raise SystemExit(
             f"{name}: restricted data must not declare ethos:remote_prefix -- "
             "it is never uploaded. Configure dataset_roots on each machine instead."
+        )
+    if access == "restricted" and meta.get(UPLOADED_KEY):
+        # The freeze this asks for is right; the claim attached to it is not.
+        # Restricted data never reaches dCache, so "dCache holds it now" would be
+        # a false statement sitting in the catalogue -- and there is a key that
+        # says the true half on its own.
+        raise SystemExit(
+            f"{name}: restricted data is never uploaded, so {UPLOADED_KEY}: true cannot "
+            f"be right. If its inventory is final -- the authorised installation is the "
+            f"permanent copy and there is nothing local left to build from -- say that "
+            f"instead:\n    {FROZEN_KEY}: true"
         )
     return access, visibility
 
@@ -732,23 +765,33 @@ def render_dataset(
     validate_provenance(name, meta)
     licenses = validate_licenses(name, meta)
 
-    # Both local to the maintainer, never published -- see the module docstring.
+    # All local to the maintainer, never published -- see the module docstring.
     uploaded = bool(meta.pop(UPLOADED_KEY, False))
+    # Uploading implies it; it does not imply uploading. See FROZEN_KEY.
+    frozen = bool(meta.pop(FROZEN_KEY, False)) or uploaded
     raw_source_dir = meta.pop("source_dir", None)
 
-    if uploaded:
+    if frozen:
         if raw_source_dir is not None:
+            reason = (
+                "Once uploaded, dCache is the source of truth and source_dir is never "
+                "read again -- remove it."
+                if uploaded else
+                "A frozen inventory is never rebuilt from local files; the copy it "
+                "describes is the permanent one -- remove it."
+            )
+            declared = UPLOADED_KEY if uploaded else FROZEN_KEY
             raise SystemExit(
-                f"{name}: declares {UPLOADED_KEY}: true and still has "
-                f"source_dir: {raw_source_dir!r}. Once uploaded, dCache is the source of "
-                "truth and source_dir is never read again -- remove it."
+                f"{name}: declares {declared}: true and still has "
+                f"source_dir: {raw_source_dir!r}. {reason}"
             )
         resources = frozen_resources(name, dataset_dir)
     else:
         if raw_source_dir is None:
             raise SystemExit(
-                f"{name}: source_dir is required, unless {UPLOADED_KEY}: true "
-                "says the dataset was already uploaded and dCache is now the source of truth."
+                f"{name}: source_dir is required, unless {UPLOADED_KEY}: true says the "
+                f"dataset was already uploaded, or {FROZEN_KEY}: true says its inventory "
+                "is final and there is nothing local left to build from."
             )
         source_dir = Path(raw_source_dir).expanduser()
         # Only a *relative* source_dir is resolved, and only to make it absolute.
