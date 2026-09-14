@@ -130,9 +130,13 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     linker = catalog_sub.add_parser(
         "link-cache",
         help="build the shared cache as links to data already on this machine")
-    linker.add_argument("--root", required=True,
+    # Not required, but still worth naming: this command usually builds a cache
+    # for a whole machine, which is rarely the one the maintainer's own account
+    # reads. The default is there so that filling your own cache from a checkout
+    # is one word, not a path you have to look up.
+    linker.add_argument("--root", default=None,
                         help="the public cache directory to build "
-                             "(e.g. /shared/ethos/public)")
+                             "(default: the configured public cache)")
     linker.add_argument("--dry-run", action="store_true",
                         help="show what would change, write nothing")
     linker.add_argument("--prune", action="store_true",

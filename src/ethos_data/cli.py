@@ -235,11 +235,23 @@ def _build_parser() -> argparse.ArgumentParser:
 
     linker = sub.add_parser(
         "link",
-        help="point one dataset's cache entry at a directory already on this machine")
-    linker.add_argument("dataset")
-    linker.add_argument("directory")
+        help="point cache entries at data already on this machine")
+    linker.add_argument("dataset", nargs="?",
+                        help="dataset name (omit with --all)")
+    linker.add_argument("directory", nargs="?",
+                        help="the directory to link to (default: the catalogue's source_dir)")
+    linker.add_argument("--all", action="store_true",
+                        help="link every dataset in the source catalogue that has a source_dir")
     linker.add_argument("--force", action="store_true",
                         help="repoint an entry that is already a link")
+    linker.add_argument("--dry-run", action="store_true",
+                        help="with --all: show what would change, write nothing")
+    # Named as the maintainer commands name it, because it is the same thing: the
+    # checkout holding dataset.yaml. source_dir is popped out of a descriptor when
+    # it is built, so the hand-written file is the only place it exists.
+    linker.add_argument("--catalog-root", default=None,
+                        help="catalogue checkout to read source_dir from "
+                             "(default: search upward for catalog.yaml)")
     unlinker = sub.add_parser(
         "unlink", help="remove a cache entry that is a link; never a real directory")
     unlinker.add_argument("dataset")
@@ -517,13 +529,49 @@ def _cache_catalog(args, roots):
     return load_catalog(DEFAULT_CATALOG)
 
 
+def _link_all_command(args, roots) -> int:
+    """Every dataset in the checkout with a source_dir, into the configured cache.
+
+    This is `catalog link-cache` pointed at the cache this machine already reads,
+    rather than a root typed out by hand -- the same planner, so the two can never
+    disagree about what a namespace should look like, and restricted datasets are
+    skipped here exactly as they are there.
+    """
+    import argparse
+
+    from .maintain import resolve_catalog_root
+    from .maintain import namespace as namespace_module
+
+    try:
+        catalog_root = resolve_catalog_root(args.catalog_root)
+    except SystemExit as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+    return namespace_module.run(catalog_root, argparse.Namespace(
+        root=str(roots.public), dry_run=args.dry_run, prune=False))
+
+
 def _link_command(args, roots) -> int:
     from .linking import LinkError, link, unlink
+
+    if args.command == "link":
+        if args.all:
+            if args.dataset or args.directory:
+                print("--all links every dataset with a source_dir; it takes no names.",
+                      file=sys.stderr)
+                return 2
+            return _link_all_command(args, roots)
+        if not args.dataset:
+            print("name a dataset, or use --all:\n"
+                  "    ethos-data link <dataset> [directory]\n"
+                  "    ethos-data link --all", file=sys.stderr)
+            return 2
 
     catalog = _cache_catalog(args, roots)
     try:
         if args.command == "link":
-            report = link(catalog, args.dataset, args.directory, roots, force=args.force)
+            report = link(catalog, args.dataset, args.directory, roots,
+                          force=args.force, catalog_root=args.catalog_root)
         else:
             report = unlink(catalog, args.dataset, roots)
     except (LinkError, UnknownDataset) as error:

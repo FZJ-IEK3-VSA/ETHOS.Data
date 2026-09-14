@@ -51,7 +51,9 @@ This reads `dataset.yaml` only, so no inventory has to exist yet. It covers the
 whole catalogue, not the dataset you last edited — read the dry run, which
 reports each entry as `link`, `repoint`, `keep` (a real directory, never replaced
 by a link), `skip` (restricted, or no `source_dir`) or `missing`. Only top-level
-`datasets/` directories are linked. Avoid `--prune` mid-migration.
+`datasets/` directories are linked. Avoid `--prune` mid-migration. Without
+`--root` it builds the cache this machine is configured to read, which is the
+form to use for your own cache rather than a shared one.
 
 ## 3. Build the inventory
 
@@ -93,20 +95,27 @@ Use a collection selecting `files: ["**"]`, as in
 The plan must report the origin as **namespace link**, and deep verification
 every expected file as `ok`.
 
-## One dataset at a time
+## One dataset, or your own cache
 
-`link-cache` needs a catalogue checkout and a `source_dir`. For a single dataset
-— including an uploaded one, whose descriptor has no `source_dir` left, and a
-restricted one, which `link-cache` skips — make the entry directly:
+`link-cache` builds a shared namespace at a root you name. To fill the cache this
+machine is configured to read, or to link one dataset:
 
 ```bash
-ethos-data link climate-inputs /legacy/climate-inputs
+ethos-data link --all                 # every dataset with a source_dir
+ethos-data link climate-inputs        # one, from its source_dir
+ethos-data link climate-inputs /legacy/climate-inputs    # one, explicitly
 ethos-data unlink climate-inputs
 ```
 
-It puts the link in the root for the dataset's access class, refuses to replace a
-real directory, and warns if the directory looks like the wrong level. To copy
-the files in rather than link them, use
+Both forms read `source_dir` from the catalogue checkout — pass `--catalog-root`
+if you are not inside one. `--all` skips restricted datasets, as `link-cache`
+does; naming one explicitly links it into the restricted root, which is how an
+authorised installation is registered. An uploaded dataset has no `source_dir`
+left, so name its directory.
+
+Entries go in the root for the dataset's access class, a real directory is never
+replaced, and a link that looks like the wrong level is reported. To copy the
+files in rather than link them, use
 [`materialize --from`](move-linked-data-into-the-cache.md#copy-from-somewhere-else).
 
 On Windows this needs Developer Mode or an elevated shell; without either, use

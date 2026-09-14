@@ -130,7 +130,7 @@ ethos-data catalog link-cache --root /shared/ethos/public --prune
 
 | Flag | |
 |---|---|
-| `--root DIR` | **required** — the public cache directory to build |
+| `--root DIR` | the public cache directory to build (default: the configured public cache) |
 | `--dry-run` | show what would change, write nothing |
 | `--prune` | also remove links for datasets no longer in the catalogue |
 
@@ -138,7 +138,9 @@ Nothing is copied or moved. **Real directories are never touched** — an entry
 downloaded from dCache or produced by `ethos-data materialize` is data the cache
 owns, and replacing it with a link would discard it.
 
-See [Link cluster data into the cache](../../how-to/link-cluster-data.md#2-create-the-links).
+For one dataset, or into the cache this machine is configured to read, see
+[`ethos-data link`](ethos-data.md). See also
+[Link cluster data into the cache](../../how-to/link-cluster-data.md#2-create-the-links).
 
 ## `check-store [vo]`
 

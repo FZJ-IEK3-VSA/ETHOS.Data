@@ -83,6 +83,19 @@ def _source_of(catalog_root: Path, name: str, meta: dict) -> Path | None:
     return source
 
 
+def _same_target(current: Path, source: Path) -> bool:
+    """Whether a link already points where the catalogue says it should.
+
+    Compared as text, because a link *is* text -- resolving both would call two
+    different curated paths the same thing the moment either went through
+    another link, which is exactly what source_dir is allowed to do. The one
+    spelling difference that is not a real difference is Windows's ``\\\\?\\``
+    extended-length prefix, added when the link is stored: without stripping it,
+    every run would repoint an entry that is already correct.
+    """
+    return str(current).removeprefix("\\\\?\\") == str(source).removeprefix("\\\\?\\")
+
+
 def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
     """Decide what the namespace needs, without touching the filesystem."""
     actions: list[Action] = []
@@ -113,7 +126,7 @@ def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
 
         if entry.is_symlink():
             current = entry.readlink()
-            if current == source:
+            if _same_target(current, source):
                 actions.append(Action(name, "unchanged", entry, source))
             else:
                 actions.append(Action(
@@ -151,7 +164,14 @@ def apply(actions: list[Action]) -> list[Action]:
 
 
 def run(catalog_root: Path, args) -> int:
-    root = Path(args.root).expanduser()
+    if args.root is None:
+        from ..config import resolve_public_cache
+
+        resolved = resolve_public_cache()
+        root = resolved.value
+        print(f"no --root given; using the public cache from {resolved.source}")
+    else:
+        root = Path(args.root).expanduser()
     actions = plan(catalog_root, root, prune=args.prune)
 
     changes = [a for a in actions if a.changes_anything]

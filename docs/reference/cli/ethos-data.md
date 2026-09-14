@@ -120,25 +120,39 @@ Statuses, worst first: `dangling`, `wrong checksum`, `wrong size`, `missing`,
 
 See [Check and repair the cache](../../how-to/verify-and-repair.md).
 
-## `link <dataset> <directory>`
+## `link [dataset] [directory]`
 
-Make one dataset's cache entry a symbolic link to a directory already on this
-machine. The entry goes in the root for the dataset's access class, so a
-restricted dataset lands in the restricted cache or is refused.
+Point cache entries at data already on this machine.
+
+```bash
+ethos-data link global-wind-atlas /data/GWA_4.0   # this directory
+ethos-data link global-wind-atlas                 # its source_dir
+ethos-data link --all                             # every source_dir there is
+```
 
 | Flag | |
 |---|---|
+| `--all` | link every dataset in the source catalogue that has a `source_dir` |
 | `--force` | repoint an entry that is already a link |
+| `--dry-run` | with `--all`: show what would change, write nothing |
+| `--catalog-root DIR` | catalogue checkout to read `source_dir` from (default: searched upward from the current directory) |
 
-The directory is recorded as given, not resolved. A real directory in the cache
-is never replaced: that is data the cache owns. If the catalogue's first listed
-file is not under the directory, the link is still made and a warning names the
-file — the usual cause is naming a level too high.
+Entries go in the root for each dataset's access class, so a restricted dataset
+lands in the restricted cache or is refused. The directory is recorded as given,
+not resolved. A real directory in the cache is never replaced: that is data the
+cache owns. If the catalogue's first listed file is not under the directory, the
+link is still made and a warning names the file — the usual cause is naming a
+level too high.
 
-For a whole catalogue at once, a maintainer uses
-[`catalog link-cache`](catalog.md); this command is for one dataset, including
-an uploaded one with no `source_dir` left to link from, and for restricted
-entries, which `link-cache` skips.
+Without a directory, `source_dir` is read from the hand-written
+`datasets/<name>/dataset.yaml`, which is the only place it exists: it is popped
+out of the descriptor when the manifest is built. An uploaded dataset has none
+by design, and is refused with the explicit form to use instead.
+
+`--all` is [`catalog link-cache`](catalog.md) pointed at the cache this machine
+reads, and skips restricted datasets for the same reason. Naming a restricted
+dataset explicitly does link it, in the restricted root — that is how an
+authorised installation is registered.
 
 On Windows a symbolic link needs Developer Mode or an elevated shell. Without
 either, use `config set-root` instead. A junction (`mklink /J`) is **not** a

@@ -182,6 +182,84 @@ def test_unlink_refuses_a_real_directory(workspace):
     assert (owned / 'a.txt').exists()
 
 
+def _checkout(tmp_path, datasets: dict[str, str]) -> pytest.TempPathFactory:
+    """A source catalogue: catalog.yaml and hand-written dataset.yaml files.
+
+    source_dir lives here and nowhere else -- it is popped out of the descriptor
+    when the manifest is built -- so this is what `link` without a directory has
+    to read.
+    """
+    root = tmp_path / 'catalogue'
+    (root / 'datasets').mkdir(parents=True)
+    (root / 'catalog.yaml').write_text('name: test\ntitle: Test\n')
+    for name, body in datasets.items():
+        directory = root / 'datasets' / name
+        directory.mkdir()
+        (directory / 'dataset.yaml').write_text(body)
+    return root
+
+
+def test_links_the_source_dir_when_no_directory_is_given(workspace, tmp_path):
+    cache, data, roots = workspace
+    checkout = _checkout(tmp_path, {
+        'example': f'name: example\ntitle: Example\nsource_dir: {data.as_posix()}\n'})
+
+    report = link(_catalog(), 'example', roots=roots, catalog_root=checkout)
+
+    assert report.target == data
+    assert (cache / 'example').is_symlink()
+    assert (cache / 'example' / 'a.txt').read_bytes() == CONTENT['a.txt']
+
+
+def test_a_dataset_with_no_source_dir_says_what_to_do_instead(workspace, tmp_path):
+    """An uploaded dataset has none by design: dCache holds it."""
+    cache, _, roots = workspace
+    checkout = _checkout(tmp_path, {
+        'example': 'name: example\ntitle: Example\nethos:uploaded: true\n'})
+
+    with pytest.raises(LinkError, match='no source_dir'):
+        link(_catalog(), 'example', roots=roots, catalog_root=checkout)
+    assert not (cache / 'example').exists()
+
+
+def test_a_dataset_the_checkout_does_not_have(workspace, tmp_path):
+    _, _, roots = workspace
+    checkout = _checkout(tmp_path, {})
+
+    with pytest.raises(LinkError, match='no dataset called'):
+        link(_catalog(), 'example', roots=roots, catalog_root=checkout)
+
+
+def test_cli_all_links_every_source_dir_into_the_configured_cache(tmp_path, monkeypatch, capsys):
+    cache = tmp_path / 'cache'
+    monkeypatch.setenv('ETHOS_DATA_DIR', str(cache))
+    one, two = _write(tmp_path / 'one'), _write(tmp_path / 'two')
+    checkout = _checkout(tmp_path, {
+        'one': f'name: one\ntitle: One\nsource_dir: {one.as_posix()}\n',
+        'two': f'name: two\ntitle: Two\nsource_dir: {two.as_posix()}\n'})
+
+    assert main(['link', '--all', '--catalog-root', str(checkout), '--dry-run']) == 0
+    assert not (cache / 'one').exists()
+
+    assert main(['link', '--all', '--catalog-root', str(checkout)]) == 0
+    assert (cache / 'one').is_symlink() and (cache / 'two').is_symlink()
+
+    # Run twice: an entry that is already right is left alone rather than
+    # repointed, which on Windows means looking past the \\?\ prefix.
+    assert main(['link', '--all', '--catalog-root', str(checkout)]) == 0
+    assert 'nothing to do' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize('arguments, message', [
+    (['link', '--all', 'example'], 'takes no names'),
+    (['link'], 'name a dataset, or use --all'),
+])
+def test_cli_rejects_a_contradictory_invocation(tmp_path, monkeypatch, capsys, arguments, message):
+    monkeypatch.setenv('ETHOS_DATA_DIR', str(tmp_path / 'cache'))
+    assert main(arguments) == 2
+    assert message in capsys.readouterr().err
+
+
 def _cli_workspace(tmp_path, monkeypatch):
     monkeypatch.setenv('ETHOS_DATA_DIR', str(tmp_path / 'cache'))
     monkeypatch.delenv('ETHOS_RESTRICTED_DIR', raising=False)

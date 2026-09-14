@@ -27,6 +27,7 @@ See [Check and repair the cache](../../how-to/verify-and-repair.md) and
       members:
         - link
         - unlink
+        - source_dir_for
         - LinkReport
         - LinkError
       show_root_heading: false

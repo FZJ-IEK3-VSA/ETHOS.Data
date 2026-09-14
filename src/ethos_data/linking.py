@@ -1,20 +1,22 @@
 """Pointing one cache entry at data that is already on this machine.
 
-    ethos-data link global-wind-atlas /data/GWA_4.0
+    ethos-data link global-wind-atlas /data/GWA_4.0   # this directory
+    ethos-data link global-wind-atlas                 # its source_dir
+    ethos-data link --all                             # every source_dir there is
     ethos-data unlink global-wind-atlas
 
-This is the single-dataset counterpart to ``ethos-data catalog link-cache``,
-which builds the whole namespace from the catalogue's ``source_dir`` values. That
-command is the right one when there is a catalogue checkout and a maintainer
-building a shared cache for everybody. This one is for the cases it cannot
-reach:
+This is the single-dataset counterpart to ``ethos-data catalog link-cache``.
+That command builds a *shared* namespace: it takes the root to build explicitly,
+reviews the whole catalogue with ``--dry-run``, and prunes stale entries. This
+one fills the cache this machine is configured to read, and reaches three things
+link-cache does not:
 
-  * a dataset that has been uploaded, so its descriptor no longer has a
-    ``source_dir`` to link from, but whose bytes are sitting right here and do
-    not need downloading again
-  * a restricted dataset, which ``link-cache`` skips on purpose: its entry is
-    made by an administrator, in the restricted root
-  * anybody who has the files and no catalogue checkout at all
+  * one dataset by name, rather than every one in the catalogue
+  * a dataset that has been uploaded, so its descriptor has no ``source_dir``
+    left, but whose bytes are sitting right here and need no downloading
+  * a restricted dataset, which ``link-cache`` skips on purpose -- a shared
+    public namespace must never touch licensed data, but registering one
+    authorised installation by name is exactly how it is meant to be done
 
 Until now the answer was "type ``ln -s`` yourself", which is advice that quietly
 does the wrong thing on Windows -- ``ln -s`` in Git Bash copies the whole tree
@@ -38,7 +40,7 @@ from .access import entry_for
 from .catalog import Catalog
 from .config import Roots
 
-__all__ = ["LinkError", "LinkReport", "link", "unlink"]
+__all__ = ["LinkError", "LinkReport", "link", "source_dir_for", "unlink"]
 
 
 class LinkError(RuntimeError):
@@ -66,6 +68,44 @@ class LinkReport:
         # printing the spelling the person used is what makes the line checkable.
         target = str(self.target).removeprefix("\\\\?\\")
         return f"{self.verb:<11} {self.dataset}  {self.entry} -> {target}"
+
+
+def source_dir_for(name: str, catalog_root: str | Path | None = None) -> Path:
+    """The ``source_dir`` a source catalogue records for this dataset.
+
+    ``source_dir`` is popped out of the descriptor when it is built, so it lives
+    in the hand-written ``datasets/<name>/dataset.yaml`` and nowhere else -- not
+    in ``datapackage.json``, not in any ``datacatalog.json``. Reading it means
+    reading the checkout, exactly as ``catalog build`` and ``catalog upload`` do;
+    ``catalog_root`` names it, or it is searched for upward from the current
+    directory.
+
+    The maintainer half of the package is imported here rather than at module
+    scope so that ``import ethos_data`` stays the read-only library it promises
+    to be: nothing is pulled in until somebody asks for a path only a checkout
+    can answer.
+    """
+    from .maintain import datasets_dir, resolve_catalog_root
+
+    root = resolve_catalog_root(str(catalog_root) if catalog_root is not None else None)
+    descriptor = datasets_dir(root) / name / "dataset.yaml"
+    if not descriptor.is_file():
+        raise LinkError(f"no dataset called {name!r} in {datasets_dir(root)}")
+
+    import yaml
+
+    meta = yaml.safe_load(descriptor.read_text(encoding="utf-8")) or {}
+    raw = meta.get("source_dir")
+    if not raw:
+        raise LinkError(
+            f"{descriptor} has no source_dir, so there is nothing to link from.\n"
+            "An uploaded dataset has none by design -- dCache holds it. Name the "
+            f"directory instead:\n    ethos-data link {name} /path/to/{name}"
+        )
+    source = Path(str(raw)).expanduser()
+    if not source.is_absolute():
+        source = (datasets_dir(root) / name / source).resolve()
+    return source
 
 
 def _absolute(directory: str | Path) -> Path:
@@ -120,14 +160,23 @@ def _refusal(name: str, target: Path, error: OSError) -> str:
 def link(
     catalog: Catalog,
     name: str,
-    directory: str | Path,
+    directory: str | Path | None = None,
     roots: "Roots | str | Path | None" = None,
     force: bool = False,
+    catalog_root: str | Path | None = None,
 ) -> LinkReport:
     """Make this dataset's cache entry a symbolic link to ``directory``.
 
+    Without a ``directory``, the source catalogue's ``source_dir`` for this
+    dataset is used -- see :func:`source_dir_for`, which is also what decides
+    where ``catalog_root`` is looked for.
+
     The entry goes in whichever root the dataset's access class belongs to, so a
-    restricted dataset lands in the restricted cache or nowhere at all.
+    restricted dataset lands in the restricted cache or nowhere at all. That is
+    one thing this does and ``catalog link-cache`` does not: it skips restricted
+    datasets, because building a shared public namespace must never touch them,
+    while linking one deliberately by name is how an authorised installation gets
+    registered.
 
     Raises :class:`LinkError` if the directory is not there, if the entry is
     already a link and ``force`` is not set, or if the entry is a real directory
@@ -139,6 +188,8 @@ def link(
     except ValueError as error:
         raise LinkError(str(error)) from None
 
+    if directory is None:
+        directory = source_dir_for(name, catalog_root)
     target = _absolute(directory)
     if not target.is_dir():
         raise LinkError(f"not a directory: {target}")
