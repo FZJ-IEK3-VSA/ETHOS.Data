@@ -51,16 +51,22 @@ Only if the workflow explicitly handles omitted data:
 ethos-data --skip-unavailable -p reskit fetch onshore_wind
 ```
 
-Keep the global option before `fetch`. For Python, first enable the preference
-with `ethos-data config set-skip-unavailable true --scope project` in the project
-directory. Skipped resources are absent from the result:
+Keep the global option before `fetch`. In Python, pass `skip_unavailable=True`
+to `fetch()` or `paths()`, or enable the preference with
+`ethos-data config set-skip-unavailable true --scope project` in the project
+directory. Skipped resources are absent from the result, and so is a named
+path whose data was skipped; a warning names what was left out:
 
 ```python
 import ethos_data
 
-files = ethos_data.fetch("onshore_wind", package="reskit")
+files = ethos_data.fetch("onshore_wind", package="reskit", skip_unavailable=True)
 if "licensed-example/layer.tif" in files:
     layer = files["licensed-example/layer.tif"]
+
+inputs = ethos_data.paths("onshore_wind", package="reskit", skip_unavailable=True)
+if "layer" in inputs:
+    layer = inputs["layer"]
 ```
 
 For a persistent preference, use `config set-skip-unavailable true`; undo it with

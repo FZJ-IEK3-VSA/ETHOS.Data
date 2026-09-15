@@ -3,9 +3,10 @@
 The scenarios use the block names from [section 5](building-blocks.md).
 
 The ordinary Python `fetch()` path loads a collections file, selects catalogue
-resources, determines where they belong on this machine, and returns a mapping
-from resource keys to local paths. It may read metadata over the network even
-when all dataset bytes are already local.
+resources, checks the collection's `paths` handles against that selection,
+determines where the resources belong on this machine, and returns a mapping
+from resource keys to local paths, with the handles resolved beside it. It may
+read metadata over the network even when all dataset bytes are already local.
 
 ## 6.1 Data request
 
@@ -34,7 +35,7 @@ entry in the public cache means use the existing files in place. The existing
 | Download-managed file is absent or fails its hash check | Pooch retrieves and verifies it | Network/storage failures can stop the request |
 | File resolves in place | Fetch checks that it exists and returns its path without copying | Fetch does not hash-check this local file; use explicit verification when needed |
 | Expected in-place file is missing | Raises an access error with concrete paths | A configured location does not silently fall back to another copy |
-| Restricted data has no configured location | Fails, or marks it unavailable when skipping is enabled | Skipped resources are absent from the returned mapping and a warning is emitted |
+| Restricted data has no configured location | Fails, or marks it unavailable when skipping is enabled | Skipped resources are absent from the returned mapping, and so is any `paths` handle that depends on them; a warning names both |
 
 A download also checks that its destination dataset directory is not a symbolic
 link before passing work to Pooch. This protects storage borrowed by the cache
@@ -63,12 +64,18 @@ and [Work with restricted data](../../how-to/restricted-data.md).
 
 ### Failure boundaries
 
-Selection rejects unknown datasets and collections. A pattern that matches no
+Loading a collections file fails first if the catalogue index it pins cannot be
+read (`CatalogUnavailable`). Selection rejects unknown datasets and collections,
+and a collection whose `test` and `full` variants name different `paths` — the
+check runs for every collection a resolution reaches through `extends`, so a
+plain collection extending a lopsided one is rejected too. A pattern that matches no
 resources can produce an empty selection; consuming packages must check that
 their required inputs were selected. Bundle export rejects empty collections. If Access
 policy finds inaccessible required data,
 Retrieval fails before returning an apparently complete result. Explicitly
-skipping unavailable data changes the returned keys, so the consuming workflow
+skipping unavailable data changes the returned keys and leaves the affected
+`paths` handles out of the named mapping — recorded in `NamedPaths.omitted`
+and named in a warning, never a path to nothing — so the consuming workflow
 must distinguish required from optional inputs.
 
 Local development can overlay catalogue data with staging entries. A staging

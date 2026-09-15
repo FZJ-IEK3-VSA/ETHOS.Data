@@ -159,7 +159,9 @@ class TestCommandLineOutput:
                    f"    include:\n      - dataset: d\n")
 
         destination = tmp_path / "listing.txt"
-        env = {**os.environ, "PYTHONPATH": str(Path(config.__file__).parent.parent)}
+        # A configured catalogue override beats the file's pin, so pin it explicitly.
+        env = {**os.environ, "PYTHONPATH": str(Path(config.__file__).parent.parent),
+               "ETHOS_DATA_CATALOG": str(catalog / "datacatalog.json")}
         with open(destination, "wb") as redirected:
             result = subprocess.run(
                 [sys.executable, "-m", "ethos_data.cli", "-c", str(collections), "list"],

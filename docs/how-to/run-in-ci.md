@@ -41,7 +41,10 @@ pytest -m data_network
 Replace the package/collection and use its accepted catalogue pin. Include the
 collections-file hash and any explicit catalogue revision override in the cache
 key. Retain metadata under `.catalog` too. An empty runner needs downloads;
-a restored cache can reuse matching files.
+a restored cache can reuse matching files. For a collection with `test:` and
+`full:` variants, the fast job uses the test variant — `fetch onshore_wind --test`
+here, `test=True` in `ethos_data.paths()` in the tests — and only a deliberate
+integration job fetches the full data.
 
 Do not use `--skip-unavailable` to pass a required test with missing inputs.
 Restricted integration tests require an authorised runner and local installation.

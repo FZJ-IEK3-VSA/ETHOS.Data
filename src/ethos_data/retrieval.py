@@ -44,6 +44,7 @@ __all__ = [
     "AccessError",
     "DataFiles",
     "ENV_VAR",
+    "NamedPaths",
     "cache_dir",
     "download",
     "local_path",
@@ -51,12 +52,51 @@ __all__ = [
 ]
 
 
+class NamedPaths(dict):
+    """A collection's ``paths``, resolved: ``{handle: absolute Path}``.
+
+    An ordinary dict whose missing-key error lists the handles the collection
+    does define. The handles are the maintainer's vocabulary for a workflow's
+    inputs -- ``era5``, ``gwa_100m`` -- and a typo in one should say so, not
+    fail three frames later inside a raster reader.
+    """
+
+    def __init__(self, *args, collection: str = "", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.collection = collection
+        #: Handles the collection defines but this machine cannot reach, left
+        #: out under ``skip_unavailable``. Kept so a missing-key error can say
+        #: "unavailable here" rather than "never defined".
+        self.omitted: list[str] = []
+
+    def __missing__(self, handle):
+        offered = ", ".join(sorted(self)) or "none"
+        where = f" in collection {self.collection!r}" if self.collection else ""
+        if handle in self.omitted:
+            raise KeyError(
+                f"named path {handle!r}{where} is not available on this machine "
+                f"(left out under skip_unavailable); available: {offered}"
+            )
+        raise KeyError(f"no named path {handle!r}{where}; it defines: {offered}")
+
+
 class DataFiles(dict):
     """The files a collection resolved to: ``{"<dataset>/<path>": Path}``.
 
     Behaves as an ordinary dict, with two conveniences for the common cases --
-    handing the whole set to a workflow, and pulling out one known file.
+    handing the whole set to a workflow, and pulling out one known file -- and,
+    for a collection that declares ``paths``, the handles it named as
+    :attr:`named`.
     """
+
+    def __init__(self, *args, named: NamedPaths | dict | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        #: ``{handle: Path}`` for the collection's ``paths`` -- what
+        #: :func:`ethos_data.paths` returns. Empty for a collection that
+        #: declares none, and for the plain ``download()`` of a resource list.
+        self.named: NamedPaths = (
+            named if isinstance(named, NamedPaths) else NamedPaths(named or {})
+        )
 
     @property
     def paths(self) -> list[Path]:

@@ -21,6 +21,7 @@ prints the actual selected catalogue. Verification reads data without repairing 
 | Finding | Next action |
 |---|---|
 | Package/collections file cannot be found | Activate the right environment; check `-p` or use `-c /path/to/collections.yaml`. |
+| Catalogue index cannot be read (`CatalogUnavailable`) | The message names the location. Check `config show` and the collections file's `catalog:` pin — a revision nobody has released yet, or a moved repository — and select another catalogue with `--catalog`, `$ETHOS_DATA_CATALOG` or `config set-catalog`. |
 | Unknown dataset or missing metadata | Check the spelling and catalogue version; for hidden data, select the internal catalogue. |
 | Restricted data unavailable | [Configure an authorised copy](restricted-data.md) or contact its custodian. |
 | Unexpected local path or staging warning | Inspect configuration origins and `ethos-data staging list`; remove obsolete overrides. |

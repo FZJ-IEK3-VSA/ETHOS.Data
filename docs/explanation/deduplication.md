@@ -36,12 +36,14 @@ URLs**. It names a dataset and a glob:
 collections:
   onshore_wind:
     include:
-      - dataset: reskit-test-data
-        files: ["era5-like/100m_*_component_of_wind.nc"]
+      - dataset: reskit-test-data/era5
+        files: ["100m_*_component_of_wind.nc"]
 ```
 
 That omission is the whole design. There is no per-tool inventory to drift,
-because there is no per-tool inventory.
+because there is no per-tool inventory. The two things a collection may add —
+`paths:`, naming a workflow's inputs by handle, and a `test:` / `full:` pair —
+are references into the catalogue as well.
 
 ## What makes the sharing work
 

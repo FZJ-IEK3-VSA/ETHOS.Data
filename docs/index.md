@@ -19,15 +19,18 @@ cache layout, a dataset used by five tools is downloaded **once**.
 ```python
 import ethos_data
 
+inputs = ethos_data.paths("onshore_wind", package="reskit", test=True)  # {"era5": Path, "gwa_100m": Path, ...}
+files = ethos_data.fetch("onshore_wind", package="reskit")              # {"<dataset>/<file>": Path}
 placements = ethos_data.path("reskit-test-data/placements/turbine_placements.csv")
-files = ethos_data.fetch("onshore_wind", package="reskit")
 ```
 
 ```bash
-ethos-data -p reskit list                  # the collections RESKit declares
-ethos-data -p reskit info onshore_wind     # which files are in one
-ethos-data -p reskit plan onshore_wind     # what a fetch would download
-ethos-data -p reskit fetch onshore_wind    # do it
+ethos-data -p reskit list                         # the collections RESKit declares, one row per variant
+ethos-data -p reskit info onshore_wind --test     # which files are in one collection's test variant
+ethos-data -p reskit plan onshore_wind            # what a fetch of the full data would download
+ethos-data -p reskit fetch onshore_wind           # do it
+ethos-data -p reskit paths onshore_wind --test    # fetch the test data, print name<TAB>path
+ethos-data ls global-wind-atlas-v4                # what a dataset contains, fetching nothing
 ```
 
 ## How this documentation is organized
@@ -79,6 +82,12 @@ The [how-to overview](how-to/index.md) lists tasks by role, including
   [four configuration options](how-to/configure-the-cache.md). Every dataset
   keeps the same position relative to the cache on every machine, so nothing
   else has to be configured to use the data.
+- **Inputs by name, on test data or the real thing.** A package names the
+  inputs its workflows take in its collections file, so
+  `ethos_data.paths("onshore_wind", package="reskit", test=True)` hands a
+  workflow `{name: path}` for a small test selection, and the same call
+  without `test=True` the full data — the two are guaranteed to offer the
+  same names. See [Get data for a task](how-to/get-data-for-a-task.md).
 - **A path, not a download routine.** `ethos_data.path("<dataset>/<file>")`
   returns the absolute path of a file or folder in the cache and downloads it
   the first time — so an example script or notebook needs one line per input.

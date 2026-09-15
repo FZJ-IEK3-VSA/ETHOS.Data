@@ -38,11 +38,19 @@ from .config import (
 )
 from .bundles import BundleError, export_bundle, load_bundle
 from .access import AccessError, cache_entries
-from .catalog import UnknownDataset, load_catalog
+from .catalog import CatalogUnavailable, IncompleteCatalog, UnknownDataset, load_catalog
 from .maintain.cli import add_catalog_parser, dispatch as _catalog_dispatch
 from .config import DEFAULT_CATALOG
-from .retrieval import download, plan
-from .selection import CollectionsNotFound, load_collections, package_collections, registered_packages
+from .retrieval import plan
+from .selection import (
+    CollectionError,
+    CollectionsNotFound,
+    UnknownCollection,
+    load_collections,
+    package_collections,
+    registered_packages,
+    variant_name,
+)
 
 
 def _human(num_bytes: int) -> str:
@@ -92,7 +100,8 @@ def main(argv: list[str] | None = None) -> int:
     _use_utf8_output()
     try:
         return _main(argv)
-    except (AccessError, UnknownDataset, BundleError, CollectionsNotFound) as error:
+    except (AccessError, UnknownDataset, IncompleteCatalog, CatalogUnavailable, BundleError,
+            CollectionsNotFound, UnknownCollection, CollectionError) as error:
         # UnknownDataset stringifies like a KeyError (quoted), which reads badly
         # on a terminal line that already says "error:".
         message = error.args[0] if error.args else error
@@ -107,7 +116,9 @@ def _build_parser() -> argparse.ArgumentParser:
         epilog="Put global options before the subcommand. Examples:\n"
                "  ethos-data config show\n"
                "  ethos-data -p reskit plan onshore_wind\n"
+               "  ethos-data -p reskit paths onshore_wind --test\n"
                "  ethos-data --skip-unavailable -p reskit fetch onshore_wind\n"
+               "  ethos-data ls global-wind-atlas-v4\n"
                "  ethos-data catalog --catalog-root /path/to/source build --check\n"
                "Use 'ethos-data COMMAND --help' for command options.",
     )
@@ -123,12 +134,24 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="carry on without data this machine has no access to "
                              "(licensed data you have no copy of), "
                              "listing what was left out instead of stopping")
+    # Accepted here as well as after the subcommand: `-p reskit --test fetch
+    # onshore_wind` is what people type after reading "put global options
+    # first", and a bare "unrecognized arguments: --test" would send them
+    # looking for a typo. Merged into args.test in _main.
+    parser.add_argument("--test", dest="test_global", action="store_true",
+                        help="the collection's small test variant instead of the full data "
+                             "(same as --test after the subcommand)")
 
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("list", help="list the collections this file defines")
     pather = sub.add_parser(
         "path", help="print the absolute path of a file or folder, fetching it if necessary")
     pather.add_argument("key", help="<dataset>/<file or folder>, or a dataset name")
+    lister = sub.add_parser(
+        "ls", help="list the catalogue's files under a dataset or folder; fetches nothing",
+        description="What is in a dataset, and what to put after the slash to get one file "
+                    "with `path`. Reads catalogue metadata only.")
+    lister.add_argument("key", help="a dataset or family name, or <dataset>/<folder>")
 
     bundle = sub.add_parser("bundle", help="repository copies of catalogued test data")
     bundle_sub = bundle.add_subparsers(dest="bundle_command", required=True)
@@ -204,20 +227,28 @@ def _build_parser() -> argparse.ArgumentParser:
     uncollectioner = config_sub.add_parser("unset-collections", help="remove the setting again")
     uncollectioner.add_argument("--scope", choices=SCOPES, default="user")
 
+    #: The same switch on every command that names a collection, so that
+    #: `plan --test` previews exactly what `fetch --test` will do.
+    test_flag = {"action": "store_true",
+                 "help": "the collection's small test variant instead of the full data"}
     for name, helptext in (
         ("info", "show what a collection contains"),
         ("plan", "preview data transfers (may retrieve catalogue metadata)"),
         ("fetch", "make a collection available, reusing cached or in-place files"),
+        ("paths", "fetch a collection and print the inputs it names, as handle and path"),
     ):
         p = sub.add_parser(name, help=helptext)
         p.add_argument("collection")
+        p.add_argument("--test", **test_flag)
 
     verifier = sub.add_parser(
         "verify", help="check file sizes, or SHA-256 hashes with --deep",
         description="Check selected files without changing them unless --repair is given. "
-                    "No collection means every collection in the selected file.")
+                    "No collection means every collection in the selected file, in every "
+                    "variant.")
     verifier.add_argument("collection", nargs="?", help="a collection (default: --all)")
     verifier.add_argument("--all", action="store_true", help="every collection in the file")
+    verifier.add_argument("--test", **test_flag)
     verifier.add_argument("--deep", action="store_true",
                           help="compare checksums, not just sizes (reads every byte)")
     verifier.add_argument("--repair", action="store_true",
@@ -339,6 +370,23 @@ def _collections_file(args) -> str:
     return chosen
 
 
+def _collections_pin_source(args) -> str | None:
+    """The collections file whose catalogue pin a *key* command should honour.
+
+    `path` and `ls` take a dataset key, not a collection, so they need no file
+    -- but when one is named with -c, or configured, or lies in the current
+    directory, its pin is what `fetch` would use, and the two must agree on
+    which catalogue they mean. -p is handled by the API itself.
+    """
+    if args.package and args.collections:
+        raise CollectionsNotFound("give -c/--collections or -p/--package, not both")
+    if args.package:
+        return None
+    resolved = resolve_collections(args.collections)
+    chosen = resolved[0] if resolved else "collections.yaml"
+    return chosen if Path(chosen).is_file() else None
+
+
 def _load(args, roots):
     """The collections file, with the catalogue it pins and staging applied."""
     resolved_catalog = resolve_catalog(args.catalog)
@@ -361,17 +409,24 @@ def _main(argv: list[str] | None = None) -> int:
         return _catalog_dispatch(args)
 
     roots = resolve_roots(args.root)
+    # --test may sit before or after the subcommand; commands without the flag
+    # (list, ls, path, config, ...) simply ignore it.
+    args.test = bool(getattr(args, "test", False) or args.test_global)
 
     if args.command == "path":
         from . import path as fetch_path
 
         try:
-            print(fetch_path(args.key, package=args.package, catalog=args.catalog, root=roots))
+            print(fetch_path(args.key, package=args.package, catalog=args.catalog, root=roots,
+                             collections=_collections_pin_source(args)))
         except KeyError as error:
             # A key naming no file or folder: a message, like UnknownDataset.
             print(f"error: {error.args[0] if error.args else error}", file=sys.stderr)
             return 2
         return 0
+
+    if args.command == "ls":
+        return _ls_command(args)
 
     if args.command == "materialize":
         return _materialize_command(args, roots)
@@ -382,39 +437,70 @@ def _main(argv: list[str] | None = None) -> int:
     loaded = _load(args, roots)
 
     if args.command == "list":
+        from . import _named_targets
+
         print(f"catalogue: {loaded.catalog.location}")
         print(f"cache:     {roots.public}\n")
         unresolved = 0
         for name in loaded.names():
-            definition = loaded.describe(name)
+            # One collection naming a dataset this catalogue lacks -- a
+            # withdrawn dataset, one that only exists in somebody's staging
+            # root, or a mistake in its own definition, down to not being a
+            # mapping at all -- must not hide every other collection in the
+            # file from everybody else. So even describing it is inside the try.
             try:
-                resources = loaded.resolve(name)
-            except UnknownDataset as error:
-                # One collection naming a dataset this catalogue lacks -- a
-                # withdrawn dataset, or one that only exists in somebody's
-                # staging root -- must not hide every other collection in the
-                # file from everybody else.
+                definition = loaded.describe(name)
+                # A collection with variants gets one row per variant: the two
+                # differ by orders of magnitude, and a single total would
+                # describe neither.
+                variants = loaded.variants(name) or (None,)
+            except CollectionError as error:
                 unresolved += 1
-                # UnknownDataset subclasses KeyError, whose str() is a repr --
-                # quoted, with newlines escaped. args[0] is the real sentence.
-                message = (error.args[0] if error.args else str(error)).splitlines()[0]
-                print(f"  {name:<28} {'[unresolvable]':>17}   {message}")
+                print(f"  {name:<28} {'[unresolvable]':>17}   {_first_line(error)}")
                 continue
-            total = sum(r.bytes for r in resources)
-            print(f"  {name:<28} {len(resources):>4} files  {_human(total):>10}   "
-                  f"{definition.get('title','')}")
+            for variant in variants:
+                label = name if variant is None else f"{name} [{variant}]"
+                try:
+                    resources = loaded.resolve(name, test=variant == "test")
+                    # The same handle check a fetch runs, so `list` flags a
+                    # `paths` mistake before anybody tries to fetch it.
+                    _named_targets(loaded, name, variant == "test", resources)
+                except (UnknownDataset, IncompleteCatalog, CollectionError) as error:
+                    unresolved += 1
+                    print(f"  {label:<28} {'[unresolvable]':>17}   {_first_line(error)}")
+                    continue
+                total = sum(r.bytes for r in resources)
+                title = definition.get("title", "") if variant in (None, variants[0]) else ""
+                print(f"  {label:<28} {len(resources):>4} files  {_human(total):>10}   {title}")
         return 1 if unresolved else 0
 
     if args.command == "verify":
         return _verify_command(args, loaded, roots)
 
-    resources = loaded.resolve(args.collection)
+    if args.command == "paths":
+        return _paths_command(args, loaded, roots)
+
+    from . import _fetch_loaded, _named_targets
+
+    resources = loaded.resolve(args.collection, test=args.test)
+    # Before plan or fetch report anything: a `paths` handle the collection
+    # cannot honour is a mistake in collections.yaml, and the command line
+    # must refuse it exactly where the Python API does.
+    _named_targets(loaded, args.collection, args.test, resources)
+    label = args.collection
+    if loaded.variants(args.collection):
+        label = f"{args.collection} [{variant_name(args.test)}]"
 
     if args.command == "info":
-        print(f"{args.collection}: {len(resources)} files, "
-              f"{_human(sum(r.bytes for r in resources))}\n")
+        print(f"{label}: {len(resources)} files, {_human(sum(r.bytes for r in resources))}\n")
         for resource in resources:
             print(f"  {resource.key:<64} {_human(resource.bytes):>10}")
+        named = loaded.named_keys(args.collection, test=args.test)
+        if named:
+            print("\nnamed paths (`ethos-data paths` resolves them to this machine):")
+            width = max(len(handle) for handle in named)
+            for handle, key in named.items():
+                print(f"  {handle:<{width}}  ->  {key}")
         return 0
 
     report = plan(loaded.catalog, resources, roots, args.skip_unavailable)
@@ -442,19 +528,69 @@ def _main(argv: list[str] | None = None) -> int:
     omitted = len(report["unavailable"])
     if omitted:
         names = sorted({r.dataset for r in report["unavailable"]})
-        print(f"{args.collection}: leaving out {omitted} file(s) from "
+        print(f"{label}: leaving out {omitted} file(s) from "
               f"{', '.join(names)} -- not available on this machine.", file=sys.stderr)
     if not report["missing"]:
+        if omitted and omitted == len(resources):
+            print(f"{label}: nothing to fetch -- none of its {omitted} file(s) is available "
+                  f"on this machine.")
+            return 0
         note = f" ({len(report['in_place'])} used in place)" if report["in_place"] else ""
-        print(f"{args.collection}: all {len(resources) - omitted} available files "
+        print(f"{label}: all {len(resources) - omitted} available files "
               f"already present{note}")
-        download(loaded.catalog, resources, root=roots, progressbar=False,
-                 skip_unavailable=args.skip_unavailable)
+        _fetch_loaded(loaded, args.collection, args.test, roots, False, args.skip_unavailable)
         return 0
-    print(f"{args.collection}: fetching {len(report['missing'])} of {len(resources)} files "
+    print(f"{label}: fetching {len(report['missing'])} of {len(resources)} files "
           f"({_human(report['bytes_to_download'])}) into {report['root']}")
-    download(loaded.catalog, resources, root=roots, skip_unavailable=args.skip_unavailable)
+    _fetch_loaded(loaded, args.collection, args.test, roots, True, args.skip_unavailable)
     print("done.")
+    return 0
+
+
+def _first_line(error: BaseException) -> str:
+    """The sentence in an error, for a one-line report.
+
+    UnknownDataset subclasses KeyError, whose str() is a repr -- quoted, with
+    newlines escaped -- so args[0] is the real sentence.
+    """
+    return (error.args[0] if error.args else str(error)).splitlines()[0]
+
+
+def _paths_command(args, loaded, roots) -> int:
+    """Fetch a collection and print its named inputs, one `handle<TAB>path` per line.
+
+    Tab-separated so a shell can read it back -- `while IFS=$'\\t' read handle
+    path` -- which is the whole point of naming inputs rather than files. Runs
+    on the collections file already loaded, so the catalogue is read once and
+    --skip-unavailable means what it means for `fetch`.
+    """
+    from . import _fetch_loaded
+
+    files = _fetch_loaded(loaded, args.collection, args.test, roots, True, args.skip_unavailable)
+    if not files.named and not files.named.omitted:
+        raise CollectionError(
+            f"collection {args.collection!r} declares no named paths -- nothing under 'paths:' "
+            f"in its definition. `ethos-data fetch {args.collection}` gets its files; ask the "
+            f"package maintainer to name the workflow's inputs."
+        )
+    for handle, local in files.named.items():
+        print(f"{handle}\t{local}")
+    return 0
+
+
+def _ls_command(args) -> int:
+    """List what the catalogue holds under a key, fetching nothing."""
+    from . import list_resources
+
+    try:
+        resources = list_resources(args.key, package=args.package, catalog=args.catalog,
+                                   collections=_collections_pin_source(args))
+    except KeyError as error:
+        print(f"error: {error.args[0] if error.args else error}", file=sys.stderr)
+        return 2
+    print(f"{args.key}: {len(resources)} files, {_human(sum(r.bytes for r in resources))}\n")
+    for resource in resources:
+        print(f"  {resource.key:<64} {_human(resource.bytes):>10}")
     return 0
 
 
@@ -463,10 +599,35 @@ def _verify_command(args, loaded, roots) -> int:
 
     if not args.collection and not args.all:
         args.all = True
-    names = loaded.names() if args.all else [args.collection]
     resources = {}
-    for name in names:
-        for resource in loaded.resolve(name):
+    skipped = 0
+    if args.all:
+        # Every collection in every variant: what is on disk is one cache, and
+        # a file the test variant selects is as much a file to check as one the
+        # full variant does. A variant that cannot be resolved -- a dataset not
+        # in this catalogue, say -- is reported and skipped, as `list` does,
+        # rather than stopping the check of everything else.
+        for name in loaded.names():
+            try:
+                variants = loaded.variants(name) or (None,)
+            except CollectionError as error:
+                skipped += 1
+                print(f"skipped {name}: {_first_line(error)}")
+                continue
+            for variant in variants:
+                label = name if variant is None else f"{name} [{variant}]"
+                try:
+                    selected = loaded.resolve(name, test=variant == "test")
+                except (UnknownDataset, IncompleteCatalog, CollectionError) as error:
+                    skipped += 1
+                    print(f"skipped {label}: {_first_line(error)}")
+                    continue
+                for resource in selected:
+                    resources[resource.key] = resource
+        if skipped:
+            print()
+    else:
+        for resource in loaded.resolve(args.collection, test=args.test):
             resources[resource.key] = resource
     ordered = sorted(resources.values(), key=lambda r: r.key)
 
@@ -505,6 +666,12 @@ def _verify_command(args, loaded, roots) -> int:
             # reason a result built on it is not reproducible.
             print(f"{len(unverifiable):,} file(s) could NOT be checked -- no checksum in "
                   f"the manifest (staged data). Describe and publish them to get one.")
+        if skipped:
+            # The files checked are fine, but the check was not complete, and
+            # an exit status of 0 would let a CI job believe it was.
+            print(f"{skipped} collection variant(s) could not be resolved and were skipped "
+                  f"(see above).")
+            return 1
         return 0
 
     if not args.repair:

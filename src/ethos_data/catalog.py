@@ -27,12 +27,23 @@ import hashlib
 import json
 import os
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
-__all__ = ["Catalog", "Dataset", "Resource", "load_catalog", "license_settled", "LICENSE_RESOLVED"]
+__all__ = [
+    "LICENSE_RESOLVED",
+    "Catalog",
+    "CatalogUnavailable",
+    "Dataset",
+    "IncompleteCatalog",
+    "Resource",
+    "UnknownDataset",
+    "license_settled",
+    "load_catalog",
+]
 
 #: The one value of ``ethos:license_status`` that means somebody has read the
 #: upstream terms. Anything else -- "unresolved", "unknown", absent -- is a
@@ -153,6 +164,54 @@ class UnknownDataset(KeyError):
     existing ``except KeyError`` handlers keep working; the CLI catches this
     specific type so a genuine bug still surfaces as a traceback.
     """
+
+
+class CatalogUnavailable(OSError):
+    """The catalogue index itself could not be read.
+
+    Distinct from :class:`IncompleteCatalog`, which is about a dataset the index
+    promised: here there is no index. The common cause is not a network fault
+    but a pin -- a collections file naming a tag or a repository that does not
+    exist (yet, or any more) -- and the person hitting it usually did not write
+    that pin, so the message says how to point at another catalogue.
+    """
+
+
+class IncompleteCatalog(FileNotFoundError):
+    """The index lists a dataset whose descriptor or shard is not where it says.
+
+    Loading is lazy, so this surfaces long after the index was read -- on the
+    first fetch that touches the dataset -- and a bare FileNotFoundError at that
+    point names a path the user never typed and gives no hint that the
+    *catalogue copy* is the problem. It happens when a tree is deployed
+    piecemeal, or an index from one revision sits beside descriptors from
+    another (a dataset renamed on disk after the index was generated, say).
+    Subclasses FileNotFoundError so existing ``except OSError`` handlers still
+    catch it.
+    """
+
+
+def _missing_part(dataset: str, what: str, location: str, index_base: str) -> IncompleteCatalog:
+    return IncompleteCatalog(
+        f"dataset {dataset!r} is listed in the catalogue index under {index_base} but its "
+        f"{what} is missing: {location}\n"
+        f"The catalogue copy is incomplete or stale -- an index from one revision paired with "
+        f"descriptors from another. Deploy or republish the complete tree for that revision; "
+        f"copying the index alone is not enough. If you did not choose this catalogue, "
+        f"`ethos-data config show` says where the setting came from."
+    )
+
+
+def _read_part(dataset: str, what: str, location: str, index_base: str) -> str:
+    """``_read`` for a descriptor or shard, turning "not there" into a diagnosis."""
+    try:
+        return _read(location)[0]
+    except FileNotFoundError as error:
+        raise _missing_part(dataset, what, location, index_base) from error
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            raise _missing_part(dataset, what, location, index_base) from error
+        raise
 
 
 def shard_key(relative_path: str, depth: int) -> str:
@@ -346,7 +405,7 @@ class Dataset:
                 "file inventory cannot be located."
             )
         location = _join(self.base, self.entry["path"])
-        package = json.loads(_read(location)[0])
+        package = json.loads(_read_part(self.name, "descriptor (datapackage.json)", location, self.base))
         # Shard paths are relative to the dataset directory, not the catalogue root.
         self._package_base = location.rsplit("/", 1)[0] + "/"
         self._shard_depth = int(package.get("ethos:shard_depth", 0))
@@ -409,7 +468,8 @@ class Dataset:
             if prefix in self._loaded_shards:
                 continue
             entry = self._shards[prefix]
-            shard = json.loads(_read(_join(self._package_base, entry["path"]))[0])
+            location = _join(self._package_base, entry["path"])
+            shard = json.loads(_read_part(self.name, f"shard {prefix!r}", location, self.base))
             self._absorb(shard.get("resources", []))
             self._loaded_shards.add(prefix)
 
@@ -435,6 +495,10 @@ class Catalog:
     location: str
     descriptor: dict
     datasets: dict[str, Dataset]
+    #: Set on the view :func:`ethos_data.staging.with_staging` returns, so a
+    #: catalogue handed back into the API is not overlaid -- and warned about --
+    #: a second time.
+    staged: bool = False
 
     @property
     def name(self) -> str:
@@ -539,8 +603,24 @@ def load_catalog(location: str) -> Catalog:
     """Load a datacatalog.json.  Dataset inventories are fetched on first use.
 
     ``location`` is a local path or an http(s) URL pointing at datacatalog.json.
+    Raises :class:`CatalogUnavailable` when there is nothing to read there.
     """
-    text, base = _read(location)
+    try:
+        text, base = _read(location)
+    except (FileNotFoundError, urllib.error.URLError) as error:
+        # HTTPError is a URLError: a 404 for a tag nobody has cut yet arrives
+        # here too, and reads as "HTTP Error 404: Not Found" -- which says
+        # nothing about *which* URL, or that a pin chose it.
+        reason = getattr(error, "reason", None) or error
+        if isinstance(error, urllib.error.HTTPError):
+            reason = f"HTTP {error.code} {error.reason}"
+        raise CatalogUnavailable(
+            f"cannot read the catalogue index at {location}: {reason}\n"
+            f"If a collections file pinned this location, its pin may name a revision or "
+            f"repository that does not exist (yet). Use another catalogue for this run with "
+            f"--catalog / catalog=, for this shell with $ETHOS_DATA_CATALOG, or for good with "
+            f"`ethos-data config set-catalog <datacatalog.json>`."
+        ) from error
     descriptor = json.loads(text)
 
     datasets = {

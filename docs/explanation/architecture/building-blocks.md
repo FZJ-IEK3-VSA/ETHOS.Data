@@ -20,7 +20,7 @@ objects or command-line output.
 
 | Building block | Responsibility | Main interface | Code within `ethos_data` |
 |---|---|---|---|
-| Consumer entry points | Compose collection resolution, retrieval, inspection, and local maintenance for callers | `fetch`, `fetch_one`, `resolve`; top-level CLI commands | `__init__.py`, consumer handlers in `cli.py` |
+| Consumer entry points | Compose collection resolution, retrieval, inspection, and local maintenance for callers | `fetch`, `paths`, `fetch_one`, `resolve`, `list_resources`; top-level CLI commands | `__init__.py`, consumer handlers in `cli.py` |
 | Maintainer entry points | Parse catalogue commands and locate the source checkout | `ethos-data catalog …`; `dispatch` | `maintain/cli.py`, parser registration in `cli.py` |
 | Data access | Select resources, locate bytes, download, verify, and support local development | `Collections.resolve`, `download`, `locate`, `verify`, `materialize`, `apply_staging`, `load_bundle` | `selection.py`, `retrieval.py`, `access.py`, `verify.py`, `materialize.py`, `staging.py`, `bundles.py` |
 | Catalogue maintenance | Build inventories, transfer manifest-listed files, generate public metadata, maintain shared-cache links | Per-command `run` functions; generated metadata and upload results | `maintain/manifest.py`, `upload.py`, `publish.py`, `namespace.py`, helpers in `maintain/__init__.py` and `maintain/scripts/` |
@@ -42,7 +42,7 @@ verification to inspect files without changing collection selection.
 
 | Block | Responsibility and interface | Dependencies and important boundary |
 |---|---|---|
-| Selection (`selection`) | Load collections, expand inheritance, match resource paths, include sidecars; return `list[Resource]` | Reads Catalogue model; exports `path_matches` also used by the manifest writer |
+| Selection (`selection`) | Load collections, expand inheritance and `test`/`full` variants, match resource paths, include sidecars, map `paths` handles to catalogue keys; return `list[Resource]` | Reads Catalogue model; exports `path_matches` also used by the manifest writer |
 | Retrieval (`retrieval`) | Produce plans or return `DataFiles`, a mapping from resource keys to paths | Calls Access policy; delegates verified downloads to external Pooch; checks in-place file presence |
 | Access policy (`access`) | Produce `Location` decisions: in-place, download, or unavailable | Uses Catalogue model, Configuration, and filesystem state; enforced before downloads |
 | Staging (`staging`) | Classify and overlay development entries while preserving official metadata separately | Reads Catalogue model and Configuration; its overlay must be applied before selection of new resources |

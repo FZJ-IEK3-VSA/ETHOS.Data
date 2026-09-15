@@ -27,16 +27,23 @@ drift and the sharing would silently stop.
 ```python
 import ethos_data
 
+inputs = ethos_data.paths("onshore_wind", package="reskit", test=True)  # {"era5": Path, "gwa_100m": Path, ...}
+files = ethos_data.fetch("onshore_wind", package="reskit")              # {"<dataset>/<file>": Path}
 placements = ethos_data.path("reskit-test-data/placements/turbine_placements.csv")
-files = ethos_data.fetch("test_suite", package="reskit")
 ```
 
+`paths()` returns the inputs a collection names, fetched, as
+`{name: absolute path}`; `test=True` selects the package's small test
+selection, and the same call without it the full data.
+
 ```bash
-ethos-data -p reskit list                  # what is on offer
-ethos-data -p reskit info test_suite       # what is in a collection
-ethos-data -p reskit plan test_suite       # what a fetch would download
-ethos-data -p reskit fetch test_suite      # download it
-ethos-data path reskit-test-data/era5      # the local path of a file or folder
+ethos-data -p reskit list                         # what is on offer, one row per variant
+ethos-data -p reskit info onshore_wind --test     # what is in a collection's test variant
+ethos-data -p reskit plan onshore_wind            # what a fetch of the full data would download
+ethos-data -p reskit fetch onshore_wind           # download it
+ethos-data -p reskit paths onshore_wind --test    # fetch the test data, print name<TAB>path
+ethos-data path reskit-test-data/era5             # the local path of a file or folder
+ethos-data ls global-wind-atlas-v4                # what a dataset contains, fetching nothing
 ```
 
 The public catalogue is built in. A package makes its collections available
@@ -62,7 +69,7 @@ mkdocs build      # static site into ./site
 | | |
 |---|---|
 | [Your first fetch](docs/tutorials/first-fetch.md) | find a package's collections, fetch one, use the paths from Python |
-| [Get data for a task](docs/how-to/get-data-for-a-task.md) | `ethos_data.path()` in scripts, and the command line |
+| [Get data for a task](docs/how-to/get-data-for-a-task.md) | `ethos_data.paths()` and `path()` in scripts, and the command line |
 | [Use ETHOS.Data in your package](docs/how-to/use-from-a-package.md) | ship and register a `collections.yaml` |
 | [Add a dataset to the catalogue](docs/tutorials/add-a-dataset.md) | the maintainer round trip, on a practice catalogue |
 | [How-to guides](docs/how-to/index.md) | cache configuration, internal catalogue, restricted data, verify/repair, CI, uploading, publishing |

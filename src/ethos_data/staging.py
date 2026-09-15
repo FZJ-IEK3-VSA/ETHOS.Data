@@ -440,6 +440,6 @@ def with_staging(catalog: Catalog, roots: Roots | None = None, warn: bool = True
     The catalogue can be reused for an official-data check after development;
     applying a temporary overlay must not leave hashless datasets in that object.
     """
-    view = replace(catalog, datasets=dict(catalog.datasets))
+    view = replace(catalog, datasets=dict(catalog.datasets), staged=True)
     apply_staging(view, roots, warn=warn)
     return view

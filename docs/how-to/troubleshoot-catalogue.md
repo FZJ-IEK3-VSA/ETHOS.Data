@@ -19,8 +19,9 @@ Both `list` and `plan` may retrieve remote metadata.
 
 | Symptom | Check and action |
 |---|---|
+| Catalogue index cannot be read (`CatalogUnavailable`) | The location is wrong or the pinned revision/repository does not exist (yet); check the collections file's `catalog:` pin and `ethos-data config show`, then select another catalogue with `--catalog`, `$ETHOS_DATA_CATALOG` or `config set-catalog`. |
 | Unknown dataset or unresolvable collection | Check spelling, catalogue revision, staging, and whether the entry is hidden. |
-| Index exists, descriptor/shard is missing | Deploy the complete tree for that revision; copying only the index is insufficient. |
+| Index exists, descriptor/shard is missing | The reader reports this as an incomplete-catalogue error (`IncompleteCatalog`) naming the dataset and the missing path; `list` shows the affected collections as `[unresolvable]`. Deploy the complete tree for that revision; copying only the index is insufficient. |
 | Cluster catalogue unreadable | Check filesystem permissions and the target of the `current` alias. |
 | Unexpected data location | Inspect per-dataset roots, staging, and cache links. |
 | Unexpected download host | Check `ETHOS_PUBLICATION_URL` and `publication_url` in the config files reported by `config show`. |

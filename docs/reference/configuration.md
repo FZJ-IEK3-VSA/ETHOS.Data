@@ -139,8 +139,10 @@ Strongest first:
 2. the `collections:` key in a config file (`config set-collections`)
 3. `collections.yaml` in the current directory
 
-In Python, `fetch()` and `resolve()` take either `collections=` (a path) or
-`package=` (a registered package name). `path()` needs neither.
+In Python, `fetch()`, `paths()` and `resolve()` take either `collections=` (a
+path) or `package=` (a registered package name). `path()` and
+`list_resources()` need neither, but accept either to read the catalogue that
+file pins.
 
 A package registers its collections file with an entry point in the
 `ethos_data.collections` group; the entry point's value names the module whose
