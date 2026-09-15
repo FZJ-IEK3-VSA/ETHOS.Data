@@ -49,10 +49,12 @@ reskit = "reskit.data"      # the module whose directory holds collections.yaml
 
 ## Documentation
 
-Full documentation lives in [`docs/`](docs/) — tutorials, how-to guides,
-explanation and reference, organised by what you came for:
+Full documentation is published at <https://ethos-data.readthedocs.io/> and
+lives in [`docs/`](docs/) — tutorials, how-to guides, explanation and
+reference, organised by what you came for:
 
 ```bash
+pip install -e ".[docs]"
 mkdocs serve      # live preview on http://localhost:8000
 mkdocs build      # static site into ./site
 ```

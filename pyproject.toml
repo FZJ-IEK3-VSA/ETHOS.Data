@@ -24,6 +24,22 @@ dependencies = [
 
 [project.optional-dependencies]
 progress = ["tqdm"]
+# Documentation toolchain, for `pip install -e ".[docs]"` and the Read the Docs
+# build (.readthedocs.yaml). Mirrors the MkDocs block in environment.yml; a floor
+# raised in one place must be raised in the other, or the hosted site and a
+# developer's local preview render with different versions.
+docs = [
+  "mkdocs>=1.6,<1.7",
+  "mkdocs-material>=9.5",
+  "mkdocstrings>=0.25",
+  "mkdocstrings-python>=1.10",
+  "griffe>=0.45",
+  # mkdocstrings formats the separated signatures with Ruff (or Black) when one
+  # is importable and otherwise prints them on one line. environment.yml has
+  # ruff as the linter, so without it here the hosted API pages would not match
+  # a developer's preview.
+  "ruff",
+]
 
 [project.scripts]
 # One executable. The maintainer commands are `ethos-data catalog ...`; they need

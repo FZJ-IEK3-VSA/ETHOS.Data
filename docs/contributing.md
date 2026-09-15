@@ -79,6 +79,13 @@ if any is stale, which is what CI should run.
 
 These pages are MkDocs + Material; see
 [Building this documentation](installation.md#building-this-documentation).
+The published site is built by [Read the Docs](https://about.readthedocs.com/)
+from `.readthedocs.yaml` whenever `main` changes. That build runs
+`mkdocs build --strict`, so a warning that a plain local build only prints
+fails the hosted one. The tools it installs are the `docs` extra in
+`pyproject.toml`; `environment.yml` lists the same tools for developers, and
+the two lists are kept in step by hand.
+
 The structure follows [Diátaxis](https://diataxis.fr/), so a new page has a
 section by construction:
 
@@ -154,7 +161,8 @@ python docs/diagrams/render.py usecases-overview --force
 
 That means an ordinary `mkdocs build` needs no LaTeX — only editing a diagram
 does. The toolchain (`tectonic` for TikZ → PDF, `poppler` for PDF → SVG) is in
-`environment.yml` as a dev dependency, and the docs CI job installs neither.
+`environment.yml` as a dev dependency, and the Read the Docs build installs
+neither.
 Tectonic rather than a system TeX Live because it fetches LaTeX packages on
 demand: these diagrams use `standalone` and `arrows.meta`, which a distro TeX
 install frequently lacks.

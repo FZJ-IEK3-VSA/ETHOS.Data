@@ -4,12 +4,15 @@ site_name: ETHOS.Data
 site_description: Shared, deduplicating data access for ETHOS tools and workflows
 site_author: ICE-2 Jülich Systems Analysis
 
-# The canonical URL is whatever the host serves this from. GitLab CI sets
-# CI_PAGES_URL for a Pages job; SITE_URL is the manual override. The localhost
-# default keeps `mkdocs serve` honest -- an absolute site_url baked in from
-# somebody's laptop makes every <link rel="canonical"> and the 404 page's
-# root-absolute asset paths point at a host that does not serve this site.
-site_url: !ENV [SITE_URL, CI_PAGES_URL, "http://localhost:8000/"]
+# The canonical URL is whatever the host serves this from. Read the Docs sets
+# READTHEDOCS_CANONICAL_URL per version (.../en/latest/, .../en/stable/), so
+# every version's pages point at themselves rather than all at one; GitLab CI
+# sets CI_PAGES_URL for a Pages job; SITE_URL is the manual override that beats
+# both. The localhost default keeps `mkdocs serve` honest -- an absolute
+# site_url baked in from somebody's laptop makes every <link rel="canonical">
+# and the 404 page's root-absolute asset paths point at a host that does not
+# serve this site.
+site_url: !ENV [SITE_URL, READTHEDOCS_CANONICAL_URL, CI_PAGES_URL, "http://localhost:8000/"]
 
 repo_url: https://github.com/FZJ-IEK3-VSA/ETHOS.Data
 repo_name: FZJ-IEK3-VSA/ETHOS.Data

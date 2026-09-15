@@ -122,15 +122,21 @@ ruff format src/ tests/
 
 ## Building this documentation
 
+The published copy is at <https://ethos-data.readthedocs.io/>, rebuilt by
+[Read the Docs](https://about.readthedocs.com/) whenever `main` changes.
+
 The docs are [MkDocs](https://www.mkdocs.org/) with the
 [Material](https://squidfunk.github.io/mkdocs-material/) theme and
-[mkdocstrings](https://mkdocstrings.github.io/) for the API reference:
+[mkdocstrings](https://mkdocstrings.github.io/) for the API reference. The
+toolchain is the package's `docs` extra, which is also what the hosted build
+installs:
 
 ```bash
-mamba install -c conda-forge mkdocs mkdocs-material mkdocstrings mkdocstrings-python
+pip install -e ".[docs]"
 mkdocs serve        # live preview on http://localhost:8000
 mkdocs build        # static site into ./site
 ```
 
-`ethos-data` itself must be importable for the API reference pages to render, so
-run these from an environment where the package is installed (`pip install -e .`).
+The mamba environment from `environment.yml` already carries the same tools.
+`ethos-data` itself must be importable for the API reference pages to render;
+the editable install above takes care of that.
