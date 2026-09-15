@@ -48,4 +48,4 @@ neither.
 - A shared cache that links to data on disk is set up by a catalogue
   maintainer: [Link cluster data into the cache](link-cluster-data.md).
 - Turn a linked dataset into your own copy:
-  [Verify and repair](verify-and-repair.md#materialize-turning-a-borrowed-dataset-into-one-you-own).
+  [Move linked data into the cache](move-linked-data-into-the-cache.md).

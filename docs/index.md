@@ -59,8 +59,12 @@ installed alongside it, is the writing half.
   data users receive them through the collections their package ships.</figcaption>
 </figure>
 
-Every task in the figure has a how-to guide; the
-[how-to overview](how-to/index.md) lists them by role.
+Start with [machine setup](how-to/set-up-your-machine.md), or follow the
+[first-fetch lesson](tutorials/first-fetch.md) with local practice data.
+The [how-to overview](how-to/index.md) lists tasks by role, including
+[reporting problems](how-to/report-a-problem.md),
+[updating test fixtures](how-to/update-test-data.md), and
+[managing dCache folders](how-to/manage-dcache-folders.md).
 
 ## Main features
 

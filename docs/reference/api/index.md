@@ -10,8 +10,8 @@
 | [Integrity and staging](integrity.md) | `verify`, `repair`, `Finding`, `materialize`, the staging root |
 | [Maintainer tooling](maintain.md) | `ethos_data.maintain` — building, publishing, uploading |
 
-Consumers never import `ethos_data.maintain`; `ethos_data` itself is a read-only
-library.
+Consumers usually need no `ethos_data.maintain` imports. The public API includes
+local download, cache, staging, and configuration operations as well as reads.
 
 ## Getting data
 

@@ -21,12 +21,14 @@ or analysis.
 
 | Task | Guide |
 |---|---|
+| Configure public/internal catalogue access and both cache roots | [Set up your machine](set-up-your-machine.md) |
 | Choose where the public and restricted caches are | [Configure the cache](configure-the-cache.md) |
 | Use your copy of licensed data, or work without it | [Work with restricted data](restricted-data.md) |
 | Also use datasets that are only in the internal catalogue | [Add the internal data catalogue](add-internal-catalogue.md) |
 | Get the path of a file or folder in a script, or fetch a collection | [Get data for a task](get-data-for-a-task.md) |
 | Read a catalogued dataset from a directory you already have | [Use data already on disk](use-data-already-on-disk.md) |
-| Check integrity, repair downloads, or replace a borrowed symlink | [Verify and repair](verify-and-repair.md) |
+| Check integrity and repair downloads | [Verify and repair](verify-and-repair.md) |
+| Identify failures and send a useful report to the right maintainer | [Identify and report a problem](report-a-problem.md) |
 | Investigate missing data, catalogue versions, and unexpected paths | [Troubleshoot catalogue access](troubleshoot-catalogue.md) |
 
 ## Package maintainers
@@ -40,7 +42,8 @@ new data does not require permission to write to the official catalogue or dCach
 | Declare data for examples, workflows, tests, or an aggregate collection | [Write a collections file](write-a-collections-file.md) |
 | Experiment with new data in a development cache | [Stage uncatalogued data](stage-unpublished-data.md) |
 | Prepare metadata, provenance, and byte access for review | [Propose a dataset](propose-a-dataset.md) |
-| Keep an official test-data snapshot in the repository and allow temporary local edits | [Keep test data in a repository](keep-test-data-in-a-repository.md) |
+| Keep an official test-data snapshot in the repository | [Keep test data in a repository](keep-test-data-in-a-repository.md) |
+| Add regression inputs, reproduce data bugs, and refresh accepted fixtures | [Update test data](update-test-data.md) |
 | Run required tests and live integration tests locally and in CI | [Run package tests in CI](run-in-ci.md) |
 | Check a local copy against the accepted catalogue | [Verify and repair](verify-and-repair.md) |
 
@@ -53,7 +56,9 @@ view after the required data is available. These guides use `ethos-data catalog`
 |---|---|
 | Review a submission and coordinate its release | [Accept a dataset proposal](accept-a-dataset.md) |
 | Write source metadata and control the inventory | [Describe a dataset](describe-a-dataset.md) |
+| Configure a maintainer's storage credentials | [Set up dCache access](set-up-dcache-access.md) |
 | Transfer and verify a selected set of datasets | [Upload a dataset](upload-a-dataset.md) |
+| Create folders, rename unpublished data, or delete selected remote paths | [Manage dCache folders](manage-dcache-folders.md) |
 | Register internal or licensed data without a public upload | [Add internal and restricted datasets](add-internal-and-restricted-data.md) |
 | Generate and review the public metadata | [Publish the catalogue](publish-the-catalogue.md) |
 | Deploy the internal filesystem catalogue and distribute public releases | [Catalogue hosting](catalogue-hosting.md) |

@@ -1,212 +1,104 @@
 # Add internal and restricted datasets
 
-For catalogue maintainers adding datasets, or additional files in an existing
-dataset, to the internal catalogue on the cluster. The **internal catalogue**
-is the source metadata repository synchronized with jugit. **Restricted** is an
-access class for particular datasets; it is not a separate catalogue format.
+Register approved local data in the internal catalogue and make it available to
+authorised cluster users. You need stable source files and a source-catalogue
+checkout. Replace all example paths with the actual internal locations.
 
-Registering metadata does not copy or upload data. Start from an existing
-cluster directory you are entitled to read, build its inventory, and configure
-how consumers find those files.
+## 1. Describe the installation
 
-## 1. Choose access and visibility
-
-| Situation | `ethos:access` | `ethos:visibility` | Where consumers read bytes |
-|---|---|---|---|
-| Institute data available to colleagues but not ready for public release | `internal` | `hidden` | Existing local directory or shared-cache link; an internal upload is a separate operation |
-| Licensed data whose metadata must also stay private | `restricted` | `hidden` | An authorised local directory or restricted root |
-| Licensed data whose description may be listed publicly | `restricted` | `public` | The same authorised local storage; public metadata does not open access to the bytes |
-
-Hidden entries need an `ethos:embargo` block explaining the reason and intended
-review or transition. `until: "unspecified"` is available when no date can be
-promised, with an explicit reason. The block is metadata, not a scheduled job
-that automatically releases the dataset.
-
-For public downloadable data use [Describe a dataset](describe-a-dataset.md).
-Do not classify data as restricted merely because its metadata lives in the
-internal repository. Equally, changing visibility to public does not remove a
-dataset's restricted access class.
-
-## 2. Describe the existing bytes
-
-Work in a maintainer checkout, for example
-`/shared/ethos/ethos-data-catalog-internal`. The paths and names in this guide are
-examples; substitute the actual cluster paths. Keep edits out of the versioned
-catalogue directory currently served to readers.
-
-For licensed data, create `datasets/licensed-example/dataset.yaml`:
+Create `datasets/licensed-example/dataset.yaml`:
 
 ```yaml
 name: licensed-example
-title: Licensed input data used on the cluster
+title: Licensed input data
 source_dir: /legacy/licensed-example
 ethos:access: restricted
 ethos:visibility: hidden
-ethos:restriction: >-
-  Access is limited to authorised users. Contact the dataset custodian for
-  access to the existing cluster installation; these files are not downloaded.
+ethos:restriction: Contact the dataset custodian for authorised cluster access.
 ethos:embargo:
   until: "unspecified"
   reason: Metadata publication has not been approved; review with the custodian.
   becomes: restricted
 ethos:license_status: unresolved
-ethos:license_note: Record the applicable agreement and review outcome here.
+ethos:license_note: Record the actual agreement and review outcome here.
 ethos:include:
   - "inputs/**"
 ```
 
-Replace the example file selection and restriction message. Add actual `sources`,
-`licenses`, and provenance using [Describe a dataset](describe-a-dataset.md).
-The unresolved marker is for metadata awaiting review, not permission to use or
-redistribute data. Do not substitute an open licence for a vendor agreement.
+Record actual provenance, selection, and terms. Complete the licensing review
+before creating links or copies; replace the unresolved marker with the reviewed
+metadata. Restricted entries must have no `ethos:remote_prefix` and must never
+be marked `ethos:uploaded: true`.
 
-While it says `unresolved`, the dataset cannot be linked into a cache
-(`ethos-data link`, `catalog link-cache`) or uploaded — those hand it to other
-people. Record the agreement as a `licenses:` entry naming it, or
-`ethos:license_status: resolved` once the review is done. Reading an
-already-present copy and [staging](stage-unpublished-data.md) still work; see
-[Licensing and immutability](../explanation/licensing.md).
-If the description may be public, set `ethos:visibility: public` and remove the
-embargo block; keep `ethos:access: restricted`.
+For non-restricted internal data, use `ethos:access: internal`, an appropriate
+remote prefix if needed, and a hidden visibility/embargo block. Metadata approved
+for public listing can use `ethos:visibility: public`; that does not change access.
 
-Restricted datasets have **no `ethos:remote_prefix`**; the builder rejects it.
-Keep `source_dir` while there is a local directory to build from, and never mark
-these files `ethos:uploaded: true` — the builder rejects that too, because these
-bytes never reach dCache.
-
-If the authorised installation is later copied into the restricted cache, keep
-`source_dir` as long as the installation is still there — the two coexist for as
-long as the transition takes. Only when there is genuinely nothing local left to
-build from, remove `source_dir` and say so:
-
-```yaml
-ethos:frozen: true
-```
-
-The inventory then stands as recorded — paths, sizes and hashes — and rebuilds
-re-derive only the metadata. Those hashes are what `verify --deep` checks the
-permanent copy against, which is why they are not re-read from it. See
-[Move linked data into the cache](move-linked-data-into-the-cache.md#5-update-the-descriptor-usually-not-at-all).
-
-For an internal dataset, use the same source-directory/provenance pattern but
-replace the classification block:
-
-```yaml
-ethos:access: internal
-ethos:visibility: hidden
-ethos:remote_prefix: institute-example-v1
-ethos:embargo:
-  until: "unspecified"
-  reason: Local validation is in progress; review before publication.
-  becomes: public
-```
-
-Use the internal dataset's own `name`, title, paths, and licence information.
-`source_dir` is a maintainer build input. Consumers do not automatically use it;
-the next steps configure their location separately.
-
-## 3. Build and inspect
-
-From anywhere, pass the source checkout to the maintainer command:
+## 2. Build and inspect
 
 ```bash
-ethos-data catalog --catalog-root /shared/ethos/ethos-data-catalog-internal build licensed-example
-ethos-data catalog --catalog-root /shared/ethos/ethos-data-catalog-internal build licensed-example --check
+ethos-data catalog --catalog-root /path/to/source-catalogue build licensed-example
+ethos-data catalog --catalog-root /path/to/source-catalogue build licensed-example --check
 ```
 
-Review `datasets/licensed-example/datapackage.json`, any generated shards, and
-`datacatalog.json` in that checkout. Confirm the selected paths, file counts,
-sizes, hashes, and access/visibility values. The input files remain in their
-original directory. `--check` checks generated metadata for staleness; consumer
-`verify --deep` below is the separate check of the actual accessible bytes.
+Review the generated descriptor, shards, and index. Confirm paths, file counts,
+hashes, classification, and the restriction note.
 
-Do not hand-edit generated JSON to add a resource. Fix the source YAML, file
-selection, or underlying input and rebuild.
+## 3. Register the existing directory
 
-## 4. Give consumers an existing local location
-
-For one dataset, configure the original directory:
+To read the original directly:
 
 ```bash
-ethos-data config set-root licensed-example /legacy/licensed-example --scope user
+ethos-data config set-root licensed-example /legacy/licensed-example
 ```
 
-Or let the cluster administrator establish a restricted namespace and configure
-its root for readers:
-
-```text
-/shared/ethos/restricted/
-  licensed-example/inputs/...
-```
+To populate the protected restricted cache instead:
 
 ```bash
-ethos-data config set-restricted-cache /shared/ethos/restricted --scope user
+ethos-data config set-restricted-cache /shared/ethos/restricted
+ethos-data --catalog /path/to/source-catalogue/datacatalog.json materialize licensed-example --from /legacy/licensed-example --dry-run
+ethos-data --catalog /path/to/source-catalogue/datacatalog.json materialize licensed-example --from /legacy/licensed-example
 ```
 
-An administrator can use `--scope site` for a machine default. A directory that
-is already an authorised installation need not be copied to register it. The
-[linking guide](link-cluster-data.md#restricted-data) describes a symlink to that
-installation, and [the move guide](move-linked-data-into-the-cache.md#restricted-data)
-its later relocation.
+Before copying, establish permissions/default ACLs and confirm the licence permits
+the copy. An authorised link is also supported; see
+[Restricted cache links](link-cluster-data.md#restricted-data).
+For internal data use a local root or a public/internal cache link.
 
-For internal data, use `config set-root` or the public/internal namespace-link
-workflow in that guide. The public cache's name does not grant access: filesystem
-permissions must still restrict internal directories to the appropriate users.
+## 4. Verify a complete dataset and use it from a package {#5-verify-a-complete-dataset-and-use-it-from-a-package}
 
-## 5. Verify a complete dataset and use it from a package
-
-Create a maintainer collections file, such as
-`/shared/ethos/maintenance-collections.yaml`:
+Create `maintenance-collections.yaml`:
 
 ```yaml
-catalog: /shared/ethos/ethos-data-catalog-internal/datacatalog.json
 collections:
   check_licensed_example:
     include:
       - dataset: licensed-example
-        files: ["**"]
 ```
 
 ```bash
-ethos-data --catalog /shared/ethos/ethos-data-catalog-internal/datacatalog.json \
-  -c /shared/ethos/maintenance-collections.yaml plan check_licensed_example
-ethos-data --catalog /shared/ethos/ethos-data-catalog-internal/datacatalog.json \
-  -c /shared/ethos/maintenance-collections.yaml verify check_licensed_example --deep
+ethos-data --catalog /path/to/source-catalogue/datacatalog.json -c maintenance-collections.yaml plan check_licensed_example
+ethos-data --catalog /path/to/source-catalogue/datacatalog.json -c maintenance-collections.yaml verify check_licensed_example --deep
 ```
 
-Confirm the plan names the intended in-place location and verification reports
-all expected files as `ok`. Do not accept an empty selection or skipped required
-files as validation. Inspect `ethos-data config show` for per-dataset overrides
-and active staging if the location is unexpected.
+Check that the plan names the intended installation and every required file
+matches. Remove a per-dataset override before verifying a newly populated cache,
+otherwise the check still reads the original.
 
-The package maintainer can then select this dataset in a package collection.
-Users read it through the served internal catalogue; see
-[Add the internal data catalogue](add-internal-catalogue.md) and
-[Write a collections file](write-a-collections-file.md).
+## 5. Release and update
 
-## 6. Add more files later
+Commit and [deploy the complete internal metadata](catalogue-hosting.md).
+Give users the catalogue location and cache root through the internal channel.
+Package maintainers can now select the dataset in their collections.
 
-Keep new files under the dataset's source directory and extend `ethos:include`
-when necessary. Rebuild that dataset, review the added resource paths and hashes,
-and repeat full verification. A separate product, release, or access policy is
-usually clearer as a new dataset entry rather than an unrelated extension.
+For additional files, update the source selection, rebuild, and repeat review
+and verification. For changed bytes, retain versions required by older pins and
+assign new resource paths or dataset identifiers.
 
-For changed existing bytes, retain the old version needed by existing catalogue
-pins and introduce versioned resource paths or a new dataset identifier. Updating
-metadata cannot restore an old licensed input that has been overwritten locally.
-Use [staging](stage-unpublished-data.md) for changing **non-restricted** development
-inventories; it deliberately does not shadow restricted datasets.
+Keep `source_dir` while it is the build input. If it is retired after a verified
+copy, remove it and use `ethos:frozen: true`.
+See [Move linked data](move-linked-data-into-the-cache.md).
 
-## 7. Release the metadata to readers
-
-Commit the reviewed internal metadata and synchronize it with jugit. Activate a
-complete validated filesystem snapshot as described in
-[Catalogue hosting](catalogue-hosting.md). Hidden entries are left out of the
-public catalogue when it is regenerated. A restricted entry with public visibility
-may be listed there, but its bytes remain local and access-controlled.
-
-There is no upload step for restricted data. Internal data can remain local;
-if an internal upload is needed, follow [Upload a dataset](upload-a-dataset.md)
-and its `--allow-internal` and verification caveats. The published dCache source
-of truth applies to uploaded datasets; the authorised local installation remains
-the source for restricted data.
+Restricted data has no upload step. Internal data can remain local; see the
+[current internal-upload limits](upload-a-dataset.md#internal-uploads) before
+attempting an authenticated store workflow.

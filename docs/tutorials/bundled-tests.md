@@ -7,7 +7,12 @@ or dCache files are changed. In a real package, export from its pinned official
 catalogue instead.
 
 You need an installed `ethos-data` and pytest. Work in a new directory so the lesson
-has no existing test data to replace.
+has no existing test data to replace. Allow about 20 minutes. Create the directory
+tree before adding the files below:
+
+```bash
+python -c "from pathlib import Path; Path('catalogue/datasets/lesson/input').mkdir(parents=True)"
+```
 
 ## Build the teaching catalogue
 
@@ -54,10 +59,11 @@ collections:
 ## Export the fixture
 
 ```bash
-ethos-data -c collections.yaml bundle export tests/data-bundle tiny_test \
+ethos-data --catalog catalogue/datacatalog.json -c collections.yaml bundle export tests/data-bundle tiny_test \
   --source-root lesson=catalogue/datasets/lesson/input --source-revision lesson-1
 ```
 
+The explicit catalogue overrides any catalogue configured for your normal work.
 The local source is verified against the built manifest. The deliberately
 unreachable publication URL is not used because you supplied the existing bytes.
 Inspect `tests/data-bundle/bundle.json`: it records the selected resource and its
@@ -103,6 +109,14 @@ Verification still reports `modified` and exits unsuccessfully. Accepting local
 changes for an experiment has not promoted them to authoritative data.
 
 Restore the fixture to its original bytes and restore the strict test to finish
-the lesson. For real changes, follow
+the lesson:
+
+```bash
+python -c "from pathlib import Path; import shutil; shutil.copyfile('catalogue/datasets/lesson/input/value.txt', 'tests/data-bundle/data/lesson/value.txt')"
+ethos-data bundle verify tests/data-bundle tiny_test
+pytest -q tests/test_value.py
+```
+
+Both checks pass again. For real changes, follow
 [Keep test data in a repository](../how-to/keep-test-data-in-a-repository.md#promote-an-accepted-fix)
 to publish a revision and refresh the copy after the fix has been verified.

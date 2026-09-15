@@ -1,17 +1,8 @@
 """The ``ethos-data catalog ...`` subcommands: build, publish, upload, link-cache, check-store.
 
-The maintainer half of one command. Everything here **writes** -- to a catalogue
-checkout, or to the storage behind it -- while everything under ``ethos-data``
-itself only reads. That split used to be two executables (``ice2-catalog`` and
-``ethos-data``), which made the separation obvious at the cost of a second name
-to install, remember and keep on PATH; people hit "command not found" and
-concluded the tooling was gone.
-
-One executable, two modes. The ``catalog`` noun does the same job the second
-binary did -- nothing a data *user* types is one key away from republishing a
-catalogue -- and it does it where the user is already looking. Grouping is not
-decoration: ``ethos-data --help`` stays a list of things that read, and every
-command that writes is one word further in.
+The maintainer group owns source metadata and publication operations. Local
+configuration, staging, and cache management also write files, but remain at the
+top level because consumers and package developers use them independently.
 
 Four of the five need a catalogue checkout, found by searching upward from the
 current directory for ``catalog.yaml``, so they work from anywhere inside one.
@@ -74,8 +65,11 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     parser = sub.add_parser(
         "catalog",
         help="maintainer commands: describe, publish and upload datasets",
-        description="Write to a catalogue, or to the storage behind it. "
-                    "Everything else in ethos-data only reads.",
+        description="Build source metadata, generate its public view, upload bytes, "
+                    "or register existing data in a cache. Uses a source checkout "
+                    "containing catalog.yaml; --catalog at the top level selects reader metadata.",
+        epilog="Folder operations use rclone mkdir/moveto/deletefile/rmdir/purge. "
+               "Run a command with --help for its options.",
     )
     # NOT a top-level option: `ethos-data --catalog` already exists and means
     # something else entirely -- which catalogue to *read*. Keeping this one
@@ -94,12 +88,15 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
 
     publisher = catalog_sub.add_parser(
         "publish", help="generate the public catalogue from this source one")
-    publisher.add_argument("target", help="path to a checkout of the public ETHOS.Data-Catalogue repo")
+    publisher.add_argument("target",
+                           help="dedicated generated public checkout; replaces everything except .git")
     publisher.add_argument("--check", action="store_true",
                            help="fail if the target is out of date; write nothing")
 
     uploader = catalog_sub.add_parser(
-        "upload", help="put datasets' bytes on dCache, then verify them anonymously")
+        "upload", help="upload dataset bytes and check anonymous readability and sizes",
+        description="Upload built, licensed, non-restricted datasets. Checks use anonymous "
+                    "HTTP HEAD, not remote SHA-256. Does not set ethos:uploaded automatically.")
     # A list, like `build`, so that publishing a subset of the catalogue is one
     # command rather than a shell loop. A loop is not equivalent: it re-checks
     # nothing up front, so it can upload half the subset and then stop on a
@@ -115,13 +112,16 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     uploader.add_argument("--root", default=None,
                           help="publication root under the VO (default: the last path segment of "
                                "catalog.yaml's ethos:publication_url)")
-    uploader.add_argument("--dry-run", action="store_true", help="show what rclone would transfer")
+    uploader.add_argument("--dry-run", action="store_true",
+                          help="preview rclone transfers; may contact storage; do not combine with --verify-only")
     uploader.add_argument("--verify-only", action="store_true",
-                          help="skip the upload, just check readability")
-    uploader.add_argument("--allow-internal", action="store_true")
+                          help="skip transfer; public chmod still runs unless --no-chmod is also given")
+    uploader.add_argument("--allow-internal", action="store_true",
+                          help="permit internal data without public chmod; verification is still anonymous")
     uploader.add_argument("--no-chmod", action="store_true",
                           help="do not set 0755 on the dataset prefix")
-    uploader.add_argument("--transfers", type=int, default=8)
+    uploader.add_argument("--transfers", type=int, default=8,
+                          help="parallel rclone transfers (default: 8)")
 
     # Named for what it produces, not for the internal idea behind it. It was
     # `namespace`, which named the concept ("a namespace of links") and left the
@@ -145,7 +145,9 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     # Was `check-access`, which did not say access to *what*. It probes the
     # publication store, and is the one subcommand here that needs no catalogue.
     prober = catalog_sub.add_parser(
-        "check-store", help="probe what this account can do on dCache InfiniteSpace")
+        "check-store", help="probe dCache permissions using temporary remote objects",
+        description="Creates and cleans up temporary remote files/directories to test access "
+                    "and permission inheritance. Needs storage credentials, no catalogue checkout.")
     prober.add_argument("vo", nargs="?", default="FZJ-ICE2", help="VO name (default: FZJ-ICE2)")
 
     return parser

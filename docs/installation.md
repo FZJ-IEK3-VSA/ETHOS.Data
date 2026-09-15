@@ -6,7 +6,7 @@
 cache locations), so it installs cleanly next to whatever scientific stack you
 already have. Python 3.10 or newer.
 
-Installing it gives you **two commands**:
+Installing it gives you one executable with a catalogue-maintenance command group:
 
 | Command | For | Needs |
 |---------|-----|-------|
@@ -32,7 +32,7 @@ dependencies = [
 ### Optional extras
 
 ```bash
-pip install "ethos-data[progress]"      # tqdm progress bars during a fetch
+pip install "ethos-data[progress] @ git+https://github.com/FZJ-IEK3-VSA/ETHOS.Data.git"
 ```
 
 Without `tqdm`, `fetch(..., progressbar=True)` still works — pooch just falls
@@ -113,8 +113,7 @@ pip install -e .
 pytest
 ```
 
-Linting uses [Ruff](https://docs.astral.sh/ruff/), pinned in the repository's
-`ruff.toml`:
+Linting uses [Ruff](https://docs.astral.sh/ruff/):
 
 ```bash
 ruff check src/ tests/

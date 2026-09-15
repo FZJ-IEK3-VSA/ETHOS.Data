@@ -2,7 +2,9 @@
 
 Get the input data an ETHOS tool or workflow needs, from a script or from the
 command line. The examples use ETHOS.RESKit; replace `reskit` and the dataset
-names with those of your package.
+names with those of your package. They illustrate the interface and do not imply
+those collections are available in every RESKit release. First
+[set up the machine](set-up-your-machine.md) and use a released catalogue.
 
 ## In a script or notebook
 
@@ -46,7 +48,7 @@ ethos-data -p reskit fetch onshore_wind    # download it
 ethos-data path reskit-test-data/era5      # print the path of a file or folder
 ```
 
-RESKit's `all` collection holds every input the package uses:
+If the package declares an `all` collection for its combined inputs:
 
 ```bash
 ethos-data -p reskit fetch all
@@ -57,4 +59,4 @@ ethos-data -p reskit fetch all
 - Licensed or proprietary data: [Work with restricted data](restricted-data.md).
 - Data that is only in the internal catalogue:
   [Add the internal data catalogue](add-internal-catalogue.md).
-- Anything else: [Troubleshoot catalogue access](troubleshoot-catalogue.md).
+- Anything else: [Identify and report a problem](report-a-problem.md).

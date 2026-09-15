@@ -1,61 +1,88 @@
-# Troubleshoot catalogue access
+# Diagnose catalogue problems
 
-Start with the same environment, collections file, and catalogue override as
-the failing workflow. These diagnostics apply to data users, package
-maintainers, and catalogue maintainers.
+Trace a reported failure through the selected metadata, local files, and remote
+storage. You need the reporter's catalogue revision, collection/resource keys,
+and error. For the initial user checks and report template, see
+[Identify and report a problem](report-a-problem.md).
 
-## Identify the selected metadata and roots
+## 1. Confirm the reader's inputs
 
 ```bash
 ethos-data config show
-ethos-data -p reskit list
-ethos-data -p reskit plan onshore_wind
+ethos-data --catalog /path/to/reported/datacatalog.json -c collections.yaml list
+ethos-data --catalog /path/to/reported/datacatalog.json -c collections.yaml plan affected_collection
 ```
 
-Replace the RESKit names for your package. Include `--catalog` if the workflow
-supplies one. `config show` needs no catalogue and names the catalogue in use;
-`list` and `plan` may retrieve remote metadata.
-
-## Match the symptom to the next check
+Use the reporter's actual pin, collection, and cache selection. `config show`
+reports configuration origins; `list` prints the chosen catalogue.
+Both `list` and `plan` may retrieve remote metadata.
 
 | Symptom | Check and action |
 |---|---|
-| Unknown dataset or `[unresolvable]` collection | Check the catalogue path/version and spelling. Hidden datasets are absent from the public view; an unaccepted dataset may need staging. |
-| Catalogue JSON exists but a descriptor or shard is missing | Check that the entire catalogue tree was deployed, not just `datacatalog.json`. A release archive must be extracted before using its local index. |
-| Catalogue on the cluster is unreadable | Confirm the supplied path and directory/file read permissions. Use a complete versioned tree if `current` is being updated. |
-| Data is looked up in an unexpected directory | Read the configuration origins in `config show`; inspect local roots, environment variables, and namespace links. |
-| Licensed data is unavailable | Configure the authorised local root using [Work with restricted data](restricted-data.md); downloading is not a fallback for this access class. |
-| A staging warning appears unexpectedly | Inspect `ethos-data staging list`; remove the relevant development entry and any local-root override before verifying an official run. |
-| A staged symlink is broken | Restore its target or explicitly remove the staging entry. A broken development entry must not silently select the official data. |
-| Cache has wrong size or checksum | Run `verify <collection> --deep`; inspect the findings before using [repair](verify-and-repair.md). Preserve deliberate fixture edits separately. |
-| A request fails only outside the cluster | Separate public metadata access from data access; a publicly listed entry may still describe internal or restricted bytes. |
-| Upload partly succeeds | Read the per-dataset summary and rerun the failed selection after fixing the cause. Completed uploads are not rolled back. |
-| The public catalogue misses accepted data | Check visibility, the generated diff, the deployed public revision, and the consumer's pin; generation alone does not release metadata. |
+| Unknown dataset or unresolvable collection | Check spelling, catalogue revision, staging, and whether the entry is hidden. |
+| Index exists, descriptor/shard is missing | Deploy the complete tree for that revision; copying only the index is insufficient. |
+| Cluster catalogue unreadable | Check filesystem permissions and the target of the `current` alias. |
+| Unexpected data location | Inspect per-dataset roots, staging, and cache links. |
+| Unexpected download host | Check `ETHOS_PUBLICATION_URL` and `publication_url` in the config files reported by `config show`. |
+| Hash mismatch | Compare with accepted inventory; preserve evidence before repairing or rebuilding. |
+| Public view misses accepted data | Check visibility, generated diff, released commit, and consumer pin. |
 
-## Distinguish a stale pin from a stale download
+To diagnose remote metadata caching without changing the pin:
 
-A package pinned to an older catalogue intentionally sees that version. Update
-its pin only after reviewing the changed data requirements. For a remote
-descriptor suspected of being cached incorrectly, bypass the metadata cache
-for a diagnostic request:
+=== "Bash"
+
+    ```bash
+    ETHOS_CATALOG_NO_CACHE=1 ethos-data -p reskit list
+    ```
+
+=== "PowerShell"
+
+    ```powershell
+    $env:ETHOS_CATALOG_NO_CACHE = "1"
+    ethos-data -p reskit list
+    Remove-Item Env:ETHOS_CATALOG_NO_CACHE
+    ```
+
+Replace `reskit` with the affected package and retain its catalogue override.
+This bypasses metadata caching, not dataset storage.
+
+## 2. Check source and generated metadata
+
+In the source checkout:
 
 ```bash
-ETHOS_CATALOG_NO_CACHE=1 ethos-data -p reskit list
+ethos-data catalog build --check
+ethos-data catalog publish ../ETHOS.Data-Catalogue --check
 ```
 
-This does not change the pin or fetch dataset bytes. Prefer a commit URL or an
-immutable release/tag policy. The URL caching heuristic cannot prove that an
-arbitrary tag has never been moved.
+| Failure | Action |
+|---|---|
+| Missing candidate `source_dir` | Restore access to the reviewed source; do not substitute an unrelated cache copy. |
+| Inventory stale before upload | Inspect changed source files and filters, rebuild, and review the diff. |
+| Include matches nothing | Correct the pattern or source path; do not accept an empty inventory accidentally. |
+| Uploaded/frozen inventory needs changed bytes | Create a deliberate dataset/resource revision; rebuilding preserves recorded hashes. |
+| Public generation differs | Review visibility and stripped fields, regenerate the dedicated public checkout, then release it. |
+| Command refuses a published checkout | Select the source checkout containing `catalog.yaml` with `catalog --catalog-root`. |
 
-## Report a reproducible failure
+## 3. Check the public store
 
-Include the package and `ethos-data` versions, selected catalogue location and
-revision, collection/resource key, full error, and relevant configuration
-origins. Include whether staging or a deliberately modified test-data bundle
-was active, plus whether the failure occurs with an empty disposable cache.
-For maintainers, add the source/public revisions and upload summary. Remove
-credentials and private values before posting a report publicly.
+```bash
+ethos-data catalog upload affected-dataset --verify-only --no-chmod
+```
 
-The [Architecture](../explanation/architecture/index.md) explains which
-components own metadata loading, selection, access, retrieval, and publication;
-use it to find the implementation responsible for the failing step.
+| Failure | Action |
+|---|---|
+| rclone cannot obtain a token | Check the active environment and loaded profile using [Set up dCache access](set-up-dcache-access.md). |
+| Anonymous 401/403 for public data | Check the intended publication root and object permissions with the storage administrator. |
+| 404 or wrong size | Compare the exact manifest path, remote prefix, transfer summary, and publication URL. |
+| Immutable transfer conflict | Use new published paths; do not remove a released object to retry. |
+| Internal transfer succeeded, verification failed | Verification is still anonymous; use the agreed private-storage procedure, not public chmod. |
+| Long first read, locality `NEARLINE` | Allow for tape staging; report persistent storage failures with the resource path and time. |
+
+Rerun only the failed upload selection after fixing the cause. Earlier completed
+transfers are not rolled back. For an unknown VO permission model,
+`catalog check-store` probes with temporary remote objects and cleans up.
+
+Keep source/public revisions, validation results, and the resolution with the
+issue. See [Catalogues and storage](../explanation/catalogues-and-storage.md) for
+the boundaries each check establishes.

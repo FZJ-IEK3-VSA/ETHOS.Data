@@ -9,8 +9,12 @@ data, use the [how-to guides](../how-to/index.md) instead.
 
 You use ETHOS.RESKit or another package and need its input data.
 
-- [Your first fetch](first-fetch.md) — discover a package's collections,
-  inspect the files one selects, fetch and check them, and use them from Python.
+- [Your first fetch](first-fetch.md) — fetch a tiny CSV from a local practice
+  server, reuse it in Python, then detect and repair a changed cache copy.
+  No public catalogue release or cluster account is needed.
+- [Find data through an internal catalogue](restricted-access.md) — distinguish
+  hidden metadata from an unavailable installation and use a restricted root
+  with synthetic practice data.
 
 ## Package maintainers
 

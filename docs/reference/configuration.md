@@ -56,7 +56,7 @@ Written into a config file, or into `ethos-data.yaml` for the project scope.
 |---|---|---|
 | `public_cache` | `config set-public-cache` | public and internal data: read from, and downloaded into |
 | `cache_dir` | `config set-cache` | what `public_cache` used to be called. Still read and still writable, so existing files keep working |
-| `restricted_cache` | `config set-restricted-cache` | licensed data; never downloaded, never written to |
+| `restricted_cache` | `config set-restricted-cache` | licensed data; retrieval only reads it in place |
 | `staging_cache` | `config set-staging-cache` | work in progress that shadows the catalogue |
 | `skip_unavailable` | `config set-skip-unavailable` | `true` to carry on without data this machine cannot reach |
 | `dataset_roots` | `config set-root <dataset> <dir>` | a mapping of dataset name to directory. Roots from different scopes **combine** rather than clobbering each other |
@@ -91,6 +91,7 @@ dataset_roots:
 | `ETHOS_DATA_CATALOG` | `catalog` |
 | `ETHOS_SKIP_UNAVAILABLE` | `skip_unavailable` |
 | `ETHOS_CATALOG_NO_CACHE` | if set, a fetched catalogue descriptor is never cached on disk |
+| `ETHOS_PUBLICATION_URL` | override the dataset download base URL |
 
 `ETHOS_DATA_DIR` is named for the era when there was only one root. It is kept
 under that name because it is in scripts, job files and people's shell profiles.
@@ -100,7 +101,7 @@ under that name because it is in scripts, job files and people's shell profiles.
 | Root | Holds | Written to |
 |---|---|---|
 | public | public and internal data — symlinks to data already here, plus real directories for downloads | yes, for downloads into real directories |
-| restricted | licensed data, real files, ideally read-only | never |
+| restricted | authorised licensed installations or links | only explicit local administration, such as `link` or `materialize`; never retrieval |
 | staging | uncatalogued work in progress | only by `staging add --copy` |
 
 Which root a dataset comes from follows from its access class; whether it is
@@ -120,8 +121,10 @@ Strongest first:
    `https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json`
 
 A local relative path in a collections file is resolved **relative to that
-file**, not to the caller's working directory. A `@ref` suffix pins a version:
-for a git host it selects the tag, and for a local path it is stripped.
+file**, not to the caller's working directory. Pin a GitHub revision in the URL
+path, for example `.../ETHOS.Data-Catalogue/COMMIT/datacatalog.json`.
+The legacy `@ref` suffix is stripped while loading a collections file; it does
+not select a remote revision.
 
 A catalogue fetched from a version-pinned URL is cached on disk indefinitely.
 One whose URL names `main`, `master`, `HEAD`, `latest`, `dev` or `develop` is

@@ -56,8 +56,8 @@ cache path from the same catalogue entry, or the sharing stops silently and
 nobody finds out for months. Anything touching `local_path`, `Resource.key`, or
 the cache layout is a compatibility change, not a refactor.
 
-**Restricted data is never written into a shared cache and never silently
-downloaded.** If it cannot be reached, asking for it fails with an explanation.
+**Retrieval never writes restricted data into the public cache or downloads
+it.** If it cannot be reached, asking for it fails with an explanation.
 See [Caches, classes and roots](explanation/caches-and-access.md).
 
 ## Changing the catalogue format
@@ -82,12 +82,24 @@ These pages are MkDocs + Material; see
 The structure follows [Diátaxis](https://diataxis.fr/), so a new page has a
 section by construction:
 
-- a **tutorial** teaches by doing, start to finish, and assumes nothing;
+- a **tutorial** teaches by doing, start to finish, with stated prerequisites,
+  practice inputs, and observable results;
 - a **how-to** gets one task done for somebody who already knows what they want;
 - an **explanation** justifies a design decision;
 - **reference** describes what exists, exhaustively and without narrative.
 
 If a page would fit two of those, it is two pages.
+
+Keep how-to guides focused on prerequisites, necessary actions, and a success
+check. Tutorials give learners a reliable exercise with expected results and
+brief cues about what to notice. Put extended rationale and comparisons in
+Explanation and option inventories in Reference. This follows the
+[Diátaxis tutorial guidance](https://diataxis.fr/tutorials/), including its
+recommendation to keep explanation brief during an exercise.
+
+Public documentation uses clearly labelled example cluster paths. Obtain actual
+deployment locations and internal support contacts through the internal onboarding
+channel; do not copy them into these pages.
 
 Tutorials and how-to guides are the pair that blur most easily. A page that
 gets one real task done is a how-to guide, even when it is written for

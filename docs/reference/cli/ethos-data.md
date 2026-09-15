@@ -14,6 +14,11 @@ not as a traceback.
 
 ## Global options
 
+Put these options before the subcommand, for example
+`ethos-data --skip-unavailable -p reskit fetch onshore_wind`.
+`--root` here is a local public cache; `catalog upload --root` is a remote
+publication folder. Use `ethos-data COMMAND --help` for command-specific options.
+
 | Option | |
 |---|---|
 | `-c`, `--collections PATH` | path to a collections file. Default: `collections.yaml` in the current directory, or a configured default — see `config show`. |
@@ -104,7 +109,7 @@ and never copied.
 
 ## `verify [collection]`
 
-Check the data on disk against the catalogue's checksums. Never writes anything
+Check file sizes, or SHA-256 hashes with `--deep`. Never writes anything
 unless `--repair` is given.
 
 | Flag | |
@@ -134,7 +139,7 @@ ethos-data link --all                             # every source_dir there is
 |---|---|
 | `--all` | link every dataset in the source catalogue that has a `source_dir` |
 | `--force` | repoint an entry that is already a link |
-| `--dry-run` | with `--all`: show what would change, write nothing |
+| `--dry-run` | honoured only with `--all`; a single-dataset link is applied immediately |
 | `--catalog-root DIR` | catalogue checkout to read `source_dir` from (default: searched upward from the current directory) |
 
 Entries go in the root for each dataset's access class, so a restricted dataset
@@ -177,7 +182,7 @@ Replace symbolic-link cache entries with real, verified copies.
 |---|---|
 | `--all` | every entry in the public cache that is currently a link |
 | `--dry-run` | show the cost, copy nothing |
-| `--force` | do not stop at entries that are already real directories |
+| `--force` | compatibility option; existing real directories are still skipped |
 | `--no-verify` | skip checksum verification of each copied file (not advised) |
 | `--from DIR` | copy from this directory instead of the entry's link target |
 | `--catalog-root DIR` | catalogue checkout to read `source_dir` from, when there is no entry and no `--from` |
@@ -190,9 +195,8 @@ protected destination; see [Move linked data into the cache](../../how-to/move-l
 `--from` names one dataset (not `--all`) and also fills an entry that does not
 exist yet, which is how a cache is seeded from bytes already on the machine
 instead of an upload and a download back. With no entry and no `--from`, the
-catalogue's `source_dir` is used — which is the restricted-data workflow in one
-command, since licensed data belongs in the restricted cache as a real, owned
-copy rather than a link. It will not write over a real directory the cache owns,
+catalogue's `source_dir` is used. This also supports seeding an authorised
+restricted installation. It will not write over a real directory the cache owns,
 and `--all` still walks the public cache only. Provenance is written to
 `.ethos-data-materialized.json` in the new directory; `was_a_link_at` is null
 when no link was replaced.
@@ -221,7 +225,9 @@ ethos-data staging remove <name> [--force]
 
 The resolved cache directories, why each was chosen, every config file
 consulted with an exists flag, the datasets read from a local root, and the
-catalogue and collections file in use. Needs no catalogue and no network.
+configured catalogue and default collections file. Needs no catalogue and no
+network. It does not resolve a package's pin or reflect per-command `--catalog`
+and `--root` overrides; `list` prints the actual catalogue selected for a collection.
 
 ### Setting a cache root
 
@@ -262,6 +268,7 @@ file locations.
 | `ETHOS_DATA_CATALOG` | the catalogue, for every tool in this shell or job |
 | `ETHOS_SKIP_UNAVAILABLE` | carry on without unreachable data |
 | `ETHOS_CATALOG_NO_CACHE` | never cache a fetched catalogue descriptor on disk |
+| `ETHOS_PUBLICATION_URL` | override the dataset download base URL |
 
 ## Exit status
 

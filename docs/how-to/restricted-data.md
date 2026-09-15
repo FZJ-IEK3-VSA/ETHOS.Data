@@ -1,76 +1,70 @@
 # Work with restricted data
 
-Restricted datasets are licensed or proprietary. ETHOS.Data never downloads
-them; it reads your own copy in place.
+Read licensed data from an authorised local installation. You need its dataset
+identifier, the catalogue describing it, and permission to read the files.
 
-## If you have a copy
+## Configure an existing copy
 
-Set the restricted cache to the directory that holds your restricted datasets,
-one subdirectory per dataset:
+If the description is hidden, [select the internal catalogue](add-internal-catalogue.md).
+
+For a root containing one directory per dataset:
 
 ```bash
-ethos-data config set-restricted-cache /path/to/ethos_data_restricted
+ethos-data config set-restricted-cache /path/to/ethos-restricted
 ```
 
-Each dataset is then read from `<restricted cache>/<dataset>/…`. For other ways
-to set it, see [Configure the cache](configure-the-cache.md).
-
-For one dataset stored somewhere else:
+For one dataset in another location:
 
 ```bash
 ethos-data config set-root licensed-example /path/to/licensed-example
 ```
 
-## If you do not have a copy
+Use the actual installation paths. The second form points directly to the
+dataset's files; do not append its name again.
 
-Leave restricted datasets out instead of stopping:
+## Check and use the data
+
+Replace the package and collection below with the workflow requiring the dataset:
 
 ```bash
-ethos-data -p reskit fetch onshore_wind --skip-unavailable   # one command
-ethos-data config set-skip-unavailable true                  # every command
+ethos-data config show
+ethos-data -p reskit plan onshore_wind
+ethos-data -p reskit verify onshore_wind --deep
+ethos-data -p reskit fetch onshore_wind
 ```
 
-The datasets that were left out are listed. In Python, their files are missing
-from the result and a `UserWarning` names them:
+The restricted files must be available in place and match the inventory.
+Fetching reads them there; it never downloads or repairs restricted bytes.
+
+## Obtain a missing required input
+
+Read the `ethos:restriction` access note in the error/descriptor and contact the
+named custodian. Request both permission and the installation location.
+Selecting a restricted cache cannot grant access. Report an unreadable or
+mismatched installation through the internal support channel.
+
+## Skip an optional input
+
+Only if the workflow explicitly handles omitted data:
+
+```bash
+ethos-data --skip-unavailable -p reskit fetch onshore_wind
+```
+
+Keep the global option before `fetch`. For Python, first enable the preference
+with `ethos-data config set-skip-unavailable true --scope project` in the project
+directory. Skipped resources are absent from the result:
 
 ```python
+import ethos_data
+
 files = ethos_data.fetch("onshore_wind", package="reskit")
-if "licensed-example/layer.tif" not in files:
-    ...
+if "licensed-example/layer.tif" in files:
+    layer = files["licensed-example/layer.tif"]
 ```
 
-To stop on missing data again: `ethos-data config unset-skip-unavailable`.
+For a persistent preference, use `config set-skip-unavailable true`; undo it with
+`config unset-skip-unavailable` in the same scope. Required inputs and tests should fail if absent.
 
-## Find out how to obtain a dataset
-
-Without a copy, asking for a restricted dataset stops with a message that
-includes the dataset's access note — whom to contact, or where to license it:
-
-```title="Output"
-dataset 'licensed-example' is restricted and is never downloaded.
-  Licensed from <vendor> under contract <ref>. Redistribution prohibited.
-No restricted cache is configured on this machine.
-
-If you have a copy, say where it is:
-    ethos-data config set-restricted-cache /path/to/ethos_data_restricted
-    ethos-data config set-root licensed-example /path/to/licensed-example    # just this one
-
-If you do not, carry on without it:
-    ethos-data ... --skip-unavailable
-    ethos-data config set-skip-unavailable true    # once, for this machine
-Datasets you cannot reach are then left out of the result and listed, rather than silently missing.
-```
-
-## Check your copy
-
-```bash
-ethos-data -p reskit verify --all --deep
-```
-
-Files you have no copy of are reported as `unavailable here`.
-
-## See also
-
-- [Add internal and restricted datasets](add-internal-and-restricted-data.md) —
-  for catalogue maintainers.
-- [Caches, classes and roots](../explanation/caches-and-access.md)
+See [Report a problem](report-a-problem.md) or, for administrators,
+[Add internal and restricted datasets](add-internal-and-restricted-data.md).

@@ -147,8 +147,9 @@ def load_collections(
     else:
         location = catalog or document.get("catalog")
         if location:
-            # A '@ref' suffix pins a catalogue version. Local paths ignore it; for a
-            # git host it selects the tag, which is what makes a tool reproducible.
+            # Retain compatibility with legacy '@ref' suffixes by stripping them.
+            # Remote revisions must be part of the URL itself; this does not
+            # rewrite a Git host's branch/tag segment.
             location = str(location)
             if not Path(location).exists() and "@" in location.rsplit("/", 1)[-1]:
                 location = location.rsplit("@", 1)[0]

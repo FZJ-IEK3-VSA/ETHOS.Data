@@ -1,10 +1,8 @@
 # `ethos-data catalog`
 
-The maintainer counterpart to [`ethos-data`](ethos-data.md). Everything here
-**writes** — to a catalogue checkout, or to the storage behind it — which is why
-it is a separate command rather than more subcommands on the consumer tool. The
-two have different audiences, and nothing a data *user* runs should be one typo
-away from republishing a catalogue.
+The catalogue-maintenance group of [`ethos-data`](ethos-data.md). It builds
+metadata, generates the public view, uploads bytes, and manages shared cache
+links. Check modes can be read-only; `check-store` creates temporary remote objects.
 
 ```
 ethos-data catalog [--catalog-root DIR] <command> ...
@@ -92,9 +90,9 @@ second.
 
 | Flag | Default | |
 |---|---|---|
-| `--dry-run` | | show what rclone would transfer |
-| `--verify-only` | | skip the upload, just check readability |
-| `--allow-internal` | | required for an `internal` dataset |
+| `--dry-run` | | preview rclone transfers; may contact storage; do not combine with `--verify-only` |
+| `--verify-only` | | skip transfer; public chmod still runs unless `--no-chmod` is supplied |
+| `--allow-internal` | | permit internal data without public chmod; verification remains anonymous |
 | `--no-chmod` | | do not set `0755` on the dataset prefix |
 | `--transfers N` | `8` | parallel transfers |
 | `--remote NAME` | `HIFIS` | rclone remote name |
@@ -106,11 +104,21 @@ A dataset may be named by directory name or by path — a path must point into
 the source catalogue's `datasets/`, so naming one in the *published* catalogue
 is refused with the name to use instead.
 
-Refuses `restricted` datasets outright, refuses unresolved licensing, and
-passes `rclone --immutable` so a published path can never be overwritten. After
+Refuses `restricted` datasets outright and unresolved licensing for transfers
+(`--verify-only` is allowed). It passes `rclone --immutable` to refuse detected
+changes at existing paths. Keep published paths immutable regardless of what
+the remote backend can compare. After
 transferring it HEADs every file in the manifest with **no credentials** and
 reports anything unreadable or the wrong size, plus the storage locality
 (`ONLINE` / `ONLINE_AND_NEARLINE` / `NEARLINE`).
+
+HEAD checks establish readability and size, not remote SHA-256 identity.
+An internal upload can succeed in transfer yet fail anonymous verification.
+`--allow-internal` does not establish private storage permissions or configure
+authenticated consumer downloads. The command does not set `ethos:uploaded`;
+the maintainer records that after verification.
+
+Use `--verify-only --no-chmod` to recheck without changing permissions.
 
 With a single dataset the exit code is rclone's own on a transfer failure, or
 `1` on a verification miss. With several it is `1` if any dataset failed, and
@@ -151,7 +159,7 @@ Probe what this account can do on dCache InfiniteSpace. Default VO:
 ethos-data catalog check-store FZJ-ICE2
 ```
 
-Non-destructive: it uses a throwaway subdirectory and cleans up after itself. It
+Creates temporary remote files/directories and cleans up after itself. It
 reports whether you can chmod at all (self-managed vs. root-owned "Simple"
 model — the latter needs a HIFIS ticket) and whether permissions inherit to new
 files.
@@ -162,6 +170,10 @@ ones it actually ran. This is the one subcommand that does not need a catalogue
 checkout.
 
 ## See also
+
+- [Set up dCache access](../../how-to/set-up-dcache-access.md)
+- [Create, rename, and delete folders](../../how-to/manage-dcache-folders.md) — uses
+  rclone directly; there are no equivalent ETHOS.Data subcommands.
 
 - [Describe a dataset](../../how-to/describe-a-dataset.md)
 - [Publish the catalogue](../../how-to/publish-the-catalogue.md)

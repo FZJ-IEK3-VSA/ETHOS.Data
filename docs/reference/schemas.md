@@ -1,7 +1,7 @@
 # File formats
 
-Four files matter. Two are hand-written, two are generated and must never be
-edited by hand.
+Three source files are hand-written. Dataset descriptors, catalogue indexes,
+and optional inventory shards are generated and must never be edited by hand.
 
 | File | Written by | Lives in |
 |---|---|---|
@@ -18,7 +18,8 @@ Institute-specific keys use the `ethos:` prefix — the
 ## `collections.yaml`
 
 Lives in the consuming package. Names *slices* of the catalogue, and contains
-no file paths, sizes, checksums or URLs.
+no resource sizes, checksums, or download URLs. It can contain selection patterns
+and a catalogue location.
 
 ```yaml
 catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/v2026.09/datacatalog.json
@@ -36,7 +37,7 @@ collections:
 
 | Key | Type | |
 |---|---|---|
-| `catalog` | string | local path or `http(s)` URL to a `datacatalog.json`. A relative path is resolved against **this file**. An `@ref` suffix pins a version (a git tag; stripped for local paths). Required unless the caller supplies one. |
+| `catalog` | string | local path or `http(s)` URL to a `datacatalog.json`. A relative path is resolved against **this file**. Optional: uses a caller/config override or the built-in public catalogue. Pin a remote revision in the URL path; a legacy `@ref` suffix is stripped and does not select it. |
 | `collections` | mapping | collection name → definition |
 | `collections.<name>.title` | string | one line, shown by `ethos-data list` |
 | `collections.<name>.include` | list | `{dataset, files}` entries |

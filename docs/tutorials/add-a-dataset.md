@@ -10,6 +10,7 @@ uploaded to dCache and nothing is published anywhere.
 You need an installed `ethos-data` and a shell: bash, zsh, or Git Bash on
 Windows. Step 5 creates a symbolic link, which on Windows requires Developer
 Mode.
+Allow about 30 minutes. The paths in this exercise are local practice paths.
 
 ## 1. Set up the practice catalogue
 
@@ -237,6 +238,9 @@ can download them. It needs storage credentials, so this lesson left it out.
 When you are done, delete the `catalogue-lesson` directory.
 
 ## Next
+
+- [Catalogues and storage](../explanation/catalogues-and-storage.md) — why metadata
+  publication, local access, and remote storage are separate operations.
 
 - [Accept a dataset proposal](../how-to/accept-a-dataset.md) — the checklist for
   a real submission, from review to release.

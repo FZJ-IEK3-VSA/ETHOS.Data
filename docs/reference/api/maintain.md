@@ -1,8 +1,8 @@
 # Maintainer tooling
 
 `ethos_data.maintain` is the writing half of the format: the code that produces
-the descriptors `ethos_data.catalog` reads. Consumers never import it — the
-`ethos_data` package itself stays a read-only library.
+the descriptors `ethos_data.catalog` reads. Consumers usually need no maintainer
+imports; ordinary APIs also manage downloads, caches, and local development data.
 
 Both halves ship in one distribution on purpose. The `ethos:` extensions are a
 format, and a format whose writer and reader live in separate repositories

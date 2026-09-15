@@ -49,6 +49,9 @@ files = ethos_data.fetch("my_workflow", package="reskit")
 
 Every read from staging warns that the data is staged, and
 `ethos-data verify` reports staged files as `unverifiable`.
+Staging still needs a readable catalogue index. Before a catalogue is available,
+use the local practice index in the
+[development lesson](../tutorials/develop-and-propose-data.md).
 
 ## 4. Stop staging
 
@@ -70,10 +73,12 @@ Run the workflow again and check that no staging warning remains.
 | `--new-only` (on `list`) | only datasets that are not in the public or restricted cache |
 | `--force` (on `remove`) | required if the entry is a copy rather than a link |
 
-Restricted datasets cannot be staged.
+Staging does not override a dataset classified as restricted in the selected
+catalogue. Keep licensed inputs in their authorised installation.
 
 Staging is also the way to work with a dataset whose licence is not settled yet:
-linking it into a cache and uploading it are refused, staging is not. See
+linking it into a cache and uploading it are refused. This development option
+applies only to non-restricted data; it grants no rights to use the files. See
 [Licensing and immutability](../explanation/licensing.md).
 
 ## See also

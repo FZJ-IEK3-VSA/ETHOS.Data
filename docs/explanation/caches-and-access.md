@@ -70,8 +70,8 @@ For one dataset, first match wins:
 
 ## The rule that does not bend
 
-Restricted data is never written into a shared cache and never silently
-downloaded. If there is nowhere to read it from, asking for it **fails with an
+Retrieval never writes restricted data into the public cache and never
+downloads it. If there is nowhere to read it from, asking for it **fails with an
 explanation** rather than doing something surprising.
 
 Having no restricted cache is a legitimate, permanent state — most people, most
@@ -107,6 +107,31 @@ cache owns, and replacing it would silently discard it.
 | licensed data you do not have | `--skip-unavailable` |
 | data that is not catalogued yet | the [staging root](../how-to/stage-unpublished-data.md) |
 | a link that is about to break | `ethos-data materialize` |
+
+## Copy ownership and frozen inventories
+
+A link borrows a directory: moving or editing its target changes what every
+reader sees. A materialized entry owns a separate copy. Materialization copies
+only catalogued resources, checks their size and hash, and records the source in
+`.ethos-data-materialized.json`. It is not a backup of unrelated project files.
+It also does not reproduce ownership or ACLs; destination permissions determine
+who can read the new copy.
+
+The original and copy can coexist. While `source_dir` remains the build input,
+a rebuild reflects changes to that original and the independent cache may then
+fail verification. `materialize --force` does not overwrite a real directory;
+changed data needs a deliberate version/migration decision.
+
+If the original is retired, a verified local installation can retain its
+inventory using `ethos:frozen: true` without `source_dir`. Uploaded data uses
+`ethos:uploaded: true` instead. Both preserve recorded resource hashes while
+allowing metadata to be regenerated. Rehashing the cache itself would erase the
+independent baseline needed to detect corruption. Frozen metadata does not back
+up bytes; the storage owner still needs retention and recovery arrangements.
+
+Size checks detect some damage cheaply but miss changes of equal length. A deep
+verification reads every byte and compares SHA-256. In-place reads do not
+automatically perform that check. See [Check and repair](../how-to/verify-and-repair.md).
 
 ## See also
 

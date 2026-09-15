@@ -169,6 +169,7 @@ nav:
           - Overview: tutorials/index.md
           - Data users:
                 - Your first fetch: tutorials/first-fetch.md
+                - Find restricted data: tutorials/restricted-access.md
           - Package maintainers:
                 - Develop and propose a dataset: tutorials/develop-and-propose-data.md
                 - Run a test with repository data: tutorials/bundled-tests.md
@@ -178,23 +179,28 @@ nav:
     - How-to guides:
           - Overview: how-to/index.md
           - Data users:
+                - Set up your machine: how-to/set-up-your-machine.md
                 - Configure the cache: how-to/configure-the-cache.md
                 - Work with restricted data: how-to/restricted-data.md
                 - Add the internal data catalogue: how-to/add-internal-catalogue.md
                 - Get data for a task: how-to/get-data-for-a-task.md
                 - Use data already on disk: how-to/use-data-already-on-disk.md
                 - Check and repair the cache: how-to/verify-and-repair.md
+                - Identify and report a problem: how-to/report-a-problem.md
           - Package maintainers:
                 - Use ETHOS.Data in your package: how-to/use-from-a-package.md
                 - Write a collections file: how-to/write-a-collections-file.md
                 - Stage uncatalogued data: how-to/stage-unpublished-data.md
                 - Propose a dataset: how-to/propose-a-dataset.md
                 - Keep test data in the repository: how-to/keep-test-data-in-a-repository.md
+                - Update test data: how-to/update-test-data.md
                 - Run package tests in CI: how-to/run-in-ci.md
           - Catalogue maintainers:
                 - Accept a dataset proposal: how-to/accept-a-dataset.md
                 - Describe a dataset: how-to/describe-a-dataset.md
-                - Upload a dataset: how-to/upload-a-dataset.md
+                - Set up dCache access: how-to/set-up-dcache-access.md
+                - Upload a public dataset: how-to/upload-a-dataset.md
+                - Manage dCache folders: how-to/manage-dcache-folders.md
                 - Add internal and restricted datasets: how-to/add-internal-and-restricted-data.md
                 - Publish the catalogue: how-to/publish-the-catalogue.md
                 - Serve catalogues on the cluster and GitHub: how-to/catalogue-hosting.md
@@ -209,6 +215,8 @@ nav:
           - Overview: explanation/index.md
           - Data concepts:
                 - Overview: explanation/data-concepts.md
+                - Catalogues and storage: explanation/catalogues-and-storage.md
+                - Test data and reproducibility: explanation/test-data.md
                 - Why one catalogue: explanation/deduplication.md
                 - Caches, classes and roots: explanation/caches-and-access.md
                 - The catalogue format: explanation/catalogue-format.md

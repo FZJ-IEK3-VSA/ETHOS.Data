@@ -1,89 +1,60 @@
 # Configure the cache
 
-ETHOS.Data keeps data in two caches:
+Choose where this machine reads and stores data. For initial catalogue and cache
+setup together, use [Set up your machine](set-up-your-machine.md).
 
-| Cache | Holds | Default |
-|---|---|---|
-| **public cache** | everything downloaded from the catalogue | your operating system's per-user cache directory |
-| **restricted cache** | your private copy of licensed or proprietary datasets | none |
+## Set persistent locations
 
-Public data needs no configuration. Set a cache only to put it somewhere else.
-
-## Four Configuration Options
-
-The first option that is set wins.
-
-| | Option | Public cache | Restricted cache | Applies to |
-|---|---|---|---|---|
-| 1 | command-line option or Python argument | `--root DIR` / `root=DIR` | — | one command or call |
-| 2 | environment variable | `ETHOS_DATA_DIR` | `ETHOS_RESTRICTED_DIR` | one shell or job |
-| 3 | project file | `config set-public-cache DIR --scope project` | `config set-restricted-cache DIR --scope project` | one project folder |
-| 4 | personal setting | `config set-public-cache DIR` | `config set-restricted-cache DIR` | all your work |
-
-### 1. For one command or call
+Use absolute paths to a public/internal cache and a separate authorised restricted
+installation. These are example paths:
 
 ```bash
-ethos-data --root /data/ethos-data -p reskit fetch onshore_wind
-```
-
-```python
-ethos_data.fetch("onshore_wind", package="reskit", root="/data/ethos-data")
-```
-
-### 2. For one shell or job
-
-```bash
-export ETHOS_DATA_DIR=/scratch/me/ethos-data
-export ETHOS_RESTRICTED_DIR=/data/licensed
-```
-
-In PowerShell, use `$env:ETHOS_DATA_DIR = "D:\ethos-data"`.
-
-### 3. For one project
-
-Run in the project folder:
-
-```bash
-ethos-data config set-public-cache /data/my-project/ethos-data --scope project
-ethos-data config set-restricted-cache /data/licensed --scope project
-```
-
-This writes `ethos-data.yaml` into the current folder:
-
-```yaml title="ethos-data.yaml"
-public_cache: /data/my-project/ethos-data
-restricted_cache: /data/licensed
-```
-
-The file applies to this folder and every folder below it. Commit it to share
-the setting with your team.
-
-### 4. For all your work
-
-```bash
-ethos-data config set-public-cache /data/ethos-data
-ethos-data config set-restricted-cache /data/licensed
-```
-
-## Check the result
-
-```bash
+ethos-data config set-public-cache /data/ethos/public
+ethos-data config set-restricted-cache /data/ethos/restricted
 ethos-data config show
 ```
 
-The output lists each cache and the option that set it.
+These commands change settings; they do not move files, grant permissions, or
+download restricted data. Datasets live at `<root>/<dataset>/<path>`.
+
+Append `--scope project` to use the nearest project config (or create one in the
+current directory). The default is `user`. Administrators can use `--scope site`;
+`--scope environment` applies to a Python environment. Commit project settings
+only when their paths work for the intended team.
+
+## Override one run or shell
+
+```bash
+ethos-data --root /scratch/me/ethos-public -p reskit fetch onshore_wind
+```
+
+=== "Bash"
+
+    ```bash
+    export ETHOS_DATA_DIR=/scratch/me/ethos-public
+    export ETHOS_RESTRICTED_DIR=/data/ethos/restricted
+    ```
+
+=== "PowerShell"
+
+    ```powershell
+    $env:ETHOS_DATA_DIR = "D:\ethos\public"
+    $env:ETHOS_RESTRICTED_DIR = "D:\ethos\restricted"
+    ```
+
+Environment variables override config files. Per-dataset roots and staging can
+still redirect individual datasets; inspect them with `config show`.
 
 ## Remove a setting
 
 ```bash
 ethos-data config unset-public-cache
 ethos-data config unset-restricted-cache --scope project
+ethos-data config show
 ```
 
-Use the same `--scope` you set it with.
+Use the scope where the setting was written. Also clear any environment variable
+that overrides it. Unsetting does not delete data.
 
-## See also
-
-- [Work with restricted data](restricted-data.md)
-- [Configuration reference](../reference/configuration.md) — every key, scope
-  and default.
+See [Configuration reference](../reference/configuration.md) for all precedence
+rules and [Work with restricted data](restricted-data.md) for access setup.

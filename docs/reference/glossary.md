@@ -19,7 +19,7 @@ Key concepts used across `ethos-data`.
 | Term | Meaning |
 |---|---|
 | **Public cache** | The shared root for public and internal data — symbolic links to data already on the machine, plus real directories for anything downloaded. Defaults to the per-user OS cache directory. |
-| **Restricted cache** | The root for licensed data. Always read in place, never downloaded, never written to. No default: somebody must say where it is. |
+| **Restricted cache** | The root for authorised licensed data. Retrieval reads it in place and never downloads it; explicit local administration can create entries. No built-in default. |
 | **Staging cache** | An optional root holding uncatalogued work in progress, which shadows the catalogue during development. Not checksummed, never uploaded. |
 | **Namespace link** | A symbolic link in the public cache pointing at data already on the machine. Its presence is what marks a dataset as read **in place** rather than downloaded. |
 | **Dataset root** | The per-dataset escape hatch (`config set-root`), for a private copy. Wins over everything else. |

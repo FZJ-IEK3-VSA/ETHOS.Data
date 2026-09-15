@@ -2,7 +2,8 @@
 
 Make your package's input data available to its users, examples and tests
 without any configuration on their side. ETHOS.RESKit is the example; replace
-`reskit` with your package's name.
+`reskit` with your package's name. Dataset identifiers and the catalogue tag
+below are examples; replace them with a revision released by the maintainer.
 
 ## 1. Add the dependency
 
@@ -12,6 +13,9 @@ dependencies = [
   "ethos-data>=0.1.0",
 ]
 ```
+
+During development before a package-index release, install ETHOS.Data from
+[its repository](../installation.md) in the same environment first.
 
 ## 2. Write the collections file
 

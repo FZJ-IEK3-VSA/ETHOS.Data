@@ -1,12 +1,8 @@
-"""Command line interface: one command, two modes.
+"""Find, fetch, and manage data for ETHOS tools and workflows.
 
-    ethos-data list|info|plan|fetch|verify|materialize|staging|config   read
-    ethos-data catalog build|publish|upload|link-cache|check-store      write
-
-Everything at the top level reads; everything that writes to a catalogue or to
-the storage behind it is one word further in, under ``catalog`` (see
-:mod:`ethos_data.maintain.cli`). That grouping is the surviving half of what used
-to be a separate ``ice2-catalog`` executable.
+Use collections shipped by a package (-p) or a local collections file (-c).
+Local configuration, staging, cache management, and test bundles are available
+at the top level. Catalogue maintenance and dCache uploads use 'catalog'.
 """
 
 from __future__ import annotations
@@ -105,13 +101,23 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="ethos-data", description=__doc__)
+    parser = argparse.ArgumentParser(
+        prog="ethos-data", description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Put global options before the subcommand. Examples:\n"
+               "  ethos-data config show\n"
+               "  ethos-data -p reskit plan onshore_wind\n"
+               "  ethos-data --skip-unavailable -p reskit fetch onshore_wind\n"
+               "  ethos-data catalog --catalog-root /path/to/source build --check\n"
+               "Use 'ethos-data COMMAND --help' for command options.",
+    )
     parser.add_argument("-c", "--collections", default=None,
                         help="path to a collections file (default: collections.yaml, "
                              "or a configured default -- see `ethos-data config show`)")
     parser.add_argument("-p", "--package", default=None,
                         help="use the collections file an installed package ships, e.g. -p reskit")
-    parser.add_argument("--catalog", default=None, help="override the catalogue location")
+    parser.add_argument("--catalog", default=None,
+                        help="datacatalog.json path or URL; overrides configuration and package pins")
     parser.add_argument("--root", default=None, help="override the public cache directory")
     parser.add_argument("--skip-unavailable", action="store_true", default=None,
                         help="carry on without data this machine has no access to "
@@ -131,7 +137,8 @@ def _build_parser() -> argparse.ArgumentParser:
     exporter.add_argument("bundle_collections", nargs="+", help="collections to include")
     exporter.add_argument("--source-root", action="append", default=[], metavar="DATASET=PATH",
                           help="verified existing local copy (repeat for each dataset)")
-    exporter.add_argument("--source-revision", help="catalogue commit or tag recorded as provenance")
+    exporter.add_argument("--source-revision",
+                          help="provenance label only; select the revision with --catalog or the collections pin")
     for name in ("fetch", "verify"):
         reader = bundle_sub.add_parser(name, help="read or verify a bundle without network access")
         reader.add_argument("directory")
@@ -140,9 +147,9 @@ def _build_parser() -> argparse.ArgumentParser:
             reader.add_argument("--allow-modified", action="store_true",
                                 help="use changed fixture bytes for development, warning about divergence")
 
-    config_parser = sub.add_parser("config", help="show or change where the caches live")
+    config_parser = sub.add_parser("config", help="show or change catalogue, cache, and access settings")
     config_sub = config_parser.add_subparsers(dest="config_command", required=True)
-    config_sub.add_parser("show", help="show the resolved cache directories and why")
+    config_sub.add_parser("show", help="show configured values and their origins; no network access")
 
     for verb, key, blurb in (
         ("cache", PUBLIC_CACHE_KEY, "the public cache (alias of set-public-cache)"),
@@ -153,7 +160,7 @@ def _build_parser() -> argparse.ArgumentParser:
         setter = config_sub.add_parser(f"set-{verb}", help=f"set {blurb}")
         setter.add_argument("directory")
         setter.add_argument("--scope", choices=SCOPES, default="user",
-                            help="user (default) = this account; environment = this conda env "
+                            help="project = nearest project config; user (default) = this account; environment = this conda env "
                                  "/ venv; site = whole machine")
         setter.set_defaults(option_key=key)
         unsetter = config_sub.add_parser(f"unset-{verb}", help="remove the setting again")
@@ -184,7 +191,7 @@ def _build_parser() -> argparse.ArgumentParser:
     puburl.add_argument("--scope", choices=SCOPES, default="user")
     cataloger = config_sub.add_parser(
         "set-catalog",
-        help="permanently point at a catalogue, so -c/--catalog do not need it every time")
+        help="set the catalogue override; -c/-p still selects the collections")
     cataloger.add_argument("location", help="a datacatalog.json path or URL")
     cataloger.add_argument("--scope", choices=SCOPES, default="user")
     uncataloger = config_sub.add_parser("unset-catalog", help="remove the setting again")
@@ -199,33 +206,37 @@ def _build_parser() -> argparse.ArgumentParser:
 
     for name, helptext in (
         ("info", "show what a collection contains"),
-        ("plan", "show what a fetch would download"),
-        ("fetch", "download a collection"),
+        ("plan", "preview data transfers (may retrieve catalogue metadata)"),
+        ("fetch", "make a collection available, reusing cached or in-place files"),
     ):
         p = sub.add_parser(name, help=helptext)
         p.add_argument("collection")
 
     verifier = sub.add_parser(
-        "verify", help="check the data on disk against the catalogue's checksums")
+        "verify", help="check file sizes, or SHA-256 hashes with --deep",
+        description="Check selected files without changing them unless --repair is given. "
+                    "No collection means every collection in the selected file.")
     verifier.add_argument("collection", nargs="?", help="a collection (default: --all)")
     verifier.add_argument("--all", action="store_true", help="every collection in the file")
     verifier.add_argument("--deep", action="store_true",
                           help="compare checksums, not just sizes (reads every byte)")
     verifier.add_argument("--repair", action="store_true",
-                          help="re-fetch whatever no longer matches, from dCache")
+                          help="re-fetch repairable data; may remove public-cache links; preview with --dry-run")
     verifier.add_argument("--dry-run", action="store_true",
                           help="with --repair: say what would be re-fetched, change nothing")
     verifier.add_argument("-q", "--quiet", action="store_true", help="only report problems")
 
     material = sub.add_parser(
         "materialize",
-        help="replace a symbolic-link cache entry with a real, verified copy")
+        help="copy catalogued files into the cache from a link or local source",
+        description="Copy a complete dataset and verify it before replacing a cache link. "
+                    "The original is kept. Explicit restricted datasets use the restricted root.")
     material.add_argument("datasets", nargs="*", help="dataset names (default: --all)")
     material.add_argument("--all", action="store_true",
                           help="every entry in the public cache that is currently a link")
     material.add_argument("--dry-run", action="store_true", help="show the cost, copy nothing")
     material.add_argument("--force", action="store_true",
-                          help="do not stop at entries that are already real directories")
+                          help="compatibility option; existing real directories are still skipped")
     material.add_argument("--no-verify", action="store_true",
                           help="skip checksum verification of each copied file (not advised)")
     # `from` is a keyword, so the destination has to be named explicitly.
@@ -248,7 +259,7 @@ def _build_parser() -> argparse.ArgumentParser:
     linker.add_argument("--force", action="store_true",
                         help="repoint an entry that is already a link")
     linker.add_argument("--dry-run", action="store_true",
-                        help="with --all: show what would change, write nothing")
+                        help="only honoured with --all; single-dataset link applies immediately")
     # Named as the maintainer commands name it, because it is the same thing: the
     # checkout holding dataset.yaml. source_dir is popped out of a descriptor when
     # it is built, so the hand-written file is the only place it exists.
@@ -261,7 +272,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     add_catalog_parser(sub)
 
-    stager = sub.add_parser("staging", help="data that is not in the catalogue yet")
+    stager = sub.add_parser("staging", help="local development data that adds to or shadows the catalogue")
     stager_sub = stager.add_subparsers(dest="staging_command", required=True)
     adder = stager_sub.add_parser("add", help="register a directory as a staged dataset")
     adder.add_argument("name")

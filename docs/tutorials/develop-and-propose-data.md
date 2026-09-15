@@ -4,7 +4,8 @@ You maintain a package and want to test a new input before asking a catalogue
 maintainer to publish it. This lesson creates a tiny CSV, reads it through the
 ordinary collection API, and prepares the handoff. It uses local files only and
 needs an installed `ethos-data`; it needs no catalogue account or upload
-credentials.
+credentials. Use Bash, zsh, or Git Bash; symbolic links on Windows require
+Developer Mode or elevation. Allow about 20 minutes.
 
 ## 1. Create a local workspace
 
@@ -27,7 +28,7 @@ Create the input and a minimal local catalogue index:
 ```python
 from pathlib import Path
 
-Path("candidate/temperatures.csv").write_text("station,value\nA,12.5\nB,13.0\n")
+Path("candidate/temperatures.csv").write_bytes(b"station,value\nA,12.5\nB,13.0\n")
 Path("datacatalog.json").write_text('{"name": "local-lesson", "datasets": []}\n')
 Path("collections.yaml").write_text("""catalog: datacatalog.json
 collections:
@@ -35,6 +36,8 @@ collections:
     include:
       - dataset: lesson-temperatures
         files: ["temperatures.csv"]
+  all:
+    extends: [example_input]
 """)
 ```
 
@@ -48,9 +51,11 @@ next step supplies the dataset through staging.
 ethos-data staging add lesson-temperatures "$PWD/candidate" --note "local CSV lesson"
 ethos-data staging list
 ethos-data -c collections.yaml --catalog "$PWD/datacatalog.json" info example_input
+ethos-data -c collections.yaml --catalog "$PWD/datacatalog.json" info all
 ```
 
-The last command resolves one CSV through the staging entry. Naming the local
+Both collections resolve the same CSV; `all` aggregates the inputs this example
+workflow uses. Naming the local
 catalogue explicitly also overrides any catalogue configured for your usual
 project. No remote metadata is needed for this lesson.
 
@@ -60,9 +65,11 @@ Run Python in this directory and shell:
 
 ```python
 import csv
+from pathlib import Path
 from ethos_data import fetch
 
-files = fetch("example_input", collections="collections.yaml")
+files = fetch("example_input", collections="collections.yaml",
+              catalog=str(Path("datacatalog.json").resolve()))
 with files.one("temperatures.csv").open() as handle:
     rows = list(csv.DictReader(handle))
 

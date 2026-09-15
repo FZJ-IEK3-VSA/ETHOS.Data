@@ -49,7 +49,9 @@ result later, use a versioned directory such as
 ethos-data config show
 ```
 
-The output names the catalogue in use and where it was set.
+The output names the configured catalogue override and where it was set.
+Run `ethos-data -p reskit list` (or your package) to check the actual selected
+catalogue and confirm its descriptors are readable.
 
 ## Go back to the public catalogue
 
