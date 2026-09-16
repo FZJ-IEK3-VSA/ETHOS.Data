@@ -14,8 +14,8 @@ Keep working site defaults. Use absolute paths when changing persistent settings
 
 ## 2. Select the catalogue
 
-For public data, use the catalogue pinned by your package or the built-in
-[public catalogue](https://github.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue).
+For public data, use the catalogue pinned by your collections file or the
+built-in [public catalogue](https://github.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue).
 No catalogue setting is needed. The CLI reads `datacatalog.json`, not the
 GitHub repository's web page.
 
@@ -27,8 +27,9 @@ ethos-data config set-catalog /shared/ethos/catalogue/current/datacatalog.json
 
 The internal catalogue includes public entries too. Use
 `versions/<revision>/datacatalog.json` for a reproducible run. This setting
-overrides package pins; see [Add the internal catalogue](add-internal-catalogue.md)
-to limit it to a project or remove it.
+overrides a collections file's `catalog:` pin; see
+[Add the internal catalogue](add-internal-catalogue.md) to limit it to a
+project or remove it.
 
 If the public repository has no released `datacatalog.json` yet, obtain a
 complete built catalogue from its maintainer. The
@@ -60,16 +61,20 @@ See [Configure the cache](configure-the-cache.md) for temporary overrides.
 
 ## 4. Check the workflow
 
-Replace `reskit` and `onshore_wind` with your installed package and collection:
+`collections.yaml` is the collections file your project uses or the one a
+package ships; replace it and `onshore_wind` with yours:
 
 ```bash
 ethos-data config show
-ethos-data -p reskit list
-ethos-data -p reskit plan onshore_wind
+ethos-data -c collections.yaml list
+ethos-data -c collections.yaml plan onshore_wind
 ```
 
 Check the catalogue printed by `list`, download size, and any missing inputs.
 `plan` can retrieve metadata but does not download data files.
+
+A package that ships its collections may also provide a command of its own
+for them; its documentation says so.
 
 Continue with [Get data for a task](get-data-for-a-task.md). If the checks fail,
 [identify and report the issue](report-a-problem.md).

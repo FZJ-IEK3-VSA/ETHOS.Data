@@ -8,7 +8,8 @@ ethos-data config show
 ```
 
 which prints the resolved values, the provenance of each, and every file
-consulted along the way.
+consulted along the way. A cache path this machine cannot reach, such as a
+network drive that is not connected, is marked `NOT REACHABLE` with the reason.
 
 ## Precedence
 
@@ -115,8 +116,8 @@ Strongest first:
 1. `--catalog` on the command line, or `catalog=` in Python
 2. `$ETHOS_DATA_CATALOG`
 3. the `catalog:` key in a config file (`config set-catalog`)
-4. the `catalog:` key at the top of the collections file — for `-p` /
-   `package=`, the file the package ships
+4. the `catalog:` key at the top of the collections file — for a tool's
+   command or handle, the file the tool ships
 5. the built-in public catalogue,
    `https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json`
 
@@ -132,24 +133,22 @@ recognised as moving and re-fetched every time.
 
 ## Collections resolution
 
-Strongest first:
+`ethos-data` reads, strongest first:
 
-1. `-c` / `--collections` on the command line, or `-p` / `--package` for the
-   file an installed package registers
+1. `-c` / `--collections` on the command line
 2. the `collections:` key in a config file (`config set-collections`)
 3. `collections.yaml` in the current directory
 
-In Python, `fetch()` and `resolve()` take either `collections=` (a path) or
-`package=` (a registered package name). `path()` needs neither.
+A tool's own data command, built with `ethos_data.tool_main`, reads the file the
+tool ships and takes no `-c`. Setting one up is described in
+[Use from a package](../how-to/use-from-a-package.md).
 
-A package registers its collections file with an entry point in the
-`ethos_data.collections` group; the entry point's value names the module whose
-directory holds `collections.yaml`:
-
-```toml title="pyproject.toml"
-[project.entry-points."ethos_data.collections"]
-reskit = "reskit.data"
-```
+In Python, a tool builds one handle on its file with
+`ethos_data.collections(path, tool=...)` and calls `fetch()`, `paths()`,
+`resolve()` and `plan()` on it; the one-call forms `ethos_data.fetch(name,
+path)`, `paths()` and `resolve()` take the path. Keys are answered by
+`ethos_data.catalog()`, which reads the configured or public catalogue, or by
+a handle's `.catalog`, which reads the catalogue the file pins.
 
 !!! warning
     A project-scope `collections` setting applies everywhere the project config

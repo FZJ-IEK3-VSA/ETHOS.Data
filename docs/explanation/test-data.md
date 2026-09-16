@@ -10,6 +10,7 @@ service. One package can use several approaches.
 | Verified repository bundle of catalogued data | Regression tests that must run without network access | Larger checkout; the bundle must be refreshed deliberately. |
 | Pinned catalogue plus download cache | Large fixtures and tests of live data access | A fresh runner needs metadata and data access; retained caches reduce transfers. |
 | Staged development dataset | New inputs or inventory changes before catalogue acceptance | Mutable, warned about, and not evidence of an official version. |
+| `test:` variant of a collection, beside its `full:` data | Examples and live-data tests that run the production code path on small inputs | Needs the catalogue and a small download; offers the same named paths as the full data, so the same code runs on both. |
 
 A test that generates three numbers need not propose them to the institute's
 catalogue. Catalogue a fixture when its identity, provenance, reuse, or connection
@@ -27,6 +28,43 @@ catalogue nor dCache.
 For catalogued public fixtures, the published store remains authoritative. A
 repository bundle is a selected snapshot, identified by resource keys and original
 hashes. A file in a Git checkout is not automatically that published version.
+
+## Test and full variants of a collection
+
+A collection can be written twice, under `test:` and `full:`: a small live
+selection that an example or a test suite runs on in seconds, and the real
+inputs. Both are ordinary catalogue selections fetched through the same cache.
+What they share is the set of named paths under `paths:`, and the reader checks
+that when the collection is resolved — for the collection asked for and for
+every collection it reaches through `extends`, so a plain `all` that extends a
+lopsided pair is refused as well. That check is the interchangeability
+guarantee: code written as
+`data.paths("onshore_wind", test=True)`, where
+`data = ethos_data.collections("collections.yaml")`, runs unchanged
+on the full data once `test=True` is dropped, because every handle it asks for
+exists in both variants. A handle present in only one of them would fail on the
+machine that has the full data, long after the example passed — so the reader
+refuses the collection instead.
+
+The guarantee is about the definition, not about this machine. Whether the data
+behind a handle is reachable here is the separate question `skip_unavailable`
+answers: without it, unreachable data stops the fetch; with it, the handle is
+left out of the mapping and named in a warning, so a workflow that treats an
+input as optional has to look for its handle rather than assume it.
+
+A test variant is not a bundle. A bundle is an offline copy of a selection,
+identified by resource keys and hashes, for tests that must run without the
+catalogue or dCache. A test variant is a live selection: it still needs the
+catalogue and, on a fresh machine, a download — a small one — and it offers the
+same handles as the full data, which a bundle does not promise. Bundle export
+takes a collection's full variant. Use both where they fit: a bundle for
+required offline tests, a test variant for examples and live-data tests that
+exercise the production code path.
+
+The full data is the default and `test=True` / `--test` is opt-in. A forgotten
+flag then costs a large but visible download that can be interrupted. The other
+default would let a real calculation run silently on fixtures and produce a
+wrong result that looks right.
 
 ## Changed bytes and new test cases are different operations
 

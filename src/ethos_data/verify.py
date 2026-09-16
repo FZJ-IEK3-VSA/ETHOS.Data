@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .access import ORIGIN_STAGING, RESTRICTED, Location, locate
-from .catalog import Catalog, Resource
+from .catalogs import Catalog, Resource
 from .config import Roots, dataset_roots
 
 __all__ = ["Finding", "verify", "repair", "summarise", "STATUSES", "OK", "UNAVAILABLE"]
@@ -133,20 +133,26 @@ def verify(
 
     for location in locations:
         if not location.available:
-            findings.append(Finding(
-                location, UNAVAILABLE,
-                "no access to this dataset from this machine; nothing was checked",
-            ))
+            findings.append(
+                Finding(
+                    location,
+                    UNAVAILABLE,
+                    "no access to this dataset from this machine; nothing was checked",
+                )
+            )
             continue
         name = location.resource.dataset
         if name not in link_state:
             link_state[name] = _broken_link(roots, name, location.origin)
         broken = link_state[name]
         if broken is not None:
-            findings.append(Finding(
-                location, DANGLING,
-                f"{broken[0]} points at {broken[1]}, which does not exist",
-            ))
+            findings.append(
+                Finding(
+                    location,
+                    DANGLING,
+                    f"{broken[0]} points at {broken[1]}, which does not exist",
+                )
+            )
             continue
         findings.append(_check_one(location, deep))
     return findings
@@ -165,13 +171,18 @@ def _check_one(location: Location, deep: bool) -> Finding:
         return Finding(location, UNREADABLE, f"{path}: {error}")
 
     if expected and actual != expected:
-        return Finding(location, SIZE, f"{path}: expected {expected:,} bytes, found {actual:,}")
+        return Finding(
+            location, SIZE, f"{path}: expected {expected:,} bytes, found {actual:,}"
+        )
 
     digest = _expected_digest(location.resource.hash or "")
     if not digest:
         # Staged data, or a catalogue that records a digest we cannot check.
-        return Finding(location, UNVERIFIABLE if deep else OK,
-                       "no sha256 in the manifest" if deep else "")
+        return Finding(
+            location,
+            UNVERIFIABLE if deep else OK,
+            "no sha256 in the manifest" if deep else "",
+        )
     if not deep:
         return Finding(location, OK)
 
@@ -180,7 +191,9 @@ def _check_one(location: Location, deep: bool) -> Finding:
     except OSError as error:
         return Finding(location, UNREADABLE, f"{path}: {error}")
     if found != digest:
-        return Finding(location, HASH, f"{path}: expected {digest[:16]}..., found {found[:16]}...")
+        return Finding(
+            location, HASH, f"{path}: expected {digest[:16]}..., found {found[:16]}..."
+        )
     return Finding(location, OK)
 
 
@@ -211,14 +224,17 @@ def repair(
     somewhere to land. That is a change other people see, which is why it is
     listed explicitly before it happens and why ``dry_run`` exists.
     """
-    from .retrieval import download  # local: retrieval imports access, which imports config
+    from .retrieval import (
+        download,
+    )  # local: retrieval imports access, which imports config
 
     roots = Roots.coerce(roots)
     broken = [f for f in findings if not f.ok]
 
     skipped: dict[str, str] = {
         f.resource.key: "not available on this machine"
-        for f in findings if f.status == UNAVAILABLE
+        for f in findings
+        if f.status == UNAVAILABLE
     }
     fetchable: list[Finding] = []
     for finding in broken:
@@ -230,11 +246,13 @@ def repair(
         else:
             fetchable.append(finding)
 
-    links_to_remove = sorted({
-        roots.public / f.resource.dataset
-        for f in fetchable
-        if (roots.public / f.resource.dataset).is_symlink()
-    })
+    links_to_remove = sorted(
+        {
+            roots.public / f.resource.dataset
+            for f in fetchable
+            if (roots.public / f.resource.dataset).is_symlink()
+        }
+    )
 
     report = {
         "broken": broken,
@@ -250,7 +268,8 @@ def repair(
     for link in links_to_remove:
         link.unlink()
 
-    files = download(catalog, [f.resource for f in fetchable], root=roots,
-                     progressbar=progressbar)
+    files = download(
+        catalog, [f.resource for f in fetchable], root=roots, progressbar=progressbar
+    )
     report["downloaded"] = len(files)
     return report

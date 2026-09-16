@@ -22,7 +22,9 @@ import yaml
 from ethos_data.maintain.manifest import render_dataset, write_dataset
 
 
-def make_dataset(workspace: Path, extra_meta: dict, files: dict[str, bytes]) -> tuple[Path, Path]:
+def make_dataset(
+    workspace: Path, extra_meta: dict, files: dict[str, bytes]
+) -> tuple[Path, Path]:
     """A throwaway dataset with a real source_dir, ready to build normally."""
     source = workspace / "src"
     source.mkdir()
@@ -33,7 +35,12 @@ def make_dataset(workspace: Path, extra_meta: dict, files: dict[str, bytes]) -> 
 
     dataset_dir = workspace / "datasets" / "d"
     dataset_dir.mkdir(parents=True)
-    meta = {"name": "d", "title": "t", "source_dir": str(source), "ethos:remote_prefix": "d"}
+    meta = {
+        "name": "d",
+        "title": "t",
+        "source_dir": str(source),
+        "ethos:remote_prefix": "d",
+    }
     meta.update(extra_meta)
     (dataset_dir / "dataset.yaml").write_text(yaml.safe_dump(meta))
     return dataset_dir, source
@@ -56,7 +63,9 @@ class TestFreezingAfterUpload:
     def test_rebuild_without_source_dir_reuses_the_same_inventory(self):
         workspace = Path(tempfile.mkdtemp())
         try:
-            dataset_dir, source = make_dataset(workspace, {}, {"a.txt": b"hello", "b.txt": b"world"})
+            dataset_dir, source = make_dataset(
+                workspace, {}, {"a.txt": b"hello", "b.txt": b"world"}
+            )
             before = json.loads(render_dataset(dataset_dir)["datapackage.json"])
             write_dataset(dataset_dir, {"datapackage.json": json.dumps(before)})
 
@@ -86,7 +95,9 @@ class TestFreezingAfterUpload:
     def test_uploaded_and_source_dir_together_is_rejected(self):
         workspace = Path(tempfile.mkdtemp())
         try:
-            dataset_dir, _ = make_dataset(workspace, {"ethos:uploaded": True}, {"a.txt": b"hello"})
+            dataset_dir, _ = make_dataset(
+                workspace, {"ethos:uploaded": True}, {"a.txt": b"hello"}
+            )
             with pytest.raises(SystemExit, match="never read again"):
                 render_dataset(dataset_dir)
         finally:
@@ -97,9 +108,16 @@ class TestFreezingAfterUpload:
         try:
             dataset_dir = workspace / "datasets" / "d"
             dataset_dir.mkdir(parents=True)
-            (dataset_dir / "dataset.yaml").write_text(yaml.safe_dump({
-                "name": "d", "title": "t", "ethos:remote_prefix": "d", "ethos:uploaded": True,
-            }))
+            (dataset_dir / "dataset.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "name": "d",
+                        "title": "t",
+                        "ethos:remote_prefix": "d",
+                        "ethos:uploaded": True,
+                    }
+                )
+            )
             with pytest.raises(SystemExit, match="no datapackage.json to freeze"):
                 render_dataset(dataset_dir)
         finally:
@@ -111,7 +129,8 @@ class TestFreezingAfterUpload:
             dataset_dir = workspace / "datasets" / "d"
             dataset_dir.mkdir(parents=True)
             (dataset_dir / "dataset.yaml").write_text(
-                yaml.safe_dump({"name": "d", "title": "t", "ethos:remote_prefix": "d"}))
+                yaml.safe_dump({"name": "d", "title": "t", "ethos:remote_prefix": "d"})
+            )
             with pytest.raises(SystemExit, match="source_dir is required"):
                 render_dataset(dataset_dir)
         finally:

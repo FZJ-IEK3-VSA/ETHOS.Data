@@ -18,35 +18,75 @@ Institute-specific keys use the `ethos:` prefix — the
 ## `collections.yaml`
 
 Lives in the consuming package. Names *slices* of the catalogue, and contains
-no resource sizes, checksums, or download URLs. It can contain selection patterns
-and a catalogue location.
+no resource sizes, checksums, or download URLs. It can contain selection
+patterns, names for the inputs a workflow takes, a paired test and full
+selection, and a catalogue location.
 
 ```yaml
 catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/v2026.09/datacatalog.json
 
 collections:
+  landcover:
+    title: Land cover
+    include:
+      - dataset: landcover
+        files: ["*.tif"]
+    paths:
+      clc: landcover/clc.tif
+
   onshore_wind:
     title: Data for onshore wind workflows
-    extends: [landcover]
-    include:
-      - dataset: reskit-test-data
-        files:
-          - "era5-like/100m_*_component_of_wind.nc"
-          - "turbinePlacements.shp"
+    test:
+      extends: [landcover]
+      include:
+        - dataset: reskit-test-data/era5
+          files: ["100m_*_component_of_wind.nc", "forecast_surface_roughness.nc"]
+        - dataset: reskit-test-data/global-wind-atlas
+          files: ["gwa*-like.tif"]
+      paths:
+        era5: reskit-test-data/era5
+        gwa_100m: reskit-test-data/global-wind-atlas/gwa100-like.tif
+        gwa_50m: reskit-test-data/global-wind-atlas/gwa50-like.tif
+        gwa_200m: reskit-test-data/global-wind-atlas/gwa200-like.tif
+    full:
+      extends: [landcover]
+      include:
+        - dataset: era5
+        - dataset: global-wind-atlas-v3
+          files: ["gwa3_250_wind-speed_*.tif"]
+      paths:
+        era5: era5
+        gwa_100m: global-wind-atlas-v3/gwa3_250_wind-speed_100m.tif
+        gwa_50m: global-wind-atlas-v3/gwa3_250_wind-speed_50m.tif
+        gwa_200m: global-wind-atlas-v3/gwa3_250_wind-speed_200m.tif
 ```
+
+Both variants of `onshore_wind` offer the handles `clc` (inherited from
+`landcover`), `era5`, `gwa_100m`, `gwa_50m` and `gwa_200m`.
 
 | Key | Type | |
 |---|---|---|
 | `catalog` | string | local path or `http(s)` URL to a `datacatalog.json`. A relative path is resolved against **this file**. Optional: uses a caller/config override or the built-in public catalogue. Pin a remote revision in the URL path; a legacy `@ref` suffix is stripped and does not select it. |
 | `collections` | mapping | collection name → definition |
-| `collections.<name>.title` | string | one line, shown by `ethos-data list` |
+| `collections.<name>.title` | string | one line, shown by `ethos-data list`. At the top level, also when the collection has variants |
 | `collections.<name>.include` | list | `{dataset, files}` entries |
 | `collections.<name>.include[].dataset` | string | a dataset name in the catalogue |
 | `collections.<name>.include[].files` | list of globs | omit, or use `["**"]`, for everything |
-| `collections.<name>.extends` | list of names | other collections in this file, composed transitively; a cycle is reported with its chain |
+| `collections.<name>.extends` | list of names | other collections in this file, composed transitively; a cycle is a `CollectionError` naming its chain. A `test=True` request passes down: a parent with variants contributes its `test` variant, a parent without is the same either way |
+| `collections.<name>.paths` | mapping | handle → catalogue key. A key is `<dataset>/<file>`, `<dataset>/<folder>`, `<dataset>` or a family name — what [`Catalog.path`][ethos_data.catalogs.Catalog.path] accepts. A file must be selected by the collection's `include`; a folder, dataset or family must have at least one selected file under it, and resolves to the directory holding the collection's files there. Handles are inherited through `extends`; the collection's own entry wins; two parents handing down the same handle with different keys is a `CollectionError` unless the collection defines that handle itself. Resolved by [`ethos_data.paths`][ethos_data.paths] and `ethos-data paths`. Optional |
+| `collections.<name>.test`, `collections.<name>.full` | mapping | the collection's two variants — exactly these two names — each holding its own `extends`, `include` and `paths`. A collection with variants has no `extends`, `include` or `paths` at the top level; `title` stays there. `full` is what every request resolves unless `test=True` / `--test` is given; asking for a variant the collection does not define is a `CollectionError`. When both exist they must offer the same set of `paths` handles, or resolving the collection is a `CollectionError` listing the differences. A collection without variants resolves identically for both flags unless a collection it extends has variants — the flag propagates, so a plain `all` extending `onshore_wind` selects `onshore_wind`'s `full` variant by default and its `test` variant with `test=True`. Optional |
 
 Glob semantics: `*` matches within one path segment, `**` matches any number of
 segments including zero. Shapefile companions are added automatically.
+
+Every `paths` handle is checked against the catalogue and the selection before
+anything is downloaded, and the variant check — the same handles under `test`
+and `full` — applies to every collection a resolution reaches through
+`extends`, not only the one asked for, so a plain collection that extends a
+lopsided one is refused too. A definition the reader cannot resolve raises
+[`CollectionError`][ethos_data.selection.CollectionError]; a name the file does
+not define raises [`UnknownCollection`][ethos_data.selection.UnknownCollection].
+`ethos-data` prints both as `error: ...` and exits `2`.
 
 See [Write a collections file](../how-to/write-a-collections-file.md).
 

@@ -73,9 +73,18 @@ def render(source: Path, dark: bool, force: bool) -> bool:
         tex.write_text(PREAMBLE % (1 if dark else 0, STYLE.as_posix(), body))
 
         result = subprocess.run(
-            [need("tectonic"), "-X", "compile", "--outdir", str(tmp),
-             "--keep-logs", "--print", str(tex)],
-            capture_output=True, text=True,
+            [
+                need("tectonic"),
+                "-X",
+                "compile",
+                "--outdir",
+                str(tmp),
+                "--keep-logs",
+                "--print",
+                str(tex),
+            ],
+            capture_output=True,
+            text=True,
         )
         if result.returncode != 0:
             # Tectonic puts the useful lines on stderr; show them rather than a
@@ -91,10 +100,13 @@ def render(source: Path, dark: bool, force: bool) -> bool:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("names", nargs="*", help="diagram stems (default: all)")
-    parser.add_argument("--force", action="store_true", help="re-render even if up to date")
+    parser.add_argument(
+        "--force", action="store_true", help="re-render even if up to date"
+    )
     args = parser.parse_args()
 
     sources = sorted(HERE.glob("*.tex"))

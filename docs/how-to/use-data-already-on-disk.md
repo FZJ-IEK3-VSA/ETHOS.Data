@@ -15,10 +15,13 @@ The directory must have the same layout as the dataset in the catalogue. Add
 ## Check it
 
 ```bash
-ethos-data config show                           # lists the dataset and its directory
-ethos-data -p reskit plan onshore_wind           # reports its files as used in place
-ethos-data -p reskit verify onshore_wind --deep  # compares the files with the catalogue
+ethos-data config show                                     # lists the dataset and its directory
+ethos-data -c collections.yaml plan onshore_wind           # reports its files as used in place
+ethos-data -c collections.yaml verify onshore_wind --deep  # compares the files with the catalogue
 ```
+
+`collections.yaml` is the collections file your project uses or the one a
+package ships; `onshore_wind` is a collection in it that reads the dataset.
 
 ## Remove it
 

@@ -61,7 +61,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .access import entry_for
-from .catalog import Catalog, Resource, UnknownDataset
+from .catalogs import Catalog, Resource, UnknownDataset
 from .config import Roots, current_user
 from .linking import LinkError, source_dir_for
 from .verify import sha256_of, _expected_digest
@@ -128,10 +128,14 @@ def plan_materialize(
             # stray name must not abort the run for every real dataset behind
             # it -- but it is worth saying out loud, because a link the
             # catalogue cannot explain is usually rubbish worth removing.
-            reports.append(MaterializeReport(
-                name, "unknown",
-                "there is an entry with this name in the cache, but the catalogue does "
-                "not describe it; `ethos-data catalog link-cache --prune` removes stale links"))
+            reports.append(
+                MaterializeReport(
+                    name,
+                    "unknown",
+                    "there is an entry with this name in the cache, but the catalogue does "
+                    "not describe it; `ethos-data catalog link-cache --prune` removes stale links",
+                )
+            )
             continue
         except ValueError as error:
             reports.append(MaterializeReport(name, "cannot", str(error)))
@@ -144,12 +148,24 @@ def plan_materialize(
             # not change that: "copy these bytes in" must never be a way to write
             # over a verified copy that is already there.
             if force:
-                reports.append(MaterializeReport(
-                    name, "already real", f"{entry} is a real directory; --force re-copies "
-                    "nothing, it is already owned", entry=entry))
+                reports.append(
+                    MaterializeReport(
+                        name,
+                        "already real",
+                        f"{entry} is a real directory; --force re-copies "
+                        "nothing, it is already owned",
+                        entry=entry,
+                    )
+                )
             else:
-                reports.append(MaterializeReport(
-                    name, "already real", f"{entry} is already a real directory", entry=entry))
+                reports.append(
+                    MaterializeReport(
+                        name,
+                        "already real",
+                        f"{entry} is already a real directory",
+                        entry=entry,
+                    )
+                )
             continue
 
         if given is not None:
@@ -157,8 +173,14 @@ def plan_materialize(
             # no longer a dead end: having the bytes somewhere else is exactly
             # the situation --from is for.
             if not given.is_dir():
-                reports.append(MaterializeReport(
-                    name, "cannot", f"--from {given} is not a directory", entry=entry))
+                reports.append(
+                    MaterializeReport(
+                        name,
+                        "cannot",
+                        f"--from {given} is not a directory",
+                        entry=entry,
+                    )
+                )
                 continue
             target = given
         elif not was_link:
@@ -170,28 +192,54 @@ def plan_materialize(
             try:
                 target = source_dir_for(name, catalog_root)
             except LinkError:
-                reports.append(MaterializeReport(
-                    name, "absent",
-                    f"no entry at {entry}, and no source_dir to copy from; name the "
-                    "directory with --from", entry=entry))
+                reports.append(
+                    MaterializeReport(
+                        name,
+                        "absent",
+                        f"no entry at {entry}, and no source_dir to copy from; name the "
+                        "directory with --from",
+                        entry=entry,
+                    )
+                )
                 continue
             if not target.is_dir():
-                reports.append(MaterializeReport(
-                    name, "cannot", f"source_dir does not exist: {target}", entry=entry))
+                reports.append(
+                    MaterializeReport(
+                        name,
+                        "cannot",
+                        f"source_dir does not exist: {target}",
+                        entry=entry,
+                    )
+                )
                 continue
         else:
             target = entry.resolve()
             if not target.is_dir():
-                reports.append(MaterializeReport(
-                    name, "dangling", f"{entry} points at {entry.readlink()}, which does not exist",
-                    entry=entry, target=target))
+                reports.append(
+                    MaterializeReport(
+                        name,
+                        "dangling",
+                        f"{entry} points at {entry.readlink()}, which does not exist",
+                        entry=entry,
+                        target=target,
+                    )
+                )
                 continue
 
         resources = list(catalog.dataset(name).resources.values())
         total = sum(r.bytes for r in resources)
-        reports.append(MaterializeReport(
-            name, "would copy", f"{len(resources):,} files, {total:,} bytes from {target}",
-            entry=entry, target=target, files=len(resources), bytes=total, was_link=was_link))
+        reports.append(
+            MaterializeReport(
+                name,
+                "would copy",
+                f"{len(resources):,} files, {total:,} bytes from {target}",
+                entry=entry,
+                target=target,
+                files=len(resources),
+                bytes=total,
+                was_link=was_link,
+            )
+        )
     return reports
 
 
@@ -228,8 +276,9 @@ def materialize(
     takes it with exactly one.
     """
     roots = Roots.coerce(roots)
-    planned = plan_materialize(catalog, names, roots, force=force, source=source,
-                               catalog_root=catalog_root)
+    planned = plan_materialize(
+        catalog, names, roots, force=force, source=source, catalog_root=catalog_root
+    )
     if dry_run:
         return planned
 
@@ -255,7 +304,9 @@ def _materialize_one(
     try:
         _check_space(entry.parent, report.bytes)
     except OSError as error:
-        return MaterializeReport(report.dataset, "failed", str(error), entry=entry, target=target)
+        return MaterializeReport(
+            report.dataset, "failed", str(error), entry=entry, target=target
+        )
 
     staging = entry.parent / f"{report.dataset}.materializing.{os.getpid()}"
     if staging.exists():
@@ -288,25 +339,37 @@ def _materialize_one(
         if failures:
             shutil.rmtree(staging, ignore_errors=True)
             return MaterializeReport(
-                report.dataset, "failed",
+                report.dataset,
+                "failed",
                 f"{len(failures)} of {len(resources)} files did not copy or did not verify; "
                 f"the link is untouched",
-                entry=entry, target=target, failures=failures)
+                entry=entry,
+                target=target,
+                failures=failures,
+            )
 
-        (staging / PROVENANCE_FILE).write_text(json.dumps({
-            "dataset": report.dataset,
-            "materialized_from": str(target),
-            # null when the entry was created by this copy rather than replacing
-            # a link -- the difference matters when tracing where a cache entry
-            # came from, and "it was a link at X" would be a false claim.
-            "was_a_link_at": str(entry) if report.was_link else None,
-            "catalog": catalog.location,
-            "files": copied,
-            "bytes": copied_bytes,
-            "verified": verify_hashes,
-            "when": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-            "by": current_user(),
-        }, indent=2) + "\n", encoding="utf-8", newline="\n")
+        (staging / PROVENANCE_FILE).write_text(
+            json.dumps(
+                {
+                    "dataset": report.dataset,
+                    "materialized_from": str(target),
+                    # null when the entry was created by this copy rather than replacing
+                    # a link -- the difference matters when tracing where a cache entry
+                    # came from, and "it was a link at X" would be a false claim.
+                    "was_a_link_at": str(entry) if report.was_link else None,
+                    "catalog": catalog.location,
+                    "files": copied,
+                    "bytes": copied_bytes,
+                    "verified": verify_hashes,
+                    "when": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    "by": current_user(),
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
 
         # A directory cannot be renamed onto a symbolic link, so the link has to
         # go first. The window between the two is the only moment the dataset is
@@ -325,17 +388,25 @@ def _materialize_one(
                 restored = "; the link was restored"
             shutil.rmtree(staging, ignore_errors=True)
             return MaterializeReport(
-                report.dataset, "failed",
+                report.dataset,
+                "failed",
                 f"could not put the copy in place ({error}){restored}",
-                entry=entry, target=target)
+                entry=entry,
+                target=target,
+            )
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
 
     return MaterializeReport(
-        report.dataset, "materialized",
+        report.dataset,
+        "materialized",
         f"{copied:,} files, {copied_bytes:,} bytes copied from {target}",
-        entry=entry, target=target, files=copied, bytes=copied_bytes)
+        entry=entry,
+        target=target,
+        files=copied,
+        bytes=copied_bytes,
+    )
 
 
 def _verify_copy(path: Path, resource: Resource) -> str:
@@ -348,5 +419,7 @@ def _verify_copy(path: Path, resource: Resource) -> str:
         return ""
     found = sha256_of(path)
     if found != digest:
-        return f"checksum {found[:16]}... does not match the manifest's {digest[:16]}..."
+        return (
+            f"checksum {found[:16]}... does not match the manifest's {digest[:16]}..."
+        )
     return ""

@@ -32,16 +32,20 @@ Restore/save a cache directory using your CI provider's cache facility:
 
 ```bash
 export ETHOS_DATA_DIR="$PWD/.cache/ethos-data"
-ethos-data -p reskit plan test_suite
-ethos-data -p reskit fetch test_suite
-ethos-data -p reskit verify test_suite --deep
+ethos-data -c collections.yaml plan test_suite
+ethos-data -c collections.yaml fetch test_suite
+ethos-data -c collections.yaml verify test_suite --deep
 pytest -m data_network
 ```
 
-Replace the package/collection and use its accepted catalogue pin. Include the
-collections-file hash and any explicit catalogue revision override in the cache
-key. Retain metadata under `.catalog` too. An empty runner needs downloads;
-a restored cache can reuse matching files.
+Replace the file and collection with your package's and use its accepted
+catalogue pin; a package with a data command of its own can use it here
+equivalently. Include the collections-file hash and any explicit catalogue
+revision override in the cache key. Retain metadata under `.catalog` too. An
+empty runner needs downloads; a restored cache can reuse matching files. For a
+collection with `test:` and `full:` variants, the fast job uses the test
+variant — `fetch onshore_wind --test` here, `test=True` in `paths()` in the
+tests — and only a deliberate integration job fetches the full data.
 
 Do not use `--skip-unavailable` to pass a required test with missing inputs.
 Restricted integration tests require an authorised runner and local installation.

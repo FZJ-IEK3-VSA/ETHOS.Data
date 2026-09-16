@@ -30,15 +30,18 @@ export ETHOS_DATA_CATALOG=/shared/ethos/catalogue/current/datacatalog.json
 ## For one command or call
 
 ```bash
-ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json -p reskit list
+ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json -c collections.yaml list
 ```
+
+`collections.yaml` is the collections file your project uses or the one a
+package ships.
 
 ```python
-ethos_data.path("my-internal-dataset/table.csv",
-                catalog="/shared/ethos/catalogue/current/datacatalog.json")
+ethos_data.catalog("/shared/ethos/catalogue/current/datacatalog.json").path(
+    "my-internal-dataset/table.csv")
 ```
 
-Each of these replaces the catalogue version a package pins. To reproduce a
+Each of these replaces the catalogue version a collections file pins. To reproduce a
 result later, use a versioned directory such as
 `/shared/ethos/catalogue/versions/<revision>/datacatalog.json` instead of
 `current`.
@@ -50,7 +53,7 @@ ethos-data config show
 ```
 
 The output names the configured catalogue override and where it was set.
-Run `ethos-data -p reskit list` (or your package) to check the actual selected
+Run `ethos-data -c collections.yaml list` to check the actual selected
 catalogue and confirm its descriptors are readable.
 
 ## Go back to the public catalogue

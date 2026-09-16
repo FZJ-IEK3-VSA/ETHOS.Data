@@ -69,10 +69,12 @@ def build_catalog(root: Path) -> Path:
     dataset_dir = root / "datasets" / "d"
     dataset_dir.mkdir(parents=True)
     write_utf8(root / "catalog.yaml", CATALOG)
-    write_utf8(dataset_dir / "dataset.yaml",
-               f"name: d\ntitle: {CJK}\ndescription: {UMLAUT}\n"
-               f"source_dir: {source}\nethos:remote_prefix: d\n"
-               f"ethos:attribution: {UMLAUT}\n")
+    write_utf8(
+        dataset_dir / "dataset.yaml",
+        f"name: d\ntitle: {CJK}\ndescription: {UMLAUT}\n"
+        f"source_dir: {source}\nethos:remote_prefix: d\n"
+        f"ethos:attribution: {UMLAUT}\n",
+    )
     return root
 
 
@@ -84,8 +86,9 @@ def catalog(tmp_path):
 class TestBuildingADescriptor:
     def test_non_ascii_metadata_survives_the_round_trip(self, catalog):
         """The silent failure: cp1252 would give back "JÃ¼lich" and raise nothing."""
-        write_dataset(catalog / "datasets" / "d",
-                      render_dataset(catalog / "datasets" / "d"))
+        write_dataset(
+            catalog / "datasets" / "d", render_dataset(catalog / "datasets" / "d")
+        )
 
         raw = (catalog / "datasets" / "d" / "datapackage.json").read_bytes()
         package = json.loads(raw.decode("utf-8"))
@@ -96,8 +99,9 @@ class TestBuildingADescriptor:
     def test_a_descriptor_is_written_with_lf_only(self, catalog):
         # Not cosmetic: a CRLF descriptor is a diff in every line of the file the
         # next time somebody on Linux rebuilds the same dataset.
-        write_dataset(catalog / "datasets" / "d",
-                      render_dataset(catalog / "datasets" / "d"))
+        write_dataset(
+            catalog / "datasets" / "d", render_dataset(catalog / "datasets" / "d")
+        )
         raw = (catalog / "datasets" / "d" / "datapackage.json").read_bytes()
         assert b"\r" not in raw
 
@@ -153,17 +157,34 @@ class TestCommandLineOutput:
         """
         assert build_run(catalog, []) == 0
         collections = tmp_path / "collections.yaml"
-        write_utf8(collections,
-                   f"catalog: {catalog / 'datacatalog.json'}\n"
-                   f"collections:\n  one:\n    title: {CJK}\n"
-                   f"    include:\n      - dataset: d\n")
+        write_utf8(
+            collections,
+            f"catalog: {catalog / 'datacatalog.json'}\n"
+            f"collections:\n  one:\n    title: {CJK}\n"
+            f"    include:\n      - dataset: d\n",
+        )
 
         destination = tmp_path / "listing.txt"
-        env = {**os.environ, "PYTHONPATH": str(Path(config.__file__).parent.parent)}
+        # A configured catalogue override beats the file's pin, so pin it explicitly.
+        env = {
+            **os.environ,
+            "PYTHONPATH": str(Path(config.__file__).parent.parent),
+            "ETHOS_DATA_CATALOG": str(catalog / "datacatalog.json"),
+        }
         with open(destination, "wb") as redirected:
             result = subprocess.run(
-                [sys.executable, "-m", "ethos_data.cli", "-c", str(collections), "list"],
-                stdout=redirected, stderr=subprocess.PIPE, env=env, check=False,
+                [
+                    sys.executable,
+                    "-m",
+                    "ethos_data.cli",
+                    "-c",
+                    str(collections),
+                    "list",
+                ],
+                stdout=redirected,
+                stderr=subprocess.PIPE,
+                env=env,
+                check=False,
             )
         assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
         assert CJK in destination.read_bytes().decode("utf-8")
@@ -174,10 +195,14 @@ class TestCommandLineOutput:
 
 
 class TestConfiguration:
-    def test_a_non_ascii_cache_path_can_be_written_and_read_back(self, tmp_path, monkeypatch):
+    def test_a_non_ascii_cache_path_can_be_written_and_read_back(
+        self, tmp_path, monkeypatch
+    ):
         """A Windows user called Jürgen has a home directory with a "ü" in it."""
         written = tmp_path / "config.yaml"
-        monkeypatch.setattr(config, "writable_config_path", lambda scope="user": written)
+        monkeypatch.setattr(
+            config, "writable_config_path", lambda scope="user": written
+        )
 
         value = str(tmp_path / f"caches-{UMLAUT}")
         config.set_option(config.PUBLIC_CACHE_KEY, value)

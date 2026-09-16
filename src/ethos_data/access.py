@@ -34,7 +34,7 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
-from .catalog import Catalog, Dataset, Resource
+from .catalogs import Catalog, Dataset, Resource
 from .config import Roots, resolve_skip_unavailable
 
 __all__ = [
@@ -158,8 +158,12 @@ def _restricted_location(
     offered as a choice rather than reported as an error only.
     """
     if roots.restricted is not None:
-        return Location(resource, roots.restricted / dataset.name / resource.path,
-                        "in-place", ORIGIN_RESTRICTED)
+        return Location(
+            resource,
+            roots.restricted / dataset.name / resource.path,
+            "in-place",
+            ORIGIN_RESTRICTED,
+        )
 
     if skip_unavailable:
         return Location(resource, None, UNAVAILABLE, ORIGIN_RESTRICTED)
@@ -171,15 +175,23 @@ def _restricted_location(
     lines.append("No restricted cache is configured on this machine.")
     lines.append("")
     lines.append("If you have a copy, say where it is:")
-    lines.append("    ethos-data config set-restricted-cache /path/to/ethos_data_restricted")
-    lines.append(f"    ethos-data config set-root {dataset.name} /path/to/{dataset.name}"
-                 "    # just this one")
+    lines.append(
+        "    ethos-data config set-restricted-cache /path/to/ethos_data_restricted"
+    )
+    lines.append(
+        f"    ethos-data config set-root {dataset.name} /path/to/{dataset.name}"
+        "    # just this one"
+    )
     lines.append("")
     lines.append("If you do not, carry on without it:")
     lines.append("    ethos-data ... --skip-unavailable")
-    lines.append("    ethos-data config set-skip-unavailable true    # once, for this machine")
-    lines.append("Datasets you cannot reach are then left out of the result and listed, "
-                 "rather than silently missing.")
+    lines.append(
+        "    ethos-data config set-skip-unavailable true    # once, for this machine"
+    )
+    lines.append(
+        "Datasets you cannot reach are then left out of the result and listed, "
+        "rather than silently missing."
+    )
     raise AccessError("\n".join(lines))
 
 
@@ -206,7 +218,9 @@ def locate(
     roots = Roots.coerce(roots)
     if skip_unavailable is None:
         skip_unavailable = resolve_skip_unavailable()[0]
-    configured = {name: Path(path).expanduser() for name, path in (dataset_roots or {}).items()}
+    configured = {
+        name: Path(path).expanduser() for name, path in (dataset_roots or {}).items()
+    }
     located: list[Location] = []
     warned: set[str] = set()
 
@@ -218,7 +232,9 @@ def locate(
         #    staging: it is the most specific thing anybody can have said.
         root = configured.get(dataset.name)
         if root is not None:
-            located.append(Location(resource, root / resource.path, "in-place", ORIGIN_CONFIGURED))
+            located.append(
+                Location(resource, root / resource.path, "in-place", ORIGIN_CONFIGURED)
+            )
             continue
 
         # 2. Staging shadows the catalogue -- but never for restricted data,
@@ -236,19 +252,27 @@ def locate(
                         UserWarning,
                         stacklevel=3,
                     )
-                located.append(Location(resource, staged / resource.path, "in-place", ORIGIN_STAGING))
+                located.append(
+                    Location(
+                        resource, staged / resource.path, "in-place", ORIGIN_STAGING
+                    )
+                )
                 continue
 
         # 3. Restricted data lives in its own root and is only ever read.
         if access == RESTRICTED:
-            located.append(_restricted_location(roots, dataset, resource, skip_unavailable))
+            located.append(
+                _restricted_location(roots, dataset, resource, skip_unavailable)
+            )
             continue
 
         # 4. Everything else comes from the public cache. A symbolic link means
         #    the data is already on this machine and must not be written to.
         entry = roots.public / dataset.name
         if entry.is_symlink():
-            located.append(Location(resource, entry / resource.path, "in-place", ORIGIN_LINK))
+            located.append(
+                Location(resource, entry / resource.path, "in-place", ORIGIN_LINK)
+            )
             continue
 
         if not catalog.publication_url:
@@ -264,7 +288,9 @@ def locate(
                 f"--scope environment"
             )
 
-        located.append(Location(resource, entry / resource.path, "download", ORIGIN_DOWNLOAD))
+        located.append(
+            Location(resource, entry / resource.path, "download", ORIGIN_DOWNLOAD)
+        )
 
     return located
 

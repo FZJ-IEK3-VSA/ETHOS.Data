@@ -24,17 +24,20 @@ dataset's files; do not append its name again.
 
 ## Check and use the data
 
-Replace the package and collection below with the workflow requiring the dataset:
+Replace the collection below with the one requiring the dataset.
+`collections.yaml` is the file your project uses or the one a package ships:
 
 ```bash
 ethos-data config show
-ethos-data -p reskit plan onshore_wind
-ethos-data -p reskit verify onshore_wind --deep
-ethos-data -p reskit fetch onshore_wind
+ethos-data -c collections.yaml plan onshore_wind
+ethos-data -c collections.yaml verify onshore_wind --deep
+ethos-data -c collections.yaml fetch onshore_wind
 ```
 
 The restricted files must be available in place and match the inventory.
 Fetching reads them there; it never downloads or repairs restricted bytes.
+A package that ships its collections may also provide a command of its own
+for them; its documentation says so.
 
 ## Obtain a missing required input
 
@@ -48,19 +51,27 @@ mismatched installation through the internal support channel.
 Only if the workflow explicitly handles omitted data:
 
 ```bash
-ethos-data --skip-unavailable -p reskit fetch onshore_wind
+ethos-data --skip-unavailable -c collections.yaml fetch onshore_wind
 ```
 
-Keep the global option before `fetch`. For Python, first enable the preference
-with `ethos-data config set-skip-unavailable true --scope project` in the project
-directory. Skipped resources are absent from the result:
+Keep the global option before `fetch`. In Python, pass `skip_unavailable=True`
+to `fetch()` or `paths()`, or enable the preference with
+`ethos-data config set-skip-unavailable true --scope project` in the project
+directory. Skipped resources are absent from the result, and so is a named
+path whose data was skipped; a warning names what was left out:
 
 ```python
 import ethos_data
 
-files = ethos_data.fetch("onshore_wind", package="reskit")
+data = ethos_data.collections("collections.yaml")
+
+files = data.fetch("onshore_wind", skip_unavailable=True)
 if "licensed-example/layer.tif" in files:
     layer = files["licensed-example/layer.tif"]
+
+inputs = data.paths("onshore_wind", skip_unavailable=True)
+if "layer" in inputs:
+    layer = inputs["layer"]
 ```
 
 For a persistent preference, use `config set-skip-unavailable true`; undo it with

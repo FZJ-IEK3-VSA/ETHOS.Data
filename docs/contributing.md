@@ -66,7 +66,7 @@ See [Caches, classes and roots](explanation/caches-and-access.md).
 together:
 
 1. Emit it in `ethos_data/maintain/manifest.py`.
-2. Read it in `ethos_data/catalog.py`.
+2. Read it in `ethos_data/catalogs.py`.
 3. Decide whether `ethos_data/maintain/publish.py` should **strip** it from the
    public catalogue (`source_dir`, `ethos:embargo` and `ethos:license_note` are
    stripped; a leak of any of them is the failure that matters).

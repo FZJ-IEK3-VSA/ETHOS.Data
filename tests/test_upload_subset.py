@@ -42,8 +42,13 @@ def make_catalog(root: Path, datasets: dict[str, dict]) -> Path:
         # A licence, because upload refuses a dataset whose terms nobody has
         # read. These tests are about *which* datasets a subset selects, so they
         # declare one; the licensing tests override it through `extra`.
-        meta = {"name": name, "title": name, "source_dir": str(source),
-                "ethos:remote_prefix": name, "licenses": [{"name": "CC-BY-4.0"}]}
+        meta = {
+            "name": name,
+            "title": name,
+            "source_dir": str(source),
+            "ethos:remote_prefix": name,
+            "licenses": [{"name": "CC-BY-4.0"}],
+        }
         meta.update(extra)
         # The catalogue refuses to build a restricted dataset that declares a
         # remote prefix -- it is never uploaded, so it has nowhere to be.
@@ -56,9 +61,17 @@ def make_catalog(root: Path, datasets: dict[str, dict]) -> Path:
 
 def make_args(datasets: list[str], **overrides) -> argparse.Namespace:
     args = argparse.Namespace(
-        datasets=datasets, remote="HIFIS", oidc_profile="HIFIS",
-        vo_path="Helmholtz/FZJ-ICE2", root=None, dry_run=True, verify_only=False,
-        allow_internal=False, no_chmod=False, transfers=8)
+        datasets=datasets,
+        remote="HIFIS",
+        oidc_profile="HIFIS",
+        vo_path="Helmholtz/FZJ-ICE2",
+        root=None,
+        dry_run=True,
+        verify_only=False,
+        allow_internal=False,
+        no_chmod=False,
+        transfers=8,
+    )
     for key, value in overrides.items():
         setattr(args, key, value)
     return args
@@ -88,7 +101,10 @@ def no_rclone(monkeypatch):
 
 class TestNamingDatasets:
     def test_a_bare_name_is_taken_as_written(self, workspace):
-        assert upload.resolve_name(workspace, "global-wind-atlas-v4") == "global-wind-atlas-v4"
+        assert (
+            upload.resolve_name(workspace, "global-wind-atlas-v4")
+            == "global-wind-atlas-v4"
+        )
 
     def test_a_path_into_the_catalogue_resolves_to_its_name(self, workspace):
         make_catalog(workspace, {"gwa": {}})
@@ -100,7 +116,9 @@ class TestNamingDatasets:
         make_catalog(workspace, {"gwa": {}})
         published = workspace / "public"
         (published / "datasets" / "gwa").mkdir(parents=True)
-        (published / "datacatalog.json").write_text('{"ethos:catalog_role": "published"}')
+        (published / "datacatalog.json").write_text(
+            '{"ethos:catalog_role": "published"}'
+        )
 
         with pytest.raises(SystemExit, match="published catalogue"):
             upload.resolve_name(workspace, str(published / "datasets" / "gwa"))
@@ -115,7 +133,8 @@ class TestNamingDatasets:
 
 class TestSubsetIsCheckedBeforeAnythingUploads:
     def test_a_restricted_dataset_stops_the_run_before_its_neighbour_uploads(
-            self, workspace, no_rclone):
+        self, workspace, no_rclone
+    ):
         # The failure a shell loop cannot prevent: `a` is fine, `b` may never be
         # published, and a loop would already have uploaded `a` before finding out.
         make_catalog(workspace, {"a": {}, "b": {"ethos:access": "restricted"}})
@@ -143,7 +162,9 @@ class TestUploadingTheSubset:
         make_catalog(workspace, {"a": {}, "b": {}})
         upload.run(workspace, make_args(["b", "a"]))
         assert [command[3] for command in no_rclone] == [
-            "HIFIS:ice2-data-files/b", "HIFIS:ice2-data-files/a"]
+            "HIFIS:ice2-data-files/b",
+            "HIFIS:ice2-data-files/a",
+        ]
 
     def test_naming_a_dataset_twice_costs_one_upload(self, workspace, no_rclone):
         make_catalog(workspace, {"a": {}})
@@ -154,20 +175,32 @@ class TestUploadingTheSubset:
         make_catalog(workspace, {"a": {}, "b": {}})
         upload.run(workspace, make_args([str(workspace / "datasets" / "a"), "b"]))
         assert [command[3] for command in no_rclone] == [
-            "HIFIS:ice2-data-files/a", "HIFIS:ice2-data-files/b"]
+            "HIFIS:ice2-data-files/a",
+            "HIFIS:ice2-data-files/b",
+        ]
 
-    def test_one_dataset_still_returns_rclones_own_exit_code(self, workspace, monkeypatch):
+    def test_one_dataset_still_returns_rclones_own_exit_code(
+        self, workspace, monkeypatch
+    ):
         # Scripts read this. Adding the list must not turn a transfer failure
         # into a generic 1, so the single-dataset path passes the code through.
         make_catalog(workspace, {"a": {}})
-        monkeypatch.setattr(upload.subprocess, "run",
-                            lambda *a, **k: type("Result", (), {"returncode": 7})())
+        monkeypatch.setattr(
+            upload.subprocess,
+            "run",
+            lambda *a, **k: type("Result", (), {"returncode": 7})(),
+        )
         assert upload.run(workspace, make_args(["a"])) == 7
 
-    def test_a_failure_is_reported_per_dataset_and_fails_the_run(self, workspace, monkeypatch):
+    def test_a_failure_is_reported_per_dataset_and_fails_the_run(
+        self, workspace, monkeypatch
+    ):
         make_catalog(workspace, {"a": {}, "b": {}})
-        monkeypatch.setattr(upload.subprocess, "run",
-                            lambda *a, **k: type("Result", (), {"returncode": 7})())
+        monkeypatch.setattr(
+            upload.subprocess,
+            "run",
+            lambda *a, **k: type("Result", (), {"returncode": 7})(),
+        )
         # Aggregated to 1 across a subset: which dataset failed is in the summary,
         # and there is no single rclone exit code left to report.
         assert upload.run(workspace, make_args(["a", "b"])) == 1

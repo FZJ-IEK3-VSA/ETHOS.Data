@@ -24,8 +24,11 @@ only when their paths work for the intended team.
 
 ## Override one run or shell
 
+`--root` goes before the subcommand; `collections.yaml` is the collections file
+your project uses or the one a package ships:
+
 ```bash
-ethos-data --root /scratch/me/ethos-public -p reskit fetch onshore_wind
+ethos-data --root /scratch/me/ethos-public -c collections.yaml fetch onshore_wind
 ```
 
 === "Bash"

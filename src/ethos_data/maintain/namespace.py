@@ -34,7 +34,7 @@ from pathlib import Path
 
 import yaml
 
-from ..catalog import license_settled
+from ..catalogs import license_settled
 from . import dataset_name_for, datasets_dir, is_namespace, iter_dataset_dirs
 
 __all__ = ["Action", "plan", "apply", "run"]
@@ -84,7 +84,10 @@ def _declared(catalog_root: Path) -> list[tuple[str, dict]]:
     for directory in iter_dataset_dirs(root):
         if is_namespace(directory):
             continue
-        meta = yaml.safe_load((directory / "dataset.yaml").read_text(encoding="utf-8")) or {}
+        meta = (
+            yaml.safe_load((directory / "dataset.yaml").read_text(encoding="utf-8"))
+            or {}
+        )
         found.append((dataset_name_for(root, directory), meta))
     return found
 
@@ -123,31 +126,49 @@ def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
         access = meta.get("ethos:access", "public")
 
         if access == RESTRICTED:
-            actions.append(Action(
-                name, "skip", entry,
-                detail="restricted: belongs in the restricted cache as a real, owned copy, "
-                       "not as a link"))
+            actions.append(
+                Action(
+                    name,
+                    "skip",
+                    entry,
+                    detail="restricted: belongs in the restricted cache as a real, owned copy, "
+                    "not as a link",
+                )
+            )
             continue
 
         if not license_settled(meta):
             # Building this namespace is how a dataset reaches everybody on the
             # machine. An absent licence is a question, not a permission, and
             # answering it is one line in dataset.yaml.
-            actions.append(Action(
-                name, "skip", entry,
-                detail="unresolved licensing: record the terms in dataset.yaml before "
-                       "linking it into a shared cache"))
+            actions.append(
+                Action(
+                    name,
+                    "skip",
+                    entry,
+                    detail="unresolved licensing: record the terms in dataset.yaml before "
+                    "linking it into a shared cache",
+                )
+            )
             continue
 
         source = _source_of(catalog_root, name, meta)
         if source is None:
-            actions.append(Action(name, "skip", entry, detail="no source_dir in dataset.yaml"))
+            actions.append(
+                Action(name, "skip", entry, detail="no source_dir in dataset.yaml")
+            )
             continue
 
         if not source.is_dir():
-            actions.append(Action(
-                name, "missing", entry, source,
-                detail=f"source_dir does not exist: {source}"))
+            actions.append(
+                Action(
+                    name,
+                    "missing",
+                    entry,
+                    source,
+                    detail=f"source_dir does not exist: {source}",
+                )
+            )
             continue
 
         if entry.is_symlink():
@@ -155,12 +176,19 @@ def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
             if _same_target(current, source):
                 actions.append(Action(name, "unchanged", entry, source))
             else:
-                actions.append(Action(
-                    name, "repoint", entry, source, detail=f"was {current}"))
+                actions.append(
+                    Action(name, "repoint", entry, source, detail=f"was {current}")
+                )
         elif entry.exists():
-            actions.append(Action(
-                name, "keep", entry, source,
-                detail="a real directory the cache owns; not replaced with a link"))
+            actions.append(
+                Action(
+                    name,
+                    "keep",
+                    entry,
+                    source,
+                    detail="a real directory the cache owns; not replaced with a link",
+                )
+            )
         else:
             actions.append(Action(name, "link", entry, source))
 
@@ -173,9 +201,9 @@ def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
         for name, existing in cache_entries(root):
             if name in names or not existing.is_symlink():
                 continue
-            actions.append(Action(
-                name, "prune", existing,
-                detail="not in the catalogue any more"))
+            actions.append(
+                Action(name, "prune", existing, detail="not in the catalogue any more")
+            )
 
     return actions
 
@@ -224,7 +252,9 @@ def run(catalog_root: Path, args) -> int:
     apply(changes)
     print(f"\n{len(changes)} change(s) applied.")
     if problems:
-        print(f"{len(problems)} dataset(s) have a source_dir that does not exist -- "
-              f"fix dataset.yaml or the storage, then run this again.")
+        print(
+            f"{len(problems)} dataset(s) have a source_dir that does not exist -- "
+            f"fix dataset.yaml or the storage, then run this again."
+        )
         return 1
     return 0
