@@ -7,7 +7,7 @@ import pytest
 import ethos_data
 from ethos_data import config
 from ethos_data.cli import main
-from ethos_data.catalog import Catalog, Dataset, Resource
+from ethos_data.catalogs import Catalog, Dataset, Resource
 
 
 @pytest.fixture
@@ -35,7 +35,7 @@ def test_new_dataset_matches_cli_and_python(workspace):
         resolved = ethos_data.resolve('test', collections)
         files = ethos_data.fetch('test', collections, progressbar=False)
         assert main(['-c', str(collections), 'fetch', 'test']) == 0
-        one = ethos_data.fetch_one('example/new.txt', str(root / 'datacatalog.json'))
+        one = ethos_data.catalog(str(root / 'datacatalog.json')).path('example/new.txt')
     assert [r.key for r in resolved] == ['example/new.txt']
     assert files == {'example/new.txt': staged / 'new.txt'}
     assert one == staged / 'new.txt'
@@ -80,7 +80,7 @@ def test_broken_staging_link_fails_python_and_cli(workspace, capsys):
     collections.write_text('catalog: datacatalog.json\ncollections:\n  test:\n    include:\n      - dataset: broken\n')
     for call in (lambda: ethos_data.fetch('test', collections, progressbar=False),
                  lambda: ethos_data.resolve('test', collections),
-                 lambda: ethos_data.fetch_one('broken/input.txt', str(root / 'datacatalog.json'))):
+                 lambda: ethos_data.catalog(str(root / 'datacatalog.json')).path('broken/input.txt')):
         with pytest.raises(ethos_data.AccessError, match="staging entry 'broken'"):
             call()
     assert main(['-c', str(collections), 'fetch', 'test']) == 2

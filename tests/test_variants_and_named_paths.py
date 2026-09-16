@@ -19,18 +19,16 @@ import contextlib
 import hashlib
 import json
 import re
-import sys
 import textwrap
 import urllib.error
 import urllib.request
 import warnings
-from importlib import metadata
 from pathlib import Path
 
 import pytest
 
 import ethos_data
-from ethos_data import config, selection
+from ethos_data import config, retrieval, selection
 from ethos_data.cli import main
 
 
@@ -139,13 +137,13 @@ def define(world):
 def download_spy(monkeypatch):
     """Records every resource handed to ``download``; the real function still runs."""
     asked: list[list[str]] = []
-    real = ethos_data.download
+    real = retrieval.download
 
     def spy(catalog, resources, **kwargs):
         asked.append([r.key for r in resources])
         return real(catalog, resources, **kwargs)
 
-    monkeypatch.setattr(ethos_data, "download", spy)
+    monkeypatch.setattr(retrieval, "download", spy)
     return asked
 
 
@@ -749,7 +747,7 @@ class TestListResources:
         _, _, index = world
         catalog = str(index)
         # In key order whatever the descriptor's order, so `ls` reads the same every time.
-        family = ethos_data.list_resources("reskit-test-data", catalog=catalog)
+        family = ethos_data.catalog(catalog).resources("reskit-test-data")
         assert [r.key for r in family] == [
             "reskit-test-data/era5/100m_u_component_of_wind.nc",
             "reskit-test-data/era5/100m_v_component_of_wind.nc",
@@ -758,20 +756,20 @@ class TestListResources:
             "reskit-test-data/global-wind-atlas/gwa200-like.tif",
             "reskit-test-data/global-wind-atlas/gwa50-like.tif",
         ]
-        folder = ethos_data.list_resources("era5/2015", catalog=catalog)
+        folder = ethos_data.catalog(catalog).resources("era5/2015")
         assert [r.key for r in folder] == ["era5/2015/u.nc", "era5/2015/v.nc"]
         # The one file plus its sidecars, which a .shp is unreadable without --
         # sorted like everything else, so the sidecar comes first here.
-        single = ethos_data.list_resources("landcover/sites.shp", catalog=catalog)
+        single = ethos_data.catalog(catalog).resources("landcover/sites.shp")
         assert [r.key for r in single] == ["landcover/sites.dbf", "landcover/sites.shp"]
         assert download_spy == [], "listing is a catalogue question; it fetches nothing"
 
     def test_a_typo_and_an_unknown_dataset_raise_their_own_errors(self, world):
         _, _, index = world
         with pytest.raises(KeyError, match="no file or folder 'typo'"):
-            ethos_data.list_resources("era5/typo", catalog=str(index))
+            ethos_data.catalog(str(index)).resources("era5/typo")
         with pytest.raises(ethos_data.UnknownDataset, match="unknown dataset 'nowhere'"):
-            ethos_data.list_resources("nowhere", catalog=str(index))
+            ethos_data.catalog(str(index)).resources("nowhere")
         assert issubclass(ethos_data.UnknownDataset, KeyError)
 
 
@@ -842,8 +840,8 @@ class TestIncompleteCatalog:
 
 
 @pytest.fixture
-def registered(world, monkeypatch):
-    """An installed package, fakepkg, whose collections file has variants and paths."""
+def shipped(world, monkeypatch):
+    """A tool, fakepkg, whose collections file has variants and paths; returns the file."""
     tmp_path, _, index = world
     package = tmp_path / "site" / "fakepkg"
     (package / "data").mkdir(parents=True)
@@ -867,32 +865,34 @@ def registered(world, monkeypatch):
         "      paths:\n"
         "        gwa_100m: global-wind-atlas-v3/gwa3_250_wind-speed_100m.tif\n"
     )
-    monkeypatch.syspath_prepend(str(tmp_path / "site"))
-    for name in ("fakepkg", "fakepkg.data"):
-        monkeypatch.delitem(sys.modules, name, raising=False)
-    entry = metadata.EntryPoint(name="fakepkg", value="fakepkg.data", group=selection.ENTRY_POINT_GROUP)
-    monkeypatch.setattr(metadata, "entry_points", lambda: metadata.EntryPoints([entry]))
-    return world
+    return tmp_path / "site" / "fakepkg" / "data" / "collections.yaml"
 
 
-class TestPackageRoute:
-    def test_paths_by_package_name_with_the_test_flag(self, registered):
+class TestToolRoute:
+    """A tool builds one handle from the file beside its code and calls it; the
+    same handle is its command."""
+
+    def test_paths_on_the_handle_with_the_test_flag(self, shipped, world):
         """The call the documentation shows, end to end."""
-        _, cache, _ = registered
-        small = ethos_data.paths("wind", package="fakepkg", progressbar=False, test=True)
+        _, cache, _ = world
+        data = ethos_data.collections(shipped, tool="fakepkg")
+        small = data.paths("wind", progressbar=False, test=True)
         assert small == {"gwa_100m": cache / "reskit-test-data/global-wind-atlas/gwa100-like.tif"}
-        large = ethos_data.paths("wind", package="fakepkg", progressbar=False)
+        large = data.paths("wind", progressbar=False)
         assert large == {"gwa_100m": cache / "global-wind-atlas-v3/gwa3_250_wind-speed_100m.tif"}
 
-    def test_the_cli_takes_the_package_name_and_the_test_flag(self, registered, capsys):
-        _, cache, _ = registered
-        assert main(["-p", "fakepkg", "paths", "wind", "--test"]) == 0
+    def test_the_tool_command_takes_the_test_flag(self, shipped, world, capsys):
+        _, cache, _ = world
+        data = ethos_data.collections(shipped, tool="fakepkg")
+        assert data.main(["paths", "wind", "--test"]) == 0
         out = capsys.readouterr().out
         assert out.splitlines() == [
             f"gwa_100m\t{cache / 'reskit-test-data/global-wind-atlas/gwa100-like.tif'}"
         ]
-        assert main(["-p", "fakepkg", "info", "wind"]) == 0
+        assert data.main(["info", "wind"]) == 0
         assert capsys.readouterr().out.startswith("wind [full]: 1 files")
+        assert data.main(["--test", "info", "wind"]) == 0, "--test before the subcommand too"
+        assert capsys.readouterr().out.startswith("wind [test]: 1 files")
 
 
 class TestCommandLine:
@@ -1201,7 +1201,7 @@ def other_catalog(world):
 
 
 class TestCollectionsFileRoute:
-    """``collections=`` on the key-taking calls: the file's pin, like a package's."""
+    """A handle's ``.catalog``: the file's pin, for the key-taking calls."""
 
     def test_path_and_list_resources_take_a_collections_file(self, world, define, monkeypatch):
         """The rule ``fetch`` applies, so a script that fetches a collection and
@@ -1209,9 +1209,10 @@ class TestCollectionsFileRoute:
         _, cache, _ = world
         file = define(ONSHORE)
         monkeypatch.setattr(urllib.request, "urlopen", _no_network)
-        assert ethos_data.path("landcover/clc.tif", collections=file) == cache / "landcover/clc.tif"
-        assert ethos_data.path("era5/2015", collections=str(file)) == cache / "era5/2015"
-        listed = ethos_data.list_resources("era5/2015", collections=file)
+        pinned = ethos_data.collections(file).catalog
+        assert pinned.path("landcover/clc.tif") == cache / "landcover/clc.tif"
+        assert ethos_data.collections(str(file)).catalog.path("era5/2015") == cache / "era5/2015"
+        listed = pinned.resources("era5/2015")
         assert [r.key for r in listed] == ["era5/2015/u.nc", "era5/2015/v.nc"]
 
     def test_an_explicit_or_configured_catalogue_wins_over_the_pin(self, define, other_catalog, monkeypatch):
@@ -1219,20 +1220,10 @@ class TestCollectionsFileRoute:
         repoint every tool at once, pins included."""
         file = define(ONSHORE)
         with pytest.raises(ethos_data.UnknownDataset, match="unknown dataset 'era5'"):
-            ethos_data.list_resources("era5", collections=file, catalog=str(other_catalog))
+            ethos_data.collections(file, catalog=str(other_catalog)).catalog.resources("era5")
         monkeypatch.setenv("ETHOS_DATA_CATALOG", str(other_catalog))
         with pytest.raises(ethos_data.UnknownDataset, match="unknown dataset 'era5'"):
-            ethos_data.list_resources("era5", collections=file)
-
-    def test_a_package_and_a_file_together_is_a_type_error(self, define):
-        """Two sources for one pin: neither may quietly win."""
-        file = define(ONSHORE)
-        with pytest.raises(TypeError, match="not both"):
-            ethos_data.path("landcover/clc.tif", package="fakepkg", collections=file)
-        with pytest.raises(TypeError, match="not both"):
-            ethos_data.list_resources("landcover", package="fakepkg", collections=file)
-        with pytest.raises(TypeError, match="not both"):
-            ethos_data.fetch("landcover", file, package="fakepkg", progressbar=False)
+            ethos_data.collections(file).catalog.resources("era5")
 
 
 class TestCatalogUnavailable:
@@ -1348,26 +1339,6 @@ class TestCatalogPin:
 class TestSecondReviewRound:
     """Loose ends a second adversarial pass found; each was demonstrated first."""
 
-    def test_a_package_and_a_file_together_is_refused_whatever_catalogue_wins(
-        self, define, other_catalog, monkeypatch
-    ):
-        """An argument ignored under one configuration and honoured under another
-        is a bug waiting for the machine where the configuration differs."""
-        file = define(ONSHORE)
-        with pytest.raises(TypeError, match="not both"):
-            ethos_data.path("landcover/clc.tif", package="fakepkg", collections=file,
-                            catalog=str(other_catalog))
-        monkeypatch.setenv("ETHOS_DATA_CATALOG", str(other_catalog))
-        with pytest.raises(TypeError, match="not both"):
-            ethos_data.list_resources("landcover", package="fakepkg", collections=file)
-
-    def test_the_cli_refuses_p_with_c_for_key_commands_too(self, define, capsys):
-        """`fetch` says "not both"; `path` and `ls` must not quietly pick one."""
-        file = define(ONSHORE)
-        for command in (["path", "landcover/clc.tif"], ["ls", "landcover"]):
-            assert main(["-p", "fakepkg", "-c", str(file), *command]) == 2
-            assert "not both" in capsys.readouterr().err
-
     @pytest.mark.parametrize("body, complaint", [
         ("strinclude:\n  include: landcover\n", "include must be a list"),
         ("nodataset:\n  include:\n    - files: [\"clc.tif\"]\n", "needs a 'dataset' name"),
@@ -1432,25 +1403,27 @@ class TestSecondReviewRound:
         monkeypatch.setenv("ETHOS_STAGING_DIR", str(staging))
         return staging
 
-    def test_listing_through_a_pin_stays_quiet_under_staging(self, define, staged_landcover):
-        """``ls`` reads metadata only; the "staging is active" warning belongs to
-        the calls that hand out data, and the catalog= route never emitted it."""
+    def test_a_handle_warns_about_staging_once_and_its_listing_not_again(self, define, staged_landcover):
+        """The overlay is applied when the handle is built -- that is the moment
+        somebody is about to be handed data -- and never again on its calls."""
         file = define(ONSHORE)
         with _recording() as caught:
-            listed = ethos_data.list_resources("landcover", collections=file)
-        assert [r.key for r in listed] == ["landcover/clc.tif"]
-        assert not [w for w in caught if "staging is active" in str(w.message)]
+            data = ethos_data.collections(file)
+            listed = data.catalog.resources("landcover")
+            listed_again = data.catalog.resources("landcover")
+        assert [r.key for r in listed] == [r.key for r in listed_again] == ["landcover/clc.tif"]
+        assert len([w for w in caught if "staging is active" in str(w.message)]) == 1
 
     def test_an_already_staged_catalogue_is_not_overlaid_twice(self, define, staged_landcover):
-        """RESKit's shim hands ``load_collections(...).catalog`` back into
-        ``path()``; the overlay -- and its warning -- must not double up."""
+        """A tool hands ``load_collections(...).catalog`` back into ``catalog()``;
+        the overlay -- and its warning -- must not double up."""
         file = define(ONSHORE)
         with _recording() as first:
             loaded = ethos_data.load_collections(file)
         assert len([w for w in first if "staging is active" in str(w.message)]) == 1
         assert loaded.catalog.staged
         with _recording() as second:
-            found = ethos_data.path("landcover/clc.tif", catalog=loaded.catalog)
+            found = ethos_data.catalog(loaded.catalog).path("landcover/clc.tif")
         assert found == staged_landcover / "landcover" / "clc.tif"
         assert not [w for w in second if "staging is active" in str(w.message)]
 

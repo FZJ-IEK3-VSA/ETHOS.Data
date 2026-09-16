@@ -25,7 +25,7 @@ or analysis.
 | Choose where the public and restricted caches are | [Configure the cache](configure-the-cache.md) |
 | Use your copy of licensed data, or work without it | [Work with restricted data](restricted-data.md) |
 | Also use datasets that are only in the internal catalogue | [Add the internal data catalogue](add-internal-catalogue.md) |
-| Feed a workflow its inputs by name with `ethos_data.paths()`, get the path of a file or folder, or fetch a collection | [Get data for a task](get-data-for-a-task.md) |
+| Feed a workflow its inputs by name from a collections file, get a file or folder by key, or fetch a collection | [Get data for a task](get-data-for-a-task.md) |
 | Read a catalogued dataset from a directory you already have | [Use data already on disk](use-data-already-on-disk.md) |
 | Check integrity and repair downloads | [Verify and repair](verify-and-repair.md) |
 | Identify failures and send a useful report to the right maintainer | [Identify and report a problem](report-a-problem.md) |
@@ -38,7 +38,7 @@ new data does not require permission to write to the official catalogue or dCach
 
 | Task | Guide |
 |---|---|
-| Ship and register your package's collections file | [Use ETHOS.Data in your package](use-from-a-package.md) |
+| Ship your package's collections file, a handle on it and the package's own data command | [Use ETHOS.Data in your package](use-from-a-package.md) |
 | Declare data for examples, workflows, tests, or an aggregate collection | [Write a collections file](write-a-collections-file.md) |
 | Experiment with new data in a development cache | [Stage uncatalogued data](stage-unpublished-data.md) |
 | Prepare metadata, provenance, and byte access for review | [Propose a dataset](propose-a-dataset.md) |

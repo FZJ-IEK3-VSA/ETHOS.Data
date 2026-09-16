@@ -34,7 +34,7 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
-from .catalog import Catalog, Dataset, Resource
+from .catalogs import Catalog, Dataset, Resource
 from .config import Roots, resolve_skip_unavailable
 
 __all__ = [

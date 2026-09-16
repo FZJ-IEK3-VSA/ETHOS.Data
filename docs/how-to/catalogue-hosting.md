@@ -33,8 +33,11 @@ revision must not be paired with inventories from another.
 Point a CLI invocation at the convenient alias:
 
 ```bash
-ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json -p reskit list
+ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json -c collections.yaml list
 ```
+
+`collections.yaml` is the collections file your project uses or the one a
+package ships.
 
 An administrator may set a site default; an individual can set a user default:
 
@@ -42,8 +45,8 @@ An administrator may set a site default; an individual can set a user default:
 ethos-data config set-catalog /shared/ethos/catalogue/current/datacatalog.json
 ```
 
-This setting, or `ETHOS_DATA_CATALOG`, replaces the catalogue version a package
-pins, in the CLI and the Python API alike; see
+This setting, or `ETHOS_DATA_CATALOG`, replaces the catalogue version a
+collections file pins, in the CLI and the Python API alike; see
 [Add the internal data catalogue](add-internal-catalogue.md). For a published
 calculation, record and use the concrete `versions/<commit>/datacatalog.json`
 path rather than the moving `current` alias.

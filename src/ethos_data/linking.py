@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .access import entry_for
-from .catalog import LICENSE_RESOLVED, Catalog
+from .catalogs import LICENSE_RESOLVED, Catalog
 from .config import Roots
 
 __all__ = ["LinkError", "LinkReport", "link", "source_dir_for", "unlink"]

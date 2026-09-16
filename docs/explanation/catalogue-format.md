@@ -44,7 +44,7 @@ and republish* — with the path to the source catalogue next to it.
 
 ## Writer and reader ship together
 
-`ethos_data.maintain` writes the descriptors that `ethos_data.catalog` reads, and
+`ethos_data.maintain` writes the descriptors that `ethos_data.catalogs` reads, and
 both live in this one distribution. That is deliberate.
 
 The `ethos:` extensions are a format. A format whose writer and reader sit in

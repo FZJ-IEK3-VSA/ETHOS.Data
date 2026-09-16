@@ -1,8 +1,9 @@
 # API Reference
 
-`ethos_data`'s public API. Most callers need only [`paths`][ethos_data.paths],
-[`path`][ethos_data.path] and [`fetch`][ethos_data.fetch]. The rest is here for
-completeness.
+`ethos_data`'s public API. Most callers need only the two handles:
+[`collections`][ethos_data.collections] for what a tool's workflows need, by
+name, and [`catalog`][ethos_data.catalog] for a dataset, folder or file by
+key. The rest is here for completeness.
 
 | Topic | Contents |
 |-------|----------|
@@ -16,46 +17,41 @@ local download, cache, staging, and configuration operations as well as reads.
 
 ## Getting data
 
-`paths()`, `fetch()` and `resolve()` name the collections file with
-`package=` — the file an installed package registers — or `collections=`, a
-path. `path()` and `list_resources()` need neither, but accept either: the
-file then contributes its `catalog:` pin, below an explicit `catalog=`,
-`$ETHOS_DATA_CATALOG` and a configured catalogue — the order `fetch()` applies,
-so `path()` and `fetch()` given the same file read the same catalogue. Giving
-both `package=` and `collections=` is a `TypeError`. `list_resources()`
-returns resources in key order. A catalogue index that cannot be read raises
-[`CatalogUnavailable`][ethos_data.catalog.CatalogUnavailable].
+Two kinds of name, two handles. A **collection** is what a tool's workflow
+needs, named once by its maintainer in the tool's `collections.yaml`;
+`collections(path, tool=...)` loads that file into a
+[`Collections`](catalog.md#collections) handle whose `paths()`, `fetch()`,
+`resolve()` and `plan()` answer by collection name, and whose `main()` runs
+the collection commands. `tool_main()` is the body of a tool's own console
+script: it builds the handle only for the commands that need one. A **key**
+(`<dataset>/<path>`) names one dataset, folder or file; `catalog()` loads the
+configured or public catalogue into a [`Catalog`](catalog.md#catalogue) whose
+`path()` and `resources()` answer by key, and a handle's `.catalog` does the
+same for the catalogue the file pins — so `fetch()` and `.catalog.path()` on
+one handle read the same catalogue. The one-call forms `fetch()`, `paths()`
+and `resolve()` take the file's path and build a handle each time. A catalogue
+index that cannot be read raises
+[`CatalogUnavailable`][ethos_data.catalogs.CatalogUnavailable].
 
 ::: ethos_data
     options:
       members:
-        - paths
-        - path
+        - collections
+        - catalog
+        - tool_main
         - fetch
-        - fetch_one
+        - paths
         - resolve
-        - list_resources
-      show_root_heading: false
-      show_root_toc_entry: false
-      heading_level: 3
-
-## Collections shipped by packages
-
-::: ethos_data.selection
-    options:
-      members:
-        - package_collections
-        - registered_packages
-        - CollectionsNotFound
-        - ENTRY_POINT_GROUP
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3
 
 A collection defined in a way that cannot be resolved raises
 [`CollectionError`][ethos_data.selection.CollectionError]; a name the file does
-not define raises [`UnknownCollection`][ethos_data.selection.UnknownCollection].
-Both are documented with [`Collections`](catalog.md#collections).
+not define raises [`UnknownCollection`][ethos_data.selection.UnknownCollection];
+a command run where no collections file can be found raises
+[`CollectionsNotFound`][ethos_data.selection.CollectionsNotFound]. All are
+documented with [`Collections`](catalog.md#collections).
 
 ## Downloading
 

@@ -1,13 +1,14 @@
 # Check and repair the cache
 
-Check the collection used by your workflow. Replace `reskit` and `onshore_wind`
-below, or use `-c collections.yaml` instead of `-p reskit`.
+Check the collection used by your workflow. Replace `collections.yaml` and
+`onshore_wind` below with the collections file your workflow uses — your
+project's own or one a package ships — and its collection.
 
 ## Check the stored files
 
 ```bash
-ethos-data -p reskit verify onshore_wind
-ethos-data -p reskit verify onshore_wind --deep
+ethos-data -c collections.yaml verify onshore_wind
+ethos-data -c collections.yaml verify onshore_wind --deep
 ```
 
 The first command checks sizes; `--deep` checks SHA-256 hashes and reads every
@@ -28,9 +29,9 @@ file. Neither command repairs data.
 For downloadable data:
 
 ```bash
-ethos-data -p reskit verify onshore_wind --deep --repair --dry-run
-ethos-data -p reskit verify onshore_wind --deep --repair
-ethos-data -p reskit verify onshore_wind --deep
+ethos-data -c collections.yaml verify onshore_wind --deep --repair --dry-run
+ethos-data -c collections.yaml verify onshore_wind --deep --repair
+ethos-data -c collections.yaml verify onshore_wind --deep
 ```
 
 Inspect the preview first. Repair can remove affected dataset links from the

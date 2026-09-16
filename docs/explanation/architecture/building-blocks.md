@@ -20,11 +20,11 @@ objects or command-line output.
 
 | Building block | Responsibility | Main interface | Code within `ethos_data` |
 |---|---|---|---|
-| Consumer entry points | Compose collection resolution, retrieval, inspection, and local maintenance for callers | `fetch`, `paths`, `fetch_one`, `resolve`, `list_resources`; top-level CLI commands | `__init__.py`, consumer handlers in `cli.py` |
+| Consumer entry points | Compose collection resolution, retrieval, inspection, and local maintenance for callers | `collections`, `catalog`, `tool_main`; `Collections.fetch` / `paths` / `plan`, `Catalog.path` / `resources`; the `ethos-data` commands and a tool's own command built with `ethos_data.tool_main` | `__init__.py`, consumer handlers in `cli.py` |
 | Maintainer entry points | Parse catalogue commands and locate the source checkout | `ethos-data catalog …`; `dispatch` | `maintain/cli.py`, parser registration in `cli.py` |
 | Data access | Select resources, locate bytes, download, verify, and support local development | `Collections.resolve`, `download`, `locate`, `verify`, `materialize`, `apply_staging`, `load_bundle` | `selection.py`, `retrieval.py`, `access.py`, `verify.py`, `materialize.py`, `staging.py`, `bundles.py` |
 | Catalogue maintenance | Build inventories, transfer manifest-listed files, generate public metadata, maintain shared-cache links | Per-command `run` functions; generated metadata and upload results | `maintain/manifest.py`, `upload.py`, `publish.py`, `namespace.py`, helpers in `maintain/__init__.py` and `maintain/scripts/` |
-| Catalogue and configuration | Represent lazy metadata and resolve configuration sources | `Catalog`, `Dataset`, `Resource`, `load_catalog`; `Roots` and setting resolvers | `catalog.py`, `config.py` |
+| Catalogue and configuration | Represent lazy metadata and resolve configuration sources | `Catalog`, `Dataset`, `Resource`, `load_catalog`; `Roots` and setting resolvers | `catalogs.py`, `config.py` |
 
 ## 5.2 Level 2: selected building blocks
 

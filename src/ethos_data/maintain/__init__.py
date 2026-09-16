@@ -2,7 +2,7 @@
 
 Consumers of the catalogue never import this package -- ``ethos_data`` itself
 stays a read-only library.  What lives here is the other half of the same
-contract: the code that *writes* the descriptors ``ethos_data.catalog`` reads.
+contract: the code that *writes* the descriptors ``ethos_data.catalogs`` reads.
 
 Keeping both halves in one distribution is the point.  The ``ethos:`` extensions
 -- shapefile sidecars, shard layout, access classes -- are a format, and a
@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..catalog import ROLE_KEY, ROLE_PUBLISHED, ROLE_SOURCE
+from ..catalogs import ROLE_KEY, ROLE_PUBLISHED, ROLE_SOURCE
 
 CATALOG_MARKER = "catalog.yaml"
 #: Present in a *generated* catalogue too, so it can never identify a source one.

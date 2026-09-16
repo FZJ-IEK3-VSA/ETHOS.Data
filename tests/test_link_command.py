@@ -13,7 +13,7 @@ import json
 import pytest
 
 from ethos_data.access import ORIGIN_LINK, locate
-from ethos_data.catalog import Catalog, Dataset, Resource, UnknownDataset
+from ethos_data.catalogs import Catalog, Dataset, Resource, UnknownDataset
 from ethos_data.cli import main
 from ethos_data.config import Roots
 from ethos_data.linking import LinkError, link, unlink

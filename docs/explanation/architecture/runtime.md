@@ -81,7 +81,7 @@ must distinguish required from optional inputs.
 Local development can overlay catalogue data with staging entries. A staging
 overlay changes metadata selection as well as file locations: new resources must
 be visible to Selection before Retrieval can use them. Python collection loading and CLI collection loading both apply the overlay;
-`fetch_one()` applies it before looking up the resource. The overlay uses a
+`Catalog.path()` applies it, once per handle, before looking up the resource. The overlay uses a
 separate catalogue object so the caller's canonical `Catalog` is retained. Export
 operations use `include_staging=False` to select authoritative metadata.
 

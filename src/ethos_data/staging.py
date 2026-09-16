@@ -41,7 +41,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .access import AccessError
-from .catalog import Catalog, Dataset, Resource
+from .catalogs import Catalog, Dataset, Resource
 from .config import Roots, current_user, resolve_staging_cache
 
 __all__ = [

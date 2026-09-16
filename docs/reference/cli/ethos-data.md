@@ -4,7 +4,7 @@ The consumer-side command: reading the catalogue, planning, fetching, verifying.
 It never writes to a catalogue — that is [`ethos-data catalog`](catalog.md).
 
 ```
-ethos-data [-c COLLECTIONS | -p PACKAGE] [--catalog LOCATION] [--root DIR] [--skip-unavailable] [--test]
+ethos-data [-c COLLECTIONS] [--catalog LOCATION] [--root DIR] [--skip-unavailable] [--test]
           <command> [--test] ...
 ```
 
@@ -14,17 +14,30 @@ not as a traceback. So are an unknown collection, a collection whose definition
 cannot be resolved, a catalogue copy whose index lists a dataset with no
 descriptor behind it, and a catalogue index that cannot be read at all.
 
+## A tool's own command { #tool-command }
+
+A package that ships a collections file can bind these command groups to that
+file through [`ethos_data.tool_main`][ethos_data.tool_main], giving it a
+command of its own. Such a command offers the collection commands (`list`,
+`info`, `plan`, `fetch`, `paths`, `verify`), the key commands (`path`, `ls`),
+`bundle` and `config` described below, bound to the file the package ships, so
+it takes no `-c`; the other global options are the same. The cache-maintenance
+commands — `link`, `unlink`, `materialize`, `staging` and the maintainer's
+`catalog` group — concern the shared cache rather than any one package's data
+and stay with `ethos-data`. `ethos-data -c <the package's collections.yaml>`
+runs the same commands on the same file. See
+[Use ETHOS.Data in your package](../../how-to/use-from-a-package.md).
+
 ## Global options
 
 Put these options before the subcommand, for example
-`ethos-data --skip-unavailable -p reskit fetch onshore_wind`.
+`ethos-data --skip-unavailable -c collections.yaml fetch onshore_wind`.
 `--root` here is a local public cache; `catalog upload --root` is a remote
 publication folder. Use `ethos-data COMMAND --help` for command-specific options.
 
 | Option | |
 |---|---|
-| `-c`, `--collections PATH` | path to a collections file. Default: `collections.yaml` in the current directory, or a configured default — see `config show`. |
-| `-p`, `--package NAME` | the collections file an installed package registers under `NAME`, e.g. `-p reskit`. Not combined with `-c`. |
+| `-c`, `--collections PATH` | path to a collections file — the one your project uses or the one a package ships. Default: `collections.yaml` in the current directory, or a configured default — see `config show`. |
 | `--catalog LOCATION` | the catalogue to use for this run. A local path or an `http(s)` URL. |
 | `--root DIR` | override the public cache directory for this run. |
 | `--skip-unavailable` | carry on without data this machine cannot reach (licensed data you have no copy of), listing what was left out instead of stopping. |
@@ -35,15 +48,16 @@ catalogue (`config set-catalog`), the collections file's `catalog:` pin, and
 the built-in public catalogue
 `https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json`.
 The same order holds for `path` and `ls`, which take a key rather than a
-collection: the pin they honour is that of the `-p` package's file, the `-c`
-file, the configured default collections file, or a `collections.yaml` in the
-current directory — whichever `fetch` would read.
+collection: the pin they honour is that of the `-c` file, the configured
+default collections file, or a `collections.yaml` in the current directory —
+whichever `fetch` would read. A tool's command honours the pin of the tool's
+own file.
 
 ## `--test` { #test }
 
 `info`, `plan`, `fetch`, `paths` and `verify` take `--test` before or after the
-subcommand: `ethos-data -p reskit fetch onshore_wind --test` and
-`ethos-data -p reskit --test fetch onshore_wind` mean the same, and commands
+subcommand: `ethos-data -c collections.yaml fetch onshore_wind --test` and
+`ethos-data -c collections.yaml --test fetch onshore_wind` mean the same, and commands
 without the flag ignore it. It selects the collection's `test` variant instead
 of the default `full` one. A collection without variants is the same either way
 unless a collection it extends has variants — the flag propagates through
@@ -56,7 +70,7 @@ variant, as in `onshore_wind [test]`. See
 ## `list`
 
 ```bash
-ethos-data -p reskit list
+ethos-data -c collections.yaml list
 ethos-data -c probe-collections.yaml list
 ```
 
@@ -86,7 +100,6 @@ the rest are still listed. Exit status is `1` if any row was unresolvable.
 ```bash
 ethos-data path reskit-test-data/placements/turbine_placements.csv
 ethos-data path reskit-test-data/era5
-ethos-data -p reskit path reskit-test-data/era5     # the catalogue version RESKit pins
 ethos-data -c collections.yaml path reskit-test-data/era5   # the version this file pins
 ```
 
@@ -94,29 +107,30 @@ Print the absolute local path of a file or folder, fetching it first if it is
 not on this machine yet. `<key>` is `<dataset>/<file>`, `<dataset>/<folder>`,
 a dataset name, or a dataset family name. A shapefile is fetched together with
 its companion files. Needs no collections file, but honours the catalogue pin
-of one when there is one — the `-p` package's file, the `-c` file, the
-configured default, or a `collections.yaml` in the current directory — below
-`--catalog`, `$ETHOS_DATA_CATALOG` and a configured catalogue, exactly as
-`fetch` chooses its catalogue. `-p` together with `-c` is refused, as for
-`fetch`. The Python equivalent is [`ethos_data.path`][ethos_data.path].
+of one when there is one — the `-c` file, the configured default, or a
+`collections.yaml` in the current directory; for a tool's command, the tool's
+own file — below `--catalog`, `$ETHOS_DATA_CATALOG` and a configured
+catalogue, exactly as `fetch` chooses its catalogue. The Python equivalent is
+[`Catalog.path`][ethos_data.catalogs.Catalog.path], on
+[`ethos_data.catalog()`][ethos_data.catalog] or on a handle's `.catalog`.
 
 ## `ls <key>`
 
 ```bash
 ethos-data ls global-wind-atlas-v4
 ethos-data ls reskit-test-data/era5
-ethos-data -p reskit ls reskit-test-data     # a family, in the catalogue version RESKit pins
+ethos-data -c collections.yaml ls reskit-test-data   # a family, in the version this file pins
 ```
 
 List the catalogue's files under a key, with sizes, fetching nothing. `<key>`
 is a dataset name, a dataset family name, `<dataset>/<folder>`, or one file
 (listed with its companion files). The catalogue is chosen as for `path`:
 `--catalog`, `$ETHOS_DATA_CATALOG` or a configured catalogue first, then the
-pin of the `-p` package's or `-c` file (or of the configured default or
-`./collections.yaml`); resolving remote catalogue metadata can require network
+pin of the `-c` file (or of the configured default or `./collections.yaml`;
+for a tool's command, its own file); resolving remote catalogue metadata can require network
 access. Each line is the key `path` takes to return that one file. An unknown
 dataset or folder exits `2`. The Python equivalent is
-[`ethos_data.list_resources`][ethos_data.list_resources].
+[`Catalog.resources`][ethos_data.catalogs.Catalog.resources].
 
 ```title="Output"
 global-wind-atlas-v4: 3 files, 1.9 GB
@@ -150,7 +164,7 @@ onshore_wind [test]: 6 files, 42.3 MB
   reskit-test-data/global-wind-atlas/gwa200-like.tif                   1.5 MB
   reskit-test-data/global-wind-atlas/gwa50-like.tif                    1.4 MB
 
-named paths (`ethos-data paths` resolves them to this machine):
+named paths (the `paths` command resolves them to this machine):
   era5      ->  reskit-test-data/era5
   gwa_100m  ->  reskit-test-data/global-wind-atlas/gwa100-like.tif
   gwa_50m   ->  reskit-test-data/global-wind-atlas/gwa50-like.tif
@@ -194,8 +208,8 @@ reach reports `nothing to fetch` rather than pretending something was present.
 ## `paths <collection> [--test]` { #paths-collection }
 
 ```bash
-ethos-data -p reskit paths onshore_wind --test
-ethos-data -p reskit paths onshore_wind
+ethos-data -c collections.yaml paths onshore_wind --test
+ethos-data -c collections.yaml paths onshore_wind
 ```
 
 Fetch the collection exactly as `fetch` does — on the collections file already
@@ -207,7 +221,8 @@ key. With `--skip-unavailable`, a handle whose data this machine cannot reach is
 left out of the output and a warning names it — the same contract `fetch` gives
 the files themselves; without the flag, unreachable data stops the command with
 an `AccessError` before anything is downloaded. A collection that declares no
-`paths` exits `2`. The Python equivalent is [`ethos_data.paths`][ethos_data.paths].
+`paths` exits `2`. The Python equivalent is
+[`Collections.paths`][ethos_data.selection.Collections.paths].
 
 ```title="Output"
 era5	/home/me/.cache/ethos-data/reskit-test-data/era5
@@ -342,8 +357,12 @@ ethos-data staging remove <name> [--force]
 The resolved cache directories, why each was chosen, every config file
 consulted with an exists flag, the datasets read from a local root, and the
 configured catalogue and default collections file. Needs no catalogue and no
-network. It does not resolve a package's pin or reflect per-command `--catalog`
-and `--root` overrides; `list` prints the actual catalogue selected for a collection.
+network. A cache path this machine cannot reach -- a network drive that is not
+connected, say -- is marked `NOT REACHABLE` with the reason, and the cache
+contents are listed one level deep only, so the command finishes even when the
+cache is a slow share. It does not resolve a collections file's pin or reflect
+per-command `--catalog` and `--root` overrides; `list` prints the actual
+catalogue selected for a collection.
 
 ### Setting a cache root
 
@@ -392,7 +411,7 @@ file locations.
 |---|---|
 | `0` | success |
 | `1` | `list` reported an `[unresolvable]` row, `verify` found problems or skipped an unresolvable collection |
-| `2` | an `AccessError`, an unknown dataset, collection or package, a collection whose definition cannot be resolved (`CollectionError`), a catalogue index that cannot be read (`CatalogUnavailable`), a catalogue copy whose index lists a dataset with no descriptor or shard behind it (`IncompleteCatalog`), an invalid bundle, or no collections file — printed as a message, not a traceback |
+| `2` | an `AccessError`, an unknown dataset or collection, a collection whose definition cannot be resolved (`CollectionError`), a catalogue index that cannot be read (`CatalogUnavailable`), a catalogue copy whose index lists a dataset with no descriptor or shard behind it (`IncompleteCatalog`), an invalid bundle, or no collections file — printed as a message, not a traceback |
 
 ## `bundle`
 
@@ -401,7 +420,7 @@ metadata. dCache remains authoritative. Bundle reads use only local files and
 never overwrite fixtures or fall back to downloads.
 
 ```bash
-ethos-data -p reskit bundle export tests/data-bundle test_suite --source-revision v2026.09
+ethos-data -c collections.yaml bundle export tests/data-bundle test_suite --source-revision v2026.09
 ethos-data bundle verify tests/data-bundle test_suite
 ethos-data bundle fetch tests/data-bundle test_suite
 ethos-data bundle fetch tests/data-bundle test_suite --allow-modified
@@ -417,5 +436,5 @@ ethos-data bundle fetch tests/data-bundle test_suite --allow-modified
 | `fetch --allow-modified` | Explicit development override for changed bytes; warns and retains original metadata. Missing files still fail. |
 
 Global cache, staging, and skip-unavailable settings do not redirect bundle reads.
-`-c`, `-p` and `--catalog` select inputs for export only. Invalid bundle inputs exit 2.
+`-c` (or a tool's own file) and `--catalog` select inputs for export only. Invalid bundle inputs exit 2.
 See [Keep test data in a repository](../../how-to/keep-test-data-in-a-repository.md).

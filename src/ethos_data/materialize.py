@@ -61,7 +61,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .access import entry_for
-from .catalog import Catalog, Resource, UnknownDataset
+from .catalogs import Catalog, Resource, UnknownDataset
 from .config import Roots, current_user
 from .linking import LinkError, source_dir_for
 from .verify import sha256_of, _expected_digest

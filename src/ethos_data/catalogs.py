@@ -30,8 +30,13 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import Roots
 
 __all__ = [
     "LICENSE_RESOLVED",
@@ -41,8 +46,11 @@ __all__ = [
     "IncompleteCatalog",
     "Resource",
     "UnknownDataset",
+    "directory_of",
     "license_settled",
     "load_catalog",
+    "select_key",
+    "split_key",
 ]
 
 #: The one value of ``ethos:license_status`` that means somebody has read the
@@ -598,6 +606,70 @@ class Catalog:
         for dataset in self.datasets.values():
             dataset.load()
 
+    # -- Access by key -----------------------------------------------------
+    #
+    # The catalogue is the place to ask for one dataset, folder or file by its
+    # key; a collections file (:class:`ethos_data.Collections`) is the place to
+    # ask for what a tool's workflow needs by name. ``ethos_data.catalog()``
+    # builds a handle for the configured catalogue; ``Collections.catalog`` is
+    # the one a tool's collections file pins.
+
+    def overlaid(self, roots: Roots | None = None, warn: bool = True) -> Catalog:
+        """This catalogue with the staging overlay applied, once.
+
+        A view :func:`ethos_data.staging.with_staging` already returned comes
+        back unchanged, so a catalogue handed around the API is never overlaid
+        -- and warned about -- a second time.
+        """
+        if self.staged:
+            return self
+        from .staging import with_staging
+
+        return with_staging(self, roots, warn=warn)
+
+    def resources(self, key: str) -> list[Resource]:
+        """The files under a key, in key order, without fetching anything.
+
+        The answer to "what is in this dataset, and what do I put after the
+        slash to get one file?". ``key`` is a dataset, a family, or
+        ``"<dataset>/<folder>"``; for a single file it is that file, with its
+        sidecars.
+        """
+        catalog = self.overlaid(warn=False)
+        name, inner = split_key(catalog, key)
+        found, _ = select_key(catalog, name, inner, key)
+        return sorted(found, key=lambda r: r.key)
+
+    def path(
+        self,
+        key: str,
+        *,
+        root: Roots | str | Path | None = None,
+        progressbar: bool = False,
+    ) -> Path:
+        """The absolute local path of a file or folder, fetching it if necessary.
+
+        ``key`` is ``"<dataset>/<path>"`` for one file -- a shapefile brings
+        its sidecars along -- or ``"<dataset>/<folder>"``, ``"<dataset>"`` or
+        a dataset family for a directory, in which case every file under it is
+        fetched first. :meth:`resources` says what is under a key without
+        fetching. Files already in the cache are not downloaded again.
+        """
+        from .access import AccessError
+        from .config import Roots
+        from .retrieval import download
+
+        roots = Roots.coerce(root)
+        catalog = self.overlaid(roots)
+        name, inner = split_key(catalog, key)
+        found, target = select_key(catalog, name, inner, key)
+        files = download(catalog, found, root=roots, progressbar=progressbar)
+        if target is not None:
+            if target.key not in files:
+                raise AccessError(f"{key!r} is not available on this machine.")
+            return Path(os.path.abspath(files[target.key]))
+        return Path(os.path.abspath(directory_of(files, found, name, inner, key)))
+
 
 def load_catalog(location: str) -> Catalog:
     """Load a datacatalog.json.  Dataset inventories are fetched on first use.
@@ -633,3 +705,88 @@ def load_catalog(location: str) -> Catalog:
         for entry in descriptor.get("datasets", [])
     }
     return Catalog(location=location, descriptor=descriptor, datasets=datasets)
+
+
+def split_key(catalog: Catalog, key: str) -> tuple[str, str]:
+    """Split a key into the dataset it names and the path inside that dataset.
+
+    Dataset names can contain "/" themselves -- ``reskit-test-data/era5`` is a
+    member of the ``reskit-test-data`` family -- so the longest dataset name
+    that prefixes the key wins, not whatever precedes the first slash.
+    """
+    key = key.strip("/")
+    if key in catalog.datasets:
+        return key, ""
+    parts = key.split("/")
+    for cut in range(len(parts) - 1, 0, -1):
+        name = "/".join(parts[:cut])
+        dataset = catalog.datasets.get(name)
+        if dataset is not None and not dataset.namespace:
+            return name, "/".join(parts[cut:])
+    catalog.dataset(parts[0])  # an unknown name raises, listing what there is
+    members = ", ".join(d.name for d in catalog.members_of(parts[0])) or "none"
+    raise UnknownDataset(
+        f"{key!r} names no dataset in the {describe_catalog(catalog.descriptor, catalog.location)}: "
+        f"{parts[0]!r} is a family, and none of its members ({members}) starts the key."
+    )
+
+
+def select_key(
+    catalog: Catalog, name: str, inner: str, key: str
+) -> tuple[list[Resource], Resource | None]:
+    """The resources to fetch for a key, and the one file it names, if it names one."""
+    if not inner:
+        found = [r for member in catalog.members_of(name) for r in member.resources.values()]
+        if not found:
+            raise KeyError(f"{key!r} has no files in the catalogue")
+        return found, None
+    dataset = catalog.dataset(name)
+    resource = dataset.resource_at(inner)
+    if resource is not None:
+        sidecars = [dataset.resource_at(sidecar) for sidecar in resource.sidecars]
+        return [resource, *(s for s in sidecars if s is not None)], resource
+    # Not a file, so a folder -- matched on a directory boundary, so that
+    # "merra-like" means the folder and not also the sibling "merra-like.nc4".
+    prefix = inner + "/"
+    under = [r for p, r in dataset.resources_matching([prefix + "**"]).items()
+             if p.startswith(prefix)]
+    if not under:
+        raise KeyError(
+            f"{key!r} is not in the catalogue: {name!r} has no file or folder {inner!r}"
+        )
+    return sorted(under, key=lambda r: r.key), None
+
+
+def directory_of(
+    files: Mapping[str, Path], resources: list[Resource], name: str, inner: str, key: str
+) -> Path:
+    """Where a folder, a dataset or a family ended up on this machine.
+
+    Read off the files themselves rather than off a root setting: a dataset may
+    come from the public cache, the restricted cache, staging or its own root,
+    and each returned path already says which.
+    """
+    from .access import AccessError
+
+    found = set()
+    for resource in resources:
+        local = files.get(resource.key)
+        if local is None:
+            continue
+        # Up from the file to its dataset's directory, then from a member up to
+        # the family the key named (reskit-test-data/era5 -> reskit-test-data).
+        levels = len(PurePosixPath(resource.path).parts) + resource.dataset.count("/") - name.count("/")
+        directory = Path(local)
+        for _ in range(levels):
+            directory = directory.parent
+        found.add(directory)
+    if not found:
+        raise AccessError(f"nothing under {key!r} is available on this machine.")
+    if len(found) > 1:
+        raise AccessError(
+            f"{key!r} is spread over {len(found)} directories "
+            f"({', '.join(sorted(map(str, found)))}); ask for its members one at a time, "
+            f"or use fetch() for the individual files."
+        )
+    base = found.pop()
+    return base / inner if inner else base

@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ethos_data.catalog import Catalog, Dataset, Resource, license_settled
+from ethos_data.catalogs import Catalog, Dataset, Resource, license_settled
 from ethos_data.config import Roots
 from ethos_data.linking import LinkError, link
 from ethos_data.maintain import namespace

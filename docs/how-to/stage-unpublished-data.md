@@ -26,13 +26,15 @@ In a script, by path:
 ```python
 import ethos_data
 
-table = ethos_data.path("my-new-dataset/results/table.csv")
-folder = ethos_data.path("my-new-dataset")
+catalog = ethos_data.catalog()
+table = catalog.path("my-new-dataset/results/table.csv")
+folder = catalog.path("my-new-dataset")
 ```
 
-In your package, add it to the collections file like any catalogued dataset:
+In your package, add it to the collections file like any catalogued dataset,
+then use the collection through that file:
 
-```yaml title="reskit/data/collections.yaml"
+```yaml title="collections.yaml"
 collections:
   my_workflow:
     include:
@@ -40,11 +42,12 @@ collections:
 ```
 
 ```bash
-ethos-data -p reskit fetch my_workflow
+ethos-data -c collections.yaml fetch my_workflow
 ```
 
 ```python
-files = ethos_data.fetch("my_workflow", package="reskit")
+data = ethos_data.collections("collections.yaml")
+files = data.fetch("my_workflow")
 ```
 
 Every read from staging warns that the data is staged, and

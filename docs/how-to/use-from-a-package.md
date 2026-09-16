@@ -68,33 +68,69 @@ or `ethos-data config set-catalog`. See
 [Write a collections file](write-a-collections-file.md) for all keys and
 patterns.
 
-## 3. Register the collections file
+## 3. Build the handle and the command
 
-```toml title="pyproject.toml"
-[project.entry-points."ethos_data.collections"]
-reskit = "reskit.data"
+Create a small module beside the file — for RESKit, `reskit/data/__init__.py`.
+It builds one `ethos_data.Collections` handle on the file, once per process,
+and forwards to it; the same module is the body of the package's own data
+command:
+
+```python title="reskit/data/__init__.py"
+from functools import lru_cache
+from pathlib import Path
+
+COLLECTIONS_FILE = Path(__file__).with_name("collections.yaml")
+
+
+@lru_cache(maxsize=1)
+def handle():
+    import ethos_data  # on first use, so `import reskit` works without it
+
+    return ethos_data.collections(COLLECTIONS_FILE, tool="reskit")
+
+
+def paths(collection, test=False):
+    return handle().paths(collection, test=test)
+
+
+def fetch(collection, test=False):
+    return handle().fetch(collection, test=test)
+
+
+def main(argv=None):
+    import ethos_data
+
+    return ethos_data.tool_main(COLLECTIONS_FILE, tool="reskit", argv=argv)
 ```
 
-The name (`reskit`) is what users pass as `package="reskit"` or `-p reskit`.
-The value is the module whose directory contains `collections.yaml`.
-
-Ship the file as package data, for example with setuptools:
+Wire `main` up as a console script and ship the file as package data, for
+example with setuptools:
 
 ```toml title="pyproject.toml"
+[project.scripts]
+reskit-data = "reskit.data:main"
+
 [tool.setuptools.package-data]
 "reskit.data" = ["collections.yaml"]
 ```
 
-Reinstall the package, for example with `pip install -e . --no-deps`, so that
-the entry point is registered.
+Nothing is registered with ETHOS.Data: the module finds the file beside
+itself, and `reskit-data` is an ordinary console script. A fresh checkout
+needs one reinstall for the script to appear, for example with
+`pip install -e . --no-deps`. `tool_main` builds the handle only for the
+commands that need it, so `reskit-data --help` and `reskit-data config show`
+work without loading the catalogue. `tool` names the package in messages and
+gives the command its default name; `catalog=` on both calls is the place for
+a package-specific catalogue override, applied below `--catalog` and above
+`$ETHOS_DATA_CATALOG`.
 
 ## 4. Use the data in code, examples and tests
 
 ```python
-import ethos_data
 import reskit as rk
+from reskit import data
 
-inputs = ethos_data.paths("onshore_wind", package="reskit", test=True)
+inputs = data.paths("onshore_wind", test=True)
 result = rk.wind.wind_era5_PenaSanchezDunkelWinklerEtAl2025(
     placements=placements,
     era5_path=inputs["era5"],
@@ -106,30 +142,37 @@ result = rk.wind.wind_era5_PenaSanchezDunkelWinklerEtAl2025(
 `paths()` fetches the collection and returns its handles as
 `{handle: absolute path}`, so the example needs no resource key. `test=True`
 selects the `test` variant; drop it and the same code runs on the full data.
-The whole collection by resource key, and a single file or folder, remain
-available:
+The whole collection by resource key, and a single file or folder in the
+catalogue version the file pins, remain available through the handle:
 
 ```python
-files = ethos_data.fetch("onshore_wind", package="reskit")
-era5_folder = ethos_data.path("reskit-test-data/era5", package="reskit")
+files = data.handle().fetch("onshore_wind")
+era5_folder = data.handle().catalog.path("reskit-test-data/era5")
 ```
-
-With `package="reskit"`, all three use the catalogue version pinned in step 2.
 
 ## 5. Check it
 
 From a directory outside the source checkout:
 
 ```bash
-ethos-data -p reskit list
-ethos-data -p reskit info onshore_wind --test
-ethos-data -p reskit plan test_suite
-ethos-data -p reskit paths onshore_wind --test
+reskit-data --help
+reskit-data list
+reskit-data paths onshore_wind --test
 ```
 
-`list` shows `onshore_wind [test]` and `onshore_wind [full]` as separate rows.
-`paths --test` fetches the test variant and prints one `handle<TAB>path` line
-per handle.
+`--help` lists the commands without loading the catalogue. `list` shows
+`onshore_wind [test]` and `onshore_wind [full]` as separate rows. `paths
+--test` fetches the test variant and prints one `handle<TAB>path` line per
+handle. From the checkout root, the same `list` runs on the file through
+`ethos-data`, with no console script involved:
+
+```bash
+ethos-data -c reskit/data/collections.yaml list
+```
+
+How users call `reskit-data` day to day — fetching inputs, configuring the
+cache — belongs in your package's own documentation; ETHOS.Data's pages cover
+`ethos-data` and `ethos_data`.
 
 ## If the package needs data that is not catalogued yet
 

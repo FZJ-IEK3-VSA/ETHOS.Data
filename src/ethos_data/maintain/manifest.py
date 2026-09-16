@@ -35,7 +35,7 @@ rendered as a resource-level ``licenses`` override.
 A dataset that declares ``ethos:shard_depth: N`` is written *sharded*: the
 inventory is split across ``manifests/<prefix>.json``, one file per directory
 prefix of N segments, and ``datapackage.json`` carries an ``ethos:shards`` index
-instead of a ``resources`` array.  ``ethos_data.catalog`` then parses only the
+instead of a ``resources`` array.  ``ethos_data.catalogs`` then parses only the
 shards a selection can match.  The grouping rule is imported from the reader
 rather than reimplemented -- writer and reader must agree on it exactly.
 
@@ -66,7 +66,7 @@ from pathlib import Path
 
 import yaml
 
-from ..catalog import CATALOG_ROLES, ROLE_KEY, ROLE_SOURCE, ROOT_SHARD, shard_key
+from ..catalogs import CATALOG_ROLES, ROLE_KEY, ROLE_SOURCE, ROOT_SHARD, shard_key
 from ..selection import path_matches
 from . import (
     INHERITED_KEYS,

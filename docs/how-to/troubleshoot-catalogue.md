@@ -33,18 +33,18 @@ To diagnose remote metadata caching without changing the pin:
 === "Bash"
 
     ```bash
-    ETHOS_CATALOG_NO_CACHE=1 ethos-data -p reskit list
+    ETHOS_CATALOG_NO_CACHE=1 ethos-data -c collections.yaml list
     ```
 
 === "PowerShell"
 
     ```powershell
     $env:ETHOS_CATALOG_NO_CACHE = "1"
-    ethos-data -p reskit list
+    ethos-data -c collections.yaml list
     Remove-Item Env:ETHOS_CATALOG_NO_CACHE
     ```
 
-Replace `reskit` with the affected package and retain its catalogue override.
+Use the reporter's collections file and retain their catalogue override.
 This bypasses metadata caching, not dataset storage.
 
 ## 2. Check source and generated metadata

@@ -39,7 +39,8 @@ that when the collection is resolved — for the collection asked for and for
 every collection it reaches through `extends`, so a plain `all` that extends a
 lopsided pair is refused as well. That check is the interchangeability
 guarantee: code written as
-`ethos_data.paths("onshore_wind", package="reskit", test=True)` runs unchanged
+`data.paths("onshore_wind", test=True)`, where
+`data = ethos_data.collections("collections.yaml")`, runs unchanged
 on the full data once `test=True` is dropped, because every handle it asks for
 exists in both variants. A handle present in only one of them would fail on the
 machine that has the full data, long after the example passed — so the reader

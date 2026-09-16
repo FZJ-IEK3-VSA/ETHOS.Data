@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .access import ORIGIN_STAGING, RESTRICTED, Location, locate
-from .catalog import Catalog, Resource
+from .catalogs import Catalog, Resource
 from .config import Roots, dataset_roots
 
 __all__ = ["Finding", "verify", "repair", "summarise", "STATUSES", "OK", "UNAVAILABLE"]

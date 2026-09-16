@@ -48,7 +48,7 @@ local debugging; their published origin remains dCache.
 
 | Boundary | Information exchanged | Technical interface |
 |---|---|---|
-| Consuming package → reader | Collection name, variant, catalogue location, options; resource keys, named paths and local paths returned | Python `fetch()` / `paths()` / `fetch_one()` or CLI; collections YAML |
+| Consuming package → reader | Collection name, variant, catalogue location, options; resource keys, named paths and local paths returned | Python `Collections.fetch()` / `paths()`, `Catalog.path()` or CLI; collections YAML |
 | Reader → metadata location | Index, requested descriptors and shards | Filesystem reads or HTTP(S) JSON; relative references resolved from the catalogue |
 | Reader → local storage | Presence checks, reads and verified cache downloads | Paths, directories and symbolic links |
 | Reader → dCache | Published dataset files | HTTP(S), with content hashes supplied by metadata |

@@ -34,7 +34,7 @@ from pathlib import Path
 
 import yaml
 
-from ..catalog import license_settled
+from ..catalogs import license_settled
 from . import dataset_name_for, datasets_dir, is_namespace, iter_dataset_dirs
 
 __all__ = ["Action", "plan", "apply", "run"]

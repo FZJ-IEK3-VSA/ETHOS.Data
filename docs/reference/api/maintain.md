@@ -1,7 +1,7 @@
 # Maintainer tooling
 
 `ethos_data.maintain` is the writing half of the format: the code that produces
-the descriptors `ethos_data.catalog` reads. Consumers usually need no maintainer
+the descriptors `ethos_data.catalogs` reads. Consumers usually need no maintainer
 imports; ordinary APIs also manage downloads, caches, and local development data.
 
 Both halves ship in one distribution on purpose. The `ethos:` extensions are a

@@ -66,8 +66,8 @@ dataset or a family. A file handle must be selected by `include`; a folder
 handle needs at least one selected file under it and resolves to the directory
 holding them. Handles are inherited through `extends`, and your own entry wins.
 Name the handles after the workflow's arguments — `gwa_100m` for
-`gwa_100m_path`; callers type
-`ethos_data.paths("onshore_wind", package="your_package")["gwa_100m"]`.
+`gwa_100m_path`; callers type `paths("onshore_wind")["gwa_100m"]` on the
+handle built from your file.
 
 Check:
 
@@ -113,12 +113,12 @@ and `full:`:
 Each variant holds its own `extends`, `include` and `paths`; `title` stays at
 the top, and no selection key may sit beside the variants. Give both variants
 the same handles: that is what lets
-`ethos_data.paths("onshore_wind", package="your_package", test=True)` and the
-same call without `test=True` feed the same code. A plain parent such as
-`landcover` is the same for both variants; a parent with variants contributes
-the matching one. The full data is the default, so a plain `all` that extends
-`onshore_wind` selects its full variant, and `fetch all --test` its test
-variant.
+`ethos_data.collections("collections.yaml").paths("onshore_wind", test=True)`
+and the same call without `test=True` feed the same code. A plain parent such
+as `landcover` is the same for both variants; a parent with variants
+contributes the matching one. The full data is the default, so a plain `all`
+that extends `onshore_wind` selects its full variant, and `fetch all --test`
+its test variant.
 
 Check:
 
@@ -158,8 +158,8 @@ For a standalone workflow:
 ethos-data -c collections.yaml fetch all
 ```
 
-For installed-package discovery, [register and ship the file](use-from-a-package.md).
-Users can then run `ethos-data -p your_package fetch all`.
+For a package, [ship the file with it](use-from-a-package.md). Users then name
+the shipped file with `-c`, or use the package's own command if it provides one.
 
 See [Collections format](../reference/schemas.md#collectionsyaml) for every key,
 family selector, and pattern rule.

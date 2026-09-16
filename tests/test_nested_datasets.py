@@ -292,7 +292,7 @@ class TestAddressing:
             tmp = Path(tmp)
             catalog = build(tmp, {"alpha": PUBLIC_MEMBER})
             build_run(catalog, [])
-            from ethos_data.catalog import load_catalog
+            from ethos_data.catalogs import load_catalog
 
             loaded = load_catalog(str(catalog / "datacatalog.json"))
             dataset = loaded.dataset("family/alpha")

@@ -24,17 +24,20 @@ dataset's files; do not append its name again.
 
 ## Check and use the data
 
-Replace the package and collection below with the workflow requiring the dataset:
+Replace the collection below with the one requiring the dataset.
+`collections.yaml` is the file your project uses or the one a package ships:
 
 ```bash
 ethos-data config show
-ethos-data -p reskit plan onshore_wind
-ethos-data -p reskit verify onshore_wind --deep
-ethos-data -p reskit fetch onshore_wind
+ethos-data -c collections.yaml plan onshore_wind
+ethos-data -c collections.yaml verify onshore_wind --deep
+ethos-data -c collections.yaml fetch onshore_wind
 ```
 
 The restricted files must be available in place and match the inventory.
 Fetching reads them there; it never downloads or repairs restricted bytes.
+A package that ships its collections may also provide a command of its own
+for them; its documentation says so.
 
 ## Obtain a missing required input
 
@@ -48,7 +51,7 @@ mismatched installation through the internal support channel.
 Only if the workflow explicitly handles omitted data:
 
 ```bash
-ethos-data --skip-unavailable -p reskit fetch onshore_wind
+ethos-data --skip-unavailable -c collections.yaml fetch onshore_wind
 ```
 
 Keep the global option before `fetch`. In Python, pass `skip_unavailable=True`
@@ -60,11 +63,13 @@ path whose data was skipped; a warning names what was left out:
 ```python
 import ethos_data
 
-files = ethos_data.fetch("onshore_wind", package="reskit", skip_unavailable=True)
+data = ethos_data.collections("collections.yaml")
+
+files = data.fetch("onshore_wind", skip_unavailable=True)
 if "licensed-example/layer.tif" in files:
     layer = files["licensed-example/layer.tif"]
 
-inputs = ethos_data.paths("onshore_wind", package="reskit", skip_unavailable=True)
+inputs = data.paths("onshore_wind", skip_unavailable=True)
 if "layer" in inputs:
     layer = inputs["layer"]
 ```

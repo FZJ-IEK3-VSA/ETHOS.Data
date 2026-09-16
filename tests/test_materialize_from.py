@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from ethos_data.catalog import Catalog, Dataset, Resource
+from ethos_data.catalogs import Catalog, Dataset, Resource
 from ethos_data.cli import main
 from ethos_data.config import Roots
 from ethos_data.materialize import PROVENANCE_FILE, materialize, plan_materialize

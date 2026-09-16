@@ -21,7 +21,7 @@ from typing import Mapping, Sequence
 import pooch
 import yaml
 
-from .catalog import Catalog, Resource
+from .catalogs import Catalog, Resource
 from .retrieval import DataFiles
 from .selection import load_collections
 

@@ -31,7 +31,7 @@ from pathlib import Path
 
 import yaml
 
-from ..catalog import ROLE_KEY, ROLE_PUBLISHED
+from ..catalogs import ROLE_KEY, ROLE_PUBLISHED
 from . import NAMESPACE_KEY, dataset_name_for, datasets_dir, iter_dataset_dirs
 
 # Maintainer-only. Never appears in the public catalogue.

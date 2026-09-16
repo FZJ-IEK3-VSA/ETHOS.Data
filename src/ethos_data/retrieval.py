@@ -37,7 +37,7 @@ from .access import (
     locate,
     unavailable,
 )
-from .catalog import Catalog, Resource
+from .catalogs import Catalog, Resource
 from .config import ENV_VAR, Roots, dataset_roots, resolve_public_cache
 
 __all__ = [

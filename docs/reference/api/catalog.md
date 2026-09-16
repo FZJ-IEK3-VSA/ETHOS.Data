@@ -11,15 +11,20 @@ patterns could reach.
 ## Catalogue
 
 Three errors say what went wrong:
-[`CatalogUnavailable`][ethos_data.catalog.CatalogUnavailable] when the index
+[`CatalogUnavailable`][ethos_data.catalogs.CatalogUnavailable] when the index
 itself cannot be read — a wrong location, or a pinned revision or repository
 that does not exist; its message names the location and says how to point at
-another catalogue — [`UnknownDataset`][ethos_data.catalog.UnknownDataset] for
+another catalogue — [`UnknownDataset`][ethos_data.catalogs.UnknownDataset] for
 a dataset the catalogue does not describe, and
-[`IncompleteCatalog`][ethos_data.catalog.IncompleteCatalog] for a dataset the
+[`IncompleteCatalog`][ethos_data.catalogs.IncompleteCatalog] for a dataset the
 index lists whose descriptor or shard is missing.
 
-::: ethos_data.catalog
+`Catalog.path` and `Catalog.resources` answer for a key — one file, a folder,
+a dataset or a family — fetching in the first case and only reading in the
+second. `ethos_data.catalog()` builds the handle for the configured catalogue;
+`Collections.catalog` is the one a tool's file pins.
+
+::: ethos_data.catalogs
     options:
       members:
         - load_catalog
@@ -44,8 +49,12 @@ selects the variant and runs `check_variants` on every collection it visits
 through `extends`, not only the one asked for. `catalog_pin` answers which
 catalogue a collections file pins for itself, resolved against the file — the
 answer `load_collections` uses, and the reason `ethos-data path` and
-`ethos-data fetch` given the same `-c` file read the same catalogue. The file
-format is in [`collections.yaml`](../schemas.md#collectionsyaml).
+`ethos-data fetch` given the same `-c` file read the same catalogue.
+`Collections.fetch`, `paths` and `plan` make a collection available, by key
+and by named handle, and `main` runs the collection commands on the file;
+`ethos_data.collections()` builds the handle a tool keeps for the life of the
+process. The file format is in
+[`collections.yaml`](../schemas.md#collectionsyaml).
 
 ::: ethos_data.selection
     options:
@@ -55,6 +64,7 @@ format is in [`collections.yaml`](../schemas.md#collectionsyaml).
         - Collections
         - CollectionError
         - UnknownCollection
+        - CollectionsNotFound
         - variant_name
         - path_matches
       show_root_heading: false

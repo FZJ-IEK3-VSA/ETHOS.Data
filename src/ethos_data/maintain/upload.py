@@ -44,7 +44,7 @@ from typing import NamedTuple
 
 import yaml
 
-from ..catalog import ROLE_PUBLISHED, license_settled
+from ..catalogs import ROLE_PUBLISHED, license_settled
 from . import catalogue_role, dataset_name_for, datasets_dir, iter_dataset_dirs, resources_of
 
 FRONTEND = "https://hifis-storage-web.desy.de/api/v1"
