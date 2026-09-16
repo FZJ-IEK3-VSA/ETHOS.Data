@@ -21,6 +21,8 @@ dependencies:
   # -- the whole read side, and `catalog build` / `publish` -- works without it.
   # dev
   - pytest
+  - pytest-xdist
+  - pytest-cov
   - ruff
   # Diagram toolchain. The docs reference committed SVGs, so these are needed
   # only to re-render a diagram after editing its .tex source -- an ordinary
