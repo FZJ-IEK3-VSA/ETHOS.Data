@@ -75,6 +75,7 @@ def license_settled(meta: dict) -> bool:
         return True
     return meta.get("ethos:license_status") == LICENSE_RESOLVED
 
+
 #: Refs that move.  A catalogue fetched from one of these must not be cached
 #: forever, or development against the internal catalogue silently goes stale.
 _MOVING_REF = re.compile(r"/(?:refs/heads/)?(?:main|master|HEAD|latest|dev|develop)/")
@@ -199,7 +200,9 @@ class IncompleteCatalog(FileNotFoundError):
     """
 
 
-def _missing_part(dataset: str, what: str, location: str, index_base: str) -> IncompleteCatalog:
+def _missing_part(
+    dataset: str, what: str, location: str, index_base: str
+) -> IncompleteCatalog:
     return IncompleteCatalog(
         f"dataset {dataset!r} is listed in the catalogue index under {index_base} but its "
         f"{what} is missing: {location}\n"
@@ -368,7 +371,7 @@ class Dataset:
 
     @property
     def license_status(self) -> str:
-        """"resolved" once somebody has read the upstream terms.
+        """ "resolved" once somebody has read the upstream terms.
 
         Promoted into the index by build_manifest.py so that listing a catalogue
         does not have to load every descriptor to warn about licensing.
@@ -413,11 +416,15 @@ class Dataset:
                 "file inventory cannot be located."
             )
         location = _join(self.base, self.entry["path"])
-        package = json.loads(_read_part(self.name, "descriptor (datapackage.json)", location, self.base))
+        package = json.loads(
+            _read_part(self.name, "descriptor (datapackage.json)", location, self.base)
+        )
         # Shard paths are relative to the dataset directory, not the catalogue root.
         self._package_base = location.rsplit("/", 1)[0] + "/"
         self._shard_depth = int(package.get("ethos:shard_depth", 0))
-        self._shards = {entry["prefix"]: entry for entry in package.get("ethos:shards", [])}
+        self._shards = {
+            entry["prefix"]: entry for entry in package.get("ethos:shards", [])
+        }
         self._descriptor = package
         if not self._shards:
             self._absorb(package.get("resources", []))
@@ -463,8 +470,11 @@ class Dataset:
         if resource is None:
             return None
         record = {
-            "name": resource.name, "path": resource.path, "bytes": resource.bytes,
-            "hash": resource.hash, "mediatype": resource.mediatype,
+            "name": resource.name,
+            "path": resource.path,
+            "bytes": resource.bytes,
+            "hash": resource.hash,
+            "mediatype": resource.mediatype,
             **self._resource_extras.get(path, {}),
         }
         if resource.sidecars:
@@ -477,14 +487,20 @@ class Dataset:
                 continue
             entry = self._shards[prefix]
             location = _join(self._package_base, entry["path"])
-            shard = json.loads(_read_part(self.name, f"shard {prefix!r}", location, self.base))
+            shard = json.loads(
+                _read_part(self.name, f"shard {prefix!r}", location, self.base)
+            )
             self._absorb(shard.get("resources", []))
             self._loaded_shards.add(prefix)
 
     def _absorb(self, items: list[dict]) -> None:
         for item in items:
-            extras = {key: value for key, value in item.items()
-                      if key not in {"name", "path", "bytes", "hash", "mediatype", "ethos:sidecars"}}
+            extras = {
+                key: value
+                for key, value in item.items()
+                if key
+                not in {"name", "path", "bytes", "hash", "mediatype", "ethos:sidecars"}
+            }
             if extras:
                 self._resource_extras[item["path"]] = extras
             self._resources[item["path"]] = Resource(
@@ -539,7 +555,8 @@ class Catalog:
         """
         prefix = f"{name}/"
         members = [
-            dataset for key, dataset in self.datasets.items()
+            dataset
+            for key, dataset in self.datasets.items()
             if (key == name or key.startswith(prefix)) and not dataset.namespace
         ]
         return sorted(members, key=lambda d: d.name)
@@ -563,7 +580,8 @@ class Catalog:
             # pretending the name was unknown.
             return [self.datasets[pattern]]
         matched = [
-            dataset for key, dataset in self.datasets.items()
+            dataset
+            for key, dataset in self.datasets.items()
             if not dataset.namespace and path_matches(key, pattern)
         ]
         if matched:
@@ -583,8 +601,10 @@ class Catalog:
                 # By far the likeliest cause: it was published once and later
                 # withdrawn, so the collections file is not wrong, just newer
                 # than the catalogue it is pointed at -- or older than it.
-                hint = ("\nIf it used to exist, it has been withdrawn from publication. "
-                        "Pin an older catalogue, or ask the maintainers to republish it.")
+                hint = (
+                    "\nIf it used to exist, it has been withdrawn from publication. "
+                    "Pin an older catalogue, or ask the maintainers to republish it."
+                )
             raise UnknownDataset(
                 f"unknown dataset {name!r}: the {where} does not describe it.\n"
                 f"It has: {known}.{hint}"
@@ -736,7 +756,9 @@ def select_key(
 ) -> tuple[list[Resource], Resource | None]:
     """The resources to fetch for a key, and the one file it names, if it names one."""
     if not inner:
-        found = [r for member in catalog.members_of(name) for r in member.resources.values()]
+        found = [
+            r for member in catalog.members_of(name) for r in member.resources.values()
+        ]
         if not found:
             raise KeyError(f"{key!r} has no files in the catalogue")
         return found, None
@@ -748,8 +770,11 @@ def select_key(
     # Not a file, so a folder -- matched on a directory boundary, so that
     # "merra-like" means the folder and not also the sibling "merra-like.nc4".
     prefix = inner + "/"
-    under = [r for p, r in dataset.resources_matching([prefix + "**"]).items()
-             if p.startswith(prefix)]
+    under = [
+        r
+        for p, r in dataset.resources_matching([prefix + "**"]).items()
+        if p.startswith(prefix)
+    ]
     if not under:
         raise KeyError(
             f"{key!r} is not in the catalogue: {name!r} has no file or folder {inner!r}"
@@ -758,7 +783,11 @@ def select_key(
 
 
 def directory_of(
-    files: Mapping[str, Path], resources: list[Resource], name: str, inner: str, key: str
+    files: Mapping[str, Path],
+    resources: list[Resource],
+    name: str,
+    inner: str,
+    key: str,
 ) -> Path:
     """Where a folder, a dataset or a family ended up on this machine.
 
@@ -775,7 +804,11 @@ def directory_of(
             continue
         # Up from the file to its dataset's directory, then from a member up to
         # the family the key named (reskit-test-data/era5 -> reskit-test-data).
-        levels = len(PurePosixPath(resource.path).parts) + resource.dataset.count("/") - name.count("/")
+        levels = (
+            len(PurePosixPath(resource.path).parts)
+            + resource.dataset.count("/")
+            - name.count("/")
+        )
         directory = Path(local)
         for _ in range(levels):
             directory = directory.parent

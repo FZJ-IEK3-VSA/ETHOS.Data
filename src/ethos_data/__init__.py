@@ -147,7 +147,6 @@ __all__ = [
 __version__ = "0.1.1"
 
 
-
 def collections(
     path: str | Path,
     *,
@@ -174,7 +173,9 @@ def collections(
     by key.
     """
     roots = Roots.coerce(root) if root is not None else None
-    return load_collections(path, catalog=_configured_catalog(catalog), roots=roots, tool=tool)
+    return load_collections(
+        path, catalog=_configured_catalog(catalog), roots=roots, tool=tool
+    )
 
 
 def catalog(
@@ -267,7 +268,10 @@ def fetch(
     and the catalogue are read once.
     """
     return _handle(collections, catalog, root).fetch(
-        collection, test=test, progressbar=progressbar, skip_unavailable=skip_unavailable
+        collection,
+        test=test,
+        progressbar=progressbar,
+        skip_unavailable=skip_unavailable,
     )
 
 
@@ -287,7 +291,10 @@ def paths(
     ``ethos_data.collections(collections).paths(...)``.
     """
     return _handle(collections, catalog, root).paths(
-        collection, test=test, progressbar=progressbar, skip_unavailable=skip_unavailable
+        collection,
+        test=test,
+        progressbar=progressbar,
+        skip_unavailable=skip_unavailable,
     )
 
 

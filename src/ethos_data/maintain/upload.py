@@ -45,7 +45,13 @@ from typing import NamedTuple
 import yaml
 
 from ..catalogs import ROLE_PUBLISHED, license_settled
-from . import catalogue_role, dataset_name_for, datasets_dir, iter_dataset_dirs, resources_of
+from . import (
+    catalogue_role,
+    dataset_name_for,
+    datasets_dir,
+    iter_dataset_dirs,
+    resources_of,
+)
 
 FRONTEND = "https://hifis-storage-web.desy.de/api/v1"
 MODE_0755 = 493  # dCache wants the mode as a decimal integer, not octal
@@ -79,7 +85,10 @@ def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path | None
         # Distinguish "not described yet" from "described but not built" -- they
         # need different fixes, and telling someone to build a dataset that does
         # not exist just moves the same error one command further along.
-        known = sorted(dataset_name_for(datasets_dir(catalog_root), d) for d in iter_dataset_dirs(datasets_dir(catalog_root)))
+        known = sorted(
+            dataset_name_for(datasets_dir(catalog_root), d)
+            for d in iter_dataset_dirs(datasets_dir(catalog_root))
+        )
         listing = "\n".join(f"    {name}" for name in known) or "    (none)"
         raise SystemExit(
             f"no dataset called {dataset_name!r} in {datasets_dir(catalog_root)}.\n"
@@ -108,8 +117,13 @@ def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path | None
     return meta, package, source_dir, dataset_dir
 
 
-def preflight(name: str, package: dict, source_dir: Path | None, allow_internal: bool,
-              verify_only: bool) -> str:
+def preflight(
+    name: str,
+    package: dict,
+    source_dir: Path | None,
+    allow_internal: bool,
+    verify_only: bool,
+) -> str:
     access = package.get("ethos:access", "public")
     prefix = package.get("ethos:remote_prefix")
 
@@ -136,7 +150,8 @@ def preflight(name: str, package: dict, source_dir: Path | None, allow_internal:
     if not verify_only and not license_settled(package):
         note = package.get("ethos:license_note", "")
         raise SystemExit(
-            f"{name} has unresolved licensing and is not uploaded. {note}\n".rstrip() + "\n"
+            f"{name} has unresolved licensing and is not uploaded. {note}\n".rstrip()
+            + "\n"
             "Record the terms in its dataset.yaml -- a `licenses:` entry, or "
             "`ethos:license_status: resolved` once somebody has read them -- and rebuild.\n"
             "Development against it does not need an upload; stage it instead:\n"
@@ -144,7 +159,9 @@ def preflight(name: str, package: dict, source_dir: Path | None, allow_internal:
         )
 
     if not prefix:
-        raise SystemExit(f"{name} declares no ethos:remote_prefix, so there is nowhere to put it.")
+        raise SystemExit(
+            f"{name} declares no ethos:remote_prefix, so there is nowhere to put it."
+        )
 
     if source_dir is None:
         if not verify_only:
@@ -158,7 +175,9 @@ def preflight(name: str, package: dict, source_dir: Path | None, allow_internal:
     return prefix
 
 
-def remote_manifest_check(resources: list[dict], base_url: str) -> tuple[list, list, list]:
+def remote_manifest_check(
+    resources: list[dict], base_url: str
+) -> tuple[list, list, list]:
     """HEAD every resource anonymously. Returns (ok, missing, wrong_size)."""
     ok, missing, wrong = [], [], []
     for resource in resources:
@@ -190,7 +209,10 @@ def chmod(path: str, mode: int, bearer: str) -> int:
     request = urllib.request.Request(
         f"{FRONTEND}/namespace/{path.lstrip('/')}",
         data=json.dumps({"action": "chmod", "mode": mode}).encode(),
-        headers={"Authorization": f"Bearer {bearer}", "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Bearer {bearer}",
+            "Content-Type": "application/json",
+        },
         method="POST",
     )
     try:
@@ -212,7 +234,10 @@ def resolve_name(catalog_root: Path, argument: str) -> str:
     # A nested dataset's name contains a slash -- `reskit-test-data/era5` -- so a
     # slash no longer means "this is a path". Try it as a name first: if it names
     # a described dataset, that is what it is.
-    if not Path(argument).is_absolute() and (datasets / argument / "dataset.yaml").is_file():
+    if (
+        not Path(argument).is_absolute()
+        and (datasets / argument / "dataset.yaml").is_file()
+    ):
         return argument
     # Anything still holding a separator is a path. Both of them, not just "/":
     # on Windows shell completion produces `datasets\global-wind-atlas-v4`, and
@@ -253,6 +278,7 @@ def resolve_name(catalog_root: Path, argument: str) -> str:
 
 class Plan(NamedTuple):
     """One dataset, loaded and cleared for upload."""
+
     name: str
     package: dict
     source_dir: Path | None
@@ -266,9 +292,13 @@ def upload_one(args, plan: Plan, base_url: str, root: str, bearer) -> int:
     destination = f"{args.remote}:{root}/{plan.prefix}"
     dataset_url = f"{base_url}/{plan.prefix}"
 
-    print(f"dataset      {plan.name}  ({plan.package['ethos:file_count']} files, "
-          f"{plan.package['ethos:total_bytes'] / 1e6:,.1f} MB)")
-    print(f"from         {plan.source_dir or '(already uploaded -- no local source_dir)'}")
+    print(
+        f"dataset      {plan.name}  ({plan.package['ethos:file_count']} files, "
+        f"{plan.package['ethos:total_bytes'] / 1e6:,.1f} MB)"
+    )
+    print(
+        f"from         {plan.source_dir or '(already uploaded -- no local source_dir)'}"
+    )
     print(f"to           {destination}")
     print(f"public URL   {dataset_url}\n")
 
@@ -287,18 +317,25 @@ def upload_one(args, plan: Plan, base_url: str, root: str, bearer) -> int:
         # fails in mkstemp before a single byte is uploaded.
         stem = plan.name.replace("/", "-").replace(os.sep, "-")
         handle, listing_path = tempfile.mkstemp(
-            prefix=f"ethos-data-upload-{stem}-", suffix=".txt")
+            prefix=f"ethos-data-upload-{stem}-", suffix=".txt"
+        )
         # rclone reads --files-from as UTF-8, one path per line. Written as bytes
         # because a text-mode write on Windows would end every line CRLF, and
         # rclone would then look for files whose names end in a carriage return.
         with open(handle, "wb") as listing_file:
             listing_file.writelines(
-                f"{resource['path']}\n".encode() for resource in resources)
+                f"{resource['path']}\n".encode() for resource in resources
+            )
         listing = Path(listing_path)
         command = [
-            "rclone", "copy", str(plan.source_dir), destination,
-            "--files-from", str(listing),
-            "--transfers", str(args.transfers),
+            "rclone",
+            "copy",
+            str(plan.source_dir),
+            destination,
+            "--files-from",
+            str(listing),
+            "--transfers",
+            str(args.transfers),
             "--checksum",
             # dCache cannot modify a file in place -- a changed file is delete +
             # rewrite. --immutable makes rclone fail loudly if a published file
@@ -314,11 +351,20 @@ def upload_one(args, plan: Plan, base_url: str, root: str, bearer) -> int:
             listing.unlink(missing_ok=True)
         if result.returncode != 0:
             print("\nrclone failed. Common causes:", file=sys.stderr)
-            print("  * no rclone remote called "
-                  f"{args.remote!r} -- check ~/.config/rclone/rclone.conf", file=sys.stderr)
-            print("  * oidc-agent not running, so bearer_token_command returned nothing", file=sys.stderr)
-            print("  * --immutable tripped: a published file changed. Publish it at a "
-                  "NEW path rather than overwriting.", file=sys.stderr)
+            print(
+                "  * no rclone remote called "
+                f"{args.remote!r} -- check ~/.config/rclone/rclone.conf",
+                file=sys.stderr,
+            )
+            print(
+                "  * oidc-agent not running, so bearer_token_command returned nothing",
+                file=sys.stderr,
+            )
+            print(
+                "  * --immutable tripped: a published file changed. Publish it at a "
+                "NEW path rather than overwriting.",
+                file=sys.stderr,
+            )
             return result.returncode
         if args.dry_run:
             print("\nDry run only; nothing was uploaded.")
@@ -330,21 +376,29 @@ def upload_one(args, plan: Plan, base_url: str, root: str, bearer) -> int:
         if status not in (200, 204):
             print("  chmod failed; anonymous reads will 401 until it succeeds.")
 
-    print("\nverifying anonymous access (no credentials, exactly what a public user gets)")
+    print(
+        "\nverifying anonymous access (no credentials, exactly what a public user gets)"
+    )
     ok, missing, wrong = remote_manifest_check(resources, dataset_url)
     print(f"  readable       {len(ok)}/{plan.package['ethos:file_count']}")
     if wrong:
         print(f"  WRONG SIZE     {len(wrong)}")
         for resource, length in wrong[:5]:
-            print(f"    {resource['path']}: {length} on server, {resource['bytes']} in manifest")
+            print(
+                f"    {resource['path']}: {length} on server, {resource['bytes']} in manifest"
+            )
     if missing:
         print(f"  NOT READABLE   {len(missing)}")
         for resource, why in missing[:5]:
             print(f"    {resource['path']}: {why}")
         print("\n  A 401 here means the directory is not world-readable yet.")
-        print(f"    curl -H \"Authorization: Bearer $(oidc-token {args.oidc_profile})\" \\")
+        print(
+            f'    curl -H "Authorization: Bearer $(oidc-token {args.oidc_profile})" \\'
+        )
         print("      -H 'Content-Type: application/json' -X POST \\")
-        print(f"      '{FRONTEND}/namespace/{namespace_path}' -d '{{\"action\":\"chmod\",\"mode\":493}}'")
+        print(
+            f'      \'{FRONTEND}/namespace/{namespace_path}\' -d \'{{"action":"chmod","mode":493}}\''
+        )
 
     sample = resources[0]["path"]
     where = locality(f"{namespace_path}/{sample}", bearer())
@@ -352,13 +406,17 @@ def upload_one(args, plan: Plan, base_url: str, root: str, bearer) -> int:
     if where == "NEARLINE":
         print("    NEARLINE means tape only -- the first read will block on staging.")
     elif where == "ONLINE":
-        print("    ONLINE means disk. Large files may also gain a tape copy after ~1 week.")
+        print(
+            "    ONLINE means disk. Large files may also gain a tape copy after ~1 week."
+        )
 
     return 1 if (missing or wrong) else 0
 
 
 def run(catalog_root: Path, args) -> int:
-    catalog_meta = yaml.safe_load((catalog_root / "catalog.yaml").read_text(encoding="utf-8"))
+    catalog_meta = yaml.safe_load(
+        (catalog_root / "catalog.yaml").read_text(encoding="utf-8")
+    )
     base_url = catalog_meta["ethos:publication_url"].rstrip("/")
 
     # The upload destination and the URL we verify afterwards have to name the
@@ -379,7 +437,9 @@ def run(catalog_root: Path, args) -> int:
 
     # Deduplicated, because naming a dataset twice should cost one upload, and
     # ordered, so the run reads in the order it was asked for.
-    names = dict.fromkeys(resolve_name(catalog_root, argument) for argument in args.datasets)
+    names = dict.fromkeys(
+        resolve_name(catalog_root, argument) for argument in args.datasets
+    )
 
     # Load and check EVERY dataset before uploading ANY of them. The checks that
     # matter here -- restricted data, an unbuilt manifest, a vanished source_dir
@@ -390,7 +450,9 @@ def run(catalog_root: Path, args) -> int:
     plans = []
     for name in names:
         _meta, package, source_dir, dataset_dir = load(catalog_root, name)
-        prefix = preflight(name, package, source_dir, args.allow_internal, args.verify_only)
+        prefix = preflight(
+            name, package, source_dir, args.allow_internal, args.verify_only
+        )
         plans.append(Plan(name, package, source_dir, dataset_dir, prefix))
 
     # One token for the whole run, fetched only if something actually needs it:
@@ -412,7 +474,10 @@ def run(catalog_root: Path, args) -> int:
     failed: dict[str, int] = {}
     for index, plan in enumerate(plans, start=1):
         if len(plans) > 1:
-            print(f"---- [{index}/{len(plans)}] {plan.name} " + "-" * max(0, 50 - len(plan.name)))
+            print(
+                f"---- [{index}/{len(plans)}] {plan.name} "
+                + "-" * max(0, 50 - len(plan.name))
+            )
         status = upload_one(args, plan, base_url, root, bearer)
         if status:
             failed[plan.name] = status

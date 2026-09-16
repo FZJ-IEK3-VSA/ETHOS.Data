@@ -40,8 +40,13 @@ from . import NAMESPACE_KEY, dataset_name_for, datasets_dir, iter_dataset_dirs
 #   source_dir          -- a path on someone's workstation
 #   ethos:uploaded       -- workflow bookkeeping about where the manifest came from
 #   ethos:frozen         -- the same, without the claim about dCache
-STRIP_FROM_PACKAGE = ("ethos:embargo", "ethos:license_note", "source_dir", "ethos:uploaded",
-                      "ethos:frozen")
+STRIP_FROM_PACKAGE = (
+    "ethos:embargo",
+    "ethos:license_note",
+    "source_dir",
+    "ethos:uploaded",
+    "ethos:frozen",
+)
 
 # Written into the public tree so that a stray local artefact -- an oidc-agent
 # socket symlink, a __pycache__ -- cannot be committed by a careless `git add -A`.
@@ -117,12 +122,16 @@ def _has_public_member(namespace_dir: Path) -> bool:
 
 
 def strip(package: dict) -> dict:
-    return {key: value for key, value in package.items() if key not in STRIP_FROM_PACKAGE}
+    return {
+        key: value for key, value in package.items() if key not in STRIP_FROM_PACKAGE
+    }
 
 
 def render(catalog_root: Path) -> dict[Path, str]:
     """Build the complete public tree in memory: {relative path -> str | bytes}."""
-    catalog_meta = yaml.safe_load((catalog_root / "catalog.yaml").read_text(encoding="utf-8"))
+    catalog_meta = yaml.safe_load(
+        (catalog_root / "catalog.yaml").read_text(encoding="utf-8")
+    )
     for key in STRIP_FROM_PACKAGE:
         catalog_meta.pop(key, None)
     # Overwritten, not inherited: this copy is generated whatever the source says.
@@ -136,7 +145,9 @@ def render(catalog_root: Path) -> dict[Path, str]:
     for dataset_dir, package in public_datasets(catalog_root):
         public_package = strip(package)
         here = Path("datasets") / dataset_dir.relative_to(datasets_dir(catalog_root))
-        files[here / "datapackage.json"] = json.dumps(public_package, indent=2, ensure_ascii=False) + "\n"
+        files[here / "datapackage.json"] = (
+            json.dumps(public_package, indent=2, ensure_ascii=False) + "\n"
+        )
 
         # Archived licence documents travel with the descriptor. A licence that
         # exists only as a URL is a licence that can disappear -- the URL printed
@@ -180,7 +191,7 @@ def render(catalog_root: Path) -> dict[Path, str]:
         size = public_package["ethos:total_bytes"] / 1e6
         note = "downloadable" if access == "public" else "**listed only**"
         rows.append(
-            f"| `{public_package['name']}` | {public_package.get('title','')} "
+            f"| `{public_package['name']}` | {public_package.get('title', '')} "
             f"| {public_package['ethos:file_count']} | {size:,.1f} MB | {note} |"
         )
 
@@ -198,7 +209,11 @@ def render(catalog_root: Path) -> dict[Path, str]:
     )
 
     table = "\n".join(
-        ["| Dataset | Title | Files | Size | Availability |", "|:--|:--|--:|--:|:--|", *rows]
+        [
+            "| Dataset | Title | Files | Size | Availability |",
+            "|:--|:--|--:|--:|:--|",
+            *rows,
+        ]
     )
     files[Path("README.md")] = GENERATED_README.format(table=table)
     files[Path(".gitignore")] = GENERATED_GITIGNORE
@@ -210,19 +225,26 @@ def run(catalog_root: Path, target: str, check: bool = False) -> int:
     files = render(catalog_root)
 
     root = datasets_dir(catalog_root)
-    all_datasets = [d for d in iter_dataset_dirs(root) if (d / "datapackage.json").is_file()]
+    all_datasets = [
+        d for d in iter_dataset_dirs(root) if (d / "datapackage.json").is_file()
+    ]
     published = {
-        Path(*p.parts[1:-1]).as_posix() for p in files if len(p.parts) > 2 and p.parts[0] == "datasets"
+        Path(*p.parts[1:-1]).as_posix()
+        for p in files
+        if len(p.parts) > 2 and p.parts[0] == "datasets"
     }
     withheld = [
-        dataset_name_for(root, d) for d in all_datasets
+        dataset_name_for(root, d)
+        for d in all_datasets
         if dataset_name_for(root, d) not in published
     ]
 
     if check:
         stale = [
-            rel for rel, text in files.items()
-            if not (destination_root / rel).is_file() or (destination_root / rel).read_text(encoding="utf-8") != text
+            rel
+            for rel, text in files.items()
+            if not (destination_root / rel).is_file()
+            or (destination_root / rel).read_text(encoding="utf-8") != text
         ]
         # Anything in the target that we no longer generate is also staleness --
         # a dataset withdrawn from publication must actually disappear.
@@ -230,7 +252,9 @@ def run(catalog_root: Path, target: str, check: bool = False) -> int:
         orphans = [
             str(p.relative_to(destination_root))
             for p in destination_root.rglob("*")
-            if p.is_file() and ".git" not in p.parts and str(p.relative_to(destination_root)) not in generated
+            if p.is_file()
+            and ".git" not in p.parts
+            and str(p.relative_to(destination_root)) not in generated
         ]
         if stale or orphans:
             print("Public catalogue is out of date:", file=sys.stderr)
@@ -243,7 +267,9 @@ def run(catalog_root: Path, target: str, check: bool = False) -> int:
         return 0
 
     if not destination_root.exists():
-        raise SystemExit(f"target does not exist: {destination_root}\nClone the public repo there first.")
+        raise SystemExit(
+            f"target does not exist: {destination_root}\nClone the public repo there first."
+        )
 
     # Remove previously generated content so withdrawn datasets really go away.
     # Symlinks are unlinked without following them: a dangling one is neither a

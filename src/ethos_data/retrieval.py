@@ -119,9 +119,13 @@ class DataFiles(dict):
         """
         matches = [key for key in self if key.endswith(suffix)]
         if not matches:
-            raise KeyError(f"no file ending in {suffix!r}; have: {', '.join(sorted(self))}")
+            raise KeyError(
+                f"no file ending in {suffix!r}; have: {', '.join(sorted(self))}"
+            )
         if len(matches) > 1:
-            raise KeyError(f"{suffix!r} is ambiguous, matches: {', '.join(sorted(matches))}")
+            raise KeyError(
+                f"{suffix!r} is ambiguous, matches: {', '.join(sorted(matches))}"
+            )
         return self[matches[0]]
 
 
@@ -214,8 +218,12 @@ def download(
 
     unreadable = check_missing(locations)
     if unreadable:
-        listing = "\n".join(f"    {loc.path}   [{loc.origin}]" for loc in unreadable[:8])
-        more = "" if len(unreadable) <= 8 else f"\n    ... and {len(unreadable) - 8} more"
+        listing = "\n".join(
+            f"    {loc.path}   [{loc.origin}]" for loc in unreadable[:8]
+        )
+        more = (
+            "" if len(unreadable) <= 8 else f"\n    ... and {len(unreadable) - 8} more"
+        )
         raise AccessError(
             f"{len(unreadable)} file(s) are missing from where they were expected:\n"
             f"{listing}{more}\n"
@@ -284,7 +292,11 @@ def _warn_about_licensing(catalog: Catalog, resources: list[Resource]) -> None:
     ethos:license_status until somebody has actually read the upstream terms.
     """
     unresolved = sorted(
-        {r.dataset for r in resources if catalog.dataset(r.dataset).license_status != "resolved"}
+        {
+            r.dataset
+            for r in resources
+            if catalog.dataset(r.dataset).license_status != "resolved"
+        }
     )
     for name in unresolved:
         note = catalog.dataset(name).descriptor.get("ethos:license_note", "")

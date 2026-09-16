@@ -183,9 +183,11 @@ class Collections:
         if wanted not in found:
             raise CollectionError(
                 f"collection {name!r} has no {wanted!r} variant (it defines: {', '.join(found)}). "
-                + ("Pass test=True (or --test) for its test data."
-                   if wanted == VARIANT_FULL else
-                   "It has no small test selection; ask for the full data.")
+                + (
+                    "Pass test=True (or --test) for its test data."
+                    if wanted == VARIANT_FULL
+                    else "It has no small test selection; ask for the full data."
+                )
             )
         selected = definition[wanted]
         if not isinstance(selected, dict):
@@ -247,7 +249,8 @@ class Collections:
                 )
             files = rule.get("files")
             if files is not None and (
-                not isinstance(files, list) or not all(isinstance(f, str) for f in files)
+                not isinstance(files, list)
+                or not all(isinstance(f, str) for f in files)
             ):
                 raise CollectionError(
                     f"collection {name!r}: include.files for {rule['dataset']!r} must be a "
@@ -264,7 +267,9 @@ class Collections:
             )
         for handle, key in entries.items():
             if not isinstance(handle, str) or not handle:
-                raise CollectionError(f"collection {name!r}: {PATHS_KEY} handles must be names")
+                raise CollectionError(
+                    f"collection {name!r}: {PATHS_KEY} handles must be names"
+                )
             if not isinstance(key, str) or not key.strip("/"):
                 raise CollectionError(
                     f"collection {name!r}: {PATHS_KEY}.{handle} must be a key such as "
@@ -437,7 +442,10 @@ class Collections:
         left out of :meth:`fetch`'s result.
         """
         files = self.fetch(
-            name, test=test, root=root, progressbar=progressbar,
+            name,
+            test=test,
+            root=root,
+            progressbar=progressbar,
             skip_unavailable=skip_unavailable,
         )
         if not files.named and not files.named.omitted:
@@ -463,7 +471,10 @@ class Collections:
         what would be downloaded and how many bytes, what is used in place.
         """
         return retrieval.plan(
-            self.catalog, self.resolve(name, test=test), self._roots(root), skip_unavailable
+            self.catalog,
+            self.resolve(name, test=test),
+            self._roots(root),
+            skip_unavailable,
         )
 
     def main(self, argv: list[str] | None = None, *, prog: str | None = None) -> int:
@@ -490,7 +501,9 @@ class Collections:
             return Roots.coerce(root)
         return self.roots if self.roots is not None else Roots.coerce(None)
 
-    def _named_targets(self, name: str, test: bool, resources: list[Resource]) -> list[_NamedTarget]:
+    def _named_targets(
+        self, name: str, test: bool, resources: list[Resource]
+    ) -> list[_NamedTarget]:
         """Check every ``paths`` handle against the catalogue and the selection.
 
         A handle naming a file must name one the collection includes --
@@ -541,7 +554,9 @@ class Collections:
         return targets
 
     @staticmethod
-    def _named_paths(targets: list[_NamedTarget], files: DataFiles, name: str) -> NamedPaths:
+    def _named_paths(
+        targets: list[_NamedTarget], files: DataFiles, name: str
+    ) -> NamedPaths:
         """Where each handle ended up on this machine, read off the fetched files.
 
         A handle whose data this machine cannot reach is left out and named in
@@ -562,7 +577,9 @@ class Collections:
             if not available:
                 named.omitted.append(target.handle)
                 continue
-            directory = directory_of(files, available, target.dataset, target.inner, target.key)
+            directory = directory_of(
+                files, available, target.dataset, target.inner, target.key
+            )
             named[target.handle] = Path(os.path.abspath(directory))
         if named.omitted:
             warnings.warn(
@@ -590,7 +607,9 @@ class _NamedTarget:
     under: tuple[Resource, ...]
 
 
-def _not_in_catalogue(collection: str, handle: str, key: str, error: KeyError) -> CollectionError:
+def _not_in_catalogue(
+    collection: str, handle: str, key: str, error: KeyError
+) -> CollectionError:
     message = error.args[0] if error.args else str(error)
     return CollectionError(
         f"collection {collection!r}: paths.{handle} names {key!r}, which is not in "
@@ -667,8 +686,11 @@ def load_collections(
 
         resolved = with_staging(resolved, roots)
     return Collections(
-        path=path, catalog=resolved, definitions=document.get("collections", {}),
-        tool=tool, roots=roots,
+        path=path,
+        catalog=resolved,
+        definitions=document.get("collections", {}),
+        tool=tool,
+        roots=roots,
     )
 
 

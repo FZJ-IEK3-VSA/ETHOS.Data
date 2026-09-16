@@ -139,15 +139,20 @@ def _read_index(root: Path) -> dict:
     except ValueError:
         # A corrupt index costs provenance, not data -- the entries on disk are
         # the truth. Say so rather than refusing to work.
-        warnings.warn(f"{path} is not valid JSON; staging provenance is unavailable",
-                      UserWarning, stacklevel=2)
+        warnings.warn(
+            f"{path} is not valid JSON; staging provenance is unavailable",
+            UserWarning,
+            stacklevel=2,
+        )
         return {}
 
 
 def _write_index(root: Path, index: dict) -> None:
     _index_path(root).write_text(
         json.dumps(index, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8", newline="\n")
+        encoding="utf-8",
+        newline="\n",
+    )
 
 
 def iter_files(directory: Path):
@@ -308,11 +313,13 @@ def classify_staged(
     for name in staged_names(staging):
         official = _official_entry(roots, name)
         base = _describe(staging, name, index)
-        described.append(replace(
-            base,
-            status=SHADOWING if official is not None else NEW,
-            official=official,
-        ))
+        described.append(
+            replace(
+                base,
+                status=SHADOWING if official is not None else NEW,
+                official=official,
+            )
+        )
     return described
 
 
@@ -333,7 +340,8 @@ def staged_names(root: str | Path | None = None) -> list[str]:
     if staging is None or not staging.is_dir():
         return []
     return sorted(
-        p.name for p in staging.iterdir()
+        p.name
+        for p in staging.iterdir()
         if p.name != INDEX_FILE and (p.is_dir() or p.is_symlink())
     )
 
@@ -371,7 +379,9 @@ def synthesize(name: str, directory: Path, access: str = STAGING_ACCESS) -> Data
         "ethos:file_count": len(resources),
         "ethos:total_bytes": total,
     }
-    dataset = Dataset(name=name, title=f"{name} (staged, not in the catalogue)", entry=entry)
+    dataset = Dataset(
+        name=name, title=f"{name} (staged, not in the catalogue)", entry=entry
+    )
     # Setting the descriptor is what makes load() a no-op: there is no
     # datapackage.json to fetch, and asking for one must not reach the network.
     dataset._descriptor = {
@@ -434,7 +444,9 @@ def apply_staging(
     return shadowed
 
 
-def with_staging(catalog: Catalog, roots: Roots | None = None, warn: bool = True) -> Catalog:
+def with_staging(
+    catalog: Catalog, roots: Roots | None = None, warn: bool = True
+) -> Catalog:
     """Return a staging view without replacing datasets in the caller's catalogue.
 
     The catalogue can be reused for an official-data check after development;

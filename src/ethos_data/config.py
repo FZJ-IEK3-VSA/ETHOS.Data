@@ -97,9 +97,7 @@ __all__ = [
 #: data needs no configuration at all. It follows a moving branch; a package
 #: that must resolve to the same bytes release after release pins a version in
 #: its own collections file instead.
-DEFAULT_CATALOG = (
-    "https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json"
-)
+DEFAULT_CATALOG = "https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json"
 #: Point every tool in one shell or job at another catalogue -- the internal one,
 #: say -- without editing a file. Wins over config files and over the version a
 #: collections file pins; an explicit ``catalog=`` / ``--catalog`` wins over it.
@@ -234,7 +232,9 @@ def _write(path: Path, document: dict) -> None:
     "\\r\\n". A project-scope ethos-data.yaml is committed and shared, so its
     bytes must not depend on who wrote it.
     """
-    text = CONFIG_HEADER + yaml.safe_dump(document, default_flow_style=False, sort_keys=True)
+    text = CONFIG_HEADER + yaml.safe_dump(
+        document, default_flow_style=False, sort_keys=True
+    )
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
@@ -269,7 +269,9 @@ def load_config() -> tuple[dict, dict[str, str]]:
         except yaml.YAMLError as error:
             raise ValueError(f"{path} is not valid YAML: {error}") from None
         if not isinstance(document, dict):
-            raise ValueError(f"{path} must contain a YAML mapping, got {type(document).__name__}")
+            raise ValueError(
+                f"{path} must contain a YAML mapping, got {type(document).__name__}"
+            )
         for key, value in document.items():
             if key in MERGED_KEYS and isinstance(value, dict):
                 combined = dict(merged.get(key) or {})
@@ -305,7 +307,9 @@ def resolve_public_cache(explicit: str | Path | None = None) -> Resolved:
     if found is not None:
         return found
 
-    return Resolved(Path(platformdirs.user_cache_dir(APP)), "built-in default (OS cache directory)")
+    return Resolved(
+        Path(platformdirs.user_cache_dir(APP)), "built-in default (OS cache directory)"
+    )
 
 
 def resolve_restricted_cache(explicit: str | Path | None = None) -> Resolved | None:
@@ -423,7 +427,11 @@ def dataset_roots() -> dict[str, str]:
 
 def set_dataset_root(dataset: str, path: str, scope: str = "user") -> Path:
     config_file = writable_config_path(scope)
-    document = yaml.safe_load(config_file.read_text(encoding="utf-8")) if config_file.is_file() else {}
+    document = (
+        yaml.safe_load(config_file.read_text(encoding="utf-8"))
+        if config_file.is_file()
+        else {}
+    )
     document = document or {}
     document.setdefault("dataset_roots", {})[dataset] = str(Path(path).expanduser())
     config_file.parent.mkdir(parents=True, exist_ok=True)

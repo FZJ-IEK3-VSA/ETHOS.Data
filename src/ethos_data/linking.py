@@ -88,7 +88,9 @@ def source_dir_for(name: str, catalog_root: str | Path | None = None) -> Path:
     from .maintain import datasets_dir, resolve_catalog_root
 
     try:
-        root = resolve_catalog_root(str(catalog_root) if catalog_root is not None else None)
+        root = resolve_catalog_root(
+            str(catalog_root) if catalog_root is not None else None
+        )
     except SystemExit as error:
         # `resolve_catalog_root` is written for the maintainer commands, which
         # exit on a missing checkout. Here it is one way of answering a question,
@@ -171,7 +173,8 @@ def _require_settled_licence(catalog: Catalog, name: str) -> None:
         note = ""
     raise LinkError(
         f"{name!r} has unresolved licensing, so it is not linked into a cache other "
-        f"people read. {note}\n".rstrip() + "\n"
+        f"people read. {note}\n".rstrip()
+        + "\n"
         "Record the terms in its dataset.yaml -- a `licenses:` entry, or "
         "`ethos:license_status: resolved` once somebody has read them -- and rebuild.\n"
         "To work with it meanwhile, stage it instead:\n"
@@ -255,7 +258,9 @@ def link(
     except OSError as error:
         raise LinkError(_refusal(name, target, error)) from None
 
-    return LinkReport(name, verb, entry, target, missing=_sample_missing(catalog, name, target))
+    return LinkReport(
+        name, verb, entry, target, missing=_sample_missing(catalog, name, target)
+    )
 
 
 def unlink(
