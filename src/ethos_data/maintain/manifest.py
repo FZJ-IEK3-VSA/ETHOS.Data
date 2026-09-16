@@ -975,7 +975,7 @@ def _render_namespace(
         **meta,
         NAMESPACE_KEY: True,
         # Reported, not owned: these are the sum over the members, so that
-        # `ethos-data list` can show what the family costs without loading every
+        # a package's `list` command can show what the family costs without loading every
         # member's inventory. There is no `resources` key at all -- a namespace
         # has nothing to download, and a tool must not be able to try.
         "ethos:total_bytes": total_bytes,

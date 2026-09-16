@@ -233,7 +233,7 @@ class Collections:
 
         A string where a list was meant, or an entry without ``dataset``, used
         to surface as a TypeError or KeyError from deep inside the glob loop --
-        a traceback that hid every other collection in ``ethos-data list``.
+        a traceback that hid every other collection in a package's ``list`` command.
         """
         rules = definition.get("include", []) or []
         if not isinstance(rules, list):

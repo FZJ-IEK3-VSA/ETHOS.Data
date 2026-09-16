@@ -6,8 +6,7 @@ import urllib.request
 import pytest
 
 import ethos_data
-from ethos_data import config
-from ethos_data.cli import main
+from ethos_data import config, tool_main
 from ethos_data.catalogs import Catalog, Dataset, Resource
 
 
@@ -39,12 +38,39 @@ def test_new_dataset_matches_cli_and_python(workspace):
     with pytest.warns(UserWarning):
         resolved = ethos_data.resolve("test", collections)
         files = ethos_data.fetch("test", collections, progressbar=False)
-        assert main(["-c", str(collections), "fetch", "test"]) == 0
+        assert (
+            tool_main(str(collections), prog="example-data", argv=["fetch", "test"])
+            == 0
+        )
         one = ethos_data.catalog(str(root / "datacatalog.json")).path("example/new.txt")
     assert [r.key for r in resolved] == ["example/new.txt"]
     assert files == {"example/new.txt": staged / "new.txt"}
     assert one == staged / "new.txt"
     assert not (root / "cache" / "example").exists()
+
+
+def test_wrapper_staging_lifecycle_needs_no_catalogue(workspace, capsys):
+    root, collections, source = workspace
+    collections.write_text("catalog: missing.json\ncollections: {}\n")
+
+    def run(*argv):
+        return tool_main(collections, prog="sample-data", argv=list(argv))
+
+    assert (
+        run("staging", "add", "trial", str(source), "--copy", "--note", "experiment")
+        == 0
+    )
+    assert "sample-data staging remove trial" in capsys.readouterr().out
+    assert run("staging", "list", "--new-only") == 0
+    assert "experiment" in capsys.readouterr().out
+    staged = root / "staging" / "trial"
+    assert (staged / "new.txt").read_text() == "development bytes"
+    with pytest.raises(SystemExit, match="--force"):
+        run("staging", "remove", "trial")
+    assert staged.exists()
+    assert run("staging", "remove", "trial", "--force") == 0
+    assert not staged.exists()
+    assert (source / "new.txt").read_text() == "development bytes"
 
 
 def test_overlay_does_not_mutate_canonical_catalogue(workspace):
@@ -107,5 +133,5 @@ def test_broken_staging_link_fails_python_and_cli(workspace, capsys):
     ):
         with pytest.raises(ethos_data.AccessError, match="staging entry 'broken'"):
             call()
-    assert main(["-c", str(collections), "fetch", "test"]) == 2
+    assert tool_main(str(collections), prog="example-data", argv=["fetch", "test"]) == 2
     assert "staging entry 'broken'" in capsys.readouterr().err

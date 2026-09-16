@@ -178,7 +178,7 @@ def _require_settled_licence(catalog: Catalog, name: str) -> None:
         "Record the terms in its dataset.yaml -- a `licenses:` entry, or "
         "`ethos:license_status: resolved` once somebody has read them -- and rebuild.\n"
         "To work with it meanwhile, stage it instead:\n"
-        f"    ethos-data staging add {name} <directory>"
+        f"    staging add {name} <directory>  (with your package's data command)"
     )
 
 

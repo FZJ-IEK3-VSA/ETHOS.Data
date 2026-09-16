@@ -1,11 +1,9 @@
-"""Find, fetch, and manage data for ETHOS tools and workflows.
+"""Fetch catalogued data and manage ETHOS configuration, caches and catalogues.
 
-The collection commands (list, info, plan, fetch, paths, verify) read a
-collections file: the one -c names, a configured default, or collections.yaml
-in the current directory. A tool's own data command, built with ethos_data.tool_main, runs the same
-commands on the file the tool ships, without -c. Keys (path, ls), configuration,
-staging, cache management and test bundles are at the top level. Catalogue
-maintenance and dCache uploads use 'catalog'.
+Use 'ls' to inspect the catalogue and 'fetch' to get a dataset, folder or file
+by its catalogue key. Catalogue maintenance and dCache uploads use 'catalog'.
+Collections, test bundles and staging belong to a package's own data command,
+such as reskit-data, built with ethos_data.tool_main.
 """
 
 from __future__ import annotations
@@ -15,24 +13,32 @@ import os
 import stat
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import yaml
 
+from .access import AccessError, cache_entries
+from .bundles import BundleError, export_bundle, load_bundle
+from .catalogs import (
+    Catalog,
+    CatalogUnavailable,
+    IncompleteCatalog,
+    UnknownDataset,
+    load_catalog,
+)
 from .config import (
+    DEFAULT_CATALOG,
     ENV_VAR,
-    SKIP_UNAVAILABLE_KEY,
     LEGACY_CACHE_KEY,
     PUBLIC_CACHE_KEY,
     RESTRICTED_CACHE_KEY,
     RESTRICTED_ENV_VAR,
     SCOPES,
+    SKIP_UNAVAILABLE_KEY,
     STAGING_CACHE_KEY,
     STAGING_ENV_VAR,
     config_sources,
     dataset_roots,
     resolve_catalog,
-    resolve_collections,
     resolve_public_cache,
     resolve_restricted_cache,
     resolve_roots,
@@ -43,20 +49,10 @@ from .config import (
     unset_dataset_root,
     unset_option,
 )
-from .bundles import BundleError, export_bundle, load_bundle
-from .access import AccessError, cache_entries
-from .catalogs import (
-    Catalog,
-    CatalogUnavailable,
-    IncompleteCatalog,
-    UnknownDataset,
-    load_catalog,
-)
-from .maintain.cli import add_catalog_parser, dispatch as _catalog_dispatch
-from .config import DEFAULT_CATALOG
+from .maintain.cli import add_catalog_parser
+from .maintain.cli import dispatch as _catalog_dispatch
 from .retrieval import plan
 from .selection import (
-    COLLECTIONS_FILENAME,
     CollectionError,
     Collections,
     CollectionsNotFound,
@@ -64,9 +60,6 @@ from .selection import (
     load_collections,
     variant_name,
 )
-
-if TYPE_CHECKING:
-    pass
 
 
 def _human(num_bytes: int) -> str:
@@ -85,7 +78,7 @@ def _use_utf8_output() -> None:
     API. Redirect or pipe the same command and ``sys.stdout`` falls back to the
     *locale* encoding instead -- cp1252 on a German machine -- so a catalogue
     holding a dataset titled in Chinese, or an attribution naming Forschungs-
-    zentrum Jülich, turned ``ethos-data list > datasets.txt`` into a
+    zentrum Jülich, turned ``ethos-data ls > datasets.txt`` into a
     UnicodeEncodeError traceback while the same command printed fine on screen.
 
     Done here rather than in the library: a command line tool owns its own
@@ -106,7 +99,7 @@ def _use_utf8_output() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """The ``ethos-data`` command: every command group, collections from ``-c``."""
+    """The ``ethos-data`` command: catalogue access and shared maintenance."""
     return _run(lambda: _main(argv))
 
 
@@ -124,9 +117,8 @@ def run_tool(
     What :func:`ethos_data.tool_main` and :meth:`ethos_data.Collections.main`
     run. The parser offers ``list``, ``info``, ``plan``, ``fetch``, ``paths``
     and ``verify`` for the file's collections, ``path`` and ``ls`` against the
-    catalogue it pins, and the ``bundle`` and ``config`` groups -- everything
-    ``ethos-data`` does for a file named with ``-c``, minus the ``-c`` and
-    minus the cache-maintenance commands that belong to no tool in particular.
+    catalogue it pins, and the ``bundle``, ``staging`` and ``config`` groups.
+    Shared cache and catalogue maintenance belong to ``ethos-data``.
 
     The handle -- and with it the catalogue -- is built only when a command
     needs it, so ``--help`` and ``config show`` work offline and a pin nobody
@@ -171,39 +163,33 @@ def _run(command) -> int:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """The ``ethos-data`` parser: every command group, collections from ``-c``."""
+    """Catalogue access, configuration and maintenance, without collections."""
     parser = argparse.ArgumentParser(
         prog="ethos-data",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Put global options before the subcommand. Examples:\n"
         "  ethos-data config show\n"
-        "  ethos-data -c collections.yaml plan onshore_wind\n"
-        "  ethos-data -c collections.yaml paths onshore_wind --test\n"
-        "  ethos-data --skip-unavailable -c collections.yaml fetch onshore_wind\n"
+        "  ethos-data ls\n"
         "  ethos-data ls global-wind-atlas-v4\n"
+        "  ethos-data fetch global-wind-atlas-v4\n"
         "  ethos-data catalog --catalog-root /path/to/source build --check\n"
-        "A tool's own data command runs the collection commands on\n"
-        "the file the tool ships, without -c.\n"
         "Use 'ethos-data COMMAND --help' for command options.",
     )
-    _add_common_options(parser, collections_flag=True)
+    _add_common_options(parser)
     sub = parser.add_subparsers(dest="command", required=True)
-    _add_collection_commands(sub)
-    _add_key_commands(sub)
-    _add_bundle_commands(sub)
+    _add_key_commands(sub, fetch_command="fetch")
     _add_config_commands(sub)
     _add_cache_commands(sub)
     add_catalog_parser(sub)
-    _add_staging_commands(sub)
     return parser
 
 
 def _build_tool_parser(prog: str, source: _ToolSource) -> argparse.ArgumentParser:
-    """A tool's parser: the collection, key, bundle and config commands, no ``-c``.
+    """A tool's collection, key, bundle, staging and config commands, no ``-c``.
 
     The file is fixed -- it is the one the tool ships -- so there is nothing to
-    name, and the cache-maintenance commands (materialize, link, staging, the
+    name, and the cache-maintenance commands (materialize, link, unlink, the
     maintainer's catalog group) stay with ``ethos-data``: they concern the
     shared cache, not any one tool's data. Built from the file alone: the
     catalogue is not loaded for ``--help``.
@@ -225,38 +211,32 @@ def _build_tool_parser(prog: str, source: _ToolSource) -> argparse.ArgumentParse
         f"  {prog} config show\n"
         f"Use '{prog} COMMAND --help' for command options.",
     )
-    _add_common_options(parser, collections_flag=False)
+    _add_common_options(parser, tool_commands=True)
     sub = parser.add_subparsers(dest="command", required=True)
     _add_collection_commands(sub)
     _add_key_commands(sub)
     _add_bundle_commands(sub)
     _add_config_commands(sub)
+    _add_staging_commands(sub)
+    parser.set_defaults(prog=prog)
     return parser
 
 
 def _add_common_options(
-    parser: argparse.ArgumentParser, *, collections_flag: bool
+    parser: argparse.ArgumentParser, *, tool_commands: bool = False
 ) -> None:
-    """The options every command may take; ``-c`` only where the file is not fixed."""
-    if collections_flag:
-        parser.add_argument(
-            "-c",
-            "--collections",
-            default=None,
-            help="path to a collections file (default: collections.yaml, "
-            "or a configured default -- see `ethos-data config show`)",
-        )
-    else:
-        parser.set_defaults(collections=None)
+    """Shared options, plus collection-specific switches for package commands."""
     parser.add_argument(
         "--catalog",
         default=None,
-        help="datacatalog.json path or URL; overrides configuration and "
-        "the collections file's pin",
+        help="datacatalog.json path or URL; overrides configuration"
+        + (" and the collections file's pin" if tool_commands else ""),
     )
     parser.add_argument(
         "--root", default=None, help="override the public cache directory"
     )
+    if not tool_commands:
+        return
     parser.add_argument(
         "--skip-unavailable",
         action="store_true",
@@ -332,20 +312,24 @@ def _add_collection_commands(sub) -> None:
     )
 
 
-def _add_key_commands(sub) -> None:
+def _add_key_commands(sub, *, fetch_command: str = "path") -> None:
     """The commands that name a dataset, folder or file in the catalogue."""
     pather = sub.add_parser(
-        "path",
-        help="print the absolute path of a file or folder, fetching it if necessary",
+        fetch_command,
+        help="fetch a dataset, folder or file and print its absolute local path",
     )
     pather.add_argument("key", help="<dataset>/<file or folder>, or a dataset name")
     lister = sub.add_parser(
         "ls",
-        help="list the catalogue's files under a dataset or folder; fetches nothing",
+        help="list datasets, or files under a catalogue key; fetches no data",
         description="What is in a dataset, and what to put after the slash to get one file "
-        "with `path`. Reads catalogue metadata only.",
+        f"with `{fetch_command}`. Reads catalogue metadata only.",
     )
-    lister.add_argument("key", help="a dataset or family name, or <dataset>/<folder>")
+    lister.add_argument(
+        "key",
+        nargs="?",
+        help="a dataset, family, folder or file (default: list datasets)",
+    )
 
 
 def _add_bundle_commands(sub) -> None:
@@ -457,7 +441,7 @@ def _add_config_commands(sub) -> None:
     puburl.add_argument("--scope", choices=SCOPES, default="user")
     cataloger = config_sub.add_parser(
         "set-catalog",
-        help="set the catalogue override; the collections file still selects the collections",
+        help="set the shared catalogue override, including for package data commands",
     )
     cataloger.add_argument("location", help="a datacatalog.json path or URL")
     cataloger.add_argument("--scope", choices=SCOPES, default="user")
@@ -465,16 +449,6 @@ def _add_config_commands(sub) -> None:
         "unset-catalog", help="remove the setting again"
     )
     uncataloger.add_argument("--scope", choices=SCOPES, default="user")
-    collectioner = config_sub.add_parser(
-        "set-collections",
-        help="permanently point ethos-data at a collections file, so -c does not need it every time",
-    )
-    collectioner.add_argument("path")
-    collectioner.add_argument("--scope", choices=SCOPES, default="user")
-    uncollectioner = config_sub.add_parser(
-        "unset-collections", help="remove the setting again"
-    )
-    uncollectioner.add_argument("--scope", choices=SCOPES, default="user")
 
 
 def _add_cache_commands(sub) -> None:
@@ -587,58 +561,6 @@ def _add_staging_commands(sub) -> None:
     )
 
 
-class _FileSource:
-    """Where ``ethos-data`` finds its collections: ``-c``, a configured default,
-    or ``collections.yaml`` in the current directory."""
-
-    def _candidate(self, args) -> str:
-        resolved = resolve_collections(args.collections)
-        return resolved[0] if resolved else COLLECTIONS_FILENAME
-
-    def file(self, args) -> str:
-        """The collections file to read, or a refusal that says where it looked."""
-        chosen = self._candidate(args)
-        if not Path(chosen).is_file():
-            raise CollectionsNotFound(
-                f"no collections file at {chosen}. Name one with -c, or use the data command "
-                f"of the tool whose data you want, if it ships one."
-            )
-        return chosen
-
-    def load(self, args, roots) -> Collections:
-        """The collections file, with the catalogue it pins and staging applied."""
-        override = self.catalog_override(args)
-        return load_collections(self.file(args), catalog=override, roots=roots)
-
-    def optional(self, args, roots) -> Collections | None:
-        """The file if there is one; for commands that take a key and only borrow its pin.
-
-        ``path`` and ``ls`` need no collections file -- but when one is named
-        with -c, or configured, or lies in the current directory, its pin is
-        what ``fetch`` would use, and the two must agree on which catalogue
-        they mean.
-        """
-        if not Path(self._candidate(args)).is_file():
-            return None
-        return self.load(args, roots)
-
-    def catalog_override(self, args) -> str | None:
-        """``--catalog``, else ``$ETHOS_DATA_CATALOG`` or a configured catalogue; else None."""
-        resolved = resolve_catalog(args.catalog)
-        return resolved[0] if resolved else None
-
-    def key_catalog(self, args, roots) -> Catalog:
-        """The catalogue a key command reads: the override, else the pin of the
-        collections file at hand, else the built-in public catalogue."""
-        override = self.catalog_override(args)
-        if override is not None:
-            return load_catalog(override).overlaid(roots)
-        loaded = self.optional(args, roots)
-        if loaded is not None:
-            return loaded.catalog
-        return load_catalog(DEFAULT_CATALOG).overlaid(roots)
-
-
 class _ToolSource:
     """A tool's command: the file the tool ships, and a handle on it built the
     first time a command needs one.
@@ -685,8 +607,6 @@ class _ToolSource:
             )
         return self._loaded
 
-    optional = load
-
     def catalog_override(self, args) -> str:
         return args.catalog or self.catalog or self.load(args, None).catalog.location
 
@@ -725,23 +645,32 @@ def _bundle_command(args, source) -> int:
 
 
 def _main(argv: list[str] | None = None) -> int:
-    return _dispatch(_build_parser().parse_args(argv), _FileSource())
+    args = _build_parser().parse_args(argv)
+    if args.command == "config":
+        return _config_command(args)
+    if args.command == "catalog":
+        return _catalog_dispatch(args)
+
+    roots = resolve_roots(args.root)
+    if args.command == "materialize":
+        return _materialize_command(args, roots)
+    if args.command in ("link", "unlink"):
+        return _link_command(args, roots)
+
+    catalog = _cache_catalog(args).overlaid(roots)
+    if args.command == "ls":
+        return _ls_command(args, catalog)
+    return _path_command(args, catalog, roots)
 
 
 def _dispatch(args, source) -> int:
-    """Run a parsed command. ``source`` says where the collections come from:
-    ``ethos-data``'s -c / configured / current-directory lookup, or the handle a
-    tool's command was built on."""
+    """Run a package command against its shipped collections file."""
     if args.command == "bundle":
         return _bundle_command(args, source)
     if args.command == "config":
         return _config_command(args)
     if args.command == "staging":
         return _staging_command(args)
-    # Before the cache roots are resolved: a maintainer command works on a
-    # catalogue checkout, and has no use for the consumer's cache directories.
-    if args.command == "catalog":
-        return _catalog_dispatch(args)
 
     roots = resolve_roots(args.root)
     # --test may sit before or after the subcommand; commands without the flag
@@ -749,22 +678,10 @@ def _dispatch(args, source) -> int:
     args.test = bool(getattr(args, "test", False) or args.test_global)
 
     if args.command == "path":
-        try:
-            print(source.key_catalog(args, roots).path(args.key, root=roots))
-        except KeyError as error:
-            # A key naming no file or folder: a message, like UnknownDataset.
-            print(f"error: {error.args[0] if error.args else error}", file=sys.stderr)
-            return 2
-        return 0
+        return _path_command(args, source.key_catalog(args, roots), roots)
 
     if args.command == "ls":
         return _ls_command(args, source.key_catalog(args, roots))
-
-    if args.command == "materialize":
-        return _materialize_command(args, roots)
-
-    if args.command in ("link", "unlink"):
-        return _link_command(args, roots)
 
     loaded = source.load(args, roots)
 
@@ -953,8 +870,23 @@ def _paths_command(args, loaded, roots) -> int:
     return 0
 
 
+def _path_command(args, catalog: Catalog, roots) -> int:
+    """Fetch a catalogue key and print a path suitable for shell use."""
+    try:
+        print(catalog.path(args.key, root=roots))
+    except KeyError as error:
+        print(f"error: {error.args[0] if error.args else error}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def _ls_command(args, catalog: Catalog) -> int:
     """List what the catalogue holds under a key, fetching nothing."""
+    if args.key is None:
+        print(f"catalogue: {catalog.location}\n")
+        for name, dataset in sorted(catalog.datasets.items()):
+            print(f"  {name:<40} {dataset.access:<12} {dataset.title}")
+        return 0
     try:
         resources = catalog.resources(args.key)
     except KeyError as error:
@@ -1061,7 +993,11 @@ def _verify_command(args, loaded, roots) -> int:
 
     if not args.repair:
         print(f"\n{len(broken)} file(s) do not match. Re-fetch them with:")
-        print("    ethos-data verify --repair" + (" --deep" if args.deep else ""))
+        print(
+            f"    {args.prog} verify {args.collection or '--all'} --repair"
+            + (" --deep" if args.deep else "")
+            + (" --test" if args.test else "")
+        )
         return 1
 
     outcome = repair(loaded.catalog, findings, roots, dry_run=args.dry_run)
@@ -1081,19 +1017,11 @@ def _verify_command(args, loaded, roots) -> int:
     return 0 if not outcome["skipped"] else 1
 
 
-def _cache_catalog(args, roots):
-    """The catalogue for a command that works on cache entries by name.
-
-    These commands take a dataset name rather than a collection, so an explicit
-    --catalog wins; a collections file is consulted only because it pins the
-    catalogue version a project is working against.
-    """
+def _cache_catalog(args):
+    """The explicit or configured catalogue, with the public default as fallback."""
     resolved_catalog = resolve_catalog(args.catalog)
     if resolved_catalog:
         return load_catalog(resolved_catalog[0])
-    loaded = _FileSource().optional(args, roots)
-    if loaded is not None:
-        return loaded.catalog
     return load_catalog(DEFAULT_CATALOG)
 
 
@@ -1107,8 +1035,8 @@ def _link_all_command(args, roots) -> int:
     """
     import argparse
 
-    from .maintain import resolve_catalog_root
     from .maintain import namespace as namespace_module
+    from .maintain import resolve_catalog_root
 
     try:
         catalog_root = resolve_catalog_root(args.catalog_root)
@@ -1142,7 +1070,7 @@ def _link_command(args, roots) -> int:
             )
             return 2
 
-    catalog = _cache_catalog(args, roots)
+    catalog = _cache_catalog(args)
     try:
         if args.command == "link":
             report = link(
@@ -1169,7 +1097,7 @@ def _link_command(args, roots) -> int:
         print(
             f"\nwarning: the catalogue lists {report.missing!r}, which is not under "
             f"{report.target}.\n         Check this is the dataset's own directory, then "
-            f"run `ethos-data verify --deep`.",
+            f"run your package's data command with `verify --deep`.",
             file=sys.stderr,
         )
     return 0
@@ -1178,7 +1106,7 @@ def _link_command(args, roots) -> int:
 def _materialize_command(args, roots) -> int:
     from .materialize import materialize
 
-    catalog = _cache_catalog(args, roots)
+    catalog = _cache_catalog(args)
 
     names = list(args.datasets)
     if args.source is not None:
@@ -1258,20 +1186,18 @@ def _staging_command(args) -> int:
             "\nThis shadows the catalogue for that dataset. It is not checksummed and "
             "not reproducible;\nremove it once the data is described and published:"
         )
-        print(f"    ethos-data staging remove {staged.name}")
+        print(f"    {args.prog} staging remove {staged.name}")
         return 0
 
     if args.staging_command == "remove":
         entry = staging.remove(args.name, force=args.force)
-        print(
-            f"unstaged {args.name!r} ({entry}). The data it pointed at was not touched."
-        )
+        print(f"unstaged {args.name!r} ({entry}).")
         return 0
 
     root = staging.staging_root()
     if root is None:
         print("no staging root configured.")
-        print("    ethos-data config set-staging-cache /path/to/ethos_data_staging")
+        print(f"    {args.prog} config set-staging-cache /path/to/ethos_data_staging")
         return 0
 
     roots = resolve_roots()
@@ -1424,33 +1350,13 @@ def _config_command(args) -> int:
         print(f"catalog written to {path}")
         print(f"resolved now: {resolve_catalog()[0]}")
         print(
-            "The collections file (-c, or the one a tool's command ships) still selects "
-            "which collections to read; this overrides the catalogue it pins for itself, "
-            "the same way --catalog does."
+            "Package data commands keep their own collections and use this catalogue "
+            "instead of their pin, unless a package-specific override is set."
         )
         return 0
 
     if command == "unset-catalog":
         path = unset_option("catalog", scope=args.scope)
-        print(
-            f"removed from {path}"
-            if path
-            else f"nothing set in the {args.scope} config"
-        )
-        return 0
-
-    if command == "set-collections":
-        candidate = Path(args.path).expanduser()
-        if not candidate.is_file():
-            raise SystemExit(f"no such file: {candidate}")
-        path = set_option("collections", str(candidate), scope=args.scope)
-        print(f"collections written to {path}")
-        print(f"resolved now: {resolve_collections()[0]}")
-        print("-c/--collections still overrides this for a single run.")
-        return 0
-
-    if command == "unset-collections":
-        path = unset_option("collections", scope=args.scope)
         print(
             f"removed from {path}"
             if path
@@ -1626,17 +1532,10 @@ def _config_show() -> int:
         )
     else:
         print(
-            "\ncatalogue: the version the collections file pins, else the built-in "
-            "public catalogue"
+            "\ncatalogue: the built-in public catalogue for ethos-data; "
+            "package data commands use their collections file's pin"
         )
         print(f"  {DEFAULT_CATALOG}")
-    collections = resolve_collections()
-    if collections:
-        exists = "" if Path(collections[0]).is_file() else "   [MISSING]"
-        print(
-            f"\ndefault collections file: {collections[0]}{exists}  (from {collections[1]})"
-        )
-        print("  used by ethos-data when -c/--collections is not given")
 
     # Last, because it is the one section that reads the cache itself. On a slow
     # or half-connected network share this is the part that takes time, and

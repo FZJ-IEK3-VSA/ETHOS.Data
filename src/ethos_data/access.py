@@ -61,7 +61,7 @@ RESTRICTED = "restricted"
 STAGING = "staging"
 
 #: Why a location resolved the way it did -- carried so that error messages and
-#: ``ethos-data verify`` can say something more useful than "not found".
+#: a package's ``verify`` command can say something more useful than "not found".
 ORIGIN_CONFIGURED = "configured root"
 ORIGIN_STAGING = "staging"
 ORIGIN_RESTRICTED = "restricted cache"

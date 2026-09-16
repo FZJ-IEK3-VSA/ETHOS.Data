@@ -227,7 +227,8 @@ def download(
         raise AccessError(
             f"{len(unreadable)} file(s) are missing from where they were expected:\n"
             f"{listing}{more}\n"
-            "Run `ethos-data verify` for a per-file account, or check the roots with "
+            "Run your package's data command with `verify` for a per-file account, "
+            "or check the roots with "
             "`ethos-data config show`."
         )
 

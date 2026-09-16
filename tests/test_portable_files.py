@@ -147,25 +147,17 @@ class TestPublishing:
 
 class TestCommandLineOutput:
     def test_a_non_ascii_title_survives_a_redirected_run(self, catalog, tmp_path):
-        """`ethos-data list > file` on Windows, which is not `ethos-data list`.
+        """`ethos-data ls > file` on Windows, which is not `ethos-data ls`.
 
         Redirected, sys.stdout falls back to the locale encoding, and printing a
-        collection titled in Chinese raised UnicodeEncodeError -- while the very
+        dataset titled in Chinese raised UnicodeEncodeError -- while the very
         same command printed fine on screen, because a Windows console uses its
         own UTF-16 API. Run as a real subprocess, because that difference only
         exists for a process that owns its streams.
         """
         assert build_run(catalog, []) == 0
-        collections = tmp_path / "collections.yaml"
-        write_utf8(
-            collections,
-            f"catalog: {catalog / 'datacatalog.json'}\n"
-            f"collections:\n  one:\n    title: {CJK}\n"
-            f"    include:\n      - dataset: d\n",
-        )
-
         destination = tmp_path / "listing.txt"
-        # A configured catalogue override beats the file's pin, so pin it explicitly.
+        # Select the local catalogue explicitly, including in a configured environment.
         env = {
             **os.environ,
             "PYTHONPATH": str(Path(config.__file__).parent.parent),
@@ -177,9 +169,7 @@ class TestCommandLineOutput:
                     sys.executable,
                     "-m",
                     "ethos_data.cli",
-                    "-c",
-                    str(collections),
-                    "list",
+                    "ls",
                 ],
                 stdout=redirected,
                 stderr=subprocess.PIPE,

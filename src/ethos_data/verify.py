@@ -8,9 +8,9 @@ files it fetches, but data read *in place* has never been checked at all -- so
 this is the one place where the promise "these bytes are the ones in the
 manifest" is actually tested.
 
-    ethos-data verify onshore_wind            # sizes: cheap, run it often
-    ethos-data verify onshore_wind --deep     # checksums: slow, run it before you publish
-    ethos-data verify --all --deep --repair   # and re-fetch whatever drifted
+    reskit-data verify onshore_wind            # sizes: cheap, run it often
+    reskit-data verify onshore_wind --deep     # checksums: slow, run it before you publish
+    reskit-data verify --all --deep --repair   # and re-fetch whatever drifted
 
 It is deliberately link-agnostic. A symbolic link, a hard link, a configured
 root and an ordinary downloaded directory are all just paths by the time they

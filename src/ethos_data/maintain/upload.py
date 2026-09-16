@@ -155,7 +155,7 @@ def preflight(
             "Record the terms in its dataset.yaml -- a `licenses:` entry, or "
             "`ethos:license_status: resolved` once somebody has read them -- and rebuild.\n"
             "Development against it does not need an upload; stage it instead:\n"
-            f"    ethos-data staging add {name} <directory>"
+            f"    staging add {name} <directory>  (with your package's data command)"
         )
 
     if not prefix:

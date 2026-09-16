@@ -28,7 +28,7 @@ from pathlib import Path
 import pytest
 
 import ethos_data
-from ethos_data import config, retrieval, selection
+from ethos_data import config, retrieval, selection, tool_main
 from ethos_data.cli import main
 
 
@@ -1136,7 +1136,7 @@ class TestCommandLine:
             """,
             catalog=incomplete,
         )
-        assert main(["-c", str(file), "list"]) == 1
+        assert tool_main(str(file), prog="example-data", argv=["list"]) == 1
         out = capsys.readouterr().out
         assert re.search(
             r"^  landcover\s+1 files\s+\d+ B\s+Land cover$", out, re.MULTILINE
@@ -1163,12 +1163,17 @@ class TestCommandLine:
         )
 
     def test_list_exits_zero_when_everything_resolves(self, define, capsys):
-        assert main(["-c", str(define(ONSHORE)), "list"]) == 0
+        assert tool_main(str(define(ONSHORE)), prog="example-data", argv=["list"]) == 0
         assert "[unresolvable]" not in capsys.readouterr().out
 
     def test_info_labels_the_variant_and_shows_the_named_paths(self, define, capsys):
         file = define(ONSHORE)
-        assert main(["-c", str(file), "info", "onshore_wind", "--test"]) == 0
+        assert (
+            tool_main(
+                str(file), prog="example-data", argv=["info", "onshore_wind", "--test"]
+            )
+            == 0
+        )
         out = capsys.readouterr().out
         assert out.startswith("onshore_wind [test]: 6 files, ")
         assert "reskit-test-data/global-wind-atlas/gwa100-like.tif" in out
@@ -1181,28 +1186,51 @@ class TestCommandLine:
         )
         assert re.search(r"^  clc\s+->\s+landcover/clc.tif$", out, re.MULTILINE)
 
-        assert main(["-c", str(file), "info", "onshore_wind"]) == 0
+        assert (
+            tool_main(str(file), prog="example-data", argv=["info", "onshore_wind"])
+            == 0
+        )
         out = capsys.readouterr().out
         assert out.startswith("onshore_wind [full]: 7 files, ")
         assert re.search(r"^  era5\s+->\s+era5$", out, re.MULTILINE)
 
         # A plain collection is not labelled: there is no variant to name.
-        assert main(["-c", str(file), "info", "landcover", "--test"]) == 0
+        assert (
+            tool_main(
+                str(file), prog="example-data", argv=["info", "landcover", "--test"]
+            )
+            == 0
+        )
         assert capsys.readouterr().out.startswith("landcover: 1 files, ")
 
     def test_plan_with_the_test_flag_previews_the_test_variant(self, define, capsys):
-        assert main(["-c", str(define(ONSHORE)), "plan", "onshore_wind", "--test"]) == 0
+        assert (
+            tool_main(
+                str(define(ONSHORE)),
+                prog="example-data",
+                argv=["plan", "onshore_wind", "--test"],
+            )
+            == 0
+        )
         out = capsys.readouterr().out
         assert re.search(r"already cached:\s+6 files", out)
         assert re.search(r"to download:\s+0 files", out)
 
     def test_fetch_with_the_test_flag_labels_its_message(self, define, capsys):
         file = define(ONSHORE)
-        assert main(["-c", str(file), "fetch", "onshore_wind", "--test"]) == 0
+        assert (
+            tool_main(
+                str(file), prog="example-data", argv=["fetch", "onshore_wind", "--test"]
+            )
+            == 0
+        )
         assert capsys.readouterr().out.startswith(
             "onshore_wind [test]: all 6 available files already present"
         )
-        assert main(["-c", str(file), "fetch", "onshore_wind"]) == 0
+        assert (
+            tool_main(str(file), prog="example-data", argv=["fetch", "onshore_wind"])
+            == 0
+        )
         assert capsys.readouterr().out.startswith(
             "onshore_wind [full]: all 7 available files already present"
         )
@@ -1213,7 +1241,12 @@ class TestCommandLine:
         """Tab-separated so a shell can read it back: ``while IFS=$'\\t' read handle path``."""
         _, cache, _ = world
         assert (
-            main(["-c", str(define(ONSHORE)), "paths", "onshore_wind", "--test"]) == 0
+            tool_main(
+                str(define(ONSHORE)),
+                prog="example-data",
+                argv=["paths", "onshore_wind", "--test"],
+            )
+            == 0
         )
         captured = capsys.readouterr()
         assert captured.err == ""
@@ -1238,7 +1271,7 @@ class TestCommandLine:
               include:
                 - dataset: landcover
             """)
-        assert main(["-c", str(file), "paths", "bare"]) == 2
+        assert tool_main(str(file), prog="example-data", argv=["paths", "bare"]) == 2
         captured = capsys.readouterr()
         assert captured.out == ""
         assert captured.err.startswith(
@@ -1275,7 +1308,7 @@ class TestCommandLine:
         """What is on disk is one cache; a file only the test variant selects
         is as much a file to check as one the full variant does."""
         file = define(ONSHORE)
-        assert main(["-c", str(file), "verify", "--all"]) == 0
+        assert tool_main(str(file), prog="example-data", argv=["verify", "--all"]) == 0
         out = capsys.readouterr().out
         expected = len(set(TEST_KEYS) | set(FULL_KEYS))
         assert expected == 12
@@ -1283,16 +1316,29 @@ class TestCommandLine:
         assert f"{expected} file(s) match the catalogue." in out
 
         # One variant on its own checks only its own files.
-        assert main(["-c", str(file), "verify", "onshore_wind", "--test"]) == 0
+        assert (
+            tool_main(
+                str(file),
+                prog="example-data",
+                argv=["verify", "onshore_wind", "--test"],
+            )
+            == 0
+        )
         assert "verifying 6 files from onshore_wind" in capsys.readouterr().out
-        assert main(["-c", str(file), "verify", "onshore_wind"]) == 0
+        assert (
+            tool_main(str(file), prog="example-data", argv=["verify", "onshore_wind"])
+            == 0
+        )
         assert "verifying 7 files from onshore_wind" in capsys.readouterr().out
 
     @pytest.mark.parametrize("command", ["info", "plan", "fetch", "paths", "verify"])
     def test_an_unknown_collection_is_a_message_not_a_traceback(
         self, define, capsys, command
     ):
-        assert main(["-c", str(define(ONSHORE)), command, "nope"]) == 2
+        assert (
+            tool_main(str(define(ONSHORE)), prog="example-data", argv=[command, "nope"])
+            == 2
+        )
         captured = capsys.readouterr()
         assert captured.err.startswith("error: unknown collection 'nope'")
         assert "Traceback" not in captured.err
@@ -1304,11 +1350,18 @@ class TestCommandLine:
                 include:
                   - dataset: landcover
             """)
-        assert main(["-c", str(file), "info", "test_only"]) == 2
+        assert (
+            tool_main(str(file), prog="example-data", argv=["info", "test_only"]) == 2
+        )
         err = capsys.readouterr().err
         assert err.startswith("error: collection 'test_only' has no 'full' variant")
         assert "--test" in err
-        assert main(["-c", str(file), "info", "test_only", "--test"]) == 0
+        assert (
+            tool_main(
+                str(file), prog="example-data", argv=["info", "test_only", "--test"]
+            )
+            == 0
+        )
 
     def test_an_incomplete_catalogue_is_a_message_not_a_traceback(
         self, define, incomplete, capsys
@@ -1321,13 +1374,18 @@ class TestCommandLine:
             """,
             catalog=incomplete,
         )
-        assert main(["-c", str(file), "info", "haunted"]) == 2
+        assert tool_main(str(file), prog="example-data", argv=["info", "haunted"]) == 2
         err = capsys.readouterr().err
         assert err.startswith("error: dataset 'ghost' is listed in the catalogue index")
         assert "Traceback" not in err
 
     def test_a_misdefined_collection_is_a_message_not_a_traceback(self, define, capsys):
-        assert main(["-c", str(define(FORGOT)), "paths", "forgot"]) == 2
+        assert (
+            tool_main(
+                str(define(FORGOT)), prog="example-data", argv=["paths", "forgot"]
+            )
+            == 2
+        )
         assert capsys.readouterr().err.startswith(
             "error: collection 'forgot': paths.clc names the file"
         )
@@ -1339,7 +1397,12 @@ class TestCommandLine:
         """The command line refuses exactly what ethos_data.fetch() refuses, and
         as early: plan and info would otherwise describe a collection that can
         never be fetched, and fetch would move the data before saying so."""
-        assert main(["-c", str(define(FORGOT)), command, "forgot"]) == 2
+        assert (
+            tool_main(
+                str(define(FORGOT)), prog="example-data", argv=[command, "forgot"]
+            )
+            == 2
+        )
         captured = capsys.readouterr()
         assert captured.out == ""
         assert captured.err.startswith(
@@ -1363,7 +1426,7 @@ class TestCommandLine:
             alsobroken: [a, b]
             """,
         )
-        assert main(["-c", str(file), "list"]) == 1
+        assert tool_main(str(file), prog="example-data", argv=["list"]) == 1
         out = capsys.readouterr().out
         assert re.search(
             r"^  forgot\s+\[unresolvable\]\s+collection 'forgot': paths\.clc names the file",
@@ -1397,7 +1460,11 @@ class TestCommandLine:
         file = define(LICENSED)
         with pytest.warns(UserWarning) as record:
             assert (
-                main(["--skip-unavailable", "-c", str(file), "paths", "with_licensed"])
+                tool_main(
+                    str(file),
+                    prog="example-data",
+                    argv=["--skip-unavailable", "paths", "with_licensed"],
+                )
                 == 0
             )
         assert capsys.readouterr().out.splitlines() == [
@@ -1408,7 +1475,10 @@ class TestCommandLine:
             for w in record
         )
         # Without the flag the command stops, as the API does, before any transfer.
-        assert main(["-c", str(file), "paths", "with_licensed"]) == 2
+        assert (
+            tool_main(str(file), prog="example-data", argv=["paths", "with_licensed"])
+            == 2
+        )
         captured = capsys.readouterr()
         assert captured.out == ""
         assert captured.err.startswith(
@@ -1437,7 +1507,7 @@ class TestCommandLine:
             """,
             catalog=incomplete,
         )
-        assert main(["-c", str(file), "verify", "--all"]) == 1
+        assert tool_main(str(file), prog="example-data", argv=["verify", "--all"]) == 1
         out = capsys.readouterr().out
         assert re.search(
             r"^skipped spooky \[full\]: dataset 'ghost' is listed in the catalogue index",
@@ -1460,63 +1530,77 @@ class TestCommandLine:
         assert "3 collection variant(s) could not be resolved and were skipped" in out
         # With everything resolvable the exit status is 0, as before.
         assert (
-            main(["-c", str(define(ONSHORE, name="fine.yaml")), "verify", "--all"]) == 0
+            tool_main(
+                str(define(ONSHORE, name="fine.yaml")),
+                prog="example-data",
+                argv=["verify", "--all"],
+            )
+            == 0
         )
         assert "skipped" not in capsys.readouterr().out
 
     def test_the_test_flag_may_come_before_the_subcommand(self, define, capsys):
         """The help says "put global options before the subcommand", so
-        ``-c f --test info x`` is what people type; a bare "unrecognized
+        ``example-data --test info x`` is what people type; a bare "unrecognized
         arguments: --test" would send them hunting for a typo."""
         file = define(ONSHORE)
         outputs = []
         for argv in (
-            ["-c", str(file), "info", "onshore_wind", "--test"],
-            ["-c", str(file), "--test", "info", "onshore_wind"],
-            ["--test", "-c", str(file), "info", "onshore_wind"],
+            ["info", "onshore_wind", "--test"],
+            ["--test", "info", "onshore_wind"],
         ):
-            assert main(argv) == 0
+            assert tool_main(file, prog="example-data", argv=argv) == 0
             outputs.append(capsys.readouterr().out)
         assert outputs[0].startswith("onshore_wind [test]: 6 files, ")
-        assert outputs[0] == outputs[1] == outputs[2]
-        assert main(["--test", "-c", str(file), "fetch", "onshore_wind"]) == 0
+        assert outputs[0] == outputs[1]
+        assert (
+            tool_main(
+                str(file), prog="example-data", argv=["--test", "fetch", "onshore_wind"]
+            )
+            == 0
+        )
         assert capsys.readouterr().out.startswith(
             "onshore_wind [test]: all 6 available files already present"
         )
         # A command without the flag ignores it rather than rejecting it.
-        assert main(["--test", "-c", str(file), "list"]) == 0
+        assert tool_main(str(file), prog="example-data", argv=["--test", "list"]) == 0
 
     def test_ls_and_path_read_the_catalogue_the_collections_file_pins(
         self, world, define, other_catalog, monkeypatch, capsys
     ):
         """``ls`` and ``path`` take a key, not a collection -- but given the
-        same ``-c`` file as ``fetch`` they must mean the same catalogue. Nothing
+        same shipped file as ``fetch`` they must mean the same catalogue. Nothing
         is configured here, so the alternative would be the public catalogue on
         the network, which must not be contacted."""
         _, cache, _ = world
         file = define(ONSHORE)
         monkeypatch.setattr(urllib.request, "urlopen", _no_network)
-        assert main(["-c", str(file), "ls", "reskit-test-data/era5"]) == 0
+        assert (
+            tool_main(
+                str(file), prog="example-data", argv=["ls", "reskit-test-data/era5"]
+            )
+            == 0
+        )
         assert capsys.readouterr().out.startswith(
             "reskit-test-data/era5: 3 files, 5 B\n"
         )
-        assert main(["-c", str(file), "path", "landcover/clc.tif"]) == 0
+        assert (
+            tool_main(
+                str(file), prog="example-data", argv=["path", "landcover/clc.tif"]
+            )
+            == 0
+        )
         assert capsys.readouterr().out.rstrip("\n") == str(cache / "landcover/clc.tif")
-        # A collections.yaml in the working directory counts as well, as for fetch.
+        # A different working directory cannot change the wrapper's pin.
         monkeypatch.chdir(file.parent)
-        assert main(["ls", "era5/2015"]) == 0
+        assert tool_main(file, prog="example-data", argv=["ls", "era5/2015"]) == 0
         assert capsys.readouterr().out.startswith("era5/2015: 2 files, ")
         # --catalog and $ETHOS_DATA_CATALOG still win over the pin, exactly as for fetch.
         assert (
-            main(
-                [
-                    "--catalog",
-                    str(other_catalog),
-                    "-c",
-                    str(file),
-                    "ls",
-                    "reskit-test-data/era5",
-                ]
+            tool_main(
+                str(file),
+                prog="example-data",
+                argv=["--catalog", str(other_catalog), "ls", "reskit-test-data/era5"],
             )
             == 2
         )
@@ -1524,7 +1608,12 @@ class TestCommandLine:
             "error: unknown dataset 'reskit-test-data'"
         )
         monkeypatch.setenv("ETHOS_DATA_CATALOG", str(other_catalog))
-        assert main(["-c", str(file), "path", "landcover/clc.tif"]) == 2
+        assert (
+            tool_main(
+                str(file), prog="example-data", argv=["path", "landcover/clc.tif"]
+            )
+            == 2
+        )
         assert capsys.readouterr().err.startswith("error: unknown dataset 'landcover'")
 
 
@@ -1631,11 +1720,11 @@ class TestCatalogUnavailable:
         tmp_path, _, _ = world
         file = define(ONSHORE, catalog=tmp_path / "nowhere" / "datacatalog.json")
         for argv in (
-            ["-c", str(file), "info", "onshore_wind"],
-            ["-c", str(file), "list"],
-            ["-c", str(file), "ls", "era5"],
+            ["info", "onshore_wind"],
+            ["list"],
+            ["ls", "era5"],
         ):
-            assert main(argv) == 2
+            assert tool_main(file, prog="example-data", argv=argv) == 2
             captured = capsys.readouterr()
             assert captured.err.startswith("error: cannot read the catalogue index at ")
             assert "Traceback" not in captured.err
@@ -1738,11 +1827,11 @@ class TestSecondReviewRound:
         name = body.split(":", 1)[0]
         with pytest.raises(ethos_data.CollectionError, match=complaint):
             ethos_data.resolve(name, file)
-        assert main(["-c", str(file), "list"]) == 1
+        assert tool_main(str(file), prog="example-data", argv=["list"]) == 1
         out = capsys.readouterr().out
         assert f"{name:<28} {'[unresolvable]':>17}" in out
         assert "onshore_wind [test]" in out and "landcover " in out
-        assert main(["-c", str(file), "info", name]) == 2
+        assert tool_main(str(file), prog="example-data", argv=["info", name]) == 2
         assert complaint in capsys.readouterr().err
 
     def test_a_mixed_keys_mistake_is_reported_as_itself(self, define):
@@ -1774,7 +1863,12 @@ class TestSecondReviewRound:
                 - dataset: licensed
         """)
         assert (
-            main(["--skip-unavailable", "-c", str(file), "fetch", "only_licensed"]) == 0
+            tool_main(
+                str(file),
+                prog="example-data",
+                argv=["--skip-unavailable", "fetch", "only_licensed"],
+            )
+            == 0
         )
         out = capsys.readouterr().out
         assert "nothing to fetch" in out and "none of its 1 file(s)" in out

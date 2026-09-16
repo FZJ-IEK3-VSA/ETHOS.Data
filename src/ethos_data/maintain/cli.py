@@ -209,7 +209,7 @@ def dispatch(args) -> int:
     """Run one ``ethos-data catalog`` subcommand.
 
     The heavy modules are imported here rather than at module scope: a plain
-    ``ethos-data list`` builds this parser too, and should not pay to import the
+    ``ethos-data ls`` builds this parser too, and should not pay to import the
     manifest builder to do it.
     """
     if args.catalog_command == "check-store":

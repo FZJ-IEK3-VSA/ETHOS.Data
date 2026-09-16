@@ -294,13 +294,139 @@ def test_the_tool_command_takes_catalog_for_one_run(shipped, world, tmp_path, ca
     assert data.main(["list"]) == 0, "the handle itself is untouched"
 
 
-def test_ethos_data_without_a_file_points_at_the_tool_command(
-    world, tmp_path, monkeypatch, capsys
-):
+def test_ethos_data_rejects_collection_commands(world, tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
-    assert main(["list"]) == 2
+    with pytest.raises(SystemExit) as stopped:
+        main(["list"])
+    assert stopped.value.code == 2
     err = capsys.readouterr().err
-    assert "no collections file" in err and "-c" in err
+    assert "invalid choice: 'list'" in err
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["info", "wind"],
+        ["plan", "wind"],
+        ["paths", "wind"],
+        ["verify"],
+        ["bundle", "--help"],
+        ["staging", "--help"],
+        ["path", "flat"],
+        ["-c", "collections.yaml", "ls"],
+        ["--test", "fetch", "flat"],
+        ["config", "set-collections", "collections.yaml"],
+        ["config", "unset-collections"],
+    ],
+)
+def test_package_commands_and_collection_options_are_not_in_ethos_data(argv):
+    with pytest.raises(SystemExit) as stopped:
+        main(argv)
+    assert stopped.value.code == 2
+
+
+@pytest.mark.parametrize(
+    "key", ["flat/one.csv", "flat/sub", "flat", "family", "family/alpha/sites.shp"]
+)
+def test_ethos_data_fetches_catalogue_keys(world, key, capsys):
+    _, _, index = world
+    expected = ethos_data.catalog(str(index)).path(key)
+    assert main(["--catalog", str(index), "fetch", key]) == 0
+    assert capsys.readouterr().out.strip() == str(expected)
+
+
+def test_catalogue_listing_only_reads_the_index(world, monkeypatch, capsys):
+    _, _, index = world
+    monkeypatch.setattr(
+        ethos_data.Dataset,
+        "load",
+        lambda self: pytest.fail("loaded a dataset inventory"),
+    )
+    assert main(["--catalog", str(index), "ls"]) == 0
+    out = capsys.readouterr().out
+    assert "family/alpha" in out and "flat" in out
+
+
+def test_ethos_data_ignores_collection_pins_and_uses_catalogue_precedence(
+    world, shipped, monkeypatch, capsys
+):
+    from ethos_data import cli
+
+    root, cache, index = world
+    other = root / "other.json"
+    other.write_text(json.dumps({"datasets": []}))
+    # Both a configured file and a file in the working directory pin an empty catalogue.
+    shipped.write_text(f"catalog: {other.as_posix()}\ncollections: {{}}\n")
+    monkeypatch.chdir(shipped.parent)
+    monkeypatch.setattr(
+        config, "load_config", lambda: ({"collections": str(shipped)}, {})
+    )
+    monkeypatch.setattr(cli, "DEFAULT_CATALOG", str(index))
+    assert main(["fetch", "flat/one.csv"]) == 0
+    assert capsys.readouterr().out.strip() == str(cache / "flat/one.csv")
+    monkeypatch.setattr(
+        config,
+        "load_config",
+        lambda: ({"catalog": str(other)}, {"catalog": "test config"}),
+    )
+    assert main(["fetch", "flat/one.csv"]) == 2
+    monkeypatch.setenv("ETHOS_DATA_CATALOG", str(index))
+    assert main(["fetch", "flat/one.csv"]) == 0
+    assert main(["--catalog", str(other), "fetch", "flat/one.csv"]) == 2
+
+
+def test_direct_fetch_respects_root_and_downloads_sidecars(world, monkeypatch, capsys):
+    import pooch
+
+    root, cache, index = world
+    destination = root / "new-cache"
+    fetched = []
+
+    def transfer(url, output_file, pooch):
+        relative = url.removeprefix("https://example.invalid/")
+        fetched.append(relative)
+        Path(output_file).write_bytes((cache / relative).read_bytes())
+
+    # Exercise the real cache, selection and checksum code with a local transfer.
+    monkeypatch.setattr(pooch.core, "choose_downloader", lambda url, **kwargs: transfer)
+    argv = [
+        "--catalog",
+        str(index),
+        "--root",
+        str(destination),
+        "fetch",
+        "family/alpha/sites.shp",
+    ]
+    assert main(argv) == 0
+    assert set(fetched) == {"family/alpha/sites.shp", "family/alpha/sites.dbf"}
+    assert capsys.readouterr().out.strip() == str(
+        destination / "family/alpha/sites.shp"
+    )
+    fetched.clear()
+    assert main(argv) == 0
+    assert fetched == [], "a second fetch must reuse the verified cache"
+
+
+def test_direct_fetch_reports_an_unknown_key(world, capsys):
+    _, _, index = world
+    assert main(["--catalog", str(index), "fetch", "flat/missing.csv"]) == 2
+    assert "error:" in capsys.readouterr().err
+
+
+def test_verify_suggests_the_package_command_and_selected_collection(
+    world, shipped, capsys
+):
+    _, cache, _ = world
+    (cache / "family/alpha/era5/x.nc").write_text("corrupted")
+    assert (
+        ethos_data.tool_main(
+            shipped, tool="faketool", argv=["verify", "wind", "--deep"]
+        )
+        == 1
+    )
+    out = capsys.readouterr().out
+    assert "faketool-data verify wind --repair --deep" in out
+    assert "ethos-data verify" not in out
 
 
 def test_tool_main_builds_the_handle_only_when_a_command_needs_it(

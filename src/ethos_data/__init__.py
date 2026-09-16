@@ -208,8 +208,7 @@ def tool_main(
     catalog: str | None = None,
     argv: list[str] | None = None,
 ) -> int:
-    """The body of a tool's own data command: ``ethos-data``'s collection
-    commands bound to the file the tool ships.
+    """The body of a tool's data command, bound to its shipped collections file.
 
     Two lines in the tool make the command::
 
@@ -223,7 +222,7 @@ def tool_main(
 
     ``list``, ``info``, ``plan``, ``fetch``, ``paths`` and ``verify`` for the
     file's collections, ``path`` and ``ls`` against the catalogue it pins,
-    ``bundle`` and ``config``. ``prog`` names the command in help and messages
+    ``bundle``, ``staging`` and ``config``. ``prog`` names the command in help and messages
     (default ``<tool>-data``); ``catalog`` is the tool's own catalogue override,
     applied below ``--catalog`` and above ``$ETHOS_DATA_CATALOG``. The handle
     is built only for the commands that need one, so ``--help`` and ``config

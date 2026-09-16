@@ -71,7 +71,8 @@ anonymous HTTPS — no Helmholtz account is needed to download it.
 
 ```bash
 pip install ethos_data
-ethos-data -c collections.yaml fetch test_suite
+ethos-data ls
+ethos-data fetch <dataset-or-key>
 ```
 
 ## Datasets

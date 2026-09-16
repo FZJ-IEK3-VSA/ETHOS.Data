@@ -9,9 +9,9 @@ hard-coded paths that have to be unpicked later.
 The staging root is that middle ground. It is an ordinary directory whose
 entries are dataset names, exactly like the public cache:
 
-    ethos-data staging add my-new-dataset /scratch/me/new-data
-    ethos-data staging list
-    ethos-data staging remove my-new-dataset
+    reskit-data staging add my-new-dataset /scratch/me/new-data
+    reskit-data staging list
+    reskit-data staging remove my-new-dataset
 
 An entry here shadows the catalogue completely, and is **described by what is on
 disk** rather than by any manifest -- which is the point: the file list is still
@@ -191,7 +191,7 @@ def add(
     if entry.exists() or entry.is_symlink():
         raise SystemExit(
             f"{name!r} is already staged at {entry}.\n"
-            f"Remove it first:  ethos-data staging remove {name}"
+            f"Remove it first with your package's data command: staging remove {name}"
         )
 
     if copy:
@@ -231,7 +231,7 @@ def remove(name: str, root: str | Path | None = None, force: bool = False) -> Pa
         if not force:
             raise SystemExit(
                 f"{entry} is a real directory, not a link -- removing it deletes the data.\n"
-                f"If that is what you mean:  ethos-data staging remove {name} --force"
+                f"Use your package's data command: staging remove {name} --force"
             )
         import shutil
 

@@ -9,7 +9,7 @@ question about a different dataset.
 
 Everything the index already knows -- byte total, file count, access class,
 remote prefix, licence status -- is answered from the index and never triggers a
-fetch, so ``ethos-data list`` and access checks stay free.
+fetch, so ``ethos-data ls`` and access checks stay free.
 
 A large dataset may additionally be **sharded**: its ``datapackage.json`` carries
 an ``ethos:shards`` index instead of a ``resources`` array, and the inventory is

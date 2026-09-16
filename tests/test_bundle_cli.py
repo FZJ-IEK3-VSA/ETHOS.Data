@@ -6,8 +6,7 @@ import urllib.request
 
 import pytest
 
-from ethos_data import config
-from ethos_data.cli import main
+from ethos_data import config, tool_main
 from ethos_data.bundles import ModifiedBundleWarning
 
 
@@ -55,10 +54,10 @@ def test_cli_export_verify_development_override(tmp_path, monkeypatch, capsys):
     )
     target = tmp_path / "bundle"
     assert (
-        main(
-            [
-                "-c",
-                str(collections),
+        tool_main(
+            str(collections),
+            prog="example-data",
+            argv=[
                 "bundle",
                 "export",
                 str(target),
@@ -67,20 +66,55 @@ def test_cli_export_verify_development_override(tmp_path, monkeypatch, capsys):
                 f"lesson={source}",
                 "--source-revision",
                 "test",
-            ]
+            ],
         )
         == 0
     )
     snapshot = (target / "bundle.json").read_bytes()
-    assert main(["bundle", "verify", str(target), "small"]) == 0
+    assert (
+        tool_main(
+            collections,
+            prog="example-data",
+            argv=["bundle", "verify", str(target), "small"],
+        )
+        == 0
+    )
     fixture = target / "data/lesson/value.txt"
     fixture.write_bytes(b"4")
-    assert main(["bundle", "verify", str(target), "small"]) == 1
-    assert main(["bundle", "fetch", str(target), "small"]) == 2
+    assert (
+        tool_main(
+            collections,
+            prog="example-data",
+            argv=["bundle", "verify", str(target), "small"],
+        )
+        == 1
+    )
+    assert (
+        tool_main(
+            collections,
+            prog="example-data",
+            argv=["bundle", "fetch", str(target), "small"],
+        )
+        == 2
+    )
     with pytest.warns(ModifiedBundleWarning, match="lesson/value.txt"):
-        assert main(["bundle", "fetch", str(target), "small", "--allow-modified"]) == 0
+        assert (
+            tool_main(
+                collections,
+                prog="example-data",
+                argv=["bundle", "fetch", str(target), "small", "--allow-modified"],
+            )
+            == 0
+        )
     assert (target / "bundle.json").read_bytes() == snapshot
     assert fixture.read_bytes() == b"4"
     fixture.unlink()
-    assert main(["bundle", "fetch", str(target), "small", "--allow-modified"]) == 2
+    assert (
+        tool_main(
+            collections,
+            prog="example-data",
+            argv=["bundle", "fetch", str(target), "small", "--allow-modified"],
+        )
+        == 2
+    )
     assert "missing" in capsys.readouterr().err
