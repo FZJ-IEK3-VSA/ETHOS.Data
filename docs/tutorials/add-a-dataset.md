@@ -169,11 +169,27 @@ collections:
       - dataset: station-temperatures
 ```
 
+Save this small package-style wrapper as `data_cli.py` beside `collections.yaml`:
+
+```python
+from pathlib import Path
+from ethos_data import tool_main
+
+if __name__ == "__main__":
+    raise SystemExit(tool_main(
+        Path(__file__).with_name("collections.yaml"), prog="python data_cli.py"
+    ))
+```
+
+It provides the same collection, bundle and staging commands a consuming package
+exposes through `tool_main`, without needing RESKit installed for this lesson.
+
+
 Plan the collection the way a data user would, with the shared cache as the
 public cache:
 
 ```bash
-ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
+python data_cli.py --catalog public-catalogue/datacatalog.json \
   --root shared-cache plan temperatures
 ```
 
@@ -189,9 +205,9 @@ may have configured for your everyday work cannot take its place. Now fetch the
 collection and check it against the catalogue:
 
 ```bash
-ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
+python data_cli.py --catalog public-catalogue/datacatalog.json \
   --root shared-cache fetch temperatures
-ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
+python data_cli.py --catalog public-catalogue/datacatalog.json \
   --root shared-cache verify temperatures --deep
 ```
 
@@ -205,9 +221,9 @@ reorganised or retired, replace the link with a verified copy that the cache
 owns:
 
 ```bash
-ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
+ethos-data --catalog public-catalogue/datacatalog.json \
   --root shared-cache materialize station-temperatures --dry-run
-ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
+ethos-data --catalog public-catalogue/datacatalog.json \
   --root shared-cache materialize station-temperatures
 ```
 
@@ -246,8 +262,8 @@ When you are done, delete the `catalogue-lesson` directory.
   a real submission, from review to release.
 - [Upload a dataset](../how-to/upload-a-dataset.md) — credentials, transfer, and
   verification.
-- [Add internal and restricted datasets](../how-to/add-internal-and-restricted-data.md)
+- [Add internal and restricted datasets](../how-to/describe-a-dataset.md#restricted-installations)
   — data that is not uploaded publicly.
 - [Link cluster data into the cache](../how-to/link-cluster-data.md) and [Move
-  linked data into the cache](../how-to/move-linked-data-into-the-cache.md) — linking and
+  linked data into the cache](../how-to/link-cluster-data.md#materialize-copies) — linking and
   copying on real shared storage.

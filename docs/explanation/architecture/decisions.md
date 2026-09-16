@@ -37,3 +37,19 @@ helps explain compatibility constraints.
 The hosting directions do not assert that repositories or releases are already
 deployed. Update statuses when implementation and validation establish
 the documented behaviour.
+
+## Package wrappers own collection workflows (2026-09-16)
+
+**Status: implemented.** Package collections define workflow selections and
+test variants; discovering a separate collections file in the standalone CLI
+duplicated that interface and made catalogue choice depend on the working directory.
+
+The standalone CLI now handles direct keys, configuration, shared cache
+administration and catalogue maintenance. Consuming packages expose collection,
+bundle and staging commands through the common `tool_main` builder. Staging
+continues to use shared roots and library logic.
+
+Keeping the generic `-c` route would preserve old scripts but also retain two
+collection entry points. The chosen split removes that route and requires
+scripts to use a package wrapper or the explicit Python collections API.
+See [CLI migration](../../reference/cli/ethos-data.md#tool-command) for replacements.

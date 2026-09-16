@@ -16,7 +16,7 @@ the calculation.
 | Component | Responsibility | Interface |
 |---|---|---|
 | Consuming package, such as ETHOS.RESKit | Declares the slices of data its workflows need | Collections YAML and Python API |
-| `ethos-data` reader | Selects resources, resolves locations, retrieves files | Python API or CLI; local paths returned |
+| `ethos_data` reader | Selects resources, resolves locations, retrieves files | Python API, package wrappers, or direct `ethos-data ls/fetch`; local paths returned |
 | Source catalogue | Maintainer-owned dataset descriptions and generated inventories | YAML inputs, JSON descriptors and shards |
 | Published catalogue | Generated view selected by visibility, with internal fields removed | JSON read locally or over HTTP(S) |
 | Remote storage (DESY dCache) | Authoritative centrally published dataset bytes, including test data | Download URLs; maintainer upload interfaces |

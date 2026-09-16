@@ -45,13 +45,29 @@ The empty index deliberately does not describe `lesson-temperatures`. It is a
 local teaching fixture, not the generated index of an official catalogue. The
 next step supplies the dataset through staging.
 
+Save this small package-style wrapper as `data_cli.py` beside `collections.yaml`:
+
+```python
+from pathlib import Path
+from ethos_data import tool_main
+
+if __name__ == "__main__":
+    raise SystemExit(tool_main(
+        Path(__file__).with_name("collections.yaml"), prog="python data_cli.py"
+    ))
+```
+
+It provides the same collection, bundle and staging commands a consuming package
+exposes through `tool_main`, without needing RESKit installed for this lesson.
+
+
 ## 2. Register and inspect the candidate
 
 ```bash
-ethos-data staging add lesson-temperatures "$PWD/candidate" --note "local CSV lesson"
-ethos-data staging list
-ethos-data -c collections.yaml --catalog "$PWD/datacatalog.json" info example_input
-ethos-data -c collections.yaml --catalog "$PWD/datacatalog.json" info all
+python data_cli.py staging add lesson-temperatures "$PWD/candidate" --note "local CSV lesson"
+python data_cli.py staging list
+python data_cli.py --catalog "$PWD/datacatalog.json" info example_input
+python data_cli.py --catalog "$PWD/datacatalog.json" info all
 ```
 
 Both collections resolve the same CSV; `all` aggregates the inputs this example
@@ -128,7 +144,7 @@ on your machine.
 ## 5. End the experiment
 
 ```bash
-ethos-data staging remove lesson-temperatures
+python data_cli.py staging remove lesson-temperatures
 unset ETHOS_STAGING_DIR ETHOS_DATA_DIR
 ```
 
@@ -148,7 +164,7 @@ metadata and inventory a catalogue maintainer reviews.
 
 - [Run a test with repository data](bundled-tests.md) — the next lesson:
   catalogued test data in a repository, and deliberate local edits to it.
-- [Stage uncatalogued data](../how-to/stage-unpublished-data.md) — staging for
+- [Stage uncatalogued data](../how-to/propose-a-dataset.md#stage-development-data) — staging for
   real data.
 - [Propose a dataset](../how-to/propose-a-dataset.md) — a real submission,
   including provenance and access to the bytes.

@@ -76,7 +76,7 @@ still checks anonymously and can report failure for correctly private bytes.
 
 Use a separate protected storage location agreed with the administrator; never
 assume `--allow-internal` makes a public parent private. Prefer the
-[local internal-data workflow](add-internal-and-restricted-data.md) until an
+[local internal-data workflow](describe-a-dataset.md#restricted-installations) until an
 authenticated transfer/read procedure is established.
 
 See [Upload options](../reference/cli/catalog.md#upload-dataset-dataset) for the

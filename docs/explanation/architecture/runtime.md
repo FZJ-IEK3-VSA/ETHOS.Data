@@ -59,8 +59,8 @@ supports changing work in progress. Neither should be mistaken for a verified
 copy solely because fetch returned a path. Staging warnings and the
 [licensing and immutability rules](../licensing.md) explain these boundaries.
 
-For configuration steps, see [Use data already on disk](../../how-to/use-data-already-on-disk.md)
-and [Work with restricted data](../../how-to/restricted-data.md).
+For configuration steps, see [Use data already on disk](../../how-to/link-cluster-data.md#dataset-root-overrides)
+and [Work with restricted data](../../how-to/set-up-your-machine.md#restricted-data).
 
 ### Failure boundaries
 

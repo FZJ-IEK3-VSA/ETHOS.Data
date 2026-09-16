@@ -78,10 +78,41 @@ ethos:embargo:
   becomes: public
 ```
 
-Use a dated review when possible. For restricted data, use
-[Add internal and restricted datasets](add-internal-and-restricted-data.md);
-do not declare a remote prefix.
+Use a dated review when possible. For restricted data, follow the installation-specific fields below.
 
 Continue with [Accept a dataset proposal](accept-a-dataset.md).
 See [File formats](../reference/schemas.md) for the full metadata reference and
 [Licensing and immutability](../explanation/licensing.md) for the rationale.
+
+## Restricted installations {#restricted-installations}
+
+Use the same source/build procedure with these classification fields, recording
+the actual agreement, provenance, selection and custodian:
+
+```yaml
+ethos:access: restricted
+ethos:visibility: hidden
+ethos:restriction: Contact the dataset custodian for authorised access.
+ethos:embargo:
+  until: "unspecified"
+  reason: Metadata publication has not been approved; review with the custodian.
+  becomes: restricted
+ethos:license_status: unresolved
+ethos:license_note: Record the actual agreement and review outcome here.
+```
+
+Complete review before linking or copying and replace the unresolved marker
+with the reviewed metadata. Restricted entries have no `ethos:remote_prefix`
+and must never be marked `ethos:uploaded: true`. Approved metadata can be listed
+publicly without making the files public.
+
+[Register and verify the local installation](link-cluster-data.md#restricted-data),
+then [deploy the complete internal metadata](catalogue-hosting.md).
+Give users catalogue and root locations through the internal channel.
+Restricted data has no upload step; for non-restricted internal data, review the
+[internal-upload limits](upload-a-dataset.md#internal-uploads).
+
+For added files, update source selection, build and review again. Changed bytes
+need versioned resources or dataset identifiers where old pins must remain usable.
+Keep `source_dir` while it is the build input; use the
+[retirement procedure](link-cluster-data.md#retire-the-original) when retiring it.

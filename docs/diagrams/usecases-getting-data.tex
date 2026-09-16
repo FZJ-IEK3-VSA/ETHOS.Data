@@ -1,5 +1,5 @@
 % The consumer side, with the commands attached. Answers "which command do I
-% actually run, and what does it touch?" for the Getting-data how-to guides.
+% actually run, and what does it touch`" for the Getting-data how-to guides.
 \begin{tikzpicture}[
   node distance=6mm and 16mm,
   usecase/.append style={text width=33mm, minimum width=0mm},
@@ -18,22 +18,29 @@
 % The commands, right of each use case. Deliberately literal: the guides are
 % task-shaped, and this is the bridge from task to keystrokes.
 \node[cmd, right=13mm of see, align=left]   (c1)
-  {ethos-data list\\ethos-data info \textit{name}};
+  {reskit-data list\\reskit-data info \textit{name}};
 \node[cmd, right=13mm of where, align=left] (c2)
   {ethos-data config show\\ethos-data config set-cache \textit{dir}};
 \node[cmd, right=13mm of get, align=left]   (c3)
-  {ethos-data plan \textit{name}\\ethos-data fetch \textit{name}};
+  {reskit-data plan \textit{name}\\reskit-data fetch \textit{name}};
 \node[cmd, right=13mm of trust, align=left] (c4)
-  {ethos-data verify --all\\ethos-data verify --deep --repair};
+  {reskit-data verify --all\\reskit-data verify --deep --repair};
 \node[cmd, right=13mm of own, align=left]   (c5)
   {ethos-data materialize \textit{dataset}};
 
 \foreach \a/\b in {see/c1,where/c2,get/c3,trust/c4,own/c5}
   \draw[uses] (\a) -- (\b);
 
+\node[usecase, below=9mm of own, text width=33mm] (direct)
+  {Get a catalogue key};
+\draw[link] (user.south) |- (direct.west);
+\node[cmd, right=13mm of direct, align=left] (c7)
+  {ethos-data ls \textit{key}\\ethos-data fetch \textit{key}};
+\draw[uses] (direct) -- (c7);
+
 % Reading in place vs downloading is the distinction the guides keep returning
 % to, so it is drawn rather than only described.
-\node[usecase, below=9mm of own, text width=33mm] (inplace)
+\node[usecase, below=9mm of direct, text width=33mm] (inplace)
   {Read data already here};
 \draw[link] (user.south) |- (inplace.west);
 \node[cmd, right=13mm of inplace, align=left] (c6)
@@ -41,12 +48,12 @@
 \draw[uses] (inplace) -- (c6);
 
 \begin{scope}[on background layer]
-  \node[boundarybox, fit=(see)(where)(get)(trust)(own)(inplace)] (sys) {};
+  \node[boundarybox, fit=(see)(where)(get)(trust)(own)(direct)(inplace)] (sys) {};
 \end{scope}
 \node[boundarylabel, anchor=north west] at (sys.north west) {reading};
 
 \node[note, below=6mm of inplace, xshift=22mm, text width=88mm]
-  {Nothing here writes to a catalogue. \texttt{fetch} and \texttt{materialize}\\
-   write only into the cache; everything else only looks.};
+  {RESKit is one package wrapper. Shared configuration and cache administration
+   use ethos-data; collection workflows use the package command.};
 
 \end{tikzpicture}

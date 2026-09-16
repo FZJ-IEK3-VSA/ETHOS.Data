@@ -95,7 +95,6 @@ package's pin; a staged dataset or per-dataset root can select local bytes.
 A successful in-place fetch establishes availability, while `verify --deep`
 checks those bytes against the recorded inventory.
 
-See [Update test data](../how-to/update-test-data.md),
+See [Update test data](../how-to/keep-test-data-in-a-repository.md#promote-an-accepted-fix),
 [Run package tests in CI](../how-to/run-in-ci.md), and
 [Licensing and immutability](licensing.md).
-

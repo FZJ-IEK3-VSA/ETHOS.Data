@@ -149,6 +149,15 @@ exclude_docs: |
 
 # Compatibility pages retain previously shared architecture URLs.
 not_in_nav: |
+  /how-to/configure-the-cache.md
+  /how-to/add-internal-catalogue.md
+  /how-to/restricted-data.md
+  /how-to/stage-unpublished-data.md
+  /how-to/update-test-data.md
+  /how-to/use-data-already-on-disk.md
+  /how-to/move-linked-data-into-the-cache.md
+  /how-to/report-a-problem.md
+  /how-to/add-internal-and-restricted-data.md
   /explanation/architecture/lifecycle.md
   /explanation/architecture/quality-and-risks.md
 
@@ -183,20 +192,13 @@ nav:
           - Overview: how-to/index.md
           - Data users:
                 - Set up your machine: how-to/set-up-your-machine.md
-                - Configure the cache: how-to/configure-the-cache.md
-                - Work with restricted data: how-to/restricted-data.md
-                - Add the internal data catalogue: how-to/add-internal-catalogue.md
-                - Get data for a task: how-to/get-data-for-a-task.md
-                - Use data already on disk: how-to/use-data-already-on-disk.md
+                - Get data by catalogue key: how-to/get-data-for-a-task.md
                 - Check and repair the cache: how-to/verify-and-repair.md
-                - Identify and report a problem: how-to/report-a-problem.md
           - Package maintainers:
                 - Use ETHOS.Data in your package: how-to/use-from-a-package.md
                 - Write a collections file: how-to/write-a-collections-file.md
-                - Stage uncatalogued data: how-to/stage-unpublished-data.md
-                - Propose a dataset: how-to/propose-a-dataset.md
+                - Develop and propose data: how-to/propose-a-dataset.md
                 - Keep test data in the repository: how-to/keep-test-data-in-a-repository.md
-                - Update test data: how-to/update-test-data.md
                 - Run package tests in CI: how-to/run-in-ci.md
           - Catalogue maintainers:
                 - Accept a dataset proposal: how-to/accept-a-dataset.md
@@ -204,11 +206,9 @@ nav:
                 - Set up dCache access: how-to/set-up-dcache-access.md
                 - Upload a public dataset: how-to/upload-a-dataset.md
                 - Manage dCache folders: how-to/manage-dcache-folders.md
-                - Add internal and restricted datasets: how-to/add-internal-and-restricted-data.md
                 - Publish the catalogue: how-to/publish-the-catalogue.md
                 - Serve catalogues on the cluster and GitHub: how-to/catalogue-hosting.md
-                - Link cluster data into the cache: how-to/link-cluster-data.md
-                - Move linked data into the cache: how-to/move-linked-data-into-the-cache.md
+                - Manage local dataset copies: how-to/link-cluster-data.md
                 - Check catalogue changes in CI: how-to/catalogue-ci.md
                 - Diagnose catalogue problems: how-to/troubleshoot-catalogue.md
                 - Withdraw a dataset: how-to/withdraw-a-dataset.md
@@ -242,6 +242,7 @@ nav:
     - Reference:
           - Command line:
                 - ethos-data: reference/cli/ethos-data.md
+                - Package data commands: reference/cli/package-data.md
                 - ethos-data catalog: reference/cli/catalog.md
           - Configuration: reference/configuration.md
           - File formats: reference/schemas.md

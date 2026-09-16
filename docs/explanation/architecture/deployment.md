@@ -71,6 +71,6 @@ For the hosting procedure, see [Host versioned catalogues](../../how-to/catalogu
 For repository fixtures, see [Keep test data in a repository](../../how-to/keep-test-data-in-a-repository.md).
 
 For setup, use [Installation](../../installation.md),
-[Configure the cache](../../how-to/configure-the-cache.md),
+[Configure the cache](../../how-to/set-up-your-machine.md#cache-locations),
 [Run it in CI](../../how-to/run-in-ci.md), and
 [Upload a dataset](../../how-to/upload-a-dataset.md).

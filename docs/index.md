@@ -25,18 +25,27 @@ files = data.fetch("onshore_wind")                 # {"<dataset>/<file>": Path}
 placements = ethos_data.catalog().path("reskit-test-data/placements/turbine_placements.csv")
 ```
 
-The same from the shell — `-c` names the collections file, the one your
-project uses or the one a package ships:
+The direct CLI takes catalogue keys:
 
 ```bash
-ethos-data -c collections.yaml list                       # the collections the file declares, one row per variant
-ethos-data -c collections.yaml info onshore_wind --test   # which files are in one collection's test variant
-ethos-data -c collections.yaml plan onshore_wind          # what a fetch of the full data would download
-ethos-data -c collections.yaml fetch onshore_wind         # do it
-ethos-data -c collections.yaml paths onshore_wind --test  # fetch the test data, print name<TAB>path
-ethos-data path reskit-test-data/era5                     # the local path of a file or folder
-ethos-data ls global-wind-atlas-v4                        # what a dataset contains, fetching nothing
+ethos-data ls
+ethos-data fetch reskit-test-data/era5
+ethos-data config show
 ```
+
+Package workflows use their own API and command. With RESKit installed:
+
+```bash
+reskit-data list
+reskit-data paths onshore_wind --test
+reskit-data staging list
+```
+
+A package's wrapper binds collections, bundles and staging to its shipped file.
+Shared configuration, direct retrieval, cache administration and catalogue
+maintenance stay with `ethos-data`. See the
+[command reference](reference/cli/ethos-data.md) and
+[package-command reference](reference/cli/package-data.md).
 
 ## How this documentation is organized
 
@@ -54,14 +63,15 @@ Tutorials and how-to guides are grouped by three roles, and one person can hold
 several of them. **Data users** fetch the inputs their ETHOS tools and workflows
 need. **Package maintainers** wire data into a package and propose new
 datasets. **Catalogue maintainers** accept those proposals and publish the
-catalogue. The `ethos-data` command is the reading half; `ethos-data catalog`,
-installed alongside it, is the writing half.
+catalogue. Packages provide the collection workflow. The `ethos-data` CLI provides
+direct access and shared administration; its `catalog` group maintains metadata
+and publication.
 
 ## Who does what
 
 <figure markdown="span">
-  ![Three columns. Data user: set up the machine with a public and a restricted cache, fetch data, check data integrity. Package maintainer: select catalogued data with a collections file, stage uncatalogued data, propose a dataset, keep catalogued test data in the repository, use data in CI from dCache, from the repository copy, or both. Catalogue maintainer: accept a dataset proposal as public or restricted data, upload public data, add restricted data, publish the catalogue internally and publicly, link data already on disk into the cache, copy data that was linked. The package maintainer's collections file goes to the data user and their proposal goes to the catalogue maintainer. Every role reads from or writes to the shared catalogue and storage.](assets/diagrams/usecases-overview-light.svg#only-light){ .diagram }
-  ![Three columns. Data user: set up the machine with a public and a restricted cache, fetch data, check data integrity. Package maintainer: select catalogued data with a collections file, stage uncatalogued data, propose a dataset, keep catalogued test data in the repository, use data in CI from dCache, from the repository copy, or both. Catalogue maintainer: accept a dataset proposal as public or restricted data, upload public data, add restricted data, publish the catalogue internally and publicly, link data already on disk into the cache, copy data that was linked. The package maintainer's collections file goes to the data user and their proposal goes to the catalogue maintainer. Every role reads from or writes to the shared catalogue and storage.](assets/diagrams/usecases-overview-dark.svg#only-dark){ .diagram }
+  ![Three columns. Data user: set up the machine with a public and a restricted cache, fetch data, check data integrity. Package maintainer: ship collections and a data command, stage data through the package command, propose a dataset, keep catalogued test data in the repository, use data in CI from dCache, from the repository copy, or both. Catalogue maintainer: accept a dataset proposal as public or restricted data, upload public data, add restricted data, publish the catalogue internally and publicly, link data already on disk into the cache, copy data that was linked. The package maintainer's collections and wrapper go to the data user and their proposal goes to the catalogue maintainer. Every role reads from or writes to the shared catalogue and storage.](assets/diagrams/usecases-overview-light.svg#only-light){ .diagram }
+  ![Three columns. Data user: set up the machine with a public and a restricted cache, fetch data, check data integrity. Package maintainer: ship collections and a data command, stage data through the package command, propose a dataset, keep catalogued test data in the repository, use data in CI from dCache, from the repository copy, or both. Catalogue maintainer: accept a dataset proposal as public or restricted data, upload public data, add restricted data, publish the catalogue internally and publicly, link data already on disk into the cache, copy data that was linked. The package maintainer's collections and wrapper go to the data user and their proposal goes to the catalogue maintainer. Every role reads from or writes to the shared catalogue and storage.](assets/diagrams/usecases-overview-dark.svg#only-dark){ .diagram }
   <figcaption>How ETHOS.Data is used and extended. Package maintainers extend
   it by proposing datasets; catalogue maintainers accept and publish them;
   data users receive them through the collections their package ships.</figcaption>
@@ -70,8 +80,8 @@ installed alongside it, is the writing half.
 Start with [machine setup](how-to/set-up-your-machine.md), or follow the
 [first-fetch lesson](tutorials/first-fetch.md) with local practice data.
 The [how-to overview](how-to/index.md) lists tasks by role, including
-[reporting problems](how-to/report-a-problem.md),
-[updating test fixtures](how-to/update-test-data.md), and
+[reporting problems](how-to/troubleshoot-catalogue.md#report-a-problem),
+[updating test fixtures](how-to/keep-test-data-in-a-repository.md#promote-an-accepted-fix), and
 [managing dCache folders](how-to/manage-dcache-folders.md).
 
 ## Main features
@@ -84,7 +94,7 @@ The [how-to overview](how-to/index.md) lists tasks by role, including
 - **Almost no configuration.** The public catalogue is built in and each
   package ships its own collections. Set the cache location once, or keep the
   standard per-user cache directory — there are
-  [four configuration options](how-to/configure-the-cache.md). Every dataset
+  [configuration scopes](how-to/set-up-your-machine.md#cache-locations). Every dataset
   keeps the same position relative to the cache on every machine, so nothing
   else has to be configured to use the data.
 - **Inputs by name, on test data or the real thing.** A package names the
@@ -101,20 +111,20 @@ The [how-to overview](how-to/index.md) lists tasks by role, including
   work on several ETHOS projects on one machine, or share a workstation or
   compute server with colleagues who also use ETHOS tools and workflows, each
   dataset needs to be there only once. Data that is already on the machine is
-  read [where it lies](how-to/use-data-already-on-disk.md), and every project
+  read [where it lies](how-to/link-cluster-data.md#dataset-root-overrides), and every project
   and every user reads that same copy — nothing is downloaded again or
   duplicated into a second cache.
 - **Non-redistributable data is declared, not shipped.** Proprietary or
   licensed datasets that may not be passed on are still described in the
   catalogue, with their source, their licence and a note on how to obtain
   access. A workflow therefore states exactly which of them it needs.
-  ETHOS.Data never downloads or copies such data: it reads your authorised copy
+  Retrieval never downloads or copies such data: it reads your authorised copy
   in place, or stops and says what is missing and how to get it. See
-  [Work with restricted data](how-to/restricted-data.md).
+  [Work with restricted data](how-to/set-up-your-machine.md#restricted-data).
 - **Integrity is checked, not assumed.** Downloads are verified against the
   manifest by [pooch](https://www.fatiando.org/pooch/); data read in place can
   be audited and re-fetched with
-  [`ethos-data verify --repair`](how-to/verify-and-repair.md).
+  [`reskit-data verify --repair`](how-to/verify-and-repair.md).
 - **Large datasets stay cheap to query.** A catalogue is loaded lazily and a
   big inventory is [sharded](explanation/catalogue-format.md#sharding), so
   selecting one ERA5 tile parses that tile's 664 resources rather than all
@@ -129,9 +139,9 @@ The [how-to overview](how-to/index.md) lists tasks by role, including
 | If you want to… | Go to |
 |------------------|-------|
 | Install the package | [Installation](installation.md) |
-| Download your first collection | [Your first fetch](tutorials/first-fetch.md) |
+| Download your first file | [Your first fetch](tutorials/first-fetch.md) |
 | Get the path of an input file in a script | [Get data for a task](how-to/get-data-for-a-task.md) |
-| Put the cache somewhere specific | [Configure the cache](how-to/configure-the-cache.md) |
+| Put the cache somewhere specific | [Configure the cache](how-to/set-up-your-machine.md#cache-locations) |
 | Ship your package's data needs with the package | [Use ETHOS.Data in your package](how-to/use-from-a-package.md) |
 | Learn how a dataset enters the catalogue | [Add a dataset to the catalogue](tutorials/add-a-dataset.md) |
 | Upload a dataset's bytes to dCache | [Upload a dataset](how-to/upload-a-dataset.md) |

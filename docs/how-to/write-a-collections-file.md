@@ -4,6 +4,20 @@ Declare all catalogue inputs relevant to your package or workflow, grouped by
 task. You need dataset identifiers from a released catalogue. The names below
 are examples; substitute entries and a revision that actually exist.
 
+For the checks below, save this development wrapper beside the file as
+`data_cli.py`. A shipped package should expose `tool_main` as its own console
+script instead; see [Package integration](use-from-a-package.md).
+
+```python
+from pathlib import Path
+from ethos_data import tool_main
+
+if __name__ == "__main__":
+    raise SystemExit(tool_main(
+        Path(__file__).with_name("collections.yaml"), prog="python data_cli.py"
+    ))
+```
+
 ## 1. Select and pin the inputs
 
 Create `collections.yaml`:
@@ -72,7 +86,7 @@ handle built from your file.
 Check:
 
 ```bash
-ethos-data -c collections.yaml info onshore_wind
+python data_cli.py info onshore_wind
 ```
 
 The output ends with a `named paths` section listing each handle and its key.
@@ -123,9 +137,9 @@ its test variant.
 Check:
 
 ```bash
-ethos-data -c collections.yaml list
-ethos-data -c collections.yaml info onshore_wind --test
-ethos-data -c collections.yaml paths onshore_wind --test
+python data_cli.py list
+python data_cli.py info onshore_wind --test
+python data_cli.py paths onshore_wind --test
 ```
 
 `list` prints one row per variant, `onshore_wind [test]` and
@@ -140,9 +154,9 @@ different handles per variant.
 ## 4. Inspect the selection
 
 ```bash
-ethos-data -c collections.yaml list
-ethos-data -c collections.yaml info all
-ethos-data -c collections.yaml plan all
+python data_cli.py list
+python data_cli.py info all
+python data_cli.py plan all
 ```
 
 Check the catalogue printed by `list`, expected paths, sidecars, size, and access
@@ -152,14 +166,17 @@ A configured catalogue override can replace the file's pin; inspect
 
 ## 5. Ship or use the file
 
-For a standalone workflow:
+For an application without a console wrapper:
 
-```bash
-ethos-data -c collections.yaml fetch all
+```python
+import ethos_data
+
+data = ethos_data.collections("collections.yaml")
+files = data.fetch("all")
 ```
 
-For a package, [ship the file with it](use-from-a-package.md). Users then name
-the shipped file with `-c`, or use the package's own command if it provides one.
+For a package, [ship the file and wrapper](use-from-a-package.md). Users name
+its collections through the package command; no file lookup is needed.
 
 See [Collections format](../reference/schemas.md#collectionsyaml) for every key,
-family selector, and pattern rule.
+family selector and pattern rule.

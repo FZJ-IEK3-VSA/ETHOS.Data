@@ -6,7 +6,7 @@ rules are explained in
 and precedence are tabulated in [Configuration](../configuration.md).
 
 Every lookup returns a `Resolved` carrying both the value **and its
-provenance** — because "why is my data going there?" is the question people
+provenance** — because "why is my data going there`" is the question people
 actually ask.
 
 ## Configuration

@@ -1,14 +1,15 @@
 # Check and repair the cache
 
-Check the collection used by your workflow. Replace `collections.yaml` and
-`onshore_wind` below with the collections file your workflow uses — your
-project's own or one a package ships — and its collection.
+Check the collection used by your workflow. Examples use RESKit's wrapper and
+`onshore_wind`; substitute your package command and collection. To verify a
+complete dataset beyond a package's selection, use the
+[integrity API example](link-cluster-data.md#verify-complete-dataset).
 
 ## Check the stored files
 
 ```bash
-ethos-data -c collections.yaml verify onshore_wind
-ethos-data -c collections.yaml verify onshore_wind --deep
+reskit-data verify onshore_wind
+reskit-data verify onshore_wind --deep
 ```
 
 The first command checks sizes; `--deep` checks SHA-256 hashes and reads every
@@ -29,9 +30,9 @@ file. Neither command repairs data.
 For downloadable data:
 
 ```bash
-ethos-data -c collections.yaml verify onshore_wind --deep --repair --dry-run
-ethos-data -c collections.yaml verify onshore_wind --deep --repair
-ethos-data -c collections.yaml verify onshore_wind --deep
+reskit-data verify onshore_wind --deep --repair --dry-run
+reskit-data verify onshore_wind --deep --repair
+reskit-data verify onshore_wind --deep
 ```
 
 Inspect the preview first. Repair can remove affected dataset links from the
@@ -43,6 +44,6 @@ download. For internal inputs without a working download endpoint, restore the
 authorised local copy. The final verification must match every required file.
 
 To replace a healthy link with a verified copy, use
-[Move linked data into the cache](move-linked-data-into-the-cache.md).
-See [CLI reference](../reference/cli/ethos-data.md#verify-collection) for options
-or [Report a problem](report-a-problem.md) if verification still fails.
+[Move linked data into the cache](link-cluster-data.md#materialize-copies).
+See [CLI reference](../reference/cli/package-data.md#verify-collection) for options
+or [Report a problem](troubleshoot-catalogue.md#report-a-problem) if verification still fails.

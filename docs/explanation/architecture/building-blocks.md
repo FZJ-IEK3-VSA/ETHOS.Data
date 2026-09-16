@@ -8,20 +8,23 @@ are labelled separately. The hierarchy follows arc42's [Building Block View](htt
 ## 5.1 Level 1: overall package
 
 <figure markdown="span">
-  ![Level 1 decomposition: Consumer entry points call Data access; Maintainer entry points call Catalogue maintenance; both use Catalogue and configuration. Catalogue maintenance shares path matching with Data access.](../../assets/diagrams/architecture-blocks-light.svg#only-light){ .diagram }
-  ![Level 1 decomposition: Consumer entry points call Data access; Maintainer entry points call Catalogue maintenance; both use Catalogue and configuration. Catalogue maintenance shares path matching with Data access.](../../assets/diagrams/architecture-blocks-dark.svg#only-dark){ .diagram }
+  ![Level 1 decomposition: APIs, package wrappers and the key CLI call Data access; catalogue/cache entry points call maintenance; both use Catalogue and configuration. Catalogue maintenance shares path matching with Data access.](../../assets/diagrams/architecture-blocks-light.svg#only-light){ .diagram }
+  ![Level 1 decomposition: APIs, package wrappers and the key CLI call Data access; catalogue/cache entry points call maintenance; both use Catalogue and configuration. Catalogue maintenance shares path matching with Data access.](../../assets/diagrams/architecture-blocks-dark.svg#only-dark){ .diagram }
 </figure>
 
 The decomposition separates obtaining data from publishing it. A caller can use
 the reader without invoking upload or publication. The shared metadata contract
 keeps resource identities, selection rules, and writer output compatible.
 Entry points compose these responsibilities and translate results into Python
-objects or command-line output.
+objects or command-line output. Package wrappers own collection workflows,
+bundles and staging. The standalone CLI offers catalogue-key access,
+configuration and shared cache/catalogue maintenance. Both use the same library;
+there is no copied staging implementation in RESKit.
 
 | Building block | Responsibility | Main interface | Code within `ethos_data` |
 |---|---|---|---|
-| Consumer entry points | Compose collection resolution, retrieval, inspection, and local maintenance for callers | `collections`, `catalog`, `tool_main`; `Collections.fetch` / `paths` / `plan`, `Catalog.path` / `resources`; the `ethos-data` commands and a tool's own command built with `ethos_data.tool_main` | `__init__.py`, consumer handlers in `cli.py` |
-| Maintainer entry points | Parse catalogue commands and locate the source checkout | `ethos-data catalog …`; `dispatch` | `maintain/cli.py`, parser registration in `cli.py` |
+| Consumer entry points | Compose collection resolution, retrieval, inspection, and local maintenance for callers | `collections`, `catalog`, `tool_main`; `Collections.fetch` / `paths` / `plan`, `Catalog.path` / `resources`; `ethos-data ls/fetch` and a package's command built with `ethos_data.tool_main` | `__init__.py`, consumer handlers in `cli.py` |
+| Maintainer entry points | Parse shared cache/catalogue administration and locate source checkouts when needed | `ethos-data catalog …`; `dispatch` | `maintain/cli.py`, parser registration in `cli.py` |
 | Data access | Select resources, locate bytes, download, verify, and support local development | `Collections.resolve`, `download`, `locate`, `verify`, `materialize`, `apply_staging`, `load_bundle` | `selection.py`, `retrieval.py`, `access.py`, `verify.py`, `materialize.py`, `staging.py`, `bundles.py` |
 | Catalogue maintenance | Build inventories, transfer manifest-listed files, generate public metadata, maintain shared-cache links | Per-command `run` functions; generated metadata and upload results | `maintain/manifest.py`, `upload.py`, `publish.py`, `namespace.py`, helpers in `maintain/__init__.py` and `maintain/scripts/` |
 | Catalogue and configuration | Represent lazy metadata and resolve configuration sources | `Catalog`, `Dataset`, `Resource`, `load_catalog`; `Roots` and setting resolvers | `catalogs.py`, `config.py` |

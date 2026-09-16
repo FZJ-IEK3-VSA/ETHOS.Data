@@ -56,10 +56,26 @@ collections:
         files: [value.txt]
 ```
 
+Save this small package-style wrapper as `data_cli.py` beside `collections.yaml`:
+
+```python
+from pathlib import Path
+from ethos_data import tool_main
+
+if __name__ == "__main__":
+    raise SystemExit(tool_main(
+        Path(__file__).with_name("collections.yaml"), prog="python data_cli.py"
+    ))
+```
+
+It provides the same collection, bundle and staging commands a consuming package
+exposes through `tool_main`, without needing RESKit installed for this lesson.
+
+
 ## Export the fixture
 
 ```bash
-ethos-data --catalog catalogue/datacatalog.json -c collections.yaml bundle export tests/data-bundle tiny_test \
+python data_cli.py --catalog catalogue/datacatalog.json bundle export tests/data-bundle tiny_test \
   --source-root lesson=catalogue/datasets/lesson/input --source-revision lesson-1
 ```
 
@@ -102,7 +118,7 @@ with a warning that the input differs from the catalogue. The snapshot's
 original hash is unchanged.
 
 ```bash
-ethos-data bundle verify tests/data-bundle tiny_test
+python data_cli.py bundle verify tests/data-bundle tiny_test
 ```
 
 Verification still reports `modified` and exits unsuccessfully. Accepting local
@@ -113,7 +129,7 @@ the lesson:
 
 ```bash
 python -c "from pathlib import Path; import shutil; shutil.copyfile('catalogue/datasets/lesson/input/value.txt', 'tests/data-bundle/data/lesson/value.txt')"
-ethos-data bundle verify tests/data-bundle tiny_test
+python data_cli.py bundle verify tests/data-bundle tiny_test
 pytest -q tests/test_value.py
 ```
 

@@ -29,7 +29,7 @@ so the two operations that do that **refuse**:
 |---|---|
 | `ethos-data link`, `catalog link-cache` | refused — the dataset is skipped, nothing is linked |
 | `catalog upload` | refused — nothing is transferred (`--verify-only` still works) |
-| `ethos-data staging add` | **allowed** |
+| `reskit-data staging add` | **allowed** |
 | `fetch`, `path`, `verify` on data already here | allowed, with the warning |
 
 Staging is the deliberate exception, and the refusals name it. A staged dataset
@@ -42,7 +42,7 @@ A dataset counts as settled when it carries a `licenses:` entry, or an explicit
 default has to be "nobody has looked" rather than "nothing applies".
 
 The status is promoted into the catalogue **index**, so warning about licensing
-does not require loading every dataset descriptor. `ethos-data list` stays cheap.
+does not require loading every dataset descriptor. `ethos-data ls` stays cheap.
 
 Resolving it means someone actually reads the upstream terms and adds a
 `licenses:` block with an
@@ -120,7 +120,7 @@ enforces that structurally rather than by convention:
 
 - it is never downloaded, under any configuration;
 - it is never written into the public cache;
-- the [staging root](../how-to/stage-unpublished-data.md) never shadows it —
+- the [staging root](../how-to/propose-a-dataset.md#stage-development-data) never shadows it —
   licence terms are not a development concern;
 - `ethos-data catalog upload` refuses it outright;
 - repository test-bundle export rejects it.
@@ -130,8 +130,8 @@ it fails with an explanation. An administrator may relocate an installation only
 where its terms permit that local copy, preserving access restrictions. Explicit
 `materialize <dataset>` supports this for a link in the restricted root; ordinary
 retrieval continues to read in place. See
-[Move linked data into the cache](../how-to/move-linked-data-into-the-cache.md#restricted-data) and
-[Work with restricted data](../how-to/restricted-data.md).
+[Move linked data into the cache](../how-to/link-cluster-data.md#materialize-copies) and
+[Work with restricted data](../how-to/set-up-your-machine.md#restricted-data).
 
 ## Access and visibility are two questions
 

@@ -9,7 +9,7 @@ data, use the [how-to guides](../how-to/index.md) instead.
 
 You use ETHOS.RESKit or another package and need its input data.
 
-- [Your first fetch](first-fetch.md) — fetch a tiny CSV from a local practice
+- [Your first fetch](first-fetch.md) — fetch a tiny CSV by catalogue key from a local practice
   server, reuse it in Python, then detect and repair a changed cache copy.
   No public catalogue release or cluster account is needed.
 - [Find data through an internal catalogue](restricted-access.md) — distinguish

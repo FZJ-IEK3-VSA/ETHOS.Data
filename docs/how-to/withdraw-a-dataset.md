@@ -42,4 +42,4 @@ an old pin is retained. Existing copies remain on users' machines; deletion does
 not notify users or correct their previous results.
 
 See [Publish the catalogue](publish-the-catalogue.md) and
-[Report a problem](report-a-problem.md).
+[Report a problem](troubleshoot-catalogue.md#report-a-problem).

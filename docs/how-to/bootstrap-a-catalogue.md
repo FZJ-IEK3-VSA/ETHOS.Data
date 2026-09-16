@@ -67,16 +67,10 @@ catalogue, and keep them consistent with `ethos:publication_url`.
 
 ## 3. Accept the first dataset
 
-[Describe](describe-a-dataset.md), review, and build a small approved dataset.
-[Upload and verify it](upload-a-dataset.md), then generate the public view:
-
-```bash
-ethos-data catalog build --check
-ethos-data catalog publish ../public-catalogue
-```
-
-For a catalogue containing only local restricted/internal inputs, establish and
-verify the authorised installation instead of uploading.
+Follow the [acceptance checklist](accept-a-dataset.md) for a small approved
+dataset. It links to the canonical describe, upload/verification, and
+public-generation procedures. For a local restricted/internal catalogue,
+establish and verify the authorised installation instead of uploading.
 
 ## 4. Release metadata and configure readers
 

@@ -148,7 +148,7 @@ owns, and replacing it with a link would discard it.
 
 For one dataset, or into the cache this machine is configured to read, see
 [`ethos-data link`](ethos-data.md). See also
-[Link cluster data into the cache](../../how-to/link-cluster-data.md#2-create-the-links).
+[Link cluster data into the cache](../../how-to/link-cluster-data.md#cache-links).
 
 ## `check-store [vo]`
 
@@ -181,4 +181,4 @@ checkout.
 - [API: maintainer tooling](../api/maintain.md)
 
 
-For the complete cluster migration, see [Link cluster data into the cache](../../how-to/link-cluster-data.md) and [Move linked data into the cache](../../how-to/move-linked-data-into-the-cache.md). Restricted entries are registered through [Add internal and restricted datasets](../../how-to/add-internal-and-restricted-data.md).
+For the complete cluster migration, see [Link cluster data into the cache](../../how-to/link-cluster-data.md) and [Move linked data into the cache](../../how-to/link-cluster-data.md#materialize-copies). Restricted entries are registered through [Add internal and restricted datasets](../../how-to/describe-a-dataset.md#restricted-installations).

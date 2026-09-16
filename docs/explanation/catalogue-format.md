@@ -75,7 +75,7 @@ So the index carries everything that can be answered without an inventory:
 | `ethos:remote_prefix` | where are its bytes |
 | `ethos:license_status` | should this warn |
 
-`ethos-data list` and every access check are therefore free. Note in particular
+`ethos-data ls` can list the index without fetching dataset inventories. Note in particular
 that the **access class is read from the index, not the descriptor**: deciding
 *where* a dataset comes from must never be the thing that pulls its file
 inventory in.

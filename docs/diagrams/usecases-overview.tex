@@ -32,7 +32,7 @@
 
 % ---- data user -------------------------------------------------------------
 \node[role] (u) at (0mm,0) {Data user};
-\node[roleline, below=1mm of u] (us) {runs ETHOS tools and workflows};
+\node[roleline, below=1mm of u] (us) {uses package APIs and commands};
 \node[task, below=5mm of us] (u1) {Set up the machine};
 \variants{u1}{public cache}{restricted cache}
 \node[task, below=6.8mm of u1v] (u2) {Fetch data};
@@ -41,8 +41,8 @@
 % ---- package maintainer ----------------------------------------------------
 \node[role] (p) at (66mm,0) {Package maintainer};
 \node[roleline, below=1mm of p] (ps) {builds a package on the catalogue};
-\node[task, below=5mm of ps] (p1) {Select catalogued data with a collections file};
-\node[task, below=of p1] (p2) {Stage uncatalogued data};
+\node[task, below=5mm of ps] (p1) {Ship collections and a data command};
+\node[task, below=of p1] (p2) {Stage data through the package command};
 \node[task, below=of p2] (p3) {Propose a dataset};
 \node[task, below=of p3] (p4) {Keep catalogued test data in the repository};
 \node[task, below=of p4] (p5) {Use data in CI};
@@ -72,7 +72,7 @@
 
 % ---- handoffs between people -----------------------------------------------
 \draw[handoff] (p1.west) -- ++(-6.5mm,0) |- (u2.east)
-  node[handofflabel, pos=0.25] {collections file};
+  node[handofflabel, pos=0.25] {collections + wrapper};
 \draw[handoff] (p3.east) -- ++(6.5mm,0) |- (c1.west)
   node[handofflabel, pos=0.25] {proposal};
 

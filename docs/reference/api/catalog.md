@@ -48,8 +48,9 @@ a `test` and a `full` variant. `Collections.variants`, `definition`,
 selects the variant and runs `check_variants` on every collection it visits
 through `extends`, not only the one asked for. `catalog_pin` answers which
 catalogue a collections file pins for itself, resolved against the file — the
-answer `load_collections` uses, and the reason `ethos-data path` and
-`ethos-data fetch` given the same `-c` file read the same catalogue.
+answer `load_collections` uses. A package's `path` and collection `fetch`
+commands use that same selected catalogue; `ethos-data fetch` instead takes a
+catalogue key against explicit/shared settings or the public default.
 `Collections.fetch`, `paths` and `plan` make a collection available, by key
 and by named handle, and `main` runs the collection commands on the file;
 `ethos_data.collections()` builds the handle a tool keeps for the life of the

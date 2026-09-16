@@ -56,13 +56,12 @@ Written into a config file, or into `ethos-data.yaml` for the project scope.
 | Key | Set with | |
 |---|---|---|
 | `public_cache` | `config set-public-cache` | public and internal data: read from, and downloaded into |
-| `cache_dir` | `config set-cache` | what `public_cache` used to be called. Still read and still writable, so existing files keep working |
+| `cache_dir` | Legacy read fallback | Older spelling of `public_cache`; `config set-cache` now writes `public_cache`. |
 | `restricted_cache` | `config set-restricted-cache` | licensed data; retrieval only reads it in place |
 | `staging_cache` | `config set-staging-cache` | work in progress that shadows the catalogue |
 | `skip_unavailable` | `config set-skip-unavailable` | `true` to carry on without data this machine cannot reach |
 | `dataset_roots` | `config set-root <dataset> <dir>` | a mapping of dataset name to directory. Roots from different scopes **combine** rather than clobbering each other |
 | `catalog` | `config set-catalog` | the catalogue to use instead of a collections file's pin or the built-in public catalogue |
-| `collections` | `config set-collections` | a default collections file, so `-c` is not needed every time |
 | `publication_url` | `config set-publication-url` | fetch bytes from a different door than the catalogue declares |
 
 A minimal project file:
@@ -111,46 +110,60 @@ read in place follows from whether its entry is a symbolic link. See
 
 ## Catalogue resolution
 
-Strongest first:
+The catalogue used by `ethos-data` and `ethos_data.catalog()` is the first of:
 
-1. `--catalog` on the command line, or `catalog=` in Python
-2. `$ETHOS_DATA_CATALOG`
-3. the `catalog:` key in a config file (`config set-catalog`)
-4. the `catalog:` key at the top of the collections file — for a tool's
-   command or handle, the file the tool ships
-5. the built-in public catalogue,
-   `https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json`
+1. `--catalog` on the command line, or the location passed in Python.
+2. `ETHOS_DATA_CATALOG`.
+3. The `catalog` setting in configuration.
+4. The built-in public catalogue:
+   `https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json`.
 
-A local relative path in a collections file is resolved **relative to that
-file**, not to the caller's working directory. Pin a GitHub revision in the URL
-path, for example `.../ETHOS.Data-Catalogue/COMMIT/datacatalog.json`.
-The legacy `@ref` suffix is stripped while loading a collections file; it does
-not select a remote revision.
+Package wrappers and collections handles also use the file's `catalog:` pin
+before the built-in fallback. A package-specific override, such as
+`RESKIT_DATA_CATALOG` passed by RESKit through `catalog=`, ranks below the CLI's
+`--catalog` and above `ETHOS_DATA_CATALOG`. To compare a direct fetch with a
+package workflow, explicitly select the same catalogue.
 
-A catalogue fetched from a version-pinned URL is cached on disk indefinitely.
-One whose URL names `main`, `master`, `HEAD`, `latest`, `dev` or `develop` is
-recognised as moving and re-fetched every time.
+Relative pins are resolved relative to the collections file. Pin a revision in
+the URL path, for example `.../ETHOS.Data-Catalogue/COMMIT/datacatalog.json`.
+A legacy `@ref` suffix is stripped; it does not select a revision.
+
+Metadata fetched from version-pinned URLs is cached indefinitely. URLs naming
+`main`, `master`, `HEAD`, `latest`, `dev` or `develop` are treated as moving and
+re-fetched. `ETHOS_CATALOG_NO_CACHE=1` bypasses metadata caching.
 
 ## Collections resolution
 
-`ethos-data` reads, strongest first:
+A package command reads the collections file shipped beside its code.
+`ethos-data` reads catalogue keys directly and does not discover a collections
+file in the working directory or from configuration.
 
-1. `-c` / `--collections` on the command line
-2. the `collections:` key in a config file (`config set-collections`)
-3. `collections.yaml` in the current directory
+In Python, use `ethos_data.collections(path, tool=...)`, or pass the file to
+the one-call `fetch`, `paths` and `resolve` APIs. The handle's `.catalog`
+provides access by key against its selected catalogue. See
+[Package integration](../how-to/use-from-a-package.md).
 
-A tool's own data command, built with `ethos_data.tool_main`, reads the file the
-tool ships and takes no `-c`. Setting one up is described in
-[Use from a package](../how-to/use-from-a-package.md).
+## Configuration commands
 
-In Python, a tool builds one handle on its file with
-`ethos_data.collections(path, tool=...)` and calls `fetch()`, `paths()`,
-`resolve()` and `plan()` on it; the one-call forms `ethos_data.fetch(name,
-path)`, `paths()` and `resolve()` take the path. Keys are answered by
-`ethos_data.catalog()`, which reads the configured or public catalogue, or by
-a handle's `.catalog`, which reads the catalogue the file pins.
+Prefix these with `ethos-data` or a package wrapper such as `reskit-data`.
 
-!!! warning
-    A project-scope `collections` setting applies everywhere the project config
-    is found — the same walk-up rule as `cache_dir` — not just in the directory
-    where you set it.
+| Command | Value |
+| --- | --- |
+| `config show` | Display shared configuration without network access. |
+| `config set-public-cache DIR`, `set-cache DIR` | Public cache; the second spelling is an alias. |
+| `config set-restricted-cache DIR` | Authorised restricted installation. |
+| `config set-staging-cache DIR` | Shared development overlay. |
+| `config set-catalog LOCATION` | Catalogue index path or URL. |
+| `config set-root DATASET DIR` | One dataset's existing directory. |
+| `config set-skip-unavailable true\|false` | Whether collection results may omit inaccessible inputs. |
+| `config set-publication-url URL` | Override the dataset download base URL. |
+
+Each setter accepts `--scope`, as described above. Remove a setting with the
+matching `unset-*` command in the same scope; `unset-root` takes the dataset
+name. There is no `unset-publication-url` command: remove that key from the
+configuration file shown by `config show` and clear `ETHOS_PUBLICATION_URL`
+if set. Unsetting configuration does not move or delete data.
+
+`config show` reports shared settings, not a package's pin, package-specific
+environment override, or per-command options. `ethos-data ls` and a wrapper's
+`list` report the catalogue they actually selected.

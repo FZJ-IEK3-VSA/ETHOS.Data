@@ -102,7 +102,7 @@ python -c "import ethos_data; print(ethos_data.__version__)"
 Nothing more is required for public data: the cache defaults to your OS's
 per-user cache directory (`~/.cache/ethos-data` on Linux). If you want it
 somewhere with room — a project filesystem, a scratch volume — see
-[Point the cache somewhere](how-to/configure-the-cache.md).
+[Point the cache somewhere](how-to/set-up-your-machine.md#cache-locations).
 
 ## Development install
 

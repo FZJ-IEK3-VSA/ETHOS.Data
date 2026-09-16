@@ -2,15 +2,14 @@
 
 Trace a reported failure through the selected metadata, local files, and remote
 storage. You need the reporter's catalogue revision, collection/resource keys,
-and error. For the initial user checks and report template, see
-[Identify and report a problem](report-a-problem.md).
+and error. Run the initial checks in the same environment and working directory as the failing workflow.
 
 ## 1. Confirm the reader's inputs
 
 ```bash
 ethos-data config show
-ethos-data --catalog /path/to/reported/datacatalog.json -c collections.yaml list
-ethos-data --catalog /path/to/reported/datacatalog.json -c collections.yaml plan affected_collection
+reskit-data --catalog /path/to/reported/datacatalog.json list
+reskit-data --catalog /path/to/reported/datacatalog.json plan affected_collection
 ```
 
 Use the reporter's actual pin, collection, and cache selection. `config show`
@@ -19,6 +18,7 @@ Both `list` and `plan` may retrieve remote metadata.
 
 | Symptom | Check and action |
 |---|---|
+| Package collections file missing | Reinstall the consuming package and check that it ships its collections YAML beside its data module. |
 | Catalogue index cannot be read (`CatalogUnavailable`) | The location is wrong or the pinned revision/repository does not exist (yet); check the collections file's `catalog:` pin and `ethos-data config show`, then select another catalogue with `--catalog`, `$ETHOS_DATA_CATALOG` or `config set-catalog`. |
 | Unknown dataset or unresolvable collection | Check spelling, catalogue revision, staging, and whether the entry is hidden. |
 | Index exists, descriptor/shard is missing | The reader reports this as an incomplete-catalogue error (`IncompleteCatalog`) naming the dataset and the missing path; `list` shows the affected collections as `[unresolvable]`. Deploy the complete tree for that revision; copying only the index is insufficient. |
@@ -33,14 +33,14 @@ To diagnose remote metadata caching without changing the pin:
 === "Bash"
 
     ```bash
-    ETHOS_CATALOG_NO_CACHE=1 ethos-data -c collections.yaml list
+    ETHOS_CATALOG_NO_CACHE=1 reskit-data list
     ```
 
 === "PowerShell"
 
     ```powershell
     $env:ETHOS_CATALOG_NO_CACHE = "1"
-    ethos-data -c collections.yaml list
+    reskit-data list
     Remove-Item Env:ETHOS_CATALOG_NO_CACHE
     ```
 
@@ -87,3 +87,39 @@ transfers are not rolled back. For an unknown VO permission model,
 Keep source/public revisions, validation results, and the resolution with the
 issue. See [Catalogues and storage](../explanation/catalogues-and-storage.md) for
 the boundaries each check establishes.
+
+## Prepare a reproducible report {#report-a-problem}
+
+Copy and fill this template:
+
+```text
+Expected result:
+Actual result and full error:
+Smallest command or Python example:
+ETHOS.Data, consuming-package, Python and OS versions:
+Catalogue location and exact revision:
+Collection and resource key:
+Relevant config origins and actual data path:
+Staging, local-root overrides, or modified bundle in use:
+plan / verify findings:
+When it last worked and what changed:
+```
+
+If needed, retry `plan` with a new disposable `--root` to isolate downloaded
+metadata/cache state. A different root does not disable staging, per-dataset
+roots, or catalogue overrides. Do not download a large collection just to
+complete the report.
+
+## Choose the responsible maintainer
+
+| Problem | Where to report |
+|---|---|
+| ETHOS.Data CLI/API or documentation | [ETHOS.Data issues](https://github.com/FZJ-IEK3-VSA/ETHOS.Data/issues) |
+| Public dataset contents, licence metadata, or published catalogue | [Catalogue issues](https://github.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/issues) |
+| A package's collection or calculation | That package's issue tracker |
+| Internal metadata, restricted files, cluster permissions, or dCache credentials | The internal catalogue maintainer, dataset custodian, or cluster support channel supplied by your administrator |
+
+Remove tokens, credential-bearing URLs, personal paths, and confidential
+metadata before posting publicly. Share restricted examples through the agreed
+internal channel. If ownership is unclear, start with the catalogue maintainer
+and include the checks already completed.

@@ -1,15 +1,16 @@
 # Keep test data in a repository
 
 Export a small public catalogue selection as a verified bundle, so tests can run
-without the catalogue or dCache. You need a collections file pinned to an
-accepted catalogue revision. For tiny fixtures owned entirely by the package,
+without the catalogue or dCache. Your package must ship a collections file pinned to an
+accepted catalogue revision. The examples use RESKit's public test collection;
+substitute your own wrapper and collection. For tiny fixtures owned entirely by the package,
 plain committed or generated test files may suffice; see
 [Test data and reproducibility](../explanation/test-data.md).
 
 ## 1. Export a new bundle
 
 ```bash
-ethos-data -c collections.yaml bundle export tests/data-bundle test_suite --source-revision ACCEPTED_REVISION
+reskit-data bundle export tests/data-bundle test_suite_public --source-revision ACCEPTED_REVISION
 ```
 
 Replace the revision label. It records provenance; it does not select metadata.
@@ -29,7 +30,7 @@ from ethos_data import load_bundle
 BUNDLE = Path(__file__).resolve().parent / "data-bundle"
 
 def test_my_workflow():
-    files = load_bundle(BUNDLE).fetch("test_suite")
+    files = load_bundle(BUNDLE).fetch("test_suite_public")
     # Pass files.one("known-input.csv") to the function under test.
     assert files
 ```
@@ -40,7 +41,7 @@ local files, and fail for missing or changed fixtures.
 ## 3. Verify and commit
 
 ```bash
-ethos-data bundle verify tests/data-bundle test_suite
+reskit-data bundle verify tests/data-bundle test_suite_public
 pytest
 git add tests/data-bundle
 ```
@@ -52,10 +53,69 @@ Validate the tests from a fresh checkout with network access blocked. If fixture
 must ship in a wheel, configure package-data inclusion and check the installed
 layout too; a top-level `tests/` directory does not ensure inclusion.
 
-## Promote an accepted fix
 
-Follow [Update test data](update-test-data.md) for deliberate local edits, new
-regression fixtures, and refreshing a bundle after acceptance.
+## Promote an accepted fix {#promote-an-accepted-fix}
 
-See [Run package tests in CI](run-in-ci.md) and
-[Bundle reference](../reference/cli/ethos-data.md#bundle).
+### Choose the change
+
+| Change needed | Action |
+|---|---|
+| New test with existing inputs | Add the test; leave data and catalogue pins unchanged. |
+| Tiny synthetic input owned by the package | Generate it in the test or commit it alongside tests; review input and expected result together. |
+| Experiment with changed bytes in a bundle | Use the temporary override below. |
+| New resources or changed catalogued inventory | Stage non-restricted candidates, validate them, then propose a dataset revision. |
+| Accepted catalogue revision | Refresh the collection and bundle together. |
+
+### Reproduce a bug with an existing bundled file
+
+Edit the fixture on a development branch and opt in only in the affected test:
+
+```python
+files = load_bundle(BUNDLE).fetch("test_suite_public", allow_modified=True)
+```
+
+Keep the original `bundle.json`. Record the changed resource and expected
+result. This permits changed existing bytes; new or missing files require an
+inventory update.
+
+```bash
+reskit-data bundle verify tests/data-bundle test_suite_public
+```
+
+Expect `modified` and a nonzero exit until you restore or replace the fixture.
+If the edit is unnecessary for the final regression test, restore it and remove
+the override.
+
+### Propose additional or corrected catalogued inputs
+
+1. Put the candidate in a separate development directory.
+2. [Stage it](propose-a-dataset.md#stage-development-data) and run the affected tests. Restricted
+   inputs must use an authorised local installation instead.
+3. [Propose the dataset revision](propose-a-dataset.md), including the bug or new
+   test, changed resource keys, provenance, and validation.
+4. Use new dataset identifiers or versioned resource paths for changed bytes
+   that must coexist with an old release. Keep new remote paths too.
+
+### Refresh after acceptance
+
+Update `collections.yaml` to the released catalogue revision and desired
+selection. Remove staging/local-root overrides for the accepted dataset, then:
+
+```bash
+reskit-data info test_suite_public
+reskit-data bundle export tests/data-bundle-next test_suite_public --source-revision ACCEPTED_REVISION
+reskit-data bundle verify tests/data-bundle-next test_suite_public
+```
+
+`ACCEPTED_REVISION` is a provenance label, not a revision selector: the
+`catalog:` pin must already select it. Review added/removed paths, hashes,
+licences, and expected test results before replacing the tracked old bundle
+with the new directory. Export requires a fresh target.
+
+Remove `allow_modified=True`, run the strict local tests, and run the relevant
+live integration tests. Commit the pin, collection, bundle, and regression test
+together. Ordinary tests must not regenerate or refresh their own fixtures.
+
+
+See [Run package tests in CI](run-in-ci.md) for CI wiring and
+[Bundle reference](../reference/cli/package-data.md#bundle) for command options.

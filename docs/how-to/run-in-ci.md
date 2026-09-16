@@ -28,13 +28,16 @@ the marker alone does not block it. Missing required data must fail.
 
 ## 2. Retain the live-test cache
 
+The example uses RESKit's public test collection; choose the installed package
+wrapper and collection your integration tests require.
+
 Restore/save a cache directory using your CI provider's cache facility:
 
 ```bash
 export ETHOS_DATA_DIR="$PWD/.cache/ethos-data"
-ethos-data -c collections.yaml plan test_suite
-ethos-data -c collections.yaml fetch test_suite
-ethos-data -c collections.yaml verify test_suite --deep
+reskit-data plan test_suite_public
+reskit-data fetch test_suite_public
+reskit-data verify test_suite_public --deep
 pytest -m data_network
 ```
 
@@ -57,7 +60,7 @@ Use a commit URL or a versioned internal tree for a reproducible baseline.
 A deliberately moving catalogue belongs in a separate latest-data integration job.
 
 For new regressions or corrected inputs, follow
-[Update test data](update-test-data.md). Keep default and release checks strict;
+[Update test data](keep-test-data-in-a-repository.md#promote-an-accepted-fix). Keep default and release checks strict;
 ordinary test runs must not refresh fixtures or accept unexplained changes.
 
 Catalogue maintainers should use [Catalogue CI](catalogue-ci.md) instead.

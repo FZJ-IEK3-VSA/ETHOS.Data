@@ -17,56 +17,12 @@ dependencies = [
 During development before a package-index release, install ETHOS.Data from
 [its repository](../installation.md) in the same environment first.
 
-## 2. Write the collections file
+## 2. Ship a collections file
 
-Create `collections.yaml` in a module of your package — for RESKit,
-`reskit/data/collections.yaml`:
-
-```yaml
-catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/v2026.09/datacatalog.json
-
-collections:
-  test_suite:
-    title: Data required by the pytest suite
-    include:
-      - dataset: reskit-test-data
-
-  onshore_wind:
-    title: Data for onshore wind workflows
-    test:
-      include:
-        - dataset: reskit-test-data/era5
-          files: ["100m_*_component_of_wind.nc", "forecast_surface_roughness.nc"]
-        - dataset: reskit-test-data/global-wind-atlas
-          files: ["gwa*-like.tif"]
-      paths:
-        era5: reskit-test-data/era5
-        gwa_100m: reskit-test-data/global-wind-atlas/gwa100-like.tif
-        gwa_50m: reskit-test-data/global-wind-atlas/gwa50-like.tif
-        gwa_200m: reskit-test-data/global-wind-atlas/gwa200-like.tif
-    full:
-      include:
-        - dataset: era5
-        - dataset: global-wind-atlas-v3
-          files: ["gwa3_250_wind-speed_*.tif"]
-      paths:
-        era5: era5
-        gwa_100m: global-wind-atlas-v3/gwa3_250_wind-speed_100m.tif
-        gwa_50m: global-wind-atlas-v3/gwa3_250_wind-speed_50m.tif
-        gwa_200m: global-wind-atlas-v3/gwa3_250_wind-speed_200m.tif
-```
-
-`paths:` names the inputs a workflow takes, so its callers never see a resource
-key. `test:` and `full:` pair a small selection for examples and tests with the
-real inputs; both must name the same handles, so the same code runs on either.
-`catalog:` pins the catalogue version a release of your package uses; leave it
-out to use the current public catalogue. The pin must name a revision that
-exists and describes the datasets you select — a tag nobody has released yet,
-or a repository that has moved, makes every call raise `CatalogUnavailable`
-naming the URL; a user can still override the pin with `$ETHOS_DATA_CATALOG`
-or `ethos-data config set-catalog`. See
-[Write a collections file](write-a-collections-file.md) for all keys and
-patterns.
+Create `reskit/data/collections.yaml` and pin a released catalogue revision.
+Keep dataset selection, test/full variants and named inputs in that file,
+following [Write a collections file](write-a-collections-file.md).
+The examples below assume it defines `onshore_wind`.
 
 ## 3. Build the handle and the command
 
@@ -118,8 +74,8 @@ Nothing is registered with ETHOS.Data: the module finds the file beside
 itself, and `reskit-data` is an ordinary console script. A fresh checkout
 needs one reinstall for the script to appear, for example with
 `pip install -e . --no-deps`. `tool_main` builds the handle only for the
-commands that need it, so `reskit-data --help` and `reskit-data config show`
-work without loading the catalogue. `tool` names the package in messages and
+commands that need it, so `reskit-data --help`, `reskit-data config show`
+and `reskit-data staging list` work without loading the catalogue. `tool` names the package in messages and
 gives the command its default name; `catalog=` on both calls is the place for
 a package-specific catalogue override, applied below `--catalog` and above
 `$ETHOS_DATA_CATALOG`.
@@ -163,21 +119,20 @@ reskit-data paths onshore_wind --test
 `--help` lists the commands without loading the catalogue. `list` shows
 `onshore_wind [test]` and `onshore_wind [full]` as separate rows. `paths
 --test` fetches the test variant and prints one `handle<TAB>path` line per
-handle. From the checkout root, the same `list` runs on the file through
-`ethos-data`, with no console script involved:
-
-```bash
-ethos-data -c reskit/data/collections.yaml list
-```
+handle.
 
 How users call `reskit-data` day to day — fetching inputs, configuring the
 cache — belongs in your package's own documentation; ETHOS.Data's pages cover
 `ethos-data` and `ethos_data`.
 
-## If the package needs data that is not catalogued yet
+The wrapper already includes `staging add/list/remove` and bundle commands.
+Keep this implementation shared; the consuming package only supplies its file,
+name and optional catalogue override. Shared cache maintenance stays with
+`ethos-data link/unlink/materialize` and `ethos-data catalog`.
 
-- To work with it now: [Stage uncatalogued data](stage-unpublished-data.md).
-- To add it to the catalogue: [Propose a dataset](propose-a-dataset.md).
+Follow [Develop and propose a dataset](propose-a-dataset.md) for the development
+workflow, and link users to the [package-command reference](../reference/cli/package-data.md)
+for all shared flags.
 
 ## See also
 

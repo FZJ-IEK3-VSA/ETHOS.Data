@@ -105,7 +105,7 @@ cache owns, and replacing it would silently discard it.
 | a private copy, or one dataset in an odd place | `ethos-data config set-root` |
 | licensed data you have access to | `ethos-data config set-restricted-cache` |
 | licensed data you do not have | `--skip-unavailable` |
-| data that is not catalogued yet | the [staging root](../how-to/stage-unpublished-data.md) |
+| data that is not catalogued yet | the [staging root](../how-to/propose-a-dataset.md#stage-development-data) |
 | a link that is about to break | `ethos-data materialize` |
 
 ## Copy ownership and frozen inventories
@@ -135,6 +135,6 @@ automatically perform that check. See [Check and repair](../how-to/verify-and-re
 
 ## See also
 
-- [Use data already on disk](../how-to/use-data-already-on-disk.md).
-- [Work with restricted data](../how-to/restricted-data.md).
+- [Use data already on disk](../how-to/link-cluster-data.md#dataset-root-overrides).
+- [Work with restricted data](../how-to/set-up-your-machine.md#restricted-data).
 - [Configuration reference](../reference/configuration.md).

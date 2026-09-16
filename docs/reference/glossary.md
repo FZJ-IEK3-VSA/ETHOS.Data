@@ -11,7 +11,7 @@ Key concepts used across `ethos-data`.
 | **Resource** | One file in a dataset, with a path, size, checksum and mediatype. |
 | **Resource key** | `"<dataset>/<resource path>"` — a resource's logical identity, stable across tools, and also its path inside the cache. |
 | **Collection** | A named slice of the catalogue, defined in a tool's `collections.yaml`: one or more datasets, each narrowed by globs. What a tool actually asks for. |
-| **Named path** | A handle a collection maps to a catalogue key under `paths:` — `era5`, `gwa_100m` — so a workflow's caller asks for an input by name and never sees a resource key. Resolved to `{handle: absolute path}` by `ethos_data.paths()` and `ethos-data paths`. |
+| **Named path** | A handle a collection maps to a catalogue key under `paths:` — `era5`, `gwa_100m` — so a workflow's caller asks for an input by name and never sees a resource key. Resolved to `{handle: absolute path}` by `ethos_data.paths()` and `reskit-data paths`. |
 | **Variant** | One of the two selections a collection may define under `test:` and `full:`: a small selection that runs an example or a test in seconds, and the real inputs. Both must offer the same named paths. `full` is the default; `test=True` / `--test` selects the other. |
 | **Sidecar** | A companion file that must travel with another to be usable — a shapefile's `.dbf`, `.shx`, `.prj`, `.cpg`. Added automatically to any selection that picks the `.shp`. |
 | **Shard** | One slice of a large dataset's inventory, held in `manifests/<prefix>.json` and keyed on a directory prefix, so a selection parses only the shards it can reach. |
@@ -56,5 +56,5 @@ Key concepts used across `ethos-data`.
 | Term | Meaning |
 |---|---|
 | **Scope** | Where a setting is written: `project` (an `ethos-data.yaml` found by walking up), `user`, `environment` (inside the conda env or venv), or `site` (machine-wide). Precedence runs in that order. |
-| **Provenance** | The record of *where* a resolved setting came from. Every lookup carries one, because "why is my data going there?" is the question people actually ask. |
+| **Provenance** | The record of *where* a resolved setting came from. Every lookup carries one, because "why is my data going there`" is the question people actually ask. |
 | **Pinned catalogue** | A catalogue URL naming an immutable version. Cached on disk forever. A URL naming `main`, `master`, `HEAD`, `latest`, `dev` or `develop` is recognised as moving and never cached. |
