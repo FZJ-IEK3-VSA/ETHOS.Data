@@ -37,9 +37,14 @@ dependencies:
   # for the static site. mkdocstrings needs ethos_data importable, so install
   # the package into this environment (`pip install -e . --no-deps`) before
   # building the API reference pages.
+  #
+  # Mirrors the `docs` extra in pyproject.toml, bound for bound -- that extra is
+  # what Read the Docs installs, and a preview built here against versions the
+  # hosted build would not pick is a preview that proves nothing. See the
+  # comment there for why each entry is capped at the next major.
   - mkdocs >=1.6,<1.7
-  - mkdocs-material >=9.5
-  - mkdocstrings >=0.25
-  - mkdocstrings-python >=1.10
-  - griffe >=0.45
+  - mkdocs-material >=9.5,<10
+  - mkdocstrings >=1.0,<2
+  - mkdocstrings-python >=2.0,<3
+  - griffe >=2.3,<3
 
