@@ -473,3 +473,203 @@ def test_fetch_leaves_read_only_bundle_unchanged(catalogue, tmp_path):
         bundle.path.chmod(0o755)
         for path in paths:
             path.chmod(0o755 if path.is_dir() else 0o644)
+
+
+# -- family members: a dataset name may have more than one path component ----
+#
+# The fixture families a package ships are described one upstream per member --
+# `reskit-test-data/era5` beside `reskit-test-data/merra2` -- because access is
+# a property of a whole dataset. A bundle that cannot hold them is a bundle
+# that cannot hold the test data it exists for.
+
+
+def build_family(tmp_path, *, members, document=None):
+    """A small catalogue whose datasets are family members.
+
+    ``members`` maps a dataset name to {relative path: bytes}. Descriptors sit
+    at datasets/<name>/datapackage.json, which is where a published catalogue
+    puts them and what makes a licence document's relative path meaningful.
+    """
+    root = tmp_path / "catalogue"
+    entries, sources = [], {}
+    packages = dict(members)
+    for name, payloads in packages.items():
+        source = tmp_path / "input" / name.replace("/", "-")
+        source.mkdir(parents=True)
+        resources = []
+        for relative, data in payloads.items():
+            (source / relative).parent.mkdir(parents=True, exist_ok=True)
+            (source / relative).write_bytes(data)
+            resources.append(
+                {
+                    "name": relative,
+                    "path": relative,
+                    "bytes": len(data),
+                    "hash": digest(data),
+                }
+            )
+        package = {
+            "name": name,
+            "title": f"Dataset {name}",
+            "ethos:access": "public",
+            "ethos:license_status": "resolved",
+            "licenses": [{"name": "CC0-1.0"}],
+            "resources": resources,
+        }
+        descriptor_dir = root / "datasets" / name
+        descriptor_dir.mkdir(parents=True)
+        if document is not None and name == next(iter(members)):
+            relative, data, declared = document
+            (descriptor_dir / relative).parent.mkdir(parents=True, exist_ok=True)
+            (descriptor_dir / relative).write_bytes(data)
+            package["licenses"] = [
+                {
+                    "title": "Archived terms",
+                    "ethos:document": relative,
+                    "ethos:document_sha256": declared,
+                }
+            ]
+        (descriptor_dir / "datapackage.json").write_text(json.dumps(package))
+        entries.append(
+            {
+                "name": name,
+                "path": f"datasets/{name}/datapackage.json",
+                "ethos:access": "public",
+                "ethos:license_status": "resolved",
+                "ethos:remote_prefix": name,
+            }
+        )
+        sources[name] = source
+    index = root / "datacatalog.json"
+    index.write_text(
+        json.dumps(
+            {
+                "name": "family-catalog",
+                "version": "v1",
+                "ethos:catalog_role": "published",
+                "ethos:publication_url": "https://dcache.invalid/data",
+                "datasets": entries,
+            }
+        )
+    )
+    collections = root / "collections.yaml"
+    collections.write_text(
+        yaml.safe_dump(
+            {
+                "catalog": "datacatalog.json",
+                "collections": {
+                    "fixtures": {"include": [{"dataset": name} for name in packages]}
+                },
+            }
+        )
+    )
+    return collections, sources
+
+
+def test_family_members_bundle_under_their_namespace(tmp_path):
+    collections, sources = build_family(
+        tmp_path,
+        members={
+            "family/alpha": {"a.bin": b"alpha"},
+            "family/beta": {"b.bin": b"beta"},
+        },
+    )
+    bundle = export_bundle(
+        collections,
+        ["fixtures"],
+        tmp_path / "bundle",
+        dataset_roots=sources,
+        source_revision="commit-abc",
+    )
+    files = bundle.fetch("fixtures")
+    assert sorted(bundle.datasets) == ["family/alpha", "family/beta"]
+    # The key nests, and so does the file: one member cannot tread on another.
+    assert (bundle.path / "data/family/alpha/a.bin").read_bytes() == b"alpha"
+    assert (bundle.path / "data/family/beta/b.bin").read_bytes() == b"beta"
+    assert len(files) == 2
+    assert load_bundle(bundle.path).fetch("fixtures")
+
+
+def test_dataset_living_under_another_dataset_is_refused(tmp_path):
+    """A committed manifest is the place this has to be caught.
+
+    Selecting a namespace resolves to its members, so an export cannot
+    normally produce the overlap; a hand-edited or hand-written bundle.json
+    can, and that is what a package ships and reads back.
+    """
+    collections, sources = build_family(
+        tmp_path, members={"family/alpha": {"a.bin": b"alpha"}}
+    )
+    bundle = export_bundle(
+        collections,
+        ["fixtures"],
+        tmp_path / "bundle",
+        dataset_roots=sources,
+        source_revision="commit-abc",
+    )
+
+    def add_parent(document):
+        # Not a duplicate key -- a different file, at a path that the member
+        # dataset already owns the directory of.
+        document["datasets"]["family"] = {
+            "name": "family",
+            "ethos:access": "public",
+            "resources": [
+                {
+                    "name": "other",
+                    "path": "alpha/other.bin",
+                    "bytes": 5,
+                    "hash": digest(b"other"),
+                }
+            ],
+        }
+
+    rewrite(bundle, add_parent)
+    with pytest.raises(BundleError, match="lives under dataset"):
+        load_bundle(bundle.path)
+
+
+# -- archived licences travel with the bytes --------------------------------
+
+
+def test_license_document_is_copied_and_hash_checked(tmp_path):
+    terms = b"You may use these bytes for any purpose."
+    collections, sources = build_family(
+        tmp_path,
+        members={"family/alpha": {"a.bin": b"alpha"}},
+        document=("licenses/terms.txt", terms, hashlib.sha256(terms).hexdigest()),
+    )
+    bundle = export_bundle(
+        collections,
+        ["fixtures"],
+        tmp_path / "bundle",
+        dataset_roots=sources,
+        source_revision="commit-abc",
+    )
+    stored = bundle.path / "datasets/family/alpha/licenses/terms.txt"
+    assert stored.read_bytes() == terms
+    # A bundle whose licence has gone missing is incomplete, not merely thinner.
+    stored.unlink()
+    with pytest.raises(BundleError, match="licence document"):
+        load_bundle(bundle.path)
+
+
+def test_license_document_not_matching_its_hash_is_refused(tmp_path):
+    terms = b"You may use these bytes for any purpose."
+    collections, sources = build_family(
+        tmp_path,
+        members={"family/alpha": {"a.bin": b"alpha"}},
+        document=(
+            "licenses/terms.txt",
+            terms,
+            hashlib.sha256(b"different").hexdigest(),
+        ),
+    )
+    with pytest.raises(BundleError, match="does not match its catalogued hash"):
+        export_bundle(
+            collections,
+            ["fixtures"],
+            tmp_path / "bundle",
+            dataset_roots=sources,
+            source_revision="commit-abc",
+        )

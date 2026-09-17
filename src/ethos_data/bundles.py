@@ -16,12 +16,12 @@ import tempfile
 import warnings
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Mapping, Sequence
+from typing import Iterable, Mapping, Sequence
 
 import pooch
 import yaml
 
-from .catalogs import Catalog, Resource
+from .catalogs import Catalog, Resource, _join, _read_binary
 from .retrieval import DataFiles
 from .selection import load_collections
 
@@ -36,6 +36,9 @@ __all__ = [
 
 MANIFEST = "bundle.json"
 FORMAT = "ethos-data-bundle-v1"
+#: Where archived licence documents sit, mirroring the published catalogue's
+#: own ``datasets/<name>/<document>`` layout so the two are read the same way.
+METADATA_DIR = "datasets"
 _SHA256 = re.compile(r"sha256:[0-9a-fA-F]{64}\Z")
 
 
@@ -94,6 +97,106 @@ def _digest(path: Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return "sha256:" + digest.hexdigest()
+
+
+def _distinct_datasets(names: Iterable[str]) -> None:
+    """Refuse a dataset that lives underneath another dataset.
+
+    A name may contain "/" -- a family member is spelled
+    ``reskit-test-data/era5`` -- so ``data/<dataset>/<path>`` locates a file
+    unambiguously only while no name is a prefix of another. Were both ``a``
+    and ``a/b`` bundled, ``data/a/b/x.tif`` would be the place for two
+    different resources, and whichever was copied second would win.
+
+    This is the invariant the old "one path component" rule was really
+    protecting. Traversal and spelling are not its business: ``_relative``
+    rejects absolute, empty, ``.``, ``..`` and backslash components, and
+    ``_inside`` confirms containment afterwards.
+    """
+    present = set(names)
+    for name in sorted(present):
+        parts = name.split("/")
+        for depth in range(1, len(parts)):
+            ancestor = "/".join(parts[:depth])
+            if ancestor in present:
+                raise BundleError(
+                    f"dataset {name!r} lives under dataset {ancestor!r}; "
+                    "their bundled files would share a path"
+                )
+
+
+def _license_documents(package: Mapping) -> list[str]:
+    """The archived licence files a dataset descriptor points at.
+
+    Relative to the descriptor's own directory, which is how
+    ``ethos-data catalog publish`` writes them and how it expects to read
+    them back.
+    """
+    documents = []
+    for entry in package.get("licenses", []):
+        if not isinstance(entry, Mapping):
+            raise BundleError("invalid licences entry")
+        document = entry.get("ethos:document")
+        if not document:
+            continue
+        if not isinstance(document, str):
+            raise BundleError(f"invalid ethos:document: {document!r}")
+        _relative(document, "licence document")
+        documents.append(document)
+    return documents
+
+
+def _collect_documents(dataset, package: Mapping, catalog_location: str) -> dict:
+    """Read a dataset's archived licences, checking each against its hash.
+
+    Keyed by the path the bundle stores them at. The descriptor records a
+    ``ethos:document_sha256`` for exactly this: a licence fetched over the
+    network is only the licence if it still hashes to what the catalogue
+    signed off, and a bundle is where that check has to happen, because
+    afterwards nobody is online to repeat it.
+    """
+    wanted = _license_documents(package)
+    if not wanted:
+        return {}
+    try:
+        descriptor_location = _join(dataset.base, dataset.entry["path"])
+    except (KeyError, TypeError) as error:
+        raise BundleError(
+            f"cannot locate the descriptor of {dataset.name!r} to read its licences"
+        ) from error
+    base = descriptor_location.rsplit("/", 1)[0] + "/"
+    expected = {
+        entry["ethos:document"]: entry.get("ethos:document_sha256")
+        for entry in package.get("licenses", [])
+        if entry.get("ethos:document")
+    }
+    collected = {}
+    for document in wanted:
+        location = _join(base, document)
+        try:
+            raw = _read_binary(location)
+        except OSError as error:
+            raise BundleError(
+                f"cannot read the licence document {document!r} of "
+                f"{dataset.name!r} at {location} (catalogue {catalog_location}): {error}"
+            ) from error
+        declared = expected.get(document)
+        if declared is not None:
+            if not isinstance(declared, str):
+                raise BundleError(
+                    f"invalid ethos:document_sha256 for {dataset.name!r}: {declared!r}"
+                )
+            # Descriptors spell this one bare, while resource hashes carry a
+            # "sha256:" prefix; accept either rather than depend on which.
+            if hashlib.sha256(raw).hexdigest() != declared.lower().removeprefix(
+                "sha256:"
+            ):
+                raise BundleError(
+                    f"licence document {document!r} of {dataset.name!r} does not "
+                    f"match its catalogued hash"
+                )
+        collected[f"{METADATA_DIR}/{dataset.name}/{document}"] = raw
+    return collected
 
 
 def _resource(record: dict, dataset: str) -> Resource:
@@ -268,8 +371,7 @@ def load_bundle(path: str | Path) -> Bundle:
         raise BundleError("bundle metadata needs datasets and collections")
     resources = {}
     for name, package in datasets.items():
-        if len(_relative(name, "dataset name").parts) != 1:
-            raise BundleError(f"dataset name must be one path component: {name!r}")
+        _relative(name, "dataset name")
         if not isinstance(package, dict) or not isinstance(
             package.get("resources"), list
         ):
@@ -285,6 +387,15 @@ def load_bundle(path: str | Path) -> Bundle:
             if resource.key in resources:
                 raise BundleError(f"duplicate resource metadata: {resource.key}")
             resources[resource.key] = resource
+    _distinct_datasets(datasets)
+    # An archived licence that did not travel is a licence the reader cannot
+    # honour, so a bundle missing one is incomplete rather than merely thinner.
+    for name, package in datasets.items():
+        for document in _license_documents(package):
+            if not _inside(root, f"{METADATA_DIR}/{name}/{document}").is_file():
+                raise BundleError(
+                    f"bundle lacks the licence document {document!r} for {name!r}"
+                )
     for name, keys in collections.items():
         if (
             not isinstance(name, str)
@@ -378,12 +489,10 @@ def export_bundle(
         members[name] = sorted(resources)
 
     packages = {}
+    documents: dict[str, bytes] = {}
     for resource in selected.values():
         dataset = loaded.catalog.dataset(resource.dataset)
-        if len(_relative(dataset.name, "dataset name").parts) != 1:
-            raise BundleError(
-                f"dataset name must be one path component: {dataset.name!r}"
-            )
+        _relative(dataset.name, "dataset name")
         _resource(_record(resource), dataset.name)
         if dataset.descriptor.get("ethos:staged") or dataset.access == "staging":
             raise BundleError(f"cannot export staged dataset {dataset.name!r}")
@@ -407,10 +516,14 @@ def export_bundle(
                 package.pop(field, None)
             package["resources"] = []
             packages[resource.dataset] = package
+            documents.update(
+                _collect_documents(dataset, package, loaded.catalog.location)
+            )
         record = dataset.resource_descriptor(resource.path) or _record(resource)
         for field in STRIP_FROM_PACKAGE:
             record.pop(field, None)
         packages[resource.dataset]["resources"].append(record)
+    _distinct_datasets(packages)
     for package in packages.values():
         package["resources"].sort(key=lambda record: record["path"])
         package["ethos:file_count"] = len(package["resources"])
@@ -472,6 +585,10 @@ def export_bundle(
                     path=destination.parent,
                     progressbar=progressbar,
                 )
+        for relative, raw in sorted(documents.items()):
+            destination = _inside(temporary, relative)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(raw)
         # newline as well as encoding: a bundle is committed to the package that
         # ships it, so a manifest written on Windows must not differ from the
         # same manifest written on Linux in every line.
