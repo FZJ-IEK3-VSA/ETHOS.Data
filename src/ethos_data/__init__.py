@@ -144,7 +144,7 @@ __all__ = [
     "verify",
 ]
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 
 def collections(

@@ -138,6 +138,22 @@ def _read(location: str) -> tuple[str, str]:
     return text, base
 
 
+def _read_binary(location: str) -> bytes:
+    """The bytes at a local path or an http(s) URL, undecoded and uncached.
+
+    Separate from ``_read`` because not every file a descriptor points at is
+    text: an archived licence is whatever the licensor published, and the ESA
+    CCI terms sheet is a PDF. Nothing here is cached -- these are read once,
+    when a bundle is exported, not on the path any ordinary read takes.
+    """
+    if not location.startswith(("http://", "https://")):
+        return Path(location).expanduser().resolve().read_bytes()
+    # No Accept-Encoding: gzip here. These are already-compressed formats, so
+    # the header buys nothing and only adds a branch that has to be right.
+    with urllib.request.urlopen(location, timeout=60) as response:
+        return response.read()
+
+
 #: Shard holding files that sit at the dataset root, above any shard directory.
 ROOT_SHARD = "_root"
 
