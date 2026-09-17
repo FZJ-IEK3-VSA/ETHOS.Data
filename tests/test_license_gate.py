@@ -120,7 +120,16 @@ def _checkout(root: Path, extra: dict) -> Path:
     return root
 
 
-def test_link_cache_skips_it_rather_than_linking_it(tmp_path):
+def test_link_all_skips_it_rather_than_linking_it(tmp_path):
+    """Catalogue mode -- ``ethos-data link --all`` -- asked of its planner.
+
+    The planner is where the refusal has to live rather than in the command that
+    calls it: by the time an entry has been written, a dataset nobody licensed
+    is already sitting in a directory everybody on the machine reads, and
+    removing it afterwards does not unsee it. Skipping is also the right shape
+    for a namespace: the one unanswered dataset is left out and the rest of the
+    cache is still built.
+    """
     checkout = _checkout(tmp_path / "catalogue", {"ethos:license_status": "unresolved"})
     cache = tmp_path / "cache"
 
@@ -132,7 +141,13 @@ def test_link_cache_skips_it_rather_than_linking_it(tmp_path):
     assert not (cache / "example").exists()
 
 
-def test_link_cache_links_it_once_the_terms_are_recorded(tmp_path):
+def test_link_all_links_it_once_the_terms_are_recorded(tmp_path):
+    """The gate is a question, so answering it in dataset.yaml has to open it.
+
+    Worth asserting alongside the refusal: a check nobody can satisfy is not a
+    gate, it is a wall, and the next person to meet it works around it instead
+    of recording the terms.
+    """
     checkout = _checkout(tmp_path / "catalogue", RESOLVED)
     cache = tmp_path / "cache"
 

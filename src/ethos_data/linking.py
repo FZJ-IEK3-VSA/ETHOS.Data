@@ -5,16 +5,17 @@
     ethos-data link --all                             # every source_dir there is
     ethos-data unlink global-wind-atlas
 
-This is the single-dataset counterpart to ``ethos-data catalog link-cache``.
-That command builds a *shared* namespace: it takes the root to build explicitly,
-reviews the whole catalogue with ``--dry-run``, and prunes stale entries. This
-one fills the cache this machine is configured to read, and reaches three things
-link-cache does not:
+This is the single-dataset mode of ``ethos-data link``; the other is ``--all``,
+which is a different job wearing the same name. ``--all`` builds a *shared*
+namespace from a source checkout: it takes the root to build explicitly, reviews
+the whole catalogue with ``--dry-run``, and prunes stale entries. Naming a
+dataset instead fills the cache this machine is configured to read, and reaches
+three things ``--all`` does not:
 
   * one dataset by name, rather than every one in the catalogue
   * a dataset that has been uploaded, so its descriptor has no ``source_dir``
     left, but whose bytes are sitting right here and need no downloading
-  * a restricted dataset, which ``link-cache`` skips on purpose -- a shared
+  * a restricted dataset, which ``--all`` skips on purpose -- a shared
     public namespace must never touch licensed data, but registering one
     authorised installation by name is exactly how it is meant to be done
 
@@ -27,7 +28,7 @@ guessed rather than the one retrieval will look in.
 records "these bytes are borrowed": retrieval reads them in place, refuses to
 write through them, and ``ethos-data materialize`` knows there is something to
 copy. A real directory means the opposite -- data the cache owns -- so neither
-this module nor ``link-cache`` will ever replace one with a link.
+mode of ``ethos-data link`` will ever replace one with a link.
 """
 
 from __future__ import annotations
@@ -214,10 +215,10 @@ def link(
 
     The entry goes in whichever root the dataset's access class belongs to, so a
     restricted dataset lands in the restricted cache or nowhere at all. That is
-    one thing this does and ``catalog link-cache`` does not: it skips restricted
-    datasets, because building a shared public namespace must never touch them,
-    while linking one deliberately by name is how an authorised installation gets
-    registered.
+    one thing naming a dataset does and ``ethos-data link --all`` does not:
+    ``--all`` skips restricted datasets, because building a shared public
+    namespace must never touch them, while linking one deliberately by name is
+    how an authorised installation gets registered.
 
     Raises :class:`LinkError` if the directory is not there, if the entry is
     already a link and ``force`` is not set, or if the entry is a real directory

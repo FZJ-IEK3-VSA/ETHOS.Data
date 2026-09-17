@@ -173,6 +173,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "  ethos-data ls\n"
         "  ethos-data ls global-wind-atlas-v4\n"
         "  ethos-data fetch global-wind-atlas-v4\n"
+        "  ethos-data link --all --root /shared/ethos/public\n"
         "  ethos-data catalog --catalog-root /path/to/source build --check\n"
         "Use 'ethos-data COMMAND --help' for command options.",
     )
@@ -495,7 +496,17 @@ def _add_cache_commands(sub) -> None:
     )
 
     linker = sub.add_parser(
-        "link", help="point cache entries at data already on this machine"
+        "link",
+        help="point cache entries at data already on this machine",
+        description="Two modes, one command. Naming a dataset registers one "
+        "directory as that dataset's entry, in whichever cache its access class "
+        "belongs to -- so a restricted dataset deliberately named here lands in "
+        "the restricted cache, which is how an authorised installation is meant "
+        "to be recorded. --all instead builds the whole public namespace from a "
+        "source checkout, and never links a restricted or unlicensed dataset "
+        "into it, because a cache several people read must not hold licensed "
+        "bytes nobody reviewed. Neither mode ever replaces a real directory "
+        "with a link.",
     )
     linker.add_argument("dataset", nargs="?", help="dataset name (omit with --all)")
     linker.add_argument(
@@ -508,13 +519,35 @@ def _add_cache_commands(sub) -> None:
         action="store_true",
         help="link every dataset in the source catalogue that has a source_dir",
     )
+    # dest is spelled out because argparse copies a subparser's whole namespace
+    # -- defaults included -- over the main one. A second argument literally
+    # called `root` would therefore reset `ethos-data --root DIR link ...` to
+    # None whenever --root was not repeated after the subcommand, and the links
+    # would quietly be built in a directory nobody named.
     linker.add_argument(
-        "--force", action="store_true", help="repoint an entry that is already a link"
+        "--root",
+        dest="cache_root",
+        metavar="DIR",
+        default=None,
+        help="with --all: the public cache directory to build "
+        "(default: the cache this machine is configured to read)",
+    )
+    linker.add_argument(
+        "--prune",
+        action="store_true",
+        help="with --all: remove links for names the catalogue no longer describes",
+    )
+    linker.add_argument(
+        "--force",
+        action="store_true",
+        help="one named dataset; repoint an entry that is already a link "
+        "(not valid with --all)",
     )
     linker.add_argument(
         "--dry-run",
         action="store_true",
-        help="only honoured with --all; single-dataset link applies immediately",
+        help="only honoured with --all, where it also previews what --prune "
+        "would remove; single-dataset link applies immediately",
     )
     # Named as the maintainer commands name it, because it is the same thing: the
     # checkout holding dataset.yaml. source_dir is popped out of a descriptor when
@@ -1026,15 +1059,17 @@ def _cache_catalog(args):
 
 
 def _link_all_command(args, roots) -> int:
-    """Every dataset in the checkout with a source_dir, into the configured cache.
+    """Every dataset in the checkout with a source_dir, into one named cache.
 
-    This is `catalog link-cache` pointed at the cache this machine already reads,
-    rather than a root typed out by hand -- the same planner, so the two can never
-    disagree about what a namespace should look like, and restricted datasets are
-    skipped here exactly as they are there.
+    Which cache that is gets decided here and nowhere else. A top-level
+    ``--root``, ``$ETHOS_DATA_DIR`` and the configuration files are read once,
+    into ``roots``, and the planner is handed the answer rather than asked to
+    work it out again: two lookups in one process can disagree -- the
+    environment read at a different moment, or an override the second lookup
+    never sees -- and the failure that produces is a complete link tree built in
+    a directory nobody asked for, reported as a success. ``--root`` after
+    ``link`` overrules that, and is the only thing that does.
     """
-    import argparse
-
     from .maintain import namespace as namespace_module
     from .maintain import resolve_catalog_root
 
@@ -1043,9 +1078,28 @@ def _link_all_command(args, roots) -> int:
     except SystemExit as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
+
+    # Decided only once there is a checkout to link from. A run that ends in
+    # "no catalogue here" has chosen nothing, and a line above that error
+    # naming a cache reads as a step that did succeed -- so the next thing
+    # anyone does is go looking in that directory for links this run never made.
+    if args.cache_root is None:
+        root = roots.public
+        # Names where this answer came from, not whether a flag was typed: a
+        # top-level ``ethos-data --root DIR link --all`` reaches here too, with
+        # that directory already resolved into ``roots``, and "no --root given"
+        # read as a denial of the flag the person had just used.
+        print(
+            f"no --root after `link`; using the public cache from {roots.public_source}"
+        )
+    else:
+        root = Path(args.cache_root).expanduser()
+
     return namespace_module.run(
         catalog_root,
-        argparse.Namespace(root=str(roots.public), dry_run=args.dry_run, prune=False),
+        root,
+        dry_run=args.dry_run,
+        prune=args.prune,
     )
 
 
@@ -1060,12 +1114,31 @@ def _link_command(args, roots) -> int:
                     file=sys.stderr,
                 )
                 return 2
+            if args.force:
+                print(
+                    "--force belongs to `ethos-data link <dataset>`. --all already "
+                    "repoints a link whose source_dir has moved, and it never "
+                    "replaces a real directory -- so there is nothing here for "
+                    "--force to overrule.",
+                    file=sys.stderr,
+                )
+                return 2
             return _link_all_command(args, roots)
         if not args.dataset:
             print(
                 "name a dataset, or use --all:\n"
                 "    ethos-data link <dataset> [directory]\n"
-                "    ethos-data link --all",
+                "    ethos-data link --all\n"
+                "    ethos-data link --all --root DIR [--prune]",
+                file=sys.stderr,
+            )
+            return 2
+        if args.cache_root is not None or args.prune:
+            print(
+                "--root and --prune describe a whole cache, not one entry, so "
+                "they go with --all:\n"
+                "    ethos-data link --all --root DIR --prune\n"
+                f"    ethos-data link {args.dataset} [directory]",
                 file=sys.stderr,
             )
             return 2

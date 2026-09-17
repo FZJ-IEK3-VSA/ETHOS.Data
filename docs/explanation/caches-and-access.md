@@ -92,15 +92,18 @@ reaching one means a bug or a race — a link created between planning and
 fetching. `download` checks again anyway, because the consequence would be
 writing into shared project storage that the cache only borrows.
 
-The same reasoning runs the other way in `ethos-data catalog link-cache`, which
-refuses to replace a real directory with a link: that directory is data the
-cache owns, and replacing it would silently discard it.
+The same reasoning runs the other way in `ethos-data link`, which refuses to
+replace a real directory with a link: that directory is data the cache owns, and
+replacing it would silently discard it. The refusal holds in both of that
+command's modes — naming one dataset fails outright, and `--all` reports such an
+entry as `keep` and carries on with the rest — because the bytes at risk are the
+same bytes either way.
 
 ## Where each mechanism belongs
 
 | Situation | Use |
 |---|---|
-| a dataset the whole machine already has | a namespace link, built by a maintainer |
+| a dataset the whole machine already has | a namespace link, built by a maintainer with `ethos-data link --all` |
 | one dataset whose files are already here | `ethos-data link <dataset> <directory>` |
 | a private copy, or one dataset in an odd place | `ethos-data config set-root` |
 | licensed data you have access to | `ethos-data config set-restricted-cache` |
@@ -135,6 +138,6 @@ automatically perform that check. See [Check and repair](../how-to/verify-and-re
 
 ## See also
 
-- [Use data already on disk](../how-to/link-cluster-data.md#dataset-root-overrides).
+- [Manage local dataset copies](../how-to/link-cluster-data.md) — overrides, cache links and materialized copies.
 - [Work with restricted data](../how-to/set-up-your-machine.md#restricted-data).
 - [Configuration reference](../reference/configuration.md).

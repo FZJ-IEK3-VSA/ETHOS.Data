@@ -6,4 +6,4 @@
 <span id="or-link-it-into-the-cache"></span>
 <span id="related-tasks"></span>
 
-This guide has moved to [Link cluster data](link-cluster-data.md#dataset-root-overrides).
+This guide has moved to [Manage local dataset copies](link-cluster-data.md#dataset-root-overrides).

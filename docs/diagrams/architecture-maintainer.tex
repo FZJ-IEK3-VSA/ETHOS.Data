@@ -1,23 +1,39 @@
+% Level 2 of the maintainer side. The boundary is the `ethos-data catalog` group
+% and nothing else: `dispatch()` in maintain/cli.py routes build, publish, upload
+% and check-store, and has no branch that reaches the namespace builder. That
+% builder is drawn OUTSIDE the boundary, with the command that does reach it,
+% because a figure that keeps it inside is the one thing a reader would take from
+% this page that the code no longer supports -- and it contradicts the paragraph
+% printed beside it.
 \begin{tikzpicture}
 \node[actor, text width=37mm, minimum height=15mm] (manifest) at (0,0) {Manifest builder};
 \node[actor, text width=37mm, minimum height=15mm] (upload) at (6,0) {Uploader};
 \node[actor, text width=37mm, minimum height=15mm] (publish) at (0,-3) {Public-view generator};
-\node[actor, text width=37mm, minimum height=15mm] (namespace) at (6,-3) {Namespace builder};
 \node[artifact, text width=97mm, minimum height=13mm] (helpers) at (3,-5.5) {Maintainer helpers\\catalogue roots / dataset layout / resource expansion};
 \node[artifact, text width=37mm, minimum height=15mm] (matching) at (-6,0) {Selection / Catalogue model\\shared rules};
 \node[artifact, text width=37mm, minimum height=15mm] (public) at (-6,-3) {Public catalogue\\filesystem output};
 \node[artifact, text width=37mm, minimum height=15mm] (remote) at (12,0) {rclone / oidc-agent\\dCache HTTP interfaces\\external};
-\node[artifact, text width=37mm, minimum height=15mm] (links) at (12,-3) {Shared-cache links\\filesystem output};
+% Beside the boundary rather than inside it, and at the height of the commands it
+% is a peer of: it reads the same checkout and the same helpers, but it is
+% reached from the top-level `link`, never from `catalog`.
+\node[actor, text width=37mm, minimum height=15mm] (namespace) at (12,-3) {Namespace builder};
+% Spelled -{}-all because a bare `--` is read as an en-dash ligature here, which
+% renders a flag nobody can copy. Same reason as in usecases-maintainer.tex.
+\node[cmd, above=2mm of namespace] (namespace-c) {ethos-data link -{}-all};
+\node[artifact, text width=37mm, minimum height=15mm] (links) at (12,-6) {Shared-cache links\\filesystem output};
 \draw[flow] (manifest) -- node[edgelabel,above]{matching / format} (matching);
 \draw[flow] (upload) -- node[edgelabel,above]{transfer / verify} (remote);
 \draw[flow] (publish) -- node[edgelabel,above]{generate} (public);
-\draw[flow] (namespace) -- node[edgelabel,above]{plan / apply} (links);
+\draw[flow] (namespace) -- node[edgelabel,right]{plan / apply} (links);
 \draw[flow] (manifest.south) -- ++(0,-6mm) -- ++(22mm,0) -- (2.2,-4.78);
-\draw[flow] (upload.south) -- ++(0,-6mm) -- ++(-22mm,0) -- (3.8,-4.78);
 \draw[flow] (publish) -- (0,-4.78);
-\draw[flow] (namespace) -- (6,-4.78);
+\draw[flow] (upload) -- (6,-4.78);
+% The one edge that crosses the boundary inwards: the builder outside it still
+% uses the catalogue-root and dataset-layout helpers, which is why those are a
+% block of their own rather than part of any one command.
+\draw[flow] (namespace.west) -- ++(-8mm,0) |- (helpers.east);
 \begin{scope}[on background layer]
-\node[boundarybox, fit=(manifest)(upload)(publish)(namespace)(helpers), label={[boundarylabel]above:Catalogue maintenance -- level 2}] {};
+\node[boundarybox, fit=(manifest)(upload)(publish)(helpers), label={[boundarylabel]above:Catalogue maintenance -- level 2}] {};
 \end{scope}
-\node[note, text width=140mm] at (3,-7) {Maintainer entry points invoke each command separately.\\Source files and generated inventories are filesystem inputs shared across commands.};
+\node[note, text width=140mm] at (3,-7.9) {\texttt{ethos-data catalog} reaches only the commands inside the boundary; the namespace builder is reached only by \texttt{ethos-data link -{}-all}.\\Source files and generated inventories are filesystem inputs shared across commands.};
 \end{tikzpicture}

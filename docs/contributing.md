@@ -180,3 +180,11 @@ between them with Material's `#only-light` / `#only-dark` convention:
 The pair is necessary, not belt-and-braces: `pdftocairo` converts text to vector
 paths, so there is no text left in the SVG for CSS to recolour, and one render
 would be unreadable in one of the two themes.
+
+`render.py` renders every `*.tex` beside it except `ethosstyle.tex`, and two of
+those diagrams -- `usecases-getting-data` and `usecases-maintainer` -- are
+source-only: their SVG pairs are rendered and committed, but no page embeds
+them. Editing one therefore reaches no reader, and `mkdocs build --strict` will
+not tell you so, because there is no reference for it to check. If a change to
+one of them was meant for the documentation, embed the diagram in the same
+commit.

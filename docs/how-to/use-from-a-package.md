@@ -127,8 +127,18 @@ cache — belongs in your package's own documentation; ETHOS.Data's pages cover
 
 The wrapper already includes `staging add/list/remove` and bundle commands.
 Keep this implementation shared; the consuming package only supplies its file,
-name and optional catalogue override. Shared cache maintenance stays with
-`ethos-data link/unlink/materialize` and `ethos-data catalog`.
+name and optional catalogue override.
+
+Two sets of commands stay with `ethos-data` and never appear in `reskit-data`,
+and they are not the same job. `ethos-data materialize`, `ethos-data link` and
+`ethos-data unlink` act on the shared cache itself: one cache serves every
+package on the machine, so a command that repoints an entry in it cannot belong
+to any one of them. `ethos-data catalog` — `build`, `publish`, `upload` and
+`check-store` — acts instead on a maintainer's source-catalogue checkout, which
+your users do not have. The two meet only at `ethos-data link --all`, which
+fills a whole shared cache from such a checkout; it sits with `link` rather than
+under `catalog` because it is `ethos-data link <dataset> <directory>` at the
+scale of a whole catalogue.
 
 Follow [Develop and propose a dataset](propose-a-dataset.md) for the development
 workflow, and link users to the [package-command reference](../reference/cli/package-data.md)
