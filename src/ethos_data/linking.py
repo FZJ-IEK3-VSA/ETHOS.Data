@@ -5,16 +5,17 @@
     ethos-data link --all                             # every source_dir there is
     ethos-data unlink global-wind-atlas
 
-This is the single-dataset counterpart to ``ethos-data catalog link-cache``.
-That command builds a *shared* namespace: it takes the root to build explicitly,
-reviews the whole catalogue with ``--dry-run``, and prunes stale entries. This
-one fills the cache this machine is configured to read, and reaches three things
-link-cache does not:
+This is the single-dataset mode of ``ethos-data link``; the other is ``--all``,
+which is a different job wearing the same name. ``--all`` builds a *shared*
+namespace from a source checkout: it takes the root to build explicitly, reviews
+the whole catalogue with ``--dry-run``, and prunes stale entries. Naming a
+dataset instead fills the cache this machine is configured to read, and reaches
+three things ``--all`` does not:
 
   * one dataset by name, rather than every one in the catalogue
   * a dataset that has been uploaded, so its descriptor has no ``source_dir``
     left, but whose bytes are sitting right here and need no downloading
-  * a restricted dataset, which ``link-cache`` skips on purpose -- a shared
+  * a restricted dataset, which ``--all`` skips on purpose -- a shared
     public namespace must never touch licensed data, but registering one
     authorised installation by name is exactly how it is meant to be done
 
@@ -27,7 +28,7 @@ guessed rather than the one retrieval will look in.
 records "these bytes are borrowed": retrieval reads them in place, refuses to
 write through them, and ``ethos-data materialize`` knows there is something to
 copy. A real directory means the opposite -- data the cache owns -- so neither
-this module nor ``link-cache`` will ever replace one with a link.
+mode of ``ethos-data link`` will ever replace one with a link.
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from .access import entry_for
+from .access import borrowed_parent, entry_for
 from .catalogs import LICENSE_RESOLVED, Catalog
 from .config import Roots
 
@@ -63,11 +64,39 @@ class LinkReport:
     def __str__(self) -> str:
         if self.target is None:
             return f"{self.verb:<11} {self.dataset}  {self.entry}"
-        # Windows stores a symbolic link with a \\?\ extended-length prefix, so
-        # reading one back shows a path nobody typed. It is the same directory;
-        # printing the spelling the person used is what makes the line checkable.
-        target = str(self.target).removeprefix("\\\\?\\")
-        return f"{self.verb:<11} {self.dataset}  {self.entry} -> {target}"
+        return (
+            f"{self.verb:<11} {self.dataset}  {self.entry} -> {_as_typed(self.target)}"
+        )
+
+
+def _as_typed(path: Path | str) -> Path:
+    """A path as somebody would have typed it, without Windows's ``\\\\?\\`` prefix.
+
+    Windows stores a symbolic link with an extended-length prefix, so reading one
+    back and printing it shows a path nobody wrote, which cannot be compared with
+    the ``source_dir`` or the directory the person is being asked to look at.
+    Every place that compares a stored link with a configured directory, or shows
+    one to be checked against the other, has to take the prefix off first -- so it
+    is taken off here, once, rather than in each of them.
+    """
+    return Path(str(path).removeprefix("\\\\?\\"))
+
+
+def _link_target(entry: Path) -> Path | None:
+    """Where a link points, as it was typed, or ``None`` when that cannot be read.
+
+    Reading a link is never the operation here, it is the diagnosis: this is
+    called to say what an entry points at *now*, inside a message or a plan. So a
+    link removed between the ``is_symlink()`` test and the ``readlink()`` call, or
+    a reparse point the system will not describe, has to cost the sentence its
+    detail rather than cost the run -- which is what lets
+    :func:`ethos_data.maintain.namespace.plan` promise that no state the cache is
+    in makes it raise.
+    """
+    try:
+        return _as_typed(entry.readlink())
+    except OSError:
+        return None
 
 
 def source_dir_for(name: str, catalog_root: str | Path | None = None) -> Path:
@@ -198,6 +227,47 @@ def _refusal(name: str, target: Path, error: OSError) -> str:
     )
 
 
+def _borrowed_refusal(entry: Path, borrowed: Path) -> str:
+    """Why an entry below a borrowed link is refused -- in both modes at once.
+
+    The walk that finds ``borrowed`` is already shared
+    (:func:`ethos_data.access.borrowed_parent`); this is the sentence that goes
+    with it. Both modes refuse the same write, for the same reason, with the same
+    remedy, and differ only in *when* they refuse -- which is a property of the
+    mode and not of the sentence. A second copy of it in the other mode is the
+    copy that goes stale.
+    """
+    return (
+        f"{borrowed} is a symbolic link, not a directory the cache owns -- the bytes "
+        f"under it are borrowed. Creating {entry} would write this cache's own entry "
+        f"into somebody else's tree, where removing that one link takes the entry with "
+        f"it. Remove {borrowed} and run this again: it discards nothing, because "
+        "nothing under it belongs to the cache."
+    )
+
+
+def _lost(name: str, entry: Path, replaced: Path | None) -> str:
+    """What ``--force`` has already destroyed, when the new link cannot be made.
+
+    There is no atomic repoint to fall back on. Renaming a freshly made symbolic
+    link over an existing one is refused by Windows whichever call is used --
+    a directory symbolic link carries the directory attribute, and the replace
+    flag will not take it -- so the old entry has to go before the new one can be
+    attempted. When the attempt then fails, the person asked for a repoint and got
+    a deletion, and the one thing that deletion destroyed is the record of where
+    the entry pointed, which is also the only thing needed to put it back. Saying
+    so is the whole of what is left to do about it.
+    """
+    if replaced is None:
+        return ""
+    quoted = f'"{replaced}"' if " " in str(replaced) else str(replaced)
+    return (
+        f"\n--force had already removed the link this was to replace, so there is no "
+        f"entry at {entry} at all now. It pointed at {replaced}. Once links can be "
+        f"made, put it back with:\n    ethos-data link {name} {quoted}"
+    )
+
+
 def link(
     catalog: Catalog,
     name: str,
@@ -214,14 +284,16 @@ def link(
 
     The entry goes in whichever root the dataset's access class belongs to, so a
     restricted dataset lands in the restricted cache or nowhere at all. That is
-    one thing this does and ``catalog link-cache`` does not: it skips restricted
-    datasets, because building a shared public namespace must never touch them,
-    while linking one deliberately by name is how an authorised installation gets
-    registered.
+    one thing naming a dataset does and ``ethos-data link --all`` does not:
+    ``--all`` skips restricted datasets, because building a shared public
+    namespace must never touch them, while linking one deliberately by name is
+    how an authorised installation gets registered.
 
     Raises :class:`LinkError` if the directory is not there, if the entry is
-    already a link and ``force`` is not set, or if the entry is a real directory
-    -- which is never replaced, because it is data the cache owns.
+    already a link and ``force`` is not set, if the entry is a real directory --
+    which is never replaced, because it is data the cache owns -- or if a
+    component of the path above it is itself a link, because the entry would
+    then be created inside data the cache has only borrowed.
     """
     roots = Roots.coerce(roots)
     try:
@@ -237,14 +309,36 @@ def link(
     if not target.is_dir():
         raise LinkError(f"not a directory: {target}")
 
+    # Checked above the whole cascade below, not merely above the ``mkdir``
+    # that would do the damage. ``entry.parent.mkdir(parents=True,
+    # exist_ok=True)`` succeeds on a parent that is already a link to a
+    # directory, so the entry would be written into somebody else's tree and
+    # reported as made -- but a ``--force`` repoint gets there only after
+    # ``entry.unlink()`` has run, which would destroy the existing entry on the
+    # way to refusing. Refusing first is also the right answer on its own
+    # terms: repointing an entry that lives inside a borrowed tree is another
+    # write through the link.
+    borrowed = borrowed_parent(entry, name)
+    if borrowed is not None:
+        raise LinkError(_borrowed_refusal(entry, borrowed))
+
     verb = "linked"
+    #: Read before the removal, because the removal is what destroys it.
+    replaced: Path | None = None
     if entry.is_symlink():
         if not force:
             raise LinkError(
-                f"{entry} already points at {entry.readlink()}.\n"
+                f"{entry} already points at {_link_target(entry)}.\n"
                 f"Repoint it with --force, or remove it with `ethos-data unlink {name}`."
             )
-        entry.unlink()
+        replaced = _link_target(entry)
+        try:
+            entry.unlink()
+        except OSError as error:
+            raise LinkError(
+                f"could not remove {entry}, the link this was to replace: {error}. "
+                "It is still there and still points where it did."
+            ) from None
         verb = "repointed"
     elif entry.exists():
         raise LinkError(
@@ -252,11 +346,19 @@ def link(
             "it with a link would discard it. Move or delete it deliberately first."
         )
 
-    entry.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        entry.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        raise LinkError(
+            f"could not create {entry.parent}, the directory this entry goes in: "
+            f"{error}" + _lost(name, entry, replaced)
+        ) from None
     try:
         entry.symlink_to(target, target_is_directory=True)
     except OSError as error:
-        raise LinkError(_refusal(name, target, error)) from None
+        raise LinkError(
+            _refusal(name, target, error) + _lost(name, entry, replaced)
+        ) from None
 
     return LinkReport(
         name, verb, entry, target, missing=_sample_missing(catalog, name, target)
@@ -273,6 +375,11 @@ def unlink(
     The data it points at is never touched. A real directory is refused: it is
     the cache's own copy, and deleting somebody's downloaded or materialised
     dataset is not something a command called ``unlink`` should do.
+
+    Deliberately not guarded against a borrowed parent, unlike :func:`link`. An
+    entry an earlier version of this command wrote *through* such a link can
+    only be cleaned up by removing it, and removing a link discards nothing; a
+    guard here would leave that damage unreachable by the tool that made it.
     """
     roots = Roots.coerce(roots)
     try:
@@ -281,8 +388,14 @@ def unlink(
         raise LinkError(str(error)) from None
 
     if entry.is_symlink():
-        target = entry.readlink()
-        entry.unlink()
+        target = _link_target(entry)
+        try:
+            entry.unlink()
+        except OSError as error:
+            raise LinkError(
+                f"could not remove {entry}: {error}. The entry is still there and "
+                "still points where it did."
+            ) from None
         return LinkReport(name, "removed", entry, target)
     if entry.exists():
         raise LinkError(

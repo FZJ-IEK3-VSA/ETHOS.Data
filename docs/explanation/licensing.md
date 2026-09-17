@@ -27,10 +27,18 @@ so the two operations that do that **refuse**:
 
 | Operation | With unresolved licensing |
 |---|---|
-| `ethos-data link`, `catalog link-cache` | refused — the dataset is skipped, nothing is linked |
+| `ethos-data link <dataset>` | refused — the command fails, nothing is linked |
+| `ethos-data link --all` | refused — the dataset is left out of the namespace, the rest of the catalogue is still linked; a link already in the cache is reported `exposed`, and `--prune` retracts it wherever the run is building |
 | `catalog upload` | refused — nothing is transferred (`--verify-only` still works) |
 | `reskit-data staging add` | **allowed** |
 | `fetch`, `path`, `verify` on data already here | allowed, with the warning |
+
+Linking is one command refusing in two shapes, because the two mistakes are
+different ones. Naming a dataset is a request for that dataset, so the request
+fails and says what has to be recorded; `--all` is a request for everything that
+is ready, so the unresolved dataset is named in the plan as skipped and every
+dataset that *is* settled is still linked. Failing the whole run over one
+unanswered licence question would teach people to stop asking it.
 
 Staging is the deliberate exception, and the refusals name it. A staged dataset
 is one person's, on one machine; it shadows nothing for anybody else, it is
@@ -56,6 +64,41 @@ licenses:
 
 `ethos:license_note` is stripped from the published catalogue — an internal note
 about an unresolved legal question is not something to publish.
+
+## A licence withdrawn after the cache was built
+
+Skipping answers the question only while the cache holds nothing for that
+dataset, and that is not the usual case. A licence rarely starts out unresolved:
+it *becomes* unresolved when somebody reads the upstream terms and finds them
+unclear, and by then `ethos-data link --all` may have linked the dataset into a
+shared cache weeks earlier. A planner that reported the skip and left the link
+would make that permanent — the line reads as though the dataset had never been
+there, the exit code says the namespace was built, and a nightly rebuild has
+nothing to notice for months.
+
+So the finding is about the cache, not about the plan. `ethos-data link --all`
+reports such an entry as `exposed` and returns `1`; with `--prune` it reports the
+same entry as `retract` and removes the link. Removing a link discards nothing:
+the bytes stay where they are, and anyone with a configured root for them can
+still read them.
+
+An unresolved licence is retracted in **whatever directory the run is building**,
+and that is the one exclusion of which this is true. No namespace anywhere is
+made better by holding a dataset whose terms nobody has read, so the removal
+needs no knowledge of which namespace this is. `ethos:access: restricted`
+arriving after the fact produces the same `exposed` line and the same exit code,
+but not the same removal: whether `--prune` may retract *that* link depends on
+what the root is, because the identical link is an exposure in a public cache and
+an authorised installation in a restricted one. See
+[Restricted data is read in place](#restricted-data-is-never-copied) and
+[Removing an exposure depends on what the root is](../reference/cli/ethos-data.md#namespace-authority).
+
+What this cannot undo is a **real directory**. If the dataset was downloaded or
+materialized into that cache before its terms were questioned, the cache holds
+the only copy of those bytes, and no command deletes it on the strength of an
+edit to a `dataset.yaml`. Such an entry is still reported as `skip`, and clearing
+it up is a decision somebody makes deliberately. It is the worse exposure of the
+two, and the one this mechanism cannot reach.
 
 ## Whose data is it
 
@@ -119,7 +162,14 @@ no files is how a dataset ends up published under terms nobody applied.
 enforces that structurally rather than by convention:
 
 - it is never downloaded, under any configuration;
-- it is never written into the public cache;
+- it is never written into the public cache — and a link that reached one before
+  the dataset was reclassified is reported by `ethos-data link --all`, and
+  removed by `--prune` where the run can say the directory is a public cache,
+  which takes away the link and not the data;
+- `ethos-data link --all` will not build the restricted cache at all: pointed at
+  it, the command exits `2` without reading the checkout, because every entry
+  there is one authorised installation registered by name rather than a namespace
+  generated from a catalogue;
 - the [staging root](../how-to/propose-a-dataset.md#stage-development-data) never shadows it —
   licence terms are not a development concern;
 - `ethos-data catalog upload` refuses it outright;
@@ -130,7 +180,7 @@ it fails with an explanation. An administrator may relocate an installation only
 where its terms permit that local copy, preserving access restrictions. Explicit
 `materialize <dataset>` supports this for a link in the restricted root; ordinary
 retrieval continues to read in place. See
-[Move linked data into the cache](../how-to/link-cluster-data.md#materialize-copies) and
+[Manage local dataset copies](../how-to/link-cluster-data.md#materialize-copies) and
 [Work with restricted data](../how-to/set-up-your-machine.md#restricted-data).
 
 ## Access and visibility are two questions

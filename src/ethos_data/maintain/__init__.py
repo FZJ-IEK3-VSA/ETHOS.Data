@@ -167,11 +167,27 @@ def dataset_name_for(root: Path, dataset_dir: Path) -> str:
 
 
 def is_namespace(dataset_dir: Path) -> bool:
-    """Whether this dataset directory has dataset directories inside it."""
-    return any(
-        child.is_dir() and (child / "dataset.yaml").is_file()
-        for child in dataset_dir.iterdir()
-    )
+    """Whether this dataset directory has dataset directories inside it, at any depth.
+
+    Membership is a property of the *name*. :func:`dataset_name_for` makes
+    ``datasets/a/x/y`` the dataset ``a/x/y``, a name below ``a``, whether or not
+    anybody wrote a ``dataset.yaml`` in ``x/``; :func:`iter_dataset_dirs`
+    collects members at any depth, and so does the manifest builder's
+    member-totals loop. Only this test used to read membership as "direct
+    children", and one ordinary directory in between was enough to make it
+    answer no.
+
+    What that cost is not a tidiness point. A namespace may not also describe
+    files of its own, and that rule is enforced where a namespace is rendered --
+    so a family with a gap in it was never checked, and a checkout declaring both
+    ``a`` (with a ``source_dir``) and ``a/x/y`` built two packages for a pair of
+    names that cannot both have a cache entry. Whichever kind of entry
+    ``<cache>/a`` is, one of them is wrong: as a link, ``a/x/y`` can only be
+    created by writing into borrowed data, and as a real directory, ``a/x/y`` is
+    invisible to :func:`ethos_data.access.cache_entries`, which stops descending
+    at the first directory holding a file.
+    """
+    return any(member != dataset_dir for member in iter_dataset_dirs(dataset_dir))
 
 
 def parent_chain(root: Path, dataset_dir: Path) -> list[Path]:

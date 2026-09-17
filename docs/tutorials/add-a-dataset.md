@@ -143,8 +143,8 @@ On a machine that several people or projects share, data already on disk does
 not need to be downloaded at all. Link it into the cache everybody uses:
 
 ```bash
-ethos-data catalog link-cache --root ../shared-cache --dry-run
-ethos-data catalog link-cache --root ../shared-cache
+ethos-data link --all --root ../shared-cache --dry-run
+ethos-data link --all --root ../shared-cache
 cd ..
 ```
 
@@ -156,6 +156,10 @@ cd ..
 
 `shared-cache/station-temperatures` is now a symbolic link to
 `incoming/station-temperatures`. Nothing was copied.
+
+If your machine will not create symbolic links, the entry is reported as `failed`
+with what to enable, the run ends with `1`, and the rest of the namespace is
+still built — one refused entry does not abandon the others.
 
 ## 6. Read the dataset as a data user
 
@@ -244,7 +248,7 @@ than `used in place`. `incoming/station-temperatures` is still there;
 | `ethos-data catalog build` | inventoried `source_dir`, left out the excluded log, hashed the rest |
 | `ethos-data catalog build --check` | compared the inventory with the files, and wrote nothing |
 | `ethos-data catalog publish` | generated the public view without maintainer-only fields |
-| `ethos-data catalog link-cache` | linked data already on disk into a shared cache |
+| `ethos-data link --all` | linked data already on disk into a shared cache |
 | `ethos-data materialize` | replaced that link with a verified copy |
 
 A real catalogue has one more step between building and publishing:
@@ -264,6 +268,5 @@ When you are done, delete the `catalogue-lesson` directory.
   verification.
 - [Add internal and restricted datasets](../how-to/describe-a-dataset.md#restricted-installations)
   — data that is not uploaded publicly.
-- [Link cluster data into the cache](../how-to/link-cluster-data.md) and [Move
-  linked data into the cache](../how-to/link-cluster-data.md#materialize-copies) — linking and
-  copying on real shared storage.
+- [Manage local dataset copies](../how-to/link-cluster-data.md) — overrides, linking
+  and copying on real shared storage.

@@ -120,11 +120,20 @@ def _checkout(root: Path, extra: dict) -> Path:
     return root
 
 
-def test_link_cache_skips_it_rather_than_linking_it(tmp_path):
+def test_link_all_skips_it_rather_than_linking_it(tmp_path):
+    """Catalogue mode -- ``ethos-data link --all`` -- asked of its planner.
+
+    The planner is where the refusal has to live rather than in the command that
+    calls it: by the time an entry has been written, a dataset nobody licensed
+    is already sitting in a directory everybody on the machine reads, and
+    removing it afterwards does not unsee it. Skipping is also the right shape
+    for a namespace: the one unanswered dataset is left out and the rest of the
+    cache is still built.
+    """
     checkout = _checkout(tmp_path / "catalogue", {"ethos:license_status": "unresolved"})
     cache = tmp_path / "cache"
 
-    actions = namespace.plan(checkout, cache)
+    actions = namespace.plan(checkout, cache, authority=namespace.PUBLIC_CACHE)
 
     assert [(a.verb, a.dataset) for a in actions] == [("skip", "example")]
     assert "unresolved licensing" in actions[0].detail
@@ -132,13 +141,80 @@ def test_link_cache_skips_it_rather_than_linking_it(tmp_path):
     assert not (cache / "example").exists()
 
 
-def test_link_cache_links_it_once_the_terms_are_recorded(tmp_path):
+def test_link_all_links_it_once_the_terms_are_recorded(tmp_path):
+    """The gate is a question, so answering it in dataset.yaml has to open it.
+
+    Worth asserting alongside the refusal: a check nobody can satisfy is not a
+    gate, it is a wall, and the next person to meet it works around it instead
+    of recording the terms.
+    """
     checkout = _checkout(tmp_path / "catalogue", RESOLVED)
     cache = tmp_path / "cache"
 
-    actions = namespace.plan(checkout, cache)
+    actions = namespace.plan(checkout, cache, authority=namespace.PUBLIC_CACHE)
 
     assert [(a.verb, a.dataset) for a in actions] == [("link", "example")]
+
+
+def _withdraw_the_licence(checkout: Path) -> None:
+    """Take the recorded terms back out of a checkout's dataset.yaml.
+
+    Both edits are needed, and the reason is the rule itself: a ``licenses``
+    entry settles the question on its own, so a status of ``unresolved`` left
+    beside a named licence would still read as settled and this would be a test
+    of nothing.
+    """
+    descriptor = checkout / "datasets" / "example" / "dataset.yaml"
+    meta = yaml.safe_load(descriptor.read_text(encoding="utf-8"))
+    meta.pop("licenses", None)
+    meta["ethos:license_status"] = "unresolved"
+    descriptor.write_text(yaml.safe_dump(meta))
+
+
+def test_link_all_retracts_the_link_when_the_terms_are_withdrawn(tmp_path, capsys):
+    """The gate has to close behind a namespace that was built while it was open.
+
+    Terms are recorded by hand and can be taken back by hand -- somebody looked
+    again, and what dataset.yaml claimed turned out not to be settled after all.
+    By then this cache is holding a live link that this same planner made, so
+    the answer that is right for a dataset the cache has never seen is the
+    dangerous one here: reporting ``skip`` left the link in place, returned 0,
+    and the shared namespace went on handing the bytes to everybody reading it
+    with nothing in the output or the exit code to say so.
+
+    Removing a link discards nothing -- the data behind it is asserted still
+    readable afterwards -- which is what makes retracting the safe answer and
+    leaving it the unsafe one. It still takes ``--prune``, because that is the
+    only flag here that deletes anything, so the run without it says the cache
+    is wrong and the run with it puts it right.
+
+    The ``authority`` these tests pass describes the shape they set up and
+    nothing more. A restricted dataset is retracted only where the run can say
+    the directory is this installation's own public cache -- see
+    ``test_link_command.py`` -- but an unrecorded licence is retracted in any of
+    them, because there is no namespace in which nobody having read the terms is
+    acceptable, so every assertion below holds whichever answer is given.
+    """
+    checkout = _checkout(tmp_path / "catalogue", RESOLVED)
+    cache = tmp_path / "cache"
+    assert namespace.run(checkout, cache, authority=namespace.PUBLIC_CACHE) == 0
+    entry = cache / "example"
+    assert entry.is_symlink()
+
+    _withdraw_the_licence(checkout)
+
+    assert namespace.run(checkout, cache, authority=namespace.PUBLIC_CACHE) == 1
+    reported = capsys.readouterr().out
+    assert "exposed" in reported and "unresolved licensing" in reported
+    assert entry.is_symlink()
+
+    assert (
+        namespace.run(checkout, cache, prune=True, authority=namespace.PUBLIC_CACHE)
+        == 0
+    )
+    assert "retract" in capsys.readouterr().out
+    assert not entry.is_symlink() and not entry.exists()
+    assert (checkout / "src" / "a.txt").read_bytes() == PAYLOAD
 
 
 def _package(extra: dict) -> dict:

@@ -92,15 +92,59 @@ reaching one means a bug or a race — a link created between planning and
 fetching. `download` checks again anyway, because the consequence would be
 writing into shared project storage that the cache only borrows.
 
-The same reasoning runs the other way in `ethos-data catalog link-cache`, which
-refuses to replace a real directory with a link: that directory is data the
-cache owns, and replacing it would silently discard it.
+The same reasoning runs the other way in `ethos-data link`, which refuses to
+replace a real directory with a link: that directory is data the cache owns, and
+replacing it would silently discard it. The refusal holds in both of that
+command's modes — naming one dataset fails outright, and `--all` reports such an
+entry as `keep` and carries on with the rest — because the bytes at risk are the
+same bytes either way.
+
+"Data the cache owns" is a question with an answer on disk, and it is the same
+answer in both halves of the cache: **does this directory hold a file of its
+own, at any depth?** Nothing under a symbolic link counts, because those bytes
+are borrowed. A directory that holds no file is not a downloaded dataset and
+never was; it is a namespace prefix this tool made itself, the shape left behind
+when the family under a name is withdrawn. Calling that `keep` was the mistake
+worth naming: the run reported "a real directory the cache owns", exited `0`, and
+the dataset the catalogue declares at that name had no entry on any rerun.
+`link --all` now reports it `obstructed`, and `--prune` clears it with `rmdir`
+and links the dataset there under the verb `replace`. A directory that cannot be
+listed counts as owned, because "I could not look" and "there is nothing here"
+are the same answer only to a command that deletes on the strength of it.
+
+## Writing *below* a link is still writing through it
+
+There is a third way through a link, and it is the one that does not look like
+writing at all: creating an entry underneath one. If `<cache>/family` is a link
+and the catalogue describes `family/member`, then making the entry's parent
+directory succeeds — the "already exists" error is swallowed and the check that
+it is a directory follows the link — so `<cache>/family/member` is created
+*inside* the borrowed tree and reported as made. That is the one thing a borrowed
+entry promises cannot happen. It is also fragile in a way nothing reports: the
+entry disappears the day its owner removes that one link, having been printed as
+linked and counted in a summary.
+
+The shape is not exotic. It is the reorganisation the namespace planner exists
+for: a dataset that was flat becomes a family, `family` stops being an entry and
+becomes a prefix, and the machine still holds yesterday's
+`<cache>/family -> /project/storage/family`. Both link modes refuse it — naming
+the dataset fails, `--all` reports the entry as `blocked` and carries on — and
+`--prune` will not remove `<cache>/family` either, because the catalogue does
+still describe something under that name.
+
+The refusal names the *link*, not the entry, because removing the link is the
+move that is certainly the cache's to make: nothing under it belongs to the
+cache, so removing it discards nothing. Deleting whatever sits at
+`<cache>/family/member` might instead delete the other project's own entry. Only
+a symbolic link is found this way; a junction is reported as an ordinary
+directory here exactly as it is everywhere else, so the guarantee is "no symbolic
+link above the entry", not "no borrowed tree at all".
 
 ## Where each mechanism belongs
 
 | Situation | Use |
 |---|---|
-| a dataset the whole machine already has | a namespace link, built by a maintainer |
+| a dataset the whole machine already has | a namespace link, built by a maintainer with `ethos-data link --all` |
 | one dataset whose files are already here | `ethos-data link <dataset> <directory>` |
 | a private copy, or one dataset in an odd place | `ethos-data config set-root` |
 | licensed data you have access to | `ethos-data config set-restricted-cache` |
@@ -135,6 +179,6 @@ automatically perform that check. See [Check and repair](../how-to/verify-and-re
 
 ## See also
 
-- [Use data already on disk](../how-to/link-cluster-data.md#dataset-root-overrides).
+- [Manage local dataset copies](../how-to/link-cluster-data.md) — overrides, cache links and materialized copies.
 - [Work with restricted data](../how-to/set-up-your-machine.md#restricted-data).
 - [Configuration reference](../reference/configuration.md).
