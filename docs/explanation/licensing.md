@@ -27,10 +27,18 @@ so the two operations that do that **refuse**:
 
 | Operation | With unresolved licensing |
 |---|---|
-| `ethos-data link`, `catalog link-cache` | refused — the dataset is skipped, nothing is linked |
+| `ethos-data link <dataset>` | refused — the command fails, nothing is linked |
+| `ethos-data link --all` | refused — the dataset is left out of the namespace, the rest of the catalogue is still linked |
 | `catalog upload` | refused — nothing is transferred (`--verify-only` still works) |
 | `reskit-data staging add` | **allowed** |
 | `fetch`, `path`, `verify` on data already here | allowed, with the warning |
+
+Linking is one command refusing in two shapes, because the two mistakes are
+different ones. Naming a dataset is a request for that dataset, so the request
+fails and says what has to be recorded; `--all` is a request for everything that
+is ready, so the unresolved dataset is named in the plan as skipped and every
+dataset that *is* settled is still linked. Failing the whole run over one
+unanswered licence question would teach people to stop asking it.
 
 Staging is the deliberate exception, and the refusals name it. A staged dataset
 is one person's, on one machine; it shadows nothing for anybody else, it is
@@ -130,7 +138,7 @@ it fails with an explanation. An administrator may relocate an installation only
 where its terms permit that local copy, preserving access restrictions. Explicit
 `materialize <dataset>` supports this for a link in the restricted root; ordinary
 retrieval continues to read in place. See
-[Move linked data into the cache](../how-to/link-cluster-data.md#materialize-copies) and
+[Manage local dataset copies](../how-to/link-cluster-data.md#materialize-copies) and
 [Work with restricted data](../how-to/set-up-your-machine.md#restricted-data).
 
 ## Access and visibility are two questions

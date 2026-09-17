@@ -78,7 +78,11 @@ mamba install -c conda-forge rclone oidc-agent
     the Linux package works. `check-store` is a shell script and also wants a
     `bash` on `PATH`; the one Git for Windows ships will do.
 
-Everything else — `build`, `publish`, `link-cache` — needs only the package.
+Everything else in the group — `build` and `publish` — needs only the package,
+and so does `ethos-data link`, which builds shared cache links from a top-level
+command rather than a `catalog` subcommand: filling a cache on the machine that
+already holds the data touches no remote storage, so it asks nothing of
+`rclone` or `oidc-agent`.
 The one-time credential setup is in
 [Upload a dataset](how-to/upload-a-dataset.md#credentials-once-per-machine).
 

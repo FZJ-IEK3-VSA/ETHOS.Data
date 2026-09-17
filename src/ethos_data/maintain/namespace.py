@@ -1,7 +1,7 @@
 """Building the public cache as a namespace of links, from the catalogue.
 
-    ethos-data catalog link-cache --root /shared/ethos/public --dry-run
-    ethos-data catalog link-cache --root /shared/ethos/public
+    ethos-data link --all --root /shared/ethos/public --dry-run
+    ethos-data link --all --root /shared/ethos/public
 
 The result is one entry per dataset, named for the dataset, pointing at wherever
 that data already sits on this machine:
@@ -17,10 +17,14 @@ Nothing is copied and nothing is moved: the entries cost a few hundred bytes in
 total. What they buy is a stable name for each dataset, so that when the storage
 behind one is reorganised, exactly one link changes and every user follows.
 
-This is maintainer-side on purpose. ``source_dir`` is never published -- it is a
-statement about one machine -- so the namespace is built once by somebody who
-knows where things are, and everybody else just points ``public_cache`` at the
-result. That is what keeps the user-facing configuration down to two settings.
+The command that drives this planner sits with the user-facing ``link`` rather
+than under ``catalog``, because filling a whole cache from a checkout and
+pointing one dataset at a directory are the same job at two scales. The planner
+itself still reads a source checkout, and that has not changed: ``source_dir``
+is never published -- it is a statement about one machine -- so the namespace is
+built once by somebody who knows where things are, and everybody else just
+points ``public_cache`` at the result. That is what keeps the user-facing
+configuration down to two settings.
 
 **Real directories are never touched.** An entry that has been downloaded from
 dCache, or materialised with ``ethos-data materialize``, is data the cache owns;
@@ -222,16 +226,26 @@ def apply(actions: list[Action]) -> list[Action]:
     return actions
 
 
-def run(catalog_root: Path, args) -> int:
-    if args.root is None:
-        from ..config import resolve_public_cache
+def run(
+    catalog_root: Path,
+    root: Path,
+    *,
+    dry_run: bool = False,
+    prune: bool = False,
+) -> int:
+    """Plan the namespace, report it, and -- unless ``dry_run`` -- build it.
 
-        resolved = resolve_public_cache()
-        root = resolved.value
-        print(f"no --root given; using the public cache from {resolved.source}")
-    else:
-        root = Path(args.root).expanduser()
-    actions = plan(catalog_root, root, prune=args.prune)
+    ``root`` arrives already decided, and deliberately has no default. The
+    earlier signature took the argparse namespace and looked the public cache up
+    itself when ``--root`` was absent, which put a second cache lookup inside a
+    command that had already done one. The two could answer differently -- a
+    top-level ``--root`` the second lookup never saw, or ``$ETHOS_DATA_DIR`` read
+    at a different moment -- and the result was a full link tree built in a
+    directory the rest of the command had never mentioned, printed as a success.
+    Deciding once, in the caller, is what makes that impossible rather than
+    merely unlikely.
+    """
+    actions = plan(catalog_root, root, prune=prune)
 
     changes = [a for a in actions if a.changes_anything]
     problems = [a for a in actions if a.verb == "missing"]
@@ -241,7 +255,7 @@ def run(catalog_root: Path, args) -> int:
     for action in actions:
         print(f"  {action}")
 
-    if args.dry_run:
+    if dry_run:
         print(f"\n{len(changes)} change(s) would be made. Nothing was written.")
         return 1 if problems else 0
 

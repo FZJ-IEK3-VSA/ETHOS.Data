@@ -1,4 +1,12 @@
-"""``ethos-data link``: making one cache entry point at data already on disk.
+"""``ethos-data link``: pointing cache entries at data already on this machine.
+
+One command, two modes. ``link <dataset>`` registers a single entry by name;
+``link --all`` builds a whole public cache from a catalogue checkout. Those were
+two separate commands until the second was folded into the first, and the merge
+is why both now have to be tested here: the modes differ on purpose -- catalogue
+mode skips restricted datasets, dataset mode links one into the restricted cache
+deliberately -- and an asymmetry that cannot be read in one place is an asymmetry
+somebody eventually "fixes".
 
 The entry has to be a *symbolic link* specifically, because that is how the cache
 records that the bytes are borrowed: retrieval reads them in place and refuses to
@@ -10,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 
 import pytest
 
@@ -276,11 +285,184 @@ def test_cli_all_links_every_source_dir_into_the_configured_cache(
     assert "nothing to do" in capsys.readouterr().out
 
 
+def _two_dataset_checkout(tmp_path):
+    """A settled, public, two-dataset checkout: the ordinary catalogue-mode case.
+
+    Two datasets rather than one throughout, because almost everything catalogue
+    mode can get wrong is about a *namespace* rather than an entry: that
+    refusing one entry still leaves the rest of the cache built, and that
+    pruning one entry does not take its neighbour with it.
+    """
+    one, two = _write(tmp_path / "one"), _write(tmp_path / "two")
+    return (
+        _checkout(
+            tmp_path,
+            {
+                "one": f"name: one\ntitle: One\nsource_dir: {one.as_posix()}\n{LICENCE}",
+                "two": f"name: two\ntitle: Two\nsource_dir: {two.as_posix()}\n{LICENCE}",
+            },
+        ),
+        one,
+        two,
+    )
+
+
+def test_cli_all_honours_an_explicit_root(tmp_path, monkeypatch):
+    """``--root`` names the cache to build, which is rarely this account's own.
+
+    The namespace for a whole machine is built once, by somebody who knows where
+    the storage is; their personal ``$ETHOS_DATA_DIR`` is beside the point. So
+    the decoy cache here is not a contrived case, it is the normal one -- and
+    the failure it guards against, a shared namespace quietly assembled in the
+    maintainer's home directory instead, looks exactly like success from the
+    terminal.
+    """
+    decoy = tmp_path / "decoy"
+    monkeypatch.setenv("ETHOS_DATA_DIR", str(decoy))
+    shared = tmp_path / "shared"
+    checkout, _, _ = _two_dataset_checkout(tmp_path)
+
+    code = main(
+        ["link", "--all", "--root", str(shared), "--catalog-root", str(checkout)]
+    )
+
+    assert code == 0
+    assert (shared / "one").is_symlink() and (shared / "two").is_symlink()
+    assert not decoy.exists()
+
+
+def test_cli_all_prune_removes_a_link_the_catalogue_no_longer_names(
+    tmp_path, monkeypatch
+):
+    """Removing entries is opt-in, because a checkout is not an authority.
+
+    A checkout on the wrong branch, or one part-way through a rename, disagrees
+    with the cache for entirely boring reasons; if a routine rebuild deleted on
+    the strength of that, everybody on the machine would lose entries they are
+    reading. So the stale link is asserted twice: still there after a run
+    without ``--prune``, and gone only after the run with it.
+    """
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("ETHOS_DATA_DIR", str(cache))
+    checkout, _, _ = _two_dataset_checkout(tmp_path)
+
+    assert main(["link", "--all", "--catalog-root", str(checkout)]) == 0
+    assert (cache / "two").is_symlink()
+
+    shutil.rmtree(checkout / "datasets" / "two")
+
+    assert main(["link", "--all", "--catalog-root", str(checkout)]) == 0
+    assert (cache / "two").is_symlink()
+
+    assert main(["link", "--all", "--prune", "--catalog-root", str(checkout)]) == 0
+    assert not (cache / "two").exists()
+    assert (cache / "one").is_symlink()
+
+
+def test_cli_all_prune_leaves_a_real_directory_alone(tmp_path, monkeypatch):
+    """Pruning removes links. A real directory is data, and data is never stale.
+
+    An entry the cache owns was downloaded from dCache or materialised here, and
+    the catalogue no longer naming it says something about the catalogue rather
+    than about the bytes. Deleting them on that evidence is the one mistake this
+    command could make that nobody can undo.
+    """
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("ETHOS_DATA_DIR", str(cache))
+    checkout, _, _ = _two_dataset_checkout(tmp_path)
+    owned = cache / "downloaded"
+    owned.mkdir(parents=True)
+    (owned / "a.txt").write_bytes(b"downloaded earlier")
+
+    assert main(["link", "--all", "--prune", "--catalog-root", str(checkout)]) == 0
+
+    assert not owned.is_symlink()
+    assert (owned / "a.txt").read_bytes() == b"downloaded earlier"
+    assert (cache / "one").is_symlink()
+
+
+def test_cli_all_prune_writes_nothing_on_a_dry_run(tmp_path, monkeypatch, capsys):
+    """``--prune`` is the only flag here that removes anything, which makes it
+    the only one whose preview has to be shown inert rather than assumed so."""
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("ETHOS_DATA_DIR", str(cache))
+    checkout, _, _ = _two_dataset_checkout(tmp_path)
+    assert main(["link", "--all", "--catalog-root", str(checkout)]) == 0
+    shutil.rmtree(checkout / "datasets" / "two")
+
+    code = main(
+        ["link", "--all", "--prune", "--dry-run", "--catalog-root", str(checkout)]
+    )
+
+    assert code == 0
+    assert (cache / "two").is_symlink()
+    assert "Nothing was written" in capsys.readouterr().out
+
+
+def test_cli_all_skips_restricted_data_that_link_by_name_still_takes(
+    tmp_path, monkeypatch
+):
+    """The asymmetry between the two modes, asserted in one place on purpose.
+
+    ``--all`` builds a namespace everybody on the machine reads, so a licensed
+    dataset stays out of it however settled its terms are: the entry would hand
+    the bytes to people the licence never covered. Naming that same dataset is
+    the opposite act -- one authorised installation, registered deliberately --
+    and it is the supported path, into the restricted cache and never the public
+    one. Both halves here read the same checkout, so that nothing but the mode
+    differs between them.
+    """
+    cache = tmp_path / "cache"
+    restricted = tmp_path / "restricted"
+    monkeypatch.setenv("ETHOS_DATA_DIR", str(cache))
+    open_data, licensed = _write(tmp_path / "open"), _write(tmp_path / "licensed")
+    checkout = _checkout(
+        tmp_path,
+        {
+            "open": (
+                f"name: open\ntitle: Open\n"
+                f"source_dir: {open_data.as_posix()}\n{LICENCE}"
+            ),
+            "example": (
+                f"name: example\ntitle: Example\nethos:access: restricted\n"
+                f"source_dir: {licensed.as_posix()}\n{LICENCE}"
+            ),
+        },
+    )
+
+    assert main(["link", "--all", "--catalog-root", str(checkout)]) == 0
+    assert (cache / "open").is_symlink()
+    assert not (cache / "example").exists()
+
+    link(
+        _catalog("restricted"),
+        "example",
+        roots=Roots(public=cache, restricted=restricted),
+        catalog_root=checkout,
+    )
+
+    assert (restricted / "example").is_symlink()
+    assert not (cache / "example").exists()
+
+
 @pytest.mark.parametrize(
     "arguments, message",
     [
         (["link", "--all", "example"], "takes no names"),
         (["link"], "name a dataset, or use --all"),
+        # The mode-only flags. What is asserted is the name of the flag that was
+        # refused rather than the sentence around it: the guidance is free to be
+        # reworded, but a refusal that never says which flag it means leaves the
+        # person guessing which of the two modes they were actually in.
+        #
+        # One case per flag, and no case that varies something the guard does not
+        # read. `ethos-data link example somewhere --root elsewhere` was a fifth
+        # row here, and it could never fail while the row above it passed: the
+        # test is `args.cache_root is not None or args.prune`, which never looks
+        # at the positional directory at all.
+        (["link", "--all", "--force"], "--force"),
+        (["link", "example", "--root", "elsewhere"], "--root"),
+        (["link", "example", "--prune"], "--prune"),
     ],
 )
 def test_cli_rejects_a_contradictory_invocation(
@@ -344,6 +526,22 @@ def test_cli_links_and_unlinks(tmp_path, monkeypatch, capsys):
     assert main(["--catalog", str(catalog), "unlink", "example"]) == 0
     assert not (tmp_path / "cache" / "example").exists()
     assert (data / "a.txt").exists()
+
+
+def test_cli_dry_run_is_ignored_when_a_dataset_is_named(tmp_path, monkeypatch):
+    """Documented as a no-op in dataset mode, and kept one rather than tightened.
+
+    A dry run earns its place where the plan is long enough to be worth reading
+    before it is written -- a whole namespace. One entry is not: the preview and
+    the act would print the same single line. Turning the flag into a refusal
+    here would buy nothing and break every wrapper that passes it uniformly.
+    """
+    catalog, data = _cli_workspace(tmp_path, monkeypatch)
+
+    code = main(["--catalog", str(catalog), "link", "example", str(data), "--dry-run"])
+
+    assert code == 0
+    assert (tmp_path / "cache" / "example").is_symlink()
 
 
 def test_cli_reports_a_refusal_without_a_traceback(tmp_path, monkeypatch, capsys):
