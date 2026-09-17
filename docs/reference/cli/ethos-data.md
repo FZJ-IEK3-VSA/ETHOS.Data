@@ -226,10 +226,11 @@ single rule. `0` means every dataset the catalogue names now has an entry where
 its name says, or was deliberately skipped — a restricted dataset, one whose
 licensing is unresolved, one with no `source_dir`, or a real directory the cache
 owns. `1` means one or more datasets have a `source_dir` that does not exist on
-this machine (`missing`). Each is named on its own line and counted in a closing
-paragraph, because a directory that has moved is a fact about this machine worth
-reporting, not a reason to abandon the other twenty entries. `--dry-run` reports
-the same findings and writes nothing.
+this machine (`missing`). Each is named on its own line, and a run that applied
+changes closes by counting them, because a directory that has moved is a fact
+about this machine worth reporting, not a reason to abandon the other twenty
+entries. `--dry-run` prints the same lines and returns the same code, and writes
+nothing.
 
 `2` is separate and means the run did not happen: a flag that belongs to the
 other mode — `--root` or `--prune` beside a dataset name, `--force` beside
