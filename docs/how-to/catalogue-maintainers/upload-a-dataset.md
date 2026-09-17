@@ -50,7 +50,7 @@ ethos-data catalog upload my-dataset --verify-only --no-chmod
 `--no-chmod` for a diagnostic that does not change permissions. Storage-locality
 lookup still requires authentication.
 
-For failures, use [Diagnose catalogue problems](troubleshoot-catalogue.md).
+For failures, use [Diagnose catalogue problems](../data-users/troubleshoot-catalogue.md).
 
 ## 4. Record and release the accepted inventory
 
@@ -79,5 +79,5 @@ assume `--allow-internal` makes a public parent private. Prefer the
 [local internal-data workflow](describe-a-dataset.md#restricted-installations) until an
 authenticated transfer/read procedure is established.
 
-See [Upload options](../reference/cli/catalog.md#upload-dataset-dataset) for the
+See [Upload options](../../reference/cli/catalog.md#upload-dataset-dataset) for the
 complete reference.

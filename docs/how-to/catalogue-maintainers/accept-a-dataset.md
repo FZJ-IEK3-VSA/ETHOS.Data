@@ -1,6 +1,6 @@
 # Accept a dataset proposal
 
-Review a package maintainer's [proposal](propose-a-dataset.md) in a private
+Review a package maintainer's [proposal](../package-maintainers/propose-a-dataset.md) in a private
 source-catalogue checkout with access to stable candidate bytes.
 
 1. **Review the submission.** Confirm identity, provenance, licensing,
@@ -30,4 +30,4 @@ source-catalogue checkout with access to stable candidate bytes.
 
 These are coordinated maintainer actions; the CLI does not perform a transaction
 across dCache, Git hosts and cluster deployment. See
-[catalogue CI checks](catalogue-ci.md) and [diagnostics](troubleshoot-catalogue.md).
+[catalogue CI checks](catalogue-ci.md) and [diagnostics](../data-users/troubleshoot-catalogue.md).

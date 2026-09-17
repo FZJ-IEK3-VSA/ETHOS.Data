@@ -164,7 +164,7 @@ metadata and inventory a catalogue maintainer reviews.
 
 - [Run a test with repository data](bundled-tests.md) — the next lesson:
   catalogued test data in a repository, and deliberate local edits to it.
-- [Stage uncatalogued data](../how-to/propose-a-dataset.md#stage-development-data) — staging for
+- [Stage uncatalogued data](../how-to/package-maintainers/propose-a-dataset.md#stage-development-data) — staging for
   real data.
-- [Propose a dataset](../how-to/propose-a-dataset.md) — a real submission,
+- [Propose a dataset](../how-to/package-maintainers/propose-a-dataset.md) — a real submission,
   including provenance and access to the bytes.

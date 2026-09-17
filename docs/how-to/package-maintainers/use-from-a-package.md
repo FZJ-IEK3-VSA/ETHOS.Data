@@ -15,7 +15,7 @@ dependencies = [
 ```
 
 During development before a package-index release, install ETHOS.Data from
-[its repository](../installation.md) in the same environment first.
+[its repository](../../installation.md) in the same environment first.
 
 ## 2. Ship a collections file
 
@@ -112,14 +112,14 @@ From a directory outside the source checkout:
 
 ```bash
 reskit-data --help
-reskit-data list
-reskit-data paths onshore_wind --test
+reskit-data show
+reskit-data fetch onshore_wind --test --paths
 ```
 
-`--help` lists the commands without loading the catalogue. `list` shows
-`onshore_wind [test]` and `onshore_wind [full]` as separate rows. `paths
---test` fetches the test variant and prints one `handle<TAB>path` line per
-handle.
+`--help` lists the commands without loading the catalogue. `show` lists
+`onshore_wind [test]` and `onshore_wind [full]` as separate rows.
+`fetch --test --paths` fetches the test variant and prints one
+`handle<TAB>path` line per handle.
 
 How users call `reskit-data` day to day — fetching inputs, configuring the
 cache — belongs in your package's own documentation; ETHOS.Data's pages cover
@@ -141,11 +141,11 @@ under `catalog` because it is `ethos-data link <dataset> <directory>` at the
 scale of a whole catalogue.
 
 Follow [Develop and propose a dataset](propose-a-dataset.md) for the development
-workflow, and link users to the [package-command reference](../reference/cli/package-data.md)
+workflow, and link users to the [package-command reference](../../reference/cli/package-data.md)
 for all shared flags.
 
 ## See also
 
 - [Keep test data in a repository](keep-test-data-in-a-repository.md)
 - [Run package tests in CI](run-in-ci.md)
-- [API reference](../reference/api/index.md)
+- [API reference](../../reference/api/index.md)

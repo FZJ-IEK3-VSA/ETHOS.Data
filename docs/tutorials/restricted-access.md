@@ -68,5 +68,5 @@ ethos-data config unset-restricted-cache --scope project
 
 The original CSV remains. The setting located files; it did not grant permissions
 or change their metadata. For real data, follow
-[Set up your machine](../how-to/set-up-your-machine.md#restricted-data) using the
+[Set up your machine](../how-to/data-users/set-up-your-machine.md#restricted-data) using the
 locations and permissions supplied by the dataset custodian.

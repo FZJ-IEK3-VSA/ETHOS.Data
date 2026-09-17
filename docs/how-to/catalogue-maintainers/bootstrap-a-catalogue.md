@@ -81,7 +81,7 @@ complete versioned internal tree and release the public revision using
 
 Give users the actual internal `datacatalog.json`, public/restricted cache roots,
 and support contact through the internal onboarding channel. Configure defaults
-with [Set up your machine](set-up-your-machine.md). Test a representative fetch
+with [Set up your machine](../data-users/set-up-your-machine.md). Test a representative fetch
 and deep verification as an ordinary reader.
 
 Add [catalogue CI checks](catalogue-ci.md), document release ownership, and retain

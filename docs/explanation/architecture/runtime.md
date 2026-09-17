@@ -42,7 +42,7 @@ link before passing work to Pooch. This protects storage borrowed by the cache
 from being treated as a download destination.
 
 `plan()` estimates download work from presence and size; it does not establish
-checksum validity. See [Check and repair the cache](../../how-to/verify-and-repair.md)
+checksum validity. See [Check and repair the cache](../../how-to/data-users/verify-and-repair.md)
 for explicit integrity checks.
 
 ## 6.2 Access failures and development data
@@ -59,8 +59,8 @@ supports changing work in progress. Neither should be mistaken for a verified
 copy solely because fetch returned a path. Staging warnings and the
 [licensing and immutability rules](../licensing.md) explain these boundaries.
 
-For configuration steps, see [Manage local dataset copies](../../how-to/link-cluster-data.md#dataset-root-overrides)
-and [Work with restricted data](../../how-to/set-up-your-machine.md#restricted-data).
+For configuration steps, see [Manage local dataset copies](../../how-to/catalogue-maintainers/link-cluster-data.md#dataset-root-overrides)
+and [Work with restricted data](../../how-to/data-users/set-up-your-machine.md#restricted-data).
 
 ### Failure boundaries
 
@@ -111,7 +111,7 @@ location, provenance, licences, and publication policy. Building produces the
 JSON index, descriptors, and any inventory shards. Consumers read these generated
 files; they do not need access to a maintainer's source directory.
 
-[Describe a dataset](../../how-to/describe-a-dataset.md) gives the procedure;
+[Describe a dataset](../../how-to/catalogue-maintainers/describe-a-dataset.md) gives the procedure;
 [The catalogue format](../catalogue-format.md) explains the representation.
 
 ### Validate the selected upload batch
@@ -145,7 +145,7 @@ verification because anonymous access is intentionally unavailable. See
 
 A batch records returned per-dataset failures and reports an unsuccessful exit
 status; completed transfers are not rolled back. Review the results before
-releasing catalogue metadata. See [Upload a dataset](../../how-to/upload-a-dataset.md)
+releasing catalogue metadata. See [Upload a dataset](../../how-to/catalogue-maintainers/upload-a-dataset.md)
 for commands and recovery steps.
 
 ### Generate and release the published catalogue
@@ -154,7 +154,7 @@ Publication selects descriptors by visibility, strips internal fields, and copie
 required shards and archived licence documents into the target catalogue checkout.
 It does not upload dataset bytes or by itself commit, push, or tag the repository.
 The maintainer reviews and releases that generated output as described in
-[Publish the catalogue](../../how-to/publish-the-catalogue.md).
+[Publish the catalogue](../../how-to/catalogue-maintainers/publish-the-catalogue.md).
 
 Publication is not gated by a transaction shared with upload. The maintainer must
 ensure that advertised files are ready before consumers see the new metadata.
@@ -165,7 +165,7 @@ Changed bytes need new paths so existing catalogue versions retain their meaning
 Withdrawing a dataset starts by removing its entry from the published view; any
 necessary deletion of remote bytes follows. Old catalogue pins still describe
 old resources, but cannot make deleted bytes available. Follow
-[Withdraw a dataset](../../how-to/withdraw-a-dataset.md) for the procedure.
+[Withdraw a dataset](../../how-to/catalogue-maintainers/withdraw-a-dataset.md) for the procedure.
 
 ## 6.4 Repository test data
 
@@ -201,5 +201,5 @@ before replacing the repository copy. The current feature supports public,
 non-staged datasets; it rejects internal/restricted data and hidden entries.
 The exported bundle retains the selected metadata and expanded sidecars needed
 by its collections. It is a bundle manifest, not a replacement full catalogue.
-See [Keep test data in a repository](../../how-to/keep-test-data-in-a-repository.md)
+See [Keep test data in a repository](../../how-to/package-maintainers/keep-test-data-in-a-repository.md)
 for commands and examples.

@@ -40,7 +40,7 @@ plumbing, `__pycache__` and root `README*`/`LICENSE*`/`CHANGELOG*`.
 
 An `ethos:include` pattern matching nothing **fails**; an `ethos:exclude` pattern
 matching nothing only warns. See
-[Describe a dataset](../../how-to/describe-a-dataset.md#the-asymmetry-is-deliberate).
+[Describe a dataset](../../how-to/catalogue-maintainers/describe-a-dataset.md#the-asymmetry-is-deliberate).
 
 | Flag | |
 |---|---|
@@ -63,7 +63,7 @@ longer generates is deleted from the target.
 
 !!! danger "It wipes everything in its target except `.git`"
     Point it only at the public repository. See
-    [Publish the catalogue](../../how-to/publish-the-catalogue.md).
+    [Publish the catalogue](../../how-to/catalogue-maintainers/publish-the-catalogue.md).
 
 | Flag | |
 |---|---|
@@ -130,7 +130,7 @@ With a single dataset the exit code is rclone's own on a transfer failure, or
 `1` on a verification miss. With several it is `1` if any dataset failed, and
 the summary says which.
 
-Full runbook: [Upload a dataset](../../how-to/upload-a-dataset.md).
+Full runbook: [Upload a dataset](../../how-to/catalogue-maintainers/upload-a-dataset.md).
 
 ## `check-store [vo]`
 
@@ -153,18 +153,18 @@ checkout.
 
 ## See also
 
-- [Set up dCache access](../../how-to/set-up-dcache-access.md)
-- [Create, rename, and delete folders](../../how-to/manage-dcache-folders.md) — uses
+- [Set up dCache access](../../how-to/catalogue-maintainers/set-up-dcache-access.md)
+- [Create, rename, and delete folders](../../how-to/catalogue-maintainers/manage-dcache-folders.md) — uses
   rclone directly; there are no equivalent ETHOS.Data subcommands.
 
 - [`ethos-data link --all`](ethos-data.md#link-dataset-directory) — build the shared
   cache as links to data already on this machine. It reads `source_dir` from the
   same source checkout these commands do.
-- [Describe a dataset](../../how-to/describe-a-dataset.md)
-- [Publish the catalogue](../../how-to/publish-the-catalogue.md)
-- [Bootstrap a new catalogue](../../how-to/bootstrap-a-catalogue.md)
+- [Describe a dataset](../../how-to/catalogue-maintainers/describe-a-dataset.md)
+- [Publish the catalogue](../../how-to/catalogue-maintainers/publish-the-catalogue.md)
+- [Bootstrap a new catalogue](../../how-to/catalogue-maintainers/bootstrap-a-catalogue.md)
 - [API: maintainer tooling](../api/maintain.md)
 
 
-For the complete cluster migration, see [Manage local dataset copies](../../how-to/link-cluster-data.md), which covers overrides, cache links and
-[materialized copies](../../how-to/link-cluster-data.md#materialize-copies) in one guide. Restricted entries are registered through [Add internal and restricted datasets](../../how-to/describe-a-dataset.md#restricted-installations).
+For the complete cluster migration, see [Manage local dataset copies](../../how-to/catalogue-maintainers/link-cluster-data.md), which covers overrides, cache links and
+[materialized copies](../../how-to/catalogue-maintainers/link-cluster-data.md#materialize-copies) in one guide. Restricted entries are registered through [Add internal and restricted datasets](../../how-to/catalogue-maintainers/describe-a-dataset.md#restricted-installations).

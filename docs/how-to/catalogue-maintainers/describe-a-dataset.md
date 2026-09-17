@@ -28,7 +28,7 @@ ethos:contact: Dataset maintainer
 Replace the examples with the actual source, release, licence, and contact.
 A relative `source_dir` is relative to this dataset directory. For created or
 derived data, record `ethos:origin`, authors, and derivation details using the
-[format reference](../reference/schemas.md#datasetyaml).
+[format reference](../../reference/schemas.md#datasetyaml).
 
 If terms are unresolved, set `ethos:license_status: unresolved` and document
 the question in `ethos:license_note`; do not invent an open licence. Review must
@@ -47,7 +47,7 @@ ethos:exclude:
 
 Check all required sidecars are included. For a large inventory, set
 `ethos:shard_depth` as described in the
-[sharding explanation](../explanation/catalogue-format.md#sharding).
+[sharding explanation](../../explanation/catalogue-format.md#sharding).
 
 ### The asymmetry is deliberate
 
@@ -81,8 +81,8 @@ ethos:embargo:
 Use a dated review when possible. For restricted data, follow the installation-specific fields below.
 
 Continue with [Accept a dataset proposal](accept-a-dataset.md).
-See [File formats](../reference/schemas.md) for the full metadata reference and
-[Licensing and immutability](../explanation/licensing.md) for the rationale.
+See [File formats](../../reference/schemas.md) for the full metadata reference and
+[Licensing and immutability](../../explanation/licensing.md) for the rationale.
 
 ## Restricted installations {#restricted-installations}
 

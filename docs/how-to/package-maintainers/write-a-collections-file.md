@@ -142,11 +142,12 @@ python data_cli.py info onshore_wind --test
 python data_cli.py paths onshore_wind --test
 ```
 
-`list` prints one row per variant, `onshore_wind [test]` and
-`onshore_wind [full]`. `info --test` shows the small selection and its handles;
-without `--test`, the full one. `paths --test` fetches the test data and prints
-one `handle<TAB>path` line per handle. If the two variants disagree about their
-handles, `list` marks the collection `[unresolvable]` and every other command
+`show` prints one row per variant, `onshore_wind [test]` and
+`onshore_wind [full]`. `show onshore_wind --test` describes the small selection
+and its handles; without `--test`, the full one. `fetch --test --paths` fetches
+the test data and prints one `handle<TAB>path` line per handle. If the two
+variants disagree about their handles, `show` marks the collection
+`[unresolvable]` and every other command
 refuses it, saying `only in test: ...; only in full: ...`. A collection that
 merely extends it — the `all` above — is refused too: it would hand a workflow
 different handles per variant.
@@ -154,12 +155,12 @@ different handles per variant.
 ## 4. Inspect the selection
 
 ```bash
-python data_cli.py list
-python data_cli.py info all
-python data_cli.py plan all
+python data_cli.py show
+python data_cli.py show all
+python data_cli.py fetch all --plan
 ```
 
-Check the catalogue printed by `list`, expected paths, sidecars, size, and access
+Check the catalogue printed by `show`, expected paths, sidecars, size, and access
 requirements. Resolve `[unresolvable]` entries and unexpectedly empty selections.
 A configured catalogue override can replace the file's pin; inspect
 `ethos-data config show` if the selected version differs.
@@ -178,5 +179,5 @@ files = data.fetch("all")
 For a package, [ship the file and wrapper](use-from-a-package.md). Users name
 its collections through the package command; no file lookup is needed.
 
-See [Collections format](../reference/schemas.md#collectionsyaml) for every key,
+See [Collections format](../../reference/schemas.md#collectionsyaml) for every key,
 family selector and pattern rule.

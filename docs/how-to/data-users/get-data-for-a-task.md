@@ -1,7 +1,7 @@
 # Get data by catalogue key
 
 Use a catalogue key to retrieve a dataset, family, folder or individual file.
-You need [ETHOS.Data installed](../installation.md) and access to the selected
+You need [ETHOS.Data installed](../../installation.md) and access to the selected
 catalogue. For a package workflow's collections and named inputs, use that
 package's API and wrapper; [RESKit's input-data guide](https://ethos-reskit.readthedocs.io/en/latest/how_to/get_input_data.html)
 is one example.
@@ -54,10 +54,10 @@ The CLI takes no collections file; it uses the explicit/configured catalogue
 or the built-in public one. See [Set up your machine](set-up-your-machine.md)
 for persistent settings.
 
-To retrieve keys from the catalogue RESKit pins, use `reskit-data path KEY`
-or `reskit.data.handle().catalog.path(KEY)`. For its workflow inputs, use
-`reskit-data paths COLLECTION` or `reskit.data.paths(COLLECTION)`. The
-[package-command reference](../reference/cli/package-data.md) describes their
+For RESKit's workflow inputs, use `reskit-data fetch COLLECTION --paths` or
+`reskit.data.paths(COLLECTION)`. A single key out of the catalogue RESKit
+pins is `ethos-data fetch KEY` or `reskit.data.handle().catalog.path(KEY)`. The
+[package-command reference](../../reference/cli/package-data.md) describes their
 shared behaviour.
 
 ## Check the result

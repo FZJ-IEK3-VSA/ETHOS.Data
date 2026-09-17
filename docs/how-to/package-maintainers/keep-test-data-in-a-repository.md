@@ -5,7 +5,7 @@ without the catalogue or dCache. Your package must ship a collections file pinne
 accepted catalogue revision. The examples use RESKit's public test collection;
 substitute your own wrapper and collection. For tiny fixtures owned entirely by the package,
 plain committed or generated test files may suffice; see
-[Test data and reproducibility](../explanation/test-data.md).
+[Test data and reproducibility](../../explanation/test-data.md).
 
 ## 1. Export a new bundle
 
@@ -102,7 +102,7 @@ Update `collections.yaml` to the released catalogue revision and desired
 selection. Remove staging/local-root overrides for the accepted dataset, then:
 
 ```bash
-reskit-data info test_suite_public
+reskit-data show test_suite_public
 reskit-data bundle export tests/data-bundle-next test_suite_public --source-revision ACCEPTED_REVISION
 reskit-data bundle verify tests/data-bundle-next test_suite_public
 ```
@@ -118,4 +118,4 @@ together. Ordinary tests must not regenerate or refresh their own fixtures.
 
 
 See [Run package tests in CI](run-in-ci.md) for CI wiring and
-[Bundle reference](../reference/cli/package-data.md#bundle) for command options.
+[Bundle reference](../../reference/cli/package-data.md#bundle) for command options.

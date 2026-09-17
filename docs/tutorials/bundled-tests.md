@@ -134,5 +134,5 @@ pytest -q tests/test_value.py
 ```
 
 Both checks pass again. For real changes, follow
-[Keep test data in a repository](../how-to/keep-test-data-in-a-repository.md#promote-an-accepted-fix)
+[Keep test data in a repository](../how-to/package-maintainers/keep-test-data-in-a-repository.md#promote-an-accepted-fix)
 to publish a revision and refresh the copy after the fix has been verified.

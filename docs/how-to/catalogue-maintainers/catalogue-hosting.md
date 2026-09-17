@@ -14,7 +14,7 @@ The paths below are examples to replace with your cluster's actual location.
 Keep the internal catalogue's Git history on jugit and a maintainer checkout on
 the cluster. Review changes, build the descriptors, and synchronize that checkout
 through Git. Package contributors can submit proposals without access to the
-maintainer checkout; see [Propose a dataset](propose-a-dataset.md).
+maintainer checkout; see [Propose a dataset](../package-maintainers/propose-a-dataset.md).
 
 Serve a complete, validated version directory separately from the working tree:
 
@@ -47,7 +47,7 @@ ethos-data config set-catalog /shared/ethos/catalogue/current/datacatalog.json
 
 This setting, or `ETHOS_DATA_CATALOG`, replaces the catalogue version a
 collections file pins, in the CLI and the Python API alike; see
-[Add the internal data catalogue](set-up-your-machine.md#select-the-catalogue). For a published
+[Add the internal data catalogue](../data-users/set-up-your-machine.md#select-the-catalogue). For a published
 calculation, record and use the concrete `versions/<commit>/datacatalog.json`
 path rather than the moving `current` alias.
 

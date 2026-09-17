@@ -3,8 +3,8 @@
 Checking that the data on disk is still the data the catalogue describes, and
 the development escape hatch for data that is not in the catalogue yet.
 
-See [Check and repair the cache](../../how-to/verify-and-repair.md) and
-[Stage uncatalogued data](../../how-to/propose-a-dataset.md#stage-development-data).
+See [Check and repair the cache](../../how-to/data-users/verify-and-repair.md) and
+[Stage uncatalogued data](../../how-to/package-maintainers/propose-a-dataset.md#stage-development-data).
 
 ## Verification
 

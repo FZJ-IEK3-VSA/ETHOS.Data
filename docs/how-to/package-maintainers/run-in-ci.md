@@ -2,7 +2,7 @@
 
 Run required tests without remote data dependencies and check live access in a
 separate test selection. For choosing fixtures, see
-[Test data and reproducibility](../explanation/test-data.md).
+[Test data and reproducibility](../../explanation/test-data.md).
 
 ## 1. Mark live data tests
 
@@ -35,7 +35,7 @@ Restore/save a cache directory using your CI provider's cache facility:
 
 ```bash
 export ETHOS_DATA_DIR="$PWD/.cache/ethos-data"
-reskit-data plan test_suite_public
+reskit-data fetch test_suite_public --plan
 reskit-data fetch test_suite_public
 reskit-data verify test_suite_public --deep
 pytest -m data_network
@@ -63,4 +63,4 @@ For new regressions or corrected inputs, follow
 [Update test data](keep-test-data-in-a-repository.md#promote-an-accepted-fix). Keep default and release checks strict;
 ordinary test runs must not refresh fixtures or accept unexplained changes.
 
-Catalogue maintainers should use [Catalogue CI](catalogue-ci.md) instead.
+Catalogue maintainers should use [Catalogue CI](../catalogue-maintainers/catalogue-ci.md) instead.

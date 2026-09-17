@@ -233,7 +233,7 @@ ethos-data --catalog public-catalogue/datacatalog.json \
 
 `shared-cache/station-temperatures` is now a real directory, and
 `.ethos-data-materialized.json` inside it records where the copy came from. Run
-the `plan` command from step 6 again: the file is now `already cached` rather
+the `fetch --plan` command from step 6 again: the file is now `already cached` rather
 than `used in place`. `incoming/station-temperatures` is still there;
 `materialize` never deletes the original.
 
@@ -258,11 +258,11 @@ When you are done, delete the `catalogue-lesson` directory.
 - [Catalogues and storage](../explanation/catalogues-and-storage.md) — why metadata
   publication, local access, and remote storage are separate operations.
 
-- [Accept a dataset proposal](../how-to/accept-a-dataset.md) — the checklist for
+- [Accept a dataset proposal](../how-to/catalogue-maintainers/accept-a-dataset.md) — the checklist for
   a real submission, from review to release.
-- [Upload a dataset](../how-to/upload-a-dataset.md) — credentials, transfer, and
+- [Upload a dataset](../how-to/catalogue-maintainers/upload-a-dataset.md) — credentials, transfer, and
   verification.
-- [Add internal and restricted datasets](../how-to/describe-a-dataset.md#restricted-installations)
+- [Add internal and restricted datasets](../how-to/catalogue-maintainers/describe-a-dataset.md#restricted-installations)
   — data that is not uploaded publicly.
-- [Manage local dataset copies](../how-to/link-cluster-data.md) — overrides, linking
+- [Manage local dataset copies](../how-to/catalogue-maintainers/link-cluster-data.md) — overrides, linking
   and copying on real shared storage.

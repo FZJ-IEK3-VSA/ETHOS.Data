@@ -10,7 +10,7 @@ command, for example `reskit-data`.
 ```
 
 The package ships and selects its own collections file. There is no CLI option
-to substitute another file. See [Use ETHOS.Data in your package](../../how-to/use-from-a-package.md)
+to substitute another file. See [Use ETHOS.Data in your package](../../how-to/package-maintainers/use-from-a-package.md)
 to expose the wrapper.
 
 ## Global options
@@ -29,11 +29,28 @@ either position. A package may supply an environment override such as
 See [catalogue resolution](../configuration.md#catalogue-resolution).
 
 `--help`, `config show`, staging management, and bundle reads do not load the
-catalogue. Collection commands and catalogue-key commands need readable metadata.
+catalogue. Collection commands need readable metadata.
+
+## Collections, not keys { #scope }
+
+This command works in the collections its package ships: `show` answers
+questions about them and never transfers a byte, `fetch` is the one that moves
+data, and `verify` checks what is already on disk. A single catalogue key — one
+dataset, folder or file — belongs to [`ethos-data ls` and
+`ethos-data fetch`](ethos-data.md), which read the same catalogue.
+
+`list`, `info`, `plan`, `paths`, `path` and `ls` were retired, not aliased.
+Each answers with the line to type instead:
+
+```text
+$ reskit-data plan onshore_wind
+error: `reskit-data plan` is gone -- use `reskit-data fetch <collection> --plan`.
+Run `reskit-data --help` for the commands this version has.
+```
 
 ## `--test` { #test }
 
-`info`, `plan`, `fetch`, `paths` and `verify` take `--test` before or after the
+`show`, `fetch` and `verify` take `--test` before or after the
 subcommand: `<tool>-data fetch onshore_wind --test` and
 `<tool>-data --test fetch onshore_wind` mean the same, and commands
 without the flag ignore it. It selects the collection's `test` variant instead
@@ -45,15 +62,21 @@ defines only one of the two refuses a request for the other. Messages label the
 variant, as in `onshore_wind [test]`. See
 [`collections.yaml`](../schemas.md#collectionsyaml).
 
-## `list`
+## `show [collection] [--test] [--files]` { #show }
+
+Reads catalogue metadata and nothing else: no form of `show` downloads
+anything.
 
 ```bash
-<tool>-data list
+<tool>-data show                         # every collection in the file
+<tool>-data show onshore_wind --test     # one collection
+<tool>-data show onshore_wind --files    # ... and every file it selects
 ```
 
-Every collection the file defines, with file count, total size and title. A
-collection with `test:` and `full:` variants gets one row per variant, labelled
-`name [test]` and `name [full]`, with the title on the first row only.
+Without a collection: every collection the file defines, with file count, total
+size and title. A collection with `test:` and `full:` variants gets one row per
+variant, labelled `name [test]` and `name [full]`, with the title on the first
+row only.
 
 ```title="Output"
 catalogue: /path/to/datacatalog.json
@@ -72,42 +95,53 @@ honour, a cycle in `extends`), or the catalogue copy lacks the descriptor of a
 dataset its index lists — is reported as `[unresolvable]` with the reason, and
 the rest are still listed. Exit status is `1` if any row was unresolvable.
 
-## `info <collection> [--test]` { #info-collection }
-
-Every file a collection selects, with its size, and — when the collection
-declares `paths` — a `named paths` section listing each handle and the
-catalogue key behind it. Resolves the catalogue but touches no data. The first
-line labels the variant when the collection has them.
-
-`info`, `plan`, `fetch` and `paths` check the collection's `paths` handles
-against the catalogue and the selection before doing anything else, exactly as
-[`ethos_data.fetch`][ethos_data.fetch] does: a handle naming a file the
-collection does not include, a folder with no selected file under it, or a key
-the catalogue lacks is a `CollectionError` — printed as `error: ...`, exit `2`
-— and nothing is fetched. `list` runs the same check on every row.
+With a collection: its size, its title, and — when the collection declares
+`paths` — a `named paths` section listing each handle and the catalogue key
+behind it. The first line labels the variant when the collection has them. The
+file list is opt-in under `--files`: a workflow is wired up from the handles,
+and a collection large enough to be worth asking about is large enough that its
+file list buries them.
 
 ```title="Output"
 onshore_wind [test]: 6 files, 42.3 MB
+  Data for onshore wind workflows
 
-  reskit-test-data/era5/100m_u_component_of_wind.nc                   16.2 MB
-  reskit-test-data/era5/100m_v_component_of_wind.nc                   16.2 MB
-  reskit-test-data/era5/forecast_surface_roughness.nc                  5.5 MB
-  reskit-test-data/global-wind-atlas/gwa100-like.tif                   1.5 MB
-  reskit-test-data/global-wind-atlas/gwa200-like.tif                   1.5 MB
-  reskit-test-data/global-wind-atlas/gwa50-like.tif                    1.4 MB
-
-named paths (the `paths` command resolves them to this machine):
+named paths (`reskit-data fetch onshore_wind --test --paths` resolves them to this machine):
   era5      ->  reskit-test-data/era5
   gwa_100m  ->  reskit-test-data/global-wind-atlas/gwa100-like.tif
   gwa_50m   ->  reskit-test-data/global-wind-atlas/gwa50-like.tif
   gwa_200m  ->  reskit-test-data/global-wind-atlas/gwa200-like.tif
+
+(6 files; --files lists them)
 ```
 
-## `plan <collection> [--test]` { #plan-collection }
+`show`, `fetch` and `fetch --plan` check the collection's `paths` handles
+against the catalogue and the selection before doing anything else, exactly as
+[`ethos_data.fetch`][ethos_data.fetch] does: a handle naming a file the
+collection does not include, a folder with no selected file under it, or a key
+the catalogue lacks is a `CollectionError` — printed as `error: ...`, exit `2`
+— and nothing is fetched. A bare `show` runs the same check on every row.
 
-What a fetch would do. No dataset bytes are downloaded, but resolving remote
-catalogue metadata can require network access. With `--test`, what a fetch of
-the test variant would do.
+## `fetch <collection> [--test] [--plan | --paths]` { #fetch-collection }
+
+Download whatever the collection selects and this machine does not already
+have. Files already present and matching their recorded checksum are skipped —
+including files another tool fetched earlier into the same cache. Datasets
+resolved in place are used where they lie and never copied. A faulty `paths`
+handle is refused before any transfer (see [above](#show)). Progress messages
+label the variant:
+`onshore_wind [test]: fetching 6 of 6 files (42.3 MB) into /path/to/cache`.
+With `--skip-unavailable`, a collection none of whose files this machine can
+reach reports `nothing to fetch` rather than pretending something was present.
+
+`--plan` and `--paths` choose what to report about the transfer and cannot be
+combined.
+
+### `--plan` { #plan }
+
+What the fetch would do, without doing it. No dataset bytes are downloaded, but
+resolving remote catalogue metadata can require network access. It shares its
+parser and its resolution with the fetch it previews, so the two cannot drift.
 
 ```title="Output"
 public cache:    /path/to/cache
@@ -119,41 +153,30 @@ to download:        2 files     32.4 MB
 not available here:    4 files                  (licensed-example -- left out)
 ```
 
-Presence is checked by size, which is cheap; `fetch` verifies the hash and
-re-fetches anything that fails, so `plan`'s "already cached" is an estimate, not
-a promise.
+Presence is checked by size, which is cheap; a real fetch verifies the hash and
+re-fetches anything that fails, so `--plan`'s "already cached" is an estimate,
+not a promise.
 
 Files expected in place but missing are reported separately, under `MISSING
 from where they were expected`.
 
-## `fetch <collection> [--test]` { #fetch-collection }
-
-Download whatever is missing and return. Files already present and matching
-their recorded checksum are skipped — including files another tool fetched
-earlier into the same cache. Datasets resolved in place are used where they lie
-and never copied. A faulty `paths` handle is refused before any transfer (see
-[`info`](#info-collection)). Progress messages label the variant:
-`onshore_wind [test]: fetching 6 of 6 files (42.3 MB) into /path/to/cache`.
-With `--skip-unavailable`, a collection none of whose files this machine can
-reach reports `nothing to fetch` rather than pretending something was present.
-
-## `paths <collection> [--test]` { #paths-collection }
+### `--paths` { #paths }
 
 ```bash
-<tool>-data paths onshore_wind --test
-<tool>-data paths onshore_wind
+<tool>-data fetch onshore_wind --test --paths
+<tool>-data fetch onshore_wind --paths
 ```
 
-Fetch the collection exactly as `fetch` does — on the collections file already
+Fetch the collection as usual — on the collections file already
 loaded, so the catalogue is read once — then print its `paths` handles resolved
 to this machine: one `handle<TAB>absolute path` line per handle, tab-separated
 so a shell can read it back (`while IFS=$'\t' read handle path`). A folder
 handle prints the directory holding the collection's selected files under that
 key. With `--skip-unavailable`, a handle whose data this machine cannot reach is
-left out of the output and a warning names it — the same contract `fetch` gives
-the files themselves; without the flag, unreachable data stops the command with
-an `AccessError` before anything is downloaded. A collection that declares no
-`paths` exits `2`. The Python equivalent is
+left out of the output and a warning names it — the same contract a plain fetch
+gives the files themselves; without the flag, unreachable data stops the command
+with an `AccessError` before anything is downloaded. A collection that declares
+no `paths` exits `2`. The Python equivalent is
 [`Collections.paths`][ethos_data.selection.Collections.paths].
 
 ```title="Output"
@@ -186,24 +209,24 @@ incomplete catalogue copy, a faulty definition — and verifies the rest. It
 exits `1` if anything was skipped, even when every checked file matches: the
 check was not complete, and a CI job must not read it as one.
 
-See [Check and repair the cache](../../how-to/verify-and-repair.md).
+See [Check and repair the cache](../../how-to/data-users/verify-and-repair.md).
 
-## `ls [key]` and `path <key>` {#keys}
+## Reaching past the collections {#keys}
 
-`ls` lists catalogue datasets, or resources under an optional key, without
-fetching data bytes. `path` fetches a file, folder, dataset or family and prints
-its absolute local path. Both use the same catalogue as the package's collections.
+A dataset, folder or file the package's collections do not name is
+`ethos-data`'s to hand out — it reads the catalogue the package pins, so the
+answer is the same and lands in the same cache.
 
 ```bash
-reskit-data ls
-reskit-data ls reskit-test-data/era5
-reskit-data path reskit-test-data/era5
+ethos-data ls
+ethos-data ls reskit-test-data/era5
+ethos-data fetch reskit-test-data/era5
 ```
 
 ## `staging`
 
 Data that is not in the catalogue yet. See
-[Stage uncatalogued data](../../how-to/propose-a-dataset.md#stage-development-data).
+[Stage uncatalogued data](../../how-to/package-maintainers/propose-a-dataset.md#stage-development-data).
 
 ```bash
 <tool>-data staging add <name> <directory> [--note TEXT] [--copy]
@@ -252,16 +275,16 @@ never overwrite fixtures or fall back to downloads.
 
 Global cache, staging, and skip-unavailable settings do not redirect bundle reads.
 The package's collections file and `--catalog` select inputs for export only. Invalid bundle inputs exit 2.
-See [Keep test data in a repository](../../how-to/keep-test-data-in-a-repository.md).
+See [Keep test data in a repository](../../how-to/package-maintainers/keep-test-data-in-a-repository.md).
 ## `config`
 
 The wrapper exposes the same shared [configuration commands](../configuration.md)
 as `ethos-data`. Settings apply across packages. `config show` reports shared
-settings and origins; `list` prints the actual catalogue chosen by this wrapper.
+settings and origins; `show` prints the actual catalogue chosen by this wrapper.
 
 ## Exit status
 
-`0` means success. `list` and `verify` return `1` for unresolved selections or
+`0` means success. `show` and `verify` return `1` for unresolved selections or
 failed checks, and bundle verification returns `1` for modified/missing files.
 Unknown collections/keys, inaccessible data and invalid collection or bundle
 definitions return `2` with an error message. Staging refusals return a nonzero

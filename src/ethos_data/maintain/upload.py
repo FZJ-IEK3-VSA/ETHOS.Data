@@ -93,7 +93,7 @@ def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path | None
         raise SystemExit(
             f"no dataset called {dataset_name!r} in {datasets_dir(catalog_root)}.\n"
             f"Datasets in this catalogue:\n{listing}\n"
-            "To add a new one, describe it first -- see docs/how-to/describe-a-dataset.md."
+            "To add a new one, describe it first -- see docs/how-to/catalogue-maintainers/describe-a-dataset.md."
         )
     if not package_file.is_file():
         raise SystemExit(

@@ -2,7 +2,7 @@
 
 Remove an entry from the current public catalogue, and only delete remote bytes
 if withdrawal requires it. For a correction, publish a new version while
-retaining the old paths; see [Licensing and immutability](../explanation/licensing.md).
+retaining the old paths; see [Licensing and immutability](../../explanation/licensing.md).
 
 ## 1. Remove the current public entry
 
@@ -42,4 +42,4 @@ an old pin is retained. Existing copies remain on users' machines; deletion does
 not notify users or correct their previous results.
 
 See [Publish the catalogue](publish-the-catalogue.md) and
-[Report a problem](troubleshoot-catalogue.md#report-a-problem).
+[Report a problem](../data-users/troubleshoot-catalogue.md#report-a-problem).

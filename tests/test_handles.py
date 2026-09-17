@@ -250,17 +250,21 @@ def test_the_one_call_forms_take_the_file(shipped):
 def test_the_tool_command_runs_the_collection_commands_on_its_file(
     shipped, world, capsys
 ):
-    _, cache, _ = world
     data = ethos_data.collections(shipped, tool="faketool")
-    assert data.main(["list"]) == 0
+    assert data.main(["show"]) == 0
     assert "wind" in capsys.readouterr().out
     assert data.main(["fetch", "wind"]) == 0
     capsys.readouterr()
-    # Keys resolve against the catalogue the file pins.
-    assert data.main(["path", "family/alpha/sites.shp"]) == 0
-    assert capsys.readouterr().out.strip() == str(cache / "family/alpha/sites.shp")
-    assert data.main(["ls", "family/alpha/era5"]) == 0
-    assert "family/alpha/era5/x.nc" in capsys.readouterr().out
+    # This collection names no inputs, so --paths says so instead of printing
+    # an empty mapping a script would read as success.
+    assert data.main(["fetch", "wind", "--paths"]) == 2
+    assert "declares no named paths" in capsys.readouterr().err
+    # A single catalogue key is ethos-data's job: this command works in
+    # collections, and says so rather than failing with 'invalid choice'.
+    assert data.main(["path", "family/alpha/sites.shp"]) == 2
+    assert "use `ethos-data fetch <key>`" in capsys.readouterr().err
+    assert data.main(["ls", "family/alpha/era5"]) == 2
+    assert "use `ethos-data ls [<key>]`" in capsys.readouterr().err
     # A refusal is a message naming the tool, not a traceback.
     assert data.main(["fetch", "nosuch"]) == 2
     assert "faketool defines: wind" in capsys.readouterr().err
@@ -276,7 +280,7 @@ def test_the_tool_command_is_named_after_the_tool_and_has_no_c_flag(shipped, cap
     assert "--collections" not in out, "the file is fixed; there is nothing to name"
     assert "materialize" not in out, "cache maintenance stays with ethos-data"
     with pytest.raises(SystemExit) as refused:
-        data.main(["-c", "elsewhere.yaml", "list"])
+        data.main(["-c", "elsewhere.yaml", "show"])
     assert refused.value.code == 2
     with pytest.raises(SystemExit) as stop:
         data.main(["--help"], prog="fake-data")
@@ -289,9 +293,9 @@ def test_the_tool_command_takes_catalog_for_one_run(shipped, world, tmp_path, ca
     other.parent.mkdir()
     other.write_text(json.dumps({"name": "other", "datasets": []}))
     data = ethos_data.collections(shipped, tool="faketool")
-    assert data.main(["--catalog", str(other), "list"]) == 1
+    assert data.main(["--catalog", str(other), "show"]) == 1
     assert "unresolvable" in capsys.readouterr().out
-    assert data.main(["list"]) == 0, "the handle itself is untouched"
+    assert data.main(["show"]) == 0, "the handle itself is untouched"
 
 
 def test_ethos_data_rejects_collection_commands(world, tmp_path, monkeypatch, capsys):
@@ -306,6 +310,8 @@ def test_ethos_data_rejects_collection_commands(world, tmp_path, monkeypatch, ca
 @pytest.mark.parametrize(
     "argv",
     [
+        ["show"],
+        ["show", "wind"],
         ["info", "wind"],
         ["plan", "wind"],
         ["paths", "wind"],
@@ -315,6 +321,10 @@ def test_ethos_data_rejects_collection_commands(world, tmp_path, monkeypatch, ca
         ["path", "flat"],
         ["-c", "collections.yaml", "ls"],
         ["--test", "fetch", "flat"],
+        # `fetch` exists here, but as a catalogue key, without the collection
+        # switches: ethos-data has no collections file to read them against.
+        ["fetch", "flat", "--plan"],
+        ["fetch", "flat", "--paths"],
         ["config", "set-collections", "collections.yaml"],
         ["config", "unset-collections"],
     ],
@@ -485,11 +495,11 @@ def test_an_unreachable_pin_can_still_be_overridden_with_catalog(
         "catalog: https://example.invalid/nowhere/datacatalog.json\n"
         "collections:\n  wind:\n    include:\n      - dataset: family/alpha\n"
     )
-    assert ethos_data.tool_main(broken, tool="faketool", argv=["list"]) == 2
+    assert ethos_data.tool_main(broken, tool="faketool", argv=["show"]) == 2
     assert "cannot read the catalogue" in capsys.readouterr().err
     assert (
         ethos_data.tool_main(
-            broken, tool="faketool", argv=["--catalog", str(index), "list"]
+            broken, tool="faketool", argv=["--catalog", str(index), "show"]
         )
         == 0
     )
@@ -507,7 +517,7 @@ def test_the_tools_own_override_sits_below_catalog_and_above_the_environment(
     monkeypatch.setenv("ETHOS_DATA_CATALOG", str(other))
     assert (
         ethos_data.tool_main(
-            shipped, tool="faketool", catalog=str(index), argv=["list"]
+            shipped, tool="faketool", catalog=str(index), argv=["show"]
         )
         == 0
     )
@@ -518,7 +528,7 @@ def test_the_tools_own_override_sits_below_catalog_and_above_the_environment(
             shipped,
             tool="faketool",
             catalog=str(index),
-            argv=["--catalog", str(other), "list"],
+            argv=["--catalog", str(other), "show"],
         )
         == 1
     )

@@ -149,15 +149,6 @@ exclude_docs: |
 
 # Compatibility pages retain previously shared architecture URLs.
 not_in_nav: |
-  /how-to/configure-the-cache.md
-  /how-to/add-internal-catalogue.md
-  /how-to/restricted-data.md
-  /how-to/stage-unpublished-data.md
-  /how-to/update-test-data.md
-  /how-to/use-data-already-on-disk.md
-  /how-to/move-linked-data-into-the-cache.md
-  /how-to/report-a-problem.md
-  /how-to/add-internal-and-restricted-data.md
   /explanation/architecture/lifecycle.md
   /explanation/architecture/quality-and-risks.md
 
@@ -191,28 +182,28 @@ nav:
     - How-to guides:
           - Overview: how-to/index.md
           - Data users:
-                - Set up your machine: how-to/set-up-your-machine.md
-                - Get data by catalogue key: how-to/get-data-for-a-task.md
-                - Check and repair the cache: how-to/verify-and-repair.md
+                - Set up your machine: how-to/data-users/set-up-your-machine.md
+                - Get data by catalogue key: how-to/data-users/get-data-for-a-task.md
+                - Check and repair the cache: how-to/data-users/verify-and-repair.md
+                - Diagnose catalogue problems: how-to/data-users/troubleshoot-catalogue.md
           - Package maintainers:
-                - Use ETHOS.Data in your package: how-to/use-from-a-package.md
-                - Write a collections file: how-to/write-a-collections-file.md
-                - Develop and propose data: how-to/propose-a-dataset.md
-                - Keep test data in the repository: how-to/keep-test-data-in-a-repository.md
-                - Run package tests in CI: how-to/run-in-ci.md
+                - Use ETHOS.Data in your package: how-to/package-maintainers/use-from-a-package.md
+                - Write a collections file: how-to/package-maintainers/write-a-collections-file.md
+                - Develop and propose data: how-to/package-maintainers/propose-a-dataset.md
+                - Keep test data in the repository: how-to/package-maintainers/keep-test-data-in-a-repository.md
+                - Run package tests in CI: how-to/package-maintainers/run-in-ci.md
           - Catalogue maintainers:
-                - Accept a dataset proposal: how-to/accept-a-dataset.md
-                - Describe a dataset: how-to/describe-a-dataset.md
-                - Set up dCache access: how-to/set-up-dcache-access.md
-                - Upload a public dataset: how-to/upload-a-dataset.md
-                - Manage dCache folders: how-to/manage-dcache-folders.md
-                - Publish the catalogue: how-to/publish-the-catalogue.md
-                - Serve catalogues on the cluster and GitHub: how-to/catalogue-hosting.md
-                - Manage local dataset copies: how-to/link-cluster-data.md
-                - Check catalogue changes in CI: how-to/catalogue-ci.md
-                - Diagnose catalogue problems: how-to/troubleshoot-catalogue.md
-                - Withdraw a dataset: how-to/withdraw-a-dataset.md
-                - Bootstrap a new catalogue: how-to/bootstrap-a-catalogue.md
+                - Accept a dataset proposal: how-to/catalogue-maintainers/accept-a-dataset.md
+                - Describe a dataset: how-to/catalogue-maintainers/describe-a-dataset.md
+                - Set up dCache access: how-to/catalogue-maintainers/set-up-dcache-access.md
+                - Upload a public dataset: how-to/catalogue-maintainers/upload-a-dataset.md
+                - Manage dCache folders: how-to/catalogue-maintainers/manage-dcache-folders.md
+                - Publish the catalogue: how-to/catalogue-maintainers/publish-the-catalogue.md
+                - Serve catalogues on the cluster and GitHub: how-to/catalogue-maintainers/catalogue-hosting.md
+                - Manage local dataset copies: how-to/catalogue-maintainers/link-cluster-data.md
+                - Check catalogue changes in CI: how-to/catalogue-maintainers/catalogue-ci.md
+                - Withdraw a dataset: how-to/catalogue-maintainers/withdraw-a-dataset.md
+                - Bootstrap a new catalogue: how-to/catalogue-maintainers/bootstrap-a-catalogue.md
 
     - Explanation:
           - Overview: explanation/index.md

@@ -29,7 +29,7 @@ reskit-data fetch my_workflow
 
 `my_workflow` is the collection you just added. Collection resolution still needs
 a readable catalogue index, even for newly staged datasets. The
-[development tutorial](../tutorials/develop-and-propose-data.md) provides a local
+[development tutorial](../../tutorials/develop-and-propose-data.md) provides a local
 practice index and wrapper.
 
 Staging adds to or shadows non-restricted datasets in a **shared** overlay.
@@ -39,7 +39,7 @@ must stay in its authorised installation.
 
 `staging list --new-only` compares entries with local public/restricted caches;
 it does not prove a dataset is absent from the catalogue. See the
-[staging command reference](../reference/cli/package-data.md#staging) for flags.
+[staging command reference](../../reference/cli/package-data.md#staging) for flags.
 
 ## Prepare the review material
 
@@ -49,7 +49,7 @@ submission channel:
 | Item | What the reviewer needs |
 |---|---|
 | Purpose and identity | Proposed dataset name, version, title, intended workflows, and whether it adds data or revises an existing input |
-| Source metadata | A draft `dataset.yaml`, following [Describe a dataset](describe-a-dataset.md) |
+| Source metadata | A draft `dataset.yaml`, following [Describe a dataset](../catalogue-maintainers/describe-a-dataset.md) |
 | Provenance | Original source or DOI, retrieval date, authors, and any derivation script with its version and parameters |
 | Redistribution and visibility | Applicable licences, attribution, access class, and any proposed embargo; identify unresolved questions |
 | Inventory | Selected relative paths, sizes, SHA-256 hashes, and required sidecars; preferably a generated manifest |
@@ -78,7 +78,7 @@ object. Explain whether the fix is only in code or also requires new data.
 
 ## Hand off publication
 
-The catalogue maintainer follows [Accept a dataset proposal](accept-a-dataset.md):
+The catalogue maintainer follows [Accept a dataset proposal](../catalogue-maintainers/accept-a-dataset.md):
 review metadata, build and inspect the inventory, upload and verify the bytes,
 then release the appropriate metadata. A successful local test or metadata
 build alone does not establish that data is available to consumers.

@@ -13,7 +13,7 @@ files with the catalogue's relative layout. Paths below are examples.
 | Make the cache own an independent copy | Materialize the dataset. |
 
 New datasets first need [source metadata](describe-a-dataset.md) and licensing
-review. For unpublished experiments, use [staging](propose-a-dataset.md#stage-development-data).
+review. For unpublished experiments, use [staging](../package-maintainers/propose-a-dataset.md#stage-development-data).
 
 ## Dataset-root overrides {#dataset-root-overrides}
 
@@ -130,7 +130,7 @@ datasets retain `ethos:uploaded: true` and no `source_dir`.
 Before retiring an original whose verified copy becomes the permanent local
 installation, remove `source_dir`, set `ethos:frozen: true`, and rebuild.
 Do not rehash the copy to establish a new baseline. See
-[Copy ownership and frozen inventories](../explanation/caches-and-access.md#copy-ownership-and-frozen-inventories).
+[Copy ownership and frozen inventories](../../explanation/caches-and-access.md#copy-ownership-and-frozen-inventories).
 
 Have the owner check legacy scripts, other links, root overrides, files outside
 the inventory, and versions needed by older pins. Retirement is a separate

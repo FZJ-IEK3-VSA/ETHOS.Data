@@ -141,7 +141,7 @@ file in the working directory or from configuration.
 In Python, use `ethos_data.collections(path, tool=...)`, or pass the file to
 the one-call `fetch`, `paths` and `resolve` APIs. The handle's `.catalog`
 provides access by key against its selected catalogue. See
-[Package integration](../how-to/use-from-a-package.md).
+[Package integration](../how-to/package-maintainers/use-from-a-package.md).
 
 ## Configuration commands
 
@@ -166,4 +166,4 @@ if set. Unsetting configuration does not move or delete data.
 
 `config show` reports shared settings, not a package's pin, package-specific
 environment override, or per-command options. `ethos-data ls` and a wrapper's
-`list` report the catalogue they actually selected.
+`show` report the catalogue they actually selected.

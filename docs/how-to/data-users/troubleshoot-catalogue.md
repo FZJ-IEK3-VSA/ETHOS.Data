@@ -13,8 +13,8 @@ reskit-data --catalog /path/to/reported/datacatalog.json plan affected_collectio
 ```
 
 Use the reporter's actual pin, collection, and cache selection. `config show`
-reports configuration origins; `list` prints the chosen catalogue.
-Both `list` and `plan` may retrieve remote metadata.
+reports configuration origins; `show` prints the chosen catalogue.
+Both `show` and `fetch --plan` may retrieve remote metadata.
 
 | Symptom | Check and action |
 |---|---|
@@ -33,14 +33,14 @@ To diagnose remote metadata caching without changing the pin:
 === "Bash"
 
     ```bash
-    ETHOS_CATALOG_NO_CACHE=1 reskit-data list
+    ETHOS_CATALOG_NO_CACHE=1 reskit-data show
     ```
 
 === "PowerShell"
 
     ```powershell
     $env:ETHOS_CATALOG_NO_CACHE = "1"
-    reskit-data list
+    reskit-data show
     Remove-Item Env:ETHOS_CATALOG_NO_CACHE
     ```
 
@@ -73,7 +73,7 @@ ethos-data catalog upload affected-dataset --verify-only --no-chmod
 
 | Failure | Action |
 |---|---|
-| rclone cannot obtain a token | Check the active environment and loaded profile using [Set up dCache access](set-up-dcache-access.md). |
+| rclone cannot obtain a token | Check the active environment and loaded profile using [Set up dCache access](../catalogue-maintainers/set-up-dcache-access.md). |
 | Anonymous 401/403 for public data | Check the intended publication root and object permissions with the storage administrator. |
 | 404 or wrong size | Compare the exact manifest path, remote prefix, transfer summary, and publication URL. |
 | Immutable transfer conflict | Use new published paths; do not remove a released object to retry. |
@@ -85,7 +85,7 @@ transfers are not rolled back. For an unknown VO permission model,
 `catalog check-store` probes with temporary remote objects and cleans up.
 
 Keep source/public revisions, validation results, and the resolution with the
-issue. See [Catalogues and storage](../explanation/catalogues-and-storage.md) for
+issue. See [Catalogues and storage](../../explanation/catalogues-and-storage.md) for
 the boundaries each check establishes.
 
 ## Prepare a reproducible report {#report-a-problem}
@@ -105,7 +105,7 @@ plan / verify findings:
 When it last worked and what changed:
 ```
 
-If needed, retry `plan` with a new disposable `--root` to isolate downloaded
+If needed, retry `fetch --plan` with a new disposable `--root` to isolate downloaded
 metadata/cache state. A different root does not disable staging, per-dataset
 roots, or catalogue overrides. Do not download a large collection just to
 complete the report.

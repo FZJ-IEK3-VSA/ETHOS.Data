@@ -84,7 +84,7 @@ command rather than a `catalog` subcommand: filling a cache on the machine that
 already holds the data touches no remote storage, so it asks nothing of
 `rclone` or `oidc-agent`.
 The one-time credential setup is in
-[Upload a dataset](how-to/upload-a-dataset.md#credentials-once-per-machine).
+[Upload a dataset](how-to/catalogue-maintainers/upload-a-dataset.md#credentials-once-per-machine).
 
 ## Check the installation
 
@@ -106,7 +106,7 @@ python -c "import ethos_data; print(ethos_data.__version__)"
 Nothing more is required for public data: the cache defaults to your OS's
 per-user cache directory (`~/.cache/ethos-data` on Linux). If you want it
 somewhere with room — a project filesystem, a scratch volume — see
-[Point the cache somewhere](how-to/set-up-your-machine.md#cache-locations).
+[Point the cache somewhere](how-to/data-users/set-up-your-machine.md#cache-locations).
 
 ## Development install
 

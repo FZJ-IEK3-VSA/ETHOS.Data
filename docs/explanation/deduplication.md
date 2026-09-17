@@ -116,4 +116,4 @@ is twelve tools that each believe they are using CORINE Land Cover 2018.
 
 - [The catalogue format](catalogue-format.md) — what the catalogue actually is.
 - [Caches, classes and roots](caches-and-access.md) — where the bytes come from.
-- [Write a collections file](../how-to/write-a-collections-file.md).
+- [Write a collections file](../how-to/package-maintainers/write-a-collections-file.md).

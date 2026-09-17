@@ -67,10 +67,10 @@ without overwriting those edits or updating the authoritative copy. This workflo
 is described in
 [Runtime View](runtime.md#64-repository-test-data).
 
-For the hosting procedure, see [Host versioned catalogues](../../how-to/catalogue-hosting.md).
-For repository fixtures, see [Keep test data in a repository](../../how-to/keep-test-data-in-a-repository.md).
+For the hosting procedure, see [Host versioned catalogues](../../how-to/catalogue-maintainers/catalogue-hosting.md).
+For repository fixtures, see [Keep test data in a repository](../../how-to/package-maintainers/keep-test-data-in-a-repository.md).
 
 For setup, use [Installation](../../installation.md),
-[Configure the cache](../../how-to/set-up-your-machine.md#cache-locations),
-[Run it in CI](../../how-to/run-in-ci.md), and
-[Upload a dataset](../../how-to/upload-a-dataset.md).
+[Configure the cache](../../how-to/data-users/set-up-your-machine.md#cache-locations),
+[Run it in CI](../../how-to/package-maintainers/run-in-ci.md), and
+[Upload a dataset](../../how-to/catalogue-maintainers/upload-a-dataset.md).

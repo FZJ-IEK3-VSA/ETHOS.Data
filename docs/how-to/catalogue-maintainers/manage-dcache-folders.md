@@ -38,7 +38,7 @@ the intended URLs before releasing it.
 
 For released datasets, retain the old path for existing pins. Publish a new
 version at a new path rather than rename its storage. See
-[Licensing and immutability](../explanation/licensing.md#paths-are-immutable).
+[Licensing and immutability](../../explanation/licensing.md#paths-are-immutable).
 
 ## Delete an empty folder
 

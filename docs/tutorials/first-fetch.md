@@ -126,5 +126,5 @@ and the calculation again prints `12.75`. Package wrappers also provide
 `verify --repair` for collection workflows.
 
 Stop the server with Ctrl+C. All practice files are inside `first-fetch-lesson`.
-Continue with [Set up your machine](../how-to/set-up-your-machine.md) or
-[Get data by catalogue key](../how-to/get-data-for-a-task.md).
+Continue with [Set up your machine](../how-to/data-users/set-up-your-machine.md) or
+[Get data by catalogue key](../how-to/data-users/get-data-for-a-task.md).

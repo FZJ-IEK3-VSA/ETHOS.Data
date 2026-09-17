@@ -62,7 +62,7 @@ Restricted data is never downloaded.
 
 The Python equivalent is [`Catalog.path`][ethos_data.catalogs.Catalog.path] on
 [`ethos_data.catalog()`][ethos_data.catalog]. To use the catalogue a package
-pins, use its wrapper's `path` command or its collections handle's `.catalog`.
+pins, point `--catalog` at that pin, or use its collections handle's `.catalog`.
 
 ## `config`
 
@@ -72,13 +72,13 @@ offline and marks unreachable cache paths with the reason. It reports shared
 settings, not per-command overrides or a package's resolved catalogue pin.
 
 Use `ethos-data ls` to see the catalogue selected for direct access, or
-`reskit-data list` for RESKit's selected catalogue and collections.
+`reskit-data show` for RESKit's selected catalogue and collections.
 
 All setters/unsetters accept `--scope project|user|environment|site`, defaulting
 to `user`. Settings affect package wrappers too. The
 [configuration reference](../configuration.md) lists keys, commands, environment
 variables, scopes and precedence. For setup steps, see
-[Set up your machine](../../how-to/set-up-your-machine.md).
+[Set up your machine](../../how-to/data-users/set-up-your-machine.md).
 
 ## `link [dataset] [directory]` {#link-dataset-directory}
 
@@ -198,7 +198,7 @@ Only files the catalogue describes are copied. Refuses if the copy would leave
 less than 2% of the filesystem free. Explicit dataset names use the root for
 their access class, including the restricted root. A local copy of licensed
 files requires permission under that installation's terms and an appropriately
-protected destination; see [Move linked data into the cache](../../how-to/link-cluster-data.md#materialize-copies).
+protected destination; see [Move linked data into the cache](../../how-to/catalogue-maintainers/link-cluster-data.md#materialize-copies).
 `--from` names one dataset (not `--all`) and also fills an entry that does not
 exist yet, which is how a cache is seeded from bytes already on the machine
 instead of an upload and a download back. With no entry and no `--from`, the
@@ -243,7 +243,9 @@ other mode — `--root` or `--prune` beside a dataset name, `--force` beside
 | --- | --- |
 | `ethos-data path KEY` | `ethos-data fetch KEY` |
 | `ethos-data -c reskit/data/collections.yaml fetch COLLECTION` | `reskit-data fetch COLLECTION` |
-| Collection `list`, `info`, `plan`, `paths`, `verify` | The corresponding package command |
+| Collection `list`, `info` | `reskit-data show [COLLECTION]` |
+| Collection `plan`, `paths` | `reskit-data fetch COLLECTION --plan` / `--paths` |
+| `reskit-data path KEY`, `reskit-data ls [KEY]` | `ethos-data fetch KEY`, `ethos-data ls [KEY]` |
 | `ethos-data staging ...` or `ethos-data bundle ...` | The package's `staging ...` or `bundle ...` command |
 | `ethos-data catalog link-cache --root DIR` | `ethos-data link --all --root DIR` |
 

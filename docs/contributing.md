@@ -17,7 +17,7 @@ saves most of the confusion:
 
 A tool that *consumes* data (RESKit, say) changes none of these: it only edits
 its own `collections.yaml`. See
-[Use ETHOS.Data in your package](how-to/use-from-a-package.md).
+[Use ETHOS.Data in your package](how-to/package-maintainers/use-from-a-package.md).
 
 Both halves of the format — the code that writes descriptors and the code that
 reads them — deliberately live in this one distribution. A format whose writer

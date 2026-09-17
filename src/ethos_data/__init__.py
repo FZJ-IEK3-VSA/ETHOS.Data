@@ -220,9 +220,11 @@ def tool_main(
         [project.scripts]
         reskit-data = "reskit.data:main"
 
-    ``list``, ``info``, ``plan``, ``fetch``, ``paths`` and ``verify`` for the
-    file's collections, ``path`` and ``ls`` against the catalogue it pins,
-    ``bundle``, ``staging`` and ``config``. ``prog`` names the command in help and messages
+    ``show``, ``fetch`` and ``verify`` for the file's collections, against the
+    catalogue it pins, plus ``bundle``, ``staging`` and ``config``. A single
+    catalogue key belongs to ``ethos-data``, not here -- which is what keeps
+    this to six commands whatever the tool.
+    ``prog`` names the command in help and messages
     (default ``<tool>-data``); ``catalog`` is the tool's own catalogue override,
     applied below ``--catalog`` and above ``$ETHOS_DATA_CATALOG``. The handle
     is built only for the commands that need one, so ``--help`` and ``config

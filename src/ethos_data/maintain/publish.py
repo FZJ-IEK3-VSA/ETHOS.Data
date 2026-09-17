@@ -20,7 +20,7 @@ that already referenced it keeps resolving.
 
 Note that this rewrites a *worktree*, not a history.  A public checkout must
 never have been a clone of the internal repository, or the embargo blocks are
-still one ``git log`` away -- see docs/how-to/bootstrap-a-catalogue.md.
+still one ``git log`` away -- see docs/how-to/catalogue-maintainers/bootstrap-a-catalogue.md.
 """
 
 from __future__ import annotations

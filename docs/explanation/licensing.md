@@ -31,7 +31,7 @@ so the two operations that do that **refuse**:
 | `ethos-data link --all` | refused — the dataset is left out of the namespace, the rest of the catalogue is still linked |
 | `catalog upload` | refused — nothing is transferred (`--verify-only` still works) |
 | `reskit-data staging add` | **allowed** |
-| `fetch`, `path`, `verify` on data already here | allowed, with the warning |
+| `fetch`, `verify` on data already here | allowed, with the warning |
 
 Linking is one command refusing in two shapes, because the two mistakes are
 different ones. Naming a dataset is a request for that dataset, so the request
@@ -128,7 +128,7 @@ enforces that structurally rather than by convention:
 
 - it is never downloaded, under any configuration;
 - it is never written into the public cache;
-- the [staging root](../how-to/propose-a-dataset.md#stage-development-data) never shadows it —
+- the [staging root](../how-to/package-maintainers/propose-a-dataset.md#stage-development-data) never shadows it —
   licence terms are not a development concern;
 - `ethos-data catalog upload` refuses it outright;
 - repository test-bundle export rejects it.
@@ -138,8 +138,8 @@ it fails with an explanation. An administrator may relocate an installation only
 where its terms permit that local copy, preserving access restrictions. Explicit
 `materialize <dataset>` supports this for a link in the restricted root; ordinary
 retrieval continues to read in place. See
-[Manage local dataset copies](../how-to/link-cluster-data.md#materialize-copies) and
-[Work with restricted data](../how-to/set-up-your-machine.md#restricted-data).
+[Manage local dataset copies](../how-to/catalogue-maintainers/link-cluster-data.md#materialize-copies) and
+[Work with restricted data](../how-to/data-users/set-up-your-machine.md#restricted-data).
 
 ## Access and visibility are two questions
 
@@ -199,7 +199,7 @@ And when it is genuinely a withdrawal, the order matters and is the opposite of
 publishing: **unpublish the catalogue entry first, then delete the bytes**. The
 other way round leaves a public catalogue pointing at a path that 404s, and
 anyone resolving it mid-way gets a broken reference instead of a clean "not
-published". See [Withdraw a dataset](../how-to/withdraw-a-dataset.md).
+published". See [Withdraw a dataset](../how-to/catalogue-maintainers/withdraw-a-dataset.md).
 
 ## What this does not cover
 

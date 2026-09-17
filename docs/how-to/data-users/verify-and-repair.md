@@ -3,7 +3,7 @@
 Check the collection used by your workflow. Examples use RESKit's wrapper and
 `onshore_wind`; substitute your package command and collection. To verify a
 complete dataset beyond a package's selection, use the
-[integrity API example](link-cluster-data.md#verify-complete-dataset).
+[integrity API example](../catalogue-maintainers/link-cluster-data.md#verify-complete-dataset).
 
 ## Check the stored files
 
@@ -44,6 +44,6 @@ download. For internal inputs without a working download endpoint, restore the
 authorised local copy. The final verification must match every required file.
 
 To replace a healthy link with a verified copy, use
-[Move linked data into the cache](link-cluster-data.md#materialize-copies).
-See [CLI reference](../reference/cli/package-data.md#verify-collection) for options
+[Move linked data into the cache](../catalogue-maintainers/link-cluster-data.md#materialize-copies).
+See [CLI reference](../../reference/cli/package-data.md#verify-collection) for options
 or [Report a problem](troubleshoot-catalogue.md#report-a-problem) if verification still fails.

@@ -73,7 +73,7 @@ Both variants of `onshore_wind` offer the handles `clc` (inherited from
 | `collections.<name>.include[].dataset` | string | a dataset name in the catalogue |
 | `collections.<name>.include[].files` | list of globs | omit, or use `["**"]`, for everything |
 | `collections.<name>.extends` | list of names | other collections in this file, composed transitively; a cycle is a `CollectionError` naming its chain. A `test=True` request passes down: a parent with variants contributes its `test` variant, a parent without is the same either way |
-| `collections.<name>.paths` | mapping | handle → catalogue key. A key is `<dataset>/<file>`, `<dataset>/<folder>`, `<dataset>` or a family name — what [`Catalog.path`][ethos_data.catalogs.Catalog.path] accepts. A file must be selected by the collection's `include`; a folder, dataset or family must have at least one selected file under it, and resolves to the directory holding the collection's files there. Handles are inherited through `extends`; the collection's own entry wins; two parents handing down the same handle with different keys is a `CollectionError` unless the collection defines that handle itself. Resolved by [`ethos_data.paths`][ethos_data.paths] and `reskit-data paths`. Optional |
+| `collections.<name>.paths` | mapping | handle → catalogue key. A key is `<dataset>/<file>`, `<dataset>/<folder>`, `<dataset>` or a family name — what [`Catalog.path`][ethos_data.catalogs.Catalog.path] accepts. A file must be selected by the collection's `include`; a folder, dataset or family must have at least one selected file under it, and resolves to the directory holding the collection's files there. Handles are inherited through `extends`; the collection's own entry wins; two parents handing down the same handle with different keys is a `CollectionError` unless the collection defines that handle itself. Resolved by [`ethos_data.paths`][ethos_data.paths] and `reskit-data fetch --paths`. Optional |
 | `collections.<name>.test`, `collections.<name>.full` | mapping | the collection's two variants — exactly these two names — each holding its own `extends`, `include` and `paths`. A collection with variants has no `extends`, `include` or `paths` at the top level; `title` stays there. `full` is what every request resolves unless `test=True` / `--test` is given; asking for a variant the collection does not define is a `CollectionError`. When both exist they must offer the same set of `paths` handles, or resolving the collection is a `CollectionError` listing the differences. A collection without variants resolves identically for both flags unless a collection it extends has variants — the flag propagates, so a plain `all` extending `onshore_wind` selects `onshore_wind`'s `full` variant by default and its `test` variant with `test=True`. Optional |
 
 Glob semantics: `*` matches within one path segment, `**` matches any number of
@@ -88,7 +88,7 @@ lopsided one is refused too. A definition the reader cannot resolve raises
 not define raises [`UnknownCollection`][ethos_data.selection.UnknownCollection].
 `ethos-data` prints both as `error: ...` and exits `2`.
 
-See [Write a collections file](../how-to/write-a-collections-file.md).
+See [Write a collections file](../how-to/package-maintainers/write-a-collections-file.md).
 
 ---
 
@@ -590,7 +590,7 @@ matcher as a collection's `files:`. Two conveniences: a pattern with **no
 wildcard** means that path and everything under it; a **trailing slash** means the
 subtree only.
 
-See [Describe a dataset](../how-to/describe-a-dataset.md).
+See [Describe a dataset](../how-to/catalogue-maintainers/describe-a-dataset.md).
 
 ---
 

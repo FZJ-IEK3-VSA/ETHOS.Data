@@ -1,7 +1,7 @@
 # Set up your machine
 
 Choose shared catalogue and cache locations for your account. You need
-[ETHOS.Data installed](../installation.md). All paths below are examples;
+[ETHOS.Data installed](../../installation.md). All paths below are examples;
 obtain deployment paths and restricted-data permission from your administrator.
 
 ## Inspect existing settings
@@ -34,9 +34,9 @@ To select metadata for one command:
 ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json ls
 ```
 
-Use the same `--catalog` with `reskit-data list` when comparing RESKit's
+Use the same `--catalog` with `reskit-data show` when comparing RESKit's
 selections. If a pin is unreachable, obtain a complete built catalogue from its
-maintainer; the [practice lesson](../tutorials/first-fetch.md) needs no release.
+maintainer; the [practice lesson](../../tutorials/first-fetch.md) needs no release.
 
 ## Select cache locations {#cache-locations}
 
@@ -56,13 +56,13 @@ Keep public, restricted and development roots separate. Each cache uses
 `<root>/<dataset>/<resource path>`. Settings do not move existing files or grant
 permissions. Retrieval reads restricted data in place and never downloads or
 repairs it. If one dataset lives elsewhere, use the
-[local-copy guide](link-cluster-data.md#dataset-root-overrides).
+[local-copy guide](../catalogue-maintainers/link-cluster-data.md#dataset-root-overrides).
 
 Project settings should contain paths usable by the intended team. Administrators
 can use `--scope site` for machine defaults. The
-[configuration reference](../reference/configuration.md) defines all scopes and
+[configuration reference](../../reference/configuration.md) defines all scopes and
 precedence. Configure a staging root only while
-[developing a dataset](propose-a-dataset.md#stage-development-data).
+[developing a dataset](../package-maintainers/propose-a-dataset.md#stage-development-data).
 
 ## Override one shell or run {#temporary-overrides}
 
@@ -107,8 +107,8 @@ check for the keys before using them. A project preference can be stored with
 ```bash
 ethos-data config show
 ethos-data ls
-reskit-data list
-reskit-data plan onshore_wind --test
+reskit-data show
+reskit-data fetch onshore_wind --test --plan
 ```
 
 The first listing checks the direct catalogue; the second names RESKit's actual

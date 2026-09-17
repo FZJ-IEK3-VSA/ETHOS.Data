@@ -115,10 +115,11 @@ def run_tool(
     """A tool's own command: the collection commands bound to the file it ships.
 
     What :func:`ethos_data.tool_main` and :meth:`ethos_data.Collections.main`
-    run. The parser offers ``list``, ``info``, ``plan``, ``fetch``, ``paths``
-    and ``verify`` for the file's collections, ``path`` and ``ls`` against the
-    catalogue it pins, and the ``bundle``, ``staging`` and ``config`` groups.
-    Shared cache and catalogue maintenance belong to ``ethos-data``.
+    run, and all a tool needs to offer its users a data command -- geokit's is
+    reskit's with another file and another name. The parser offers ``show``,
+    ``fetch`` and ``verify`` for the file's collections and the ``bundle``,
+    ``staging`` and ``config`` groups. Access by catalogue key and shared cache
+    and catalogue maintenance belong to ``ethos-data``.
 
     The handle -- and with it the catalogue -- is built only when a command
     needs it, so ``--help`` and ``config show`` work offline and a pin nobody
@@ -128,10 +129,56 @@ def run_tool(
     already exists, reused when nothing overrides its catalogue.
     """
     prog = prog or (f"{tool}-data" if tool else "ethos-data")
+    retired = _retired_command(prog, argv)
+    if retired is not None:
+        return retired
     source = _ToolSource(file, tool, catalog, loaded)
     return _run(
         lambda: _dispatch(_build_tool_parser(prog, source).parse_args(argv), source)
     )
+
+
+#: Commands a tool's data command used to have, and what replaces each.
+#: They are gone, not aliased: the whole point of the shorter command list is
+#: that there is one way to ask each question, and an alias that keeps working
+#: keeps the old shape alive in every script nobody got round to updating. But
+#: argparse's "invalid choice" would leave somebody staring at a command that
+#: worked last week, so each retired name gets one line saying what to type.
+_RETIRED_COMMANDS = {
+    "list": "{prog} show",
+    "info": "{prog} show <collection>",
+    "plan": "{prog} fetch <collection> --plan",
+    "paths": "{prog} fetch <collection> --paths",
+    "path": "ethos-data fetch <key>",
+    "ls": "ethos-data ls [<key>]",
+}
+
+#: Global options that take a value, so their value is not mistaken for the
+#: subcommand when looking for a retired name.
+_VALUED_GLOBALS = ("--catalog", "--root")
+
+
+def _retired_command(prog: str, argv: list[str] | None) -> int | None:
+    """Two lines pointing at the replacement, or None to parse as usual."""
+    skip = False
+    for word in sys.argv[1:] if argv is None else argv:
+        if skip:
+            skip = False
+            continue
+        if word.startswith("-"):
+            skip = word in _VALUED_GLOBALS
+            continue
+        replacement = _RETIRED_COMMANDS.get(word)
+        if replacement is None:
+            return None
+        print(
+            f"error: `{prog} {word}` is gone -- "
+            f"use `{replacement.format(prog=prog)}`.\n"
+            f"Run `{prog} --help` for the commands this version has.",
+            file=sys.stderr,
+        )
+        return 2
+    return None
 
 
 def _run(command) -> int:
@@ -179,7 +226,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_common_options(parser)
     sub = parser.add_subparsers(dest="command", required=True)
-    _add_key_commands(sub, fetch_command="fetch")
+    _add_key_commands(sub)
     _add_config_commands(sub)
     _add_cache_commands(sub)
     add_catalog_parser(sub)
@@ -187,35 +234,41 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _build_tool_parser(prog: str, source: _ToolSource) -> argparse.ArgumentParser:
-    """A tool's collection, key, bundle, staging and config commands, no ``-c``.
+    """A tool's collection, bundle, staging and config commands, no ``-c``.
+
+    Six commands, and the two that carry the work are ``show`` and ``fetch``:
+    whatever a tool's user wants out of the catalogue, they ask for it through
+    one of the collections the tool ships. Access by catalogue key
+    (``ethos-data ls``, ``ethos-data fetch``) and cache maintenance
+    (materialize, link, unlink, the maintainer's catalog group) stay with
+    ``ethos-data``; they are about the shared catalogue and cache, not about
+    any one tool's data.
 
     The file is fixed -- it is the one the tool ships -- so there is nothing to
-    name, and the cache-maintenance commands (materialize, link, unlink, the
-    maintainer's catalog group) stay with ``ethos-data``: they concern the
-    shared cache, not any one tool's data. Built from the file alone: the
-    catalogue is not loaded for ``--help``.
+    name. Built from the file alone: the catalogue is not loaded for ``--help``.
     """
     tool = source.tool or prog
     example = (source.names() or ["<collection>"])[0]
     parser = argparse.ArgumentParser(
         prog=prog,
         description=f"Find, fetch and check the data {tool} needs.\n\n"
-        f"Its collections are defined in {source.file_path}. `list` shows them, "
-        f"`paths` fetches one and prints the inputs it names. Data lands in "
-        f"the cache every ETHOS tool shares (`{prog} config show`).",
+        f"Its collections are defined in {source.file_path}. `show` lists them "
+        f"and describes one; `fetch` makes one available and, with --paths, "
+        f"prints the inputs it names. Data lands in the cache every ETHOS tool "
+        f"shares (`{prog} config show`). This command works in collections: a "
+        f"single catalogue key is `ethos-data ls` and `ethos-data fetch`.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Put global options before the subcommand. Examples:\n"
-        f"  {prog} list\n"
-        f"  {prog} plan {example} --test\n"
-        f"  {prog} paths {example} --test\n"
-        f"  {prog} ls <dataset>\n"
+        f"  {prog} show\n"
+        f"  {prog} show {example} --test\n"
+        f"  {prog} fetch {example} --test --plan\n"
+        f"  {prog} fetch {example} --test --paths\n"
         f"  {prog} config show\n"
         f"Use '{prog} COMMAND --help' for command options.",
     )
     _add_common_options(parser, tool_commands=True)
     sub = parser.add_subparsers(dest="command", required=True)
     _add_collection_commands(sub)
-    _add_key_commands(sub)
     _add_bundle_commands(sub)
     _add_config_commands(sub)
     _add_staging_commands(sub)
@@ -260,26 +313,64 @@ def _add_common_options(
 
 
 def _add_collection_commands(sub) -> None:
-    """The commands that name a collection, plus ``list``."""
-    sub.add_parser("list", help="list the collections this file defines")
+    """``show``, ``fetch`` and ``verify``: everything that names a collection.
+
+    Two verbs, split by what they do to the machine rather than by what they
+    print. ``show`` answers questions from the catalogue and never transfers a
+    byte, so it is safe to run anywhere, on any collection, without wondering
+    what it will cost; ``fetch`` is the one that moves data, and its options
+    choose what to report about the transfer -- ``--plan`` to describe it
+    instead of running it, ``--paths`` to name the result. That is why the
+    preview is an option of ``fetch`` and not a command of its own: a preview
+    that could drift from the fetch it previews is worth nothing, and sharing
+    one parser makes the drift impossible.
+    """
     #: The same switch on every command that names a collection, so that
-    #: `plan --test` previews exactly what `fetch --test` will do.
+    #: `fetch --plan --test` previews exactly what `fetch --test` will do.
     test_flag = {
         "action": "store_true",
         "help": "the collection's small test variant instead of the full data",
     }
-    for name, helptext in (
-        ("info", "show what a collection contains"),
-        ("plan", "preview data transfers (may retrieve catalogue metadata)"),
-        ("fetch", "make a collection available, reusing cached or in-place files"),
-        (
-            "paths",
-            "fetch a collection and print the inputs it names, as handle and path",
-        ),
-    ):
-        p = sub.add_parser(name, help=helptext)
-        p.add_argument("collection")
-        p.add_argument("--test", **test_flag)
+
+    shower = sub.add_parser(
+        "show",
+        help="list the collections, or describe one; fetches no data",
+        description="Without a collection, every collection in the file with its file "
+        "count and size -- one row per variant where a collection defines "
+        "them. With one, that collection's size and the inputs it names for a "
+        "workflow. Reads catalogue metadata only; nothing is downloaded.",
+    )
+    shower.add_argument(
+        "collection", nargs="?", help="a collection (default: list them all)"
+    )
+    shower.add_argument("--test", **test_flag)
+    shower.add_argument(
+        "--files",
+        action="store_true",
+        help="with a collection: list every file it selects, with its size",
+    )
+
+    fetcher = sub.add_parser(
+        "fetch",
+        help="make a collection available, reusing cached or in-place files",
+        description="Download whatever the collection selects and is not already on this "
+        "machine. --plan says what that would be and stops; --paths prints the "
+        "inputs the collection names, one `handle<TAB>path` line each, for a "
+        "script to read back.",
+    )
+    fetcher.add_argument("collection")
+    fetcher.add_argument("--test", **test_flag)
+    report = fetcher.add_mutually_exclusive_group()
+    report.add_argument(
+        "--plan",
+        action="store_true",
+        help="preview the transfer and stop (may retrieve catalogue metadata)",
+    )
+    report.add_argument(
+        "--paths",
+        action="store_true",
+        help="print the inputs the collection names, as handle and path",
+    )
 
     verifier = sub.add_parser(
         "verify",
@@ -313,10 +404,14 @@ def _add_collection_commands(sub) -> None:
     )
 
 
-def _add_key_commands(sub, *, fetch_command: str = "path") -> None:
-    """The commands that name a dataset, folder or file in the catalogue."""
+def _add_key_commands(sub) -> None:
+    """The commands that name a dataset, folder or file in the catalogue.
+
+    ``ethos-data`` only: a tool's own command works in the collections that
+    tool ships, and reaching past them into the catalogue is this command's job.
+    """
     pather = sub.add_parser(
-        fetch_command,
+        "fetch",
         help="fetch a dataset, folder or file and print its absolute local path",
     )
     pather.add_argument("key", help="<dataset>/<file or folder>, or a dataset name")
@@ -324,7 +419,7 @@ def _add_key_commands(sub, *, fetch_command: str = "path") -> None:
         "ls",
         help="list datasets, or files under a catalogue key; fetches no data",
         description="What is in a dataset, and what to put after the slash to get one file "
-        f"with `{fetch_command}`. Reads catalogue metadata only.",
+        "with `fetch`. Reads catalogue metadata only.",
     )
     lister.add_argument(
         "key",
@@ -643,9 +738,6 @@ class _ToolSource:
     def catalog_override(self, args) -> str:
         return args.catalog or self.catalog or self.load(args, None).catalog.location
 
-    def key_catalog(self, args, roots) -> Catalog:
-        return self.load(args, roots).catalog
-
 
 def _bundle_command(args, source) -> int:
     if args.bundle_command == "export":
@@ -707,92 +799,130 @@ def _dispatch(args, source) -> int:
 
     roots = resolve_roots(args.root)
     # --test may sit before or after the subcommand; commands without the flag
-    # (list, ls, path, config, ...) simply ignore it.
+    # (config, staging, ...) simply ignore it.
     args.test = bool(getattr(args, "test", False) or args.test_global)
 
-    if args.command == "path":
-        return _path_command(args, source.key_catalog(args, roots), roots)
-
-    if args.command == "ls":
-        return _ls_command(args, source.key_catalog(args, roots))
-
     loaded = source.load(args, roots)
-
-    if args.command == "list":
-        print(f"catalogue: {loaded.catalog.location}")
-        print(f"cache:     {roots.public}\n")
-        unresolved = 0
-        for name in loaded.names():
-            # One collection naming a dataset this catalogue lacks -- a
-            # withdrawn dataset, one that only exists in somebody's staging
-            # root, or a mistake in its own definition, down to not being a
-            # mapping at all -- must not hide every other collection in the
-            # file from everybody else. So even describing it is inside the try.
-            try:
-                definition = loaded.describe(name)
-                # A collection with variants gets one row per variant: the two
-                # differ by orders of magnitude, and a single total would
-                # describe neither.
-                variants = loaded.variants(name) or (None,)
-            except CollectionError as error:
-                unresolved += 1
-                print(f"  {name:<28} {'[unresolvable]':>17}   {_first_line(error)}")
-                continue
-            for variant in variants:
-                label = name if variant is None else f"{name} [{variant}]"
-                try:
-                    resources = loaded.resolve(name, test=variant == "test")
-                    # The same handle check a fetch runs, so `list` flags a
-                    # `paths` mistake before anybody tries to fetch it.
-                    loaded._named_targets(name, variant == "test", resources)
-                except (UnknownDataset, IncompleteCatalog, CollectionError) as error:
-                    unresolved += 1
-                    print(
-                        f"  {label:<28} {'[unresolvable]':>17}   {_first_line(error)}"
-                    )
-                    continue
-                total = sum(r.bytes for r in resources)
-                title = (
-                    definition.get("title", "")
-                    if variant in (None, variants[0])
-                    else ""
-                )
-                print(
-                    f"  {label:<28} {len(resources):>4} files  {_human(total):>10}   {title}"
-                )
-        return 1 if unresolved else 0
-
+    if args.command == "show":
+        return _show_command(args, loaded, roots)
     if args.command == "verify":
         return _verify_command(args, loaded, roots)
+    return _collection_fetch_command(args, loaded, roots)
 
-    if args.command == "paths":
-        return _paths_command(args, loaded, roots)
 
+def _show_command(args, loaded, roots) -> int:
+    """What the file defines, or what one collection of it holds.
+
+    Reads catalogue metadata and nothing else: no byte moves, whichever form
+    is used, so this is the command to reach for when the question is "what is
+    there" rather than "give it to me".
+    """
+    if args.collection is None:
+        return _show_the_collections(loaded, roots)
+    return _show_one_collection(args, loaded)
+
+
+def _show_the_collections(loaded, roots) -> int:
+    """One row per collection -- per variant, where a collection defines them."""
+    print(f"catalogue: {loaded.catalog.location}")
+    print(f"cache:     {roots.public}\n")
+    unresolved = 0
+    for name in loaded.names():
+        # One collection naming a dataset this catalogue lacks -- a
+        # withdrawn dataset, one that only exists in somebody's staging
+        # root, or a mistake in its own definition, down to not being a
+        # mapping at all -- must not hide every other collection in the
+        # file from everybody else. So even describing it is inside the try.
+        try:
+            definition = loaded.describe(name)
+            # A collection with variants gets one row per variant: the two
+            # differ by orders of magnitude, and a single total would
+            # describe neither.
+            variants = loaded.variants(name) or (None,)
+        except CollectionError as error:
+            unresolved += 1
+            print(f"  {name:<28} {'[unresolvable]':>17}   {_first_line(error)}")
+            continue
+        for variant in variants:
+            label = name if variant is None else f"{name} [{variant}]"
+            try:
+                resources = loaded.resolve(name, test=variant == "test")
+                # The same handle check a fetch runs, so `show` flags a
+                # `paths:` mistake before anybody tries to fetch it.
+                loaded._named_targets(name, variant == "test", resources)
+            except (UnknownDataset, IncompleteCatalog, CollectionError) as error:
+                unresolved += 1
+                print(f"  {label:<28} {'[unresolvable]':>17}   {_first_line(error)}")
+                continue
+            total = sum(r.bytes for r in resources)
+            title = (
+                definition.get("title", "") if variant in (None, variants[0]) else ""
+            )
+            print(
+                f"  {label:<28} {len(resources):>4} files  {_human(total):>10}   {title}"
+            )
+    return 1 if unresolved else 0
+
+
+def _show_one_collection(args, loaded) -> int:
+    """A collection's size and the inputs it names; every file under --files.
+
+    The named inputs come first and the file list is opt-in: a workflow is
+    wired up from the handles, and a collection big enough to be worth asking
+    about is big enough that its file list buries them.
+    """
+    resources, label = _selection(args, loaded)
+    print(f"{label}: {len(resources)} files, {_human(sum(r.bytes for r in resources))}")
+    title = loaded.describe(args.collection).get("title", "")
+    if title:
+        print(f"  {title}")
+    named = loaded.named_keys(args.collection, test=args.test)
+    if named:
+        variant = " --test" if args.test and loaded.variants(args.collection) else ""
+        print(
+            f"\nnamed paths (`{args.prog} fetch {args.collection}{variant} --paths` "
+            f"resolves them to this machine):"
+        )
+        width = max(len(handle) for handle in named)
+        for handle, key in named.items():
+            print(f"  {handle:<{width}}  ->  {key}")
+    if args.files:
+        print()
+        for resource in resources:
+            print(f"  {resource.key:<64} {_human(resource.bytes):>10}")
+    elif resources:
+        print(f"\n({len(resources)} files; --files lists them)")
+    return 0
+
+
+def _selection(args, loaded):
+    """The resources a collection selects, and the label to print them under.
+
+    Resolving is also the check: a ``paths:`` handle the collection cannot
+    honour is a mistake in the collections file, and every command must refuse
+    it exactly where the Python API does -- before reporting anything, and
+    before moving any data.
+    """
     resources = loaded.resolve(args.collection, test=args.test)
-    # Before plan or fetch report anything: a `paths` handle the collection
-    # cannot honour is a mistake in collections.yaml, and the command line
-    # must refuse it exactly where the Python API does.
     loaded._named_targets(args.collection, args.test, resources)
     label = args.collection
     if loaded.variants(args.collection):
         label = f"{args.collection} [{variant_name(args.test)}]"
+    return resources, label
 
-    if args.command == "info":
-        print(
-            f"{label}: {len(resources)} files, {_human(sum(r.bytes for r in resources))}\n"
-        )
-        for resource in resources:
-            print(f"  {resource.key:<64} {_human(resource.bytes):>10}")
-        named = loaded.named_keys(args.collection, test=args.test)
-        if named:
-            print("\nnamed paths (the `paths` command resolves them to this machine):")
-            width = max(len(handle) for handle in named)
-            for handle, key in named.items():
-                print(f"  {handle:<{width}}  ->  {key}")
-        return 0
+
+def _collection_fetch_command(args, loaded, roots) -> int:
+    """Make a collection available; --plan describes the transfer instead.
+
+    One parser, one resolution, one report shape for both: what ``--plan``
+    prints is what the very next line of code would download.
+    """
+    resources, label = _selection(args, loaded)
+    if args.paths:
+        return _paths_command(args, loaded, roots)
 
     report = plan(loaded.catalog, resources, roots, args.skip_unavailable)
-    if args.command == "plan":
+    if args.plan:
         print(f"public cache:    {report['root']}")
         for origin, items in sorted(report["in_place_by_origin"].items()):
             print(
@@ -944,7 +1074,7 @@ def _verify_command(args, loaded, roots) -> int:
         # Every collection in every variant: what is on disk is one cache, and
         # a file the test variant selects is as much a file to check as one the
         # full variant does. A variant that cannot be resolved -- a dataset not
-        # in this catalogue, say -- is reported and skipped, as `list` does,
+        # in this catalogue, say -- is reported and skipped, as `show` does,
         # rather than stopping the check of everything else.
         for name in loaded.names():
             try:

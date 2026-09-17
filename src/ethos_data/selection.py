@@ -233,7 +233,7 @@ class Collections:
 
         A string where a list was meant, or an entry without ``dataset``, used
         to surface as a TypeError or KeyError from deep inside the glob loop --
-        a traceback that hid every other collection in a package's ``list`` command.
+        a traceback that hid every other collection in a package's ``show`` command.
         """
         rules = definition.get("include", []) or []
         if not isinstance(rules, list):
@@ -480,11 +480,11 @@ class Collections:
     def main(self, argv: list[str] | None = None, *, prog: str | None = None) -> int:
         """Run the collection commands bound to this file, from a built handle.
 
-        ``list``, ``info``, ``plan``, ``fetch``, ``paths`` and ``verify`` for
-        the collections in this file, ``path`` and ``ls`` against the catalogue
-        it pins, ``bundle`` and ``config`` -- the same commands ``ethos-data``
-        offers for a file named with ``-c``, without the ``-c``. ``prog`` names
-        the command in help and messages; the default is ``<tool>-data``.
+        ``show``, ``fetch`` and ``verify`` for the collections in this file,
+        resolved against the catalogue it pins, plus ``bundle``, ``staging``
+        and ``config``. A single catalogue key is ``ethos-data``'s to hand out.
+        ``prog`` names the command in help and messages; the default is
+        ``<tool>-data``.
 
         For a tool's console script use :func:`ethos_data.tool_main`, which
         builds the handle only for the commands that need one, so ``--help``
@@ -512,7 +512,7 @@ class Collections:
         *where the collection's files are*, not a request for everything the
         catalogue holds there, so ``era5: reskit-test-data/era5`` with
         ``files: ["100m_*.nc"]`` means the directory holding those two files.
-        Run by the CLI's ``list``, ``info`` and ``plan`` too, so a mistake in
+        Run by the CLI's ``show`` and ``fetch --plan`` too, so a mistake in
         ``paths`` is flagged before anybody tries to fetch.
         """
         named = self.named_keys(name, test)
@@ -699,8 +699,8 @@ def catalog_pin(path: str | Path, document: dict | None = None) -> str | None:
 
     A relative path is resolved against the file, not the caller's working
     directory -- the pin belongs to the file. Shared with the commands that take
-    a *key* rather than a collection (``path``, ``ls``), so that ``-c`` means
-    the same catalogue for them as for ``fetch``.
+    a *key* rather than a collection (``ethos-data fetch``, ``ethos-data ls``),
+    so that ``-c`` means the same catalogue for them as for a collection fetch.
     """
     path = Path(path).expanduser().resolve()
     if document is None:

@@ -18,11 +18,11 @@
 % The commands, right of each use case. Deliberately literal: the guides are
 % task-shaped, and this is the bridge from task to keystrokes.
 \node[cmd, right=13mm of see, align=left]   (c1)
-  {reskit-data list\\reskit-data info \textit{name}};
+  {reskit-data show\\reskit-data show \textit{name}};
 \node[cmd, right=13mm of where, align=left] (c2)
   {ethos-data config show\\ethos-data config set-cache \textit{dir}};
 \node[cmd, right=13mm of get, align=left]   (c3)
-  {reskit-data plan \textit{name}\\reskit-data fetch \textit{name}};
+  {reskit-data fetch \textit{name} --plan\\reskit-data fetch \textit{name}};
 \node[cmd, right=13mm of trust, align=left] (c4)
   {reskit-data verify --all\\reskit-data verify --deep --repair};
 \node[cmd, right=13mm of own, align=left]   (c5)

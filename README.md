@@ -46,8 +46,8 @@ inputs = data.paths("onshore_wind", test=True)
 ```
 
 ```bash
-reskit-data list
-reskit-data paths onshore_wind --test
+reskit-data show
+reskit-data fetch onshore_wind --test --paths
 reskit-data staging list
 ```
 
@@ -58,7 +58,7 @@ Staging uses a shared development root even though package wrappers manage it.
 
 Applications can also use `ethos_data.catalog().path(KEY)` for keys or
 `ethos_data.collections("collections.yaml").paths(COLLECTION)` for an explicit
-collections file. See [Package integration](docs/how-to/use-from-a-package.md)
+collections file. See [Package integration](docs/how-to/package-maintainers/use-from-a-package.md)
 and the [package-command reference](docs/reference/cli/package-data.md).
 
 ## Documentation
@@ -76,8 +76,8 @@ mkdocs build      # static site into ./site
 | | |
 |---|---|
 | [Your first fetch](docs/tutorials/first-fetch.md) | fetch a file from a practice catalogue, use the path from Python, repair a damaged cache copy |
-| [Get data by catalogue key](docs/how-to/get-data-for-a-task.md) | inspect and fetch a dataset, folder or file with the shared CLI or Python API |
-| [Use ETHOS.Data in your package](docs/how-to/use-from-a-package.md) | ship a `collections.yaml`, a handle on it and a console script of your own via `ethos_data.tool_main` |
+| [Get data by catalogue key](docs/how-to/data-users/get-data-for-a-task.md) | inspect and fetch a dataset, folder or file with the shared CLI or Python API |
+| [Use ETHOS.Data in your package](docs/how-to/package-maintainers/use-from-a-package.md) | ship a `collections.yaml`, a handle on it and a console script of your own via `ethos_data.tool_main` |
 | [Add a dataset to the catalogue](docs/tutorials/add-a-dataset.md) | the maintainer round trip, on a practice catalogue |
 | [How-to guides](docs/how-to/index.md) | cache configuration, internal catalogue, restricted data, verify/repair, CI, uploading, publishing |
 | [Explanation](docs/explanation/index.md) | why one catalogue; caches, classes and roots; the catalogue format; licensing |

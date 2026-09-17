@@ -108,7 +108,7 @@ same bytes either way.
 | a private copy, or one dataset in an odd place | `ethos-data config set-root` |
 | licensed data you have access to | `ethos-data config set-restricted-cache` |
 | licensed data you do not have | `--skip-unavailable` |
-| data that is not catalogued yet | the [staging root](../how-to/propose-a-dataset.md#stage-development-data) |
+| data that is not catalogued yet | the [staging root](../how-to/package-maintainers/propose-a-dataset.md#stage-development-data) |
 | a link that is about to break | `ethos-data materialize` |
 
 ## Copy ownership and frozen inventories
@@ -134,10 +134,10 @@ up bytes; the storage owner still needs retention and recovery arrangements.
 
 Size checks detect some damage cheaply but miss changes of equal length. A deep
 verification reads every byte and compares SHA-256. In-place reads do not
-automatically perform that check. See [Check and repair](../how-to/verify-and-repair.md).
+automatically perform that check. See [Check and repair](../how-to/data-users/verify-and-repair.md).
 
 ## See also
 
-- [Manage local dataset copies](../how-to/link-cluster-data.md) — overrides, cache links and materialized copies.
-- [Work with restricted data](../how-to/set-up-your-machine.md#restricted-data).
+- [Manage local dataset copies](../how-to/catalogue-maintainers/link-cluster-data.md) — overrides, cache links and materialized copies.
+- [Work with restricted data](../how-to/data-users/set-up-your-machine.md#restricted-data).
 - [Configuration reference](../reference/configuration.md).
