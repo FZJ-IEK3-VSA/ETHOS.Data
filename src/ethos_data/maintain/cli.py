@@ -1,10 +1,15 @@
-"""The ``ethos-data catalog ...`` subcommands: build, publish, upload, link-cache, check-store.
+"""The ``ethos-data catalog ...`` subcommands: build, publish, upload, check-store.
 
 The maintainer group owns source metadata and publication operations. Local
 configuration, staging, and cache management also write files, but remain at the
-top level because consumers and package developers use them independently.
+top level because consumers and package developers use them independently. That
+includes building a shared cache as links: ``ethos-data link --all`` reads a
+checkout the way the commands here do, but the person filling a whole cache from
+one and the person pointing a single dataset at a directory are doing the same
+thing at different scale, and splitting them across two command groups made the
+smaller job look like the unrelated one.
 
-Four of the five need a catalogue checkout, found by searching upward from the
+Three of the four need a catalogue checkout, found by searching upward from the
 current directory for ``catalog.yaml``, so they work from anywhere inside one.
 ``check-store`` is the exception: it probes dCache and has nothing to do with
 any particular catalogue.
@@ -65,9 +70,9 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     parser = sub.add_parser(
         "catalog",
         help="maintainer commands: describe, publish and upload datasets",
-        description="Build source metadata, generate its public view, upload bytes, "
-        "or register existing data in a cache. Uses a source checkout "
-        "containing catalog.yaml; --catalog at the top level selects reader metadata.",
+        description="Build source metadata, generate its public view, or upload "
+        "bytes. Uses a source checkout containing catalog.yaml; --catalog at the "
+        "top level selects reader metadata.",
         epilog="Folder operations use rclone mkdir/moveto/deletefile/rmdir/purge. "
         "Run a command with --help for its options.",
     )
@@ -163,33 +168,6 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         help="parallel rclone transfers (default: 8)",
     )
 
-    # Named for what it produces, not for the internal idea behind it. It was
-    # `namespace`, which named the concept ("a namespace of links") and left the
-    # reader of `--root /projects5/...` with no way to guess that the thing being
-    # built is the shared cache.
-    linker = catalog_sub.add_parser(
-        "link-cache",
-        help="build the shared cache as links to data already on this machine",
-    )
-    # Not required, but still worth naming: this command usually builds a cache
-    # for a whole machine, which is rarely the one the maintainer's own account
-    # reads. The default is there so that filling your own cache from a checkout
-    # is one word, not a path you have to look up.
-    linker.add_argument(
-        "--root",
-        default=None,
-        help="the public cache directory to build "
-        "(default: the configured public cache)",
-    )
-    linker.add_argument(
-        "--dry-run", action="store_true", help="show what would change, write nothing"
-    )
-    linker.add_argument(
-        "--prune",
-        action="store_true",
-        help="also remove links for datasets no longer in the catalogue",
-    )
-
     # Was `check-access`, which did not say access to *what*. It probes the
     # publication store, and is the one subcommand here that needs no catalogue.
     prober = catalog_sub.add_parser(
@@ -226,11 +204,6 @@ def dispatch(args) -> int:
         from . import publish
 
         return publish.run(root, args.target, check=args.check)
-
-    if args.catalog_command == "link-cache":
-        from . import namespace
-
-        return namespace.run(root, args)
 
     if args.catalog_command == "upload":
         from . import upload

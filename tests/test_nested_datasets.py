@@ -14,6 +14,7 @@ Run with pytest, or directly:  python tests/test_nested_datasets.py
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -89,6 +90,40 @@ class TestDiscovery:
             catalog = build(Path(tmp), {"alpha": PUBLIC_MEMBER})
             assert is_namespace(catalog / "datasets" / "family")
             assert not is_namespace(catalog / "datasets" / "family" / "alpha")
+
+    def test_a_member_further_down_still_makes_it_a_namespace(self):
+        """Membership is a property of the name, not of the directory listing.
+
+        ``datasets/family/sub/alpha`` is the dataset ``family/sub/alpha``, a name
+        below ``family``, whether or not anybody wrote a dataset.yaml in
+        ``sub/``. Everything else already read it that way -- the discovery walk,
+        the member totals, the cache path the entry goes at -- and only this test
+        asked whether there was a member among the *direct* children, so one
+        ordinary directory in between made it answer no.
+
+        What that cost is not tidiness. The rule that a namespace may not also
+        describe files of its own is enforced where a namespace is rendered, so a
+        family with a gap in it was never checked at all, and a checkout
+        declaring both ``family`` with a source_dir and a dataset below it built
+        two packages for a pair of names that cannot both have a cache entry.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            catalog = build(tmp, {"alpha": PUBLIC_MEMBER})
+            family = catalog / "datasets" / "family"
+            (family / "sub").mkdir()
+            shutil.move(str(family / "alpha"), str(family / "sub" / "alpha"))
+
+            assert is_namespace(family)
+            assert not (family / "sub" / "dataset.yaml").exists()
+
+            family.joinpath("dataset.yaml").write_text(
+                NAMESPACE + f"source_dir: {tmp / 'src'}\n"
+            )
+            with pytest.raises(
+                SystemExit, match="cannot also describe files of its own"
+            ):
+                build_run(catalog, [])
 
     def test_a_name_that_disagrees_with_its_directory_is_refused(self):
         """A half-done rename must fail here, not somewhere far away later."""

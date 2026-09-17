@@ -47,6 +47,8 @@ actually ask.
         - locate
         - Location
         - AccessError
+        - borrowed_parent
+        - which_cache
         - requires_local_root
         - check_missing
         - unavailable

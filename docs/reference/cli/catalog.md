@@ -1,8 +1,14 @@
 # `ethos-data catalog`
 
 The catalogue-maintenance group of [`ethos-data`](ethos-data.md). It builds
-metadata, generates the public view, uploads bytes, and manages shared cache
-links. Check modes can be read-only; `check-store` creates temporary remote objects.
+metadata, generates the public view, and uploads bytes. Check modes can be
+read-only; `check-store` creates temporary remote objects.
+
+Shared cache links are not in this group: one dataset or a whole catalogue,
+they are [`ethos-data link`](ethos-data.md#link-dataset-directory). Building a
+namespace is site administration on the machine that holds the data, not
+catalogue maintenance, and having had it in both places only ever raised the
+question of which one you were supposed to type.
 
 ```
 ethos-data catalog [--catalog-root DIR] <command> ...
@@ -126,30 +132,6 @@ the summary says which.
 
 Full runbook: [Upload a dataset](../../how-to/upload-a-dataset.md).
 
-## `link-cache --root <directory>`
-
-Build the public cache as a directory of symbolic links to data already on this
-machine, one entry per dataset with a `source_dir`.
-
-```bash
-ethos-data catalog link-cache --root /shared/ethos/public --dry-run
-ethos-data catalog link-cache --root /shared/ethos/public --prune
-```
-
-| Flag | |
-|---|---|
-| `--root DIR` | the public cache directory to build (default: the configured public cache) |
-| `--dry-run` | show what would change, write nothing |
-| `--prune` | also remove links for datasets no longer in the catalogue |
-
-Nothing is copied or moved. **Real directories are never touched** — an entry
-downloaded from dCache or produced by `ethos-data materialize` is data the cache
-owns, and replacing it with a link would discard it.
-
-For one dataset, or into the cache this machine is configured to read, see
-[`ethos-data link`](ethos-data.md). See also
-[Link cluster data into the cache](../../how-to/link-cluster-data.md#cache-links).
-
 ## `check-store [vo]`
 
 Probe what this account can do on dCache InfiniteSpace. Default VO:
@@ -175,10 +157,14 @@ checkout.
 - [Create, rename, and delete folders](../../how-to/manage-dcache-folders.md) — uses
   rclone directly; there are no equivalent ETHOS.Data subcommands.
 
+- [`ethos-data link --all`](ethos-data.md#link-dataset-directory) — build the shared
+  cache as links to data already on this machine. It reads `source_dir` from the
+  same source checkout these commands do.
 - [Describe a dataset](../../how-to/describe-a-dataset.md)
 - [Publish the catalogue](../../how-to/publish-the-catalogue.md)
 - [Bootstrap a new catalogue](../../how-to/bootstrap-a-catalogue.md)
 - [API: maintainer tooling](../api/maintain.md)
 
 
-For the complete cluster migration, see [Link cluster data into the cache](../../how-to/link-cluster-data.md) and [Move linked data into the cache](../../how-to/link-cluster-data.md#materialize-copies). Restricted entries are registered through [Add internal and restricted datasets](../../how-to/describe-a-dataset.md#restricted-installations).
+For the complete cluster migration, see [Manage local dataset copies](../../how-to/link-cluster-data.md), which covers overrides, cache links and
+[materialized copies](../../how-to/link-cluster-data.md#materialize-copies) in one guide. Restricted entries are registered through [Add internal and restricted datasets](../../how-to/describe-a-dataset.md#restricted-installations).

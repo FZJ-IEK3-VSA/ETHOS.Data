@@ -30,6 +30,7 @@ for it fails with an explanation instead of doing something surprising.
 
 from __future__ import annotations
 
+import os
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,12 +40,15 @@ from .config import Roots, resolve_skip_unavailable
 
 __all__ = [
     "AccessError",
+    "borrowed_parent",
     "cache_entries",
+    "entry_ancestry",
     "entry_for",
     "Location",
     "locate",
     "requires_local_root",
     "unavailable",
+    "which_cache",
     "ORIGIN_CONFIGURED",
     "ORIGIN_STAGING",
     "ORIGIN_RESTRICTED",
@@ -129,6 +133,124 @@ def entry_for(catalog: Catalog, roots: Roots, name: str) -> Path:
             "    ethos-data config set-restricted-cache /path/to/ethos_data_restricted"
         )
     return root / name
+
+
+def entry_ancestry(entry: Path, name: str) -> tuple[Path, list[Path]]:
+    """The cache root this entry sits in, and the directories between them.
+
+    No cache root is passed, deliberately. An entry is ``<root>/<name>`` and
+    nothing else -- :func:`entry_for` has no other rule, and the namespace
+    planner builds the same path -- so the number of parts in the name is the
+    number of components below the root, and this cannot disagree with
+    ``entry_for`` about where the root is. A root passed in could disagree, and
+    then every caller below would be reasoning about a different directory from
+    the one the entry was built from.
+
+    Outermost first, because both callers work down from the root: one looks for
+    the first borrowed component, and the other creates each component in turn
+    and has to meet a link before it has written anything underneath it.
+
+    The root itself is not in the list. Pointing a whole cache at a symbolic
+    link is a configuration somebody made on purpose, not a borrowed tree.
+    """
+    above = list(entry.parents)
+    depth = min(len(Path(name).parts) - 1, len(above) - 1)
+    return above[depth], list(reversed(above[:depth]))
+
+
+def borrowed_parent(entry: Path, name: str) -> Path | None:
+    """The outermost component between the cache root and ``entry`` that is a link.
+
+    ``Path.mkdir(parents=True, exist_ok=True)`` succeeds when a parent is
+    already a symbolic link to a directory -- the ``FileExistsError`` is
+    swallowed and ``is_dir()`` follows the link -- so an entry written below one
+    lands *inside* the borrowed tree, silently, and is reported as made. That is
+    the one thing a borrowed entry promises can never happen: a symbolic-link
+    entry is routed to "in-place" by :func:`locate`, a download into one is
+    refused, and the reason those reads are safe is that the cache never writes
+    there either. The entry also disappears the day its owner removes that one
+    link, having been printed as linked and counted in a summary.
+
+    The shape that produces it is the reorganisation the namespace planner
+    exists for: a dataset that was flat becomes a family, so ``family`` stops
+    being an entry and becomes a prefix, while the machine still holds
+    yesterday's ``<cache>/family -> /project/storage/family``.
+
+    This reads the cache at one moment, so what it establishes is that nothing
+    was borrowed *when it was asked* -- which is advice to a planner and not a
+    guarantee to a writer. The guarantee belongs to whatever does the writing,
+    which is why :func:`ethos_data.maintain.namespace._create` creates the
+    components one at a time instead of trusting an answer from before the run.
+
+    Only a *symbolic* link is found. A Windows junction (``mklink /J``) is
+    reported as an ordinary directory here exactly as it is by
+    :func:`cache_entries` and :func:`locate`, so the guarantee this supports is
+    "no symbolic link above the entry", not "no borrowed tree at all".
+    """
+    _, parents = entry_ancestry(entry, name)
+    return next((parent for parent in parents if parent.is_symlink()), None)
+
+
+def _same_directory(left: Path, right: Path) -> bool:
+    """Whether two paths name one directory on this machine, however spelled.
+
+    The cheap comparison first, and the filesystem only when the two spellings
+    actually differ. That is not only speed: these caches can sit on an SMB
+    share, ``os.path.realpath`` has no timeout, and a command with no need to
+    ask must not be able to hang on a dead mount.
+
+    Every spelling that turns up in this codebase is equated by that pair --
+    case, the two separators, a trailing separator, Windows' 8.3 short name, a
+    symlinked spelling of the same directory, and a path that does not exist
+    yet, which a configured-but-never-created restricted cache is.
+    """
+    if os.path.normcase(os.path.abspath(left)) == os.path.normcase(
+        os.path.abspath(right)
+    ):
+        return True
+    try:
+        return os.path.normcase(os.path.realpath(left)) == os.path.normcase(
+            os.path.realpath(right)
+        )
+    except OSError:
+        return False
+
+
+def which_cache(roots: Roots, path: Path) -> str | None:
+    """Which of this machine's caches ``path`` is: restricted, public, or neither.
+
+    The inverse of :meth:`ethos_data.config.Roots.for_access`, which routes a
+    dataset to a root. The two answer one question from opposite ends and have
+    to agree, because a command told it is building the public cache while
+    pointed at the restricted one will delete entries on the strength of a
+    policy that does not apply there.
+
+    ``None`` is a legitimate and common answer rather than a failure: building a
+    cache for another machine is the documented cluster workflow, and most
+    machines have no restricted cache configured at all. What may be done to an
+    unidentified directory is the caller's decision, and the only safe reading
+    is that it may be anything -- including another machine's restricted cache.
+
+    Restricted is tested first and wins. On a machine whose public and
+    restricted caches are configured to the same directory, answering "public"
+    is what would build a shared namespace on top of licensed bytes; answering
+    "restricted" makes every caller that refuses the restricted cache refuse
+    that configuration too, which is the alarm it deserves.
+
+    Compared as directories rather than as text, because the spellings genuinely
+    differ: ``resolve_catalog_root`` returns a resolved path while ``--root`` is
+    only expanded, which on Windows is the difference between the 8.3 short name
+    of a user directory and its long one, for one directory. Deliberately not
+    the comparison :func:`ethos_data.maintain.namespace._same_target` makes:
+    that one asks whether a link still spells the curated ``source_dir``, where
+    resolving would call two different curated paths the same thing. This one
+    asks whether two paths are the same directory, where resolving is the whole
+    question.
+    """
+    for kind, root in ((RESTRICTED, roots.restricted), (PUBLIC, roots.public)):
+        if root is not None and _same_directory(root, path):
+            return kind
+    return None
 
 
 def _staged(roots: Roots, name: str) -> Path | None:
@@ -322,6 +444,14 @@ def cache_entries(root: Path) -> list[tuple[str, Path]]:
     files (data downloaded). Descent stops at either, so a link is never
     followed and a downloaded dataset's own subdirectories are not mistaken for
     more datasets.
+
+    A directory that cannot be listed is reported as an entry rather than
+    descended into. Every caller of this either leaves an entry alone or offers
+    to remove it, and "I could not look" and "there is nothing there" are the
+    same answer only to a command that deletes on the strength of it. It is also
+    what lets :func:`ethos_data.maintain.namespace.plan` promise that no state
+    the cache is in makes it raise, which is what makes ``--dry-run`` safe to
+    point at a cache in any condition.
     """
     found: list[tuple[str, Path]] = []
     if not root.is_dir():
@@ -337,7 +467,12 @@ def cache_entries(root: Path) -> list[tuple[str, Path]]:
             if child.is_symlink():
                 found.append((name, child))
             elif child.is_dir():
-                if any(item.is_file() for item in child.iterdir()):
+                try:
+                    holds_files = any(item.is_file() for item in child.iterdir())
+                except OSError:
+                    found.append((name, child))
+                    continue
+                if holds_files:
                     found.append((name, child))
                 else:
                     walk(child, name)
