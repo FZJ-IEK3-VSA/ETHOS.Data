@@ -27,6 +27,7 @@ from ethos_data.maintain.manifest import (
 
 # -- ethos:origin -----------------------------------------------------------
 
+
 def test_origin_defaults_to_downloaded():
     """The common case, and the conservative one: claim no authorship."""
     meta = {}
@@ -58,29 +59,45 @@ def test_derived_needs_sources_and_a_derivation():
         validate_provenance("d", {"ethos:origin": "derived", "contributors": author})
 
     with pytest.raises(SystemExit, match="needs ethos:derivation"):
-        validate_provenance("d", {
-            "ethos:origin": "derived",
-            "contributors": author,
-            "sources": [{"title": "upstream"}],
-        })
+        validate_provenance(
+            "d",
+            {
+                "ethos:origin": "derived",
+                "contributors": author,
+                "sources": [{"title": "upstream"}],
+            },
+        )
 
-    assert validate_provenance("d", {
-        "ethos:origin": "derived",
-        "contributors": author,
-        "sources": [{"title": "upstream"}],
-        "ethos:derivation": "gdalwarp to EPSG:3035, nearest neighbour.",
-    }) == "derived"
+    assert (
+        validate_provenance(
+            "d",
+            {
+                "ethos:origin": "derived",
+                "contributors": author,
+                "sources": [{"title": "upstream"}],
+                "ethos:derivation": "gdalwarp to EPSG:3035, nearest neighbour.",
+            },
+        )
+        == "derived"
+    )
 
 
 def test_created_needs_only_an_author():
     """Created from scratch has no upstream to name -- that is the difference."""
-    assert validate_provenance("d", {
-        "ethos:origin": "created",
-        "contributors": [{"title": "A Researcher", "roles": ["author"]}],
-    }) == "created"
+    assert (
+        validate_provenance(
+            "d",
+            {
+                "ethos:origin": "created",
+                "contributors": [{"title": "A Researcher", "roles": ["author"]}],
+            },
+        )
+        == "created"
+    )
 
 
 # -- contributors ----------------------------------------------------------
+
 
 def test_v1_scalar_role_is_rejected_not_coerced():
     """Half-following two versions of the spec is worse than being told which."""
@@ -90,7 +107,9 @@ def test_v1_scalar_role_is_rejected_not_coerced():
 
 def test_unknown_role_is_rejected():
     with pytest.raises(SystemExit, match="unknown role"):
-        validate_provenance("d", {"contributors": [{"title": "X", "roles": ["archivist"]}]})
+        validate_provenance(
+            "d", {"contributors": [{"title": "X", "roles": ["archivist"]}]}
+        )
 
 
 def test_contributor_needs_a_title():
@@ -100,10 +119,14 @@ def test_contributor_needs_a_title():
 
 # -- licences --------------------------------------------------------------
 
+
 def test_licenses_may_hold_several():
     entries = [
         {"name": "CC-BY-4.0", "path": "https://creativecommons.org/licenses/by/4.0/"},
-        {"name": "CC0-1.0", "path": "https://creativecommons.org/publicdomain/zero/1.0/"},
+        {
+            "name": "CC0-1.0",
+            "path": "https://creativecommons.org/publicdomain/zero/1.0/",
+        },
     ]
     assert validate_licenses("d", {"licenses": entries}) == entries
 
@@ -121,15 +144,21 @@ def test_licenses_must_be_a_list():
 
 def test_applies_to_must_be_a_list_of_patterns():
     with pytest.raises(SystemExit, match="list of glob patterns"):
-        validate_licenses("d", {"licenses": [{"name": "MIT", "ethos:applies_to": "*.tif"}]})
+        validate_licenses(
+            "d", {"licenses": [{"name": "MIT", "ethos:applies_to": "*.tif"}]}
+        )
 
 
 def test_narrowed_licence_lands_on_matching_resources_only():
     resources = [{"path": "originals/a.nc"}, {"path": "converted/a.tif"}]
-    apply_resource_licenses("d", resources, [
-        {"name": "CC-BY-4.0", "ethos:applies_to": ["originals/**"]},
-        {"name": "CC0-1.0"},
-    ])
+    apply_resource_licenses(
+        "d",
+        resources,
+        [
+            {"name": "CC-BY-4.0", "ethos:applies_to": ["originals/**"]},
+            {"name": "CC0-1.0"},
+        ],
+    )
     assert resources[0]["licenses"] == [{"name": "CC-BY-4.0"}]
     # The unnarrowed licence stays at package level; the resource inherits it.
     assert "licenses" not in resources[1]
@@ -138,24 +167,30 @@ def test_narrowed_licence_lands_on_matching_resources_only():
 def test_applies_to_strips_itself_from_the_resource_copy():
     """On the file it was attached to, applies_to answers nobody's question."""
     resources = [{"path": "a.nc"}]
-    apply_resource_licenses("d", resources, [{"name": "MIT", "ethos:applies_to": ["*.nc"]}])
+    apply_resource_licenses(
+        "d", resources, [{"name": "MIT", "ethos:applies_to": ["*.nc"]}]
+    )
     assert resources[0]["licenses"] == [{"name": "MIT"}]
 
 
 def test_applies_to_matching_nothing_is_an_error():
     """Silently licensing no files is how data ships under terms nobody applied."""
     with pytest.raises(SystemExit, match="matches none of"):
-        apply_resource_licenses("d", [{"path": "a.nc"}],
-                                [{"name": "MIT", "ethos:applies_to": ["nope/**"]}])
+        apply_resource_licenses(
+            "d", [{"path": "a.nc"}], [{"name": "MIT", "ethos:applies_to": ["nope/**"]}]
+        )
 
 
 def test_uncovered_files_warn_when_every_licence_is_narrowed(capsys):
     resources = [{"path": "a.nc"}, {"path": "b.tif"}]
-    apply_resource_licenses("d", resources, [{"name": "MIT", "ethos:applies_to": ["*.nc"]}])
+    apply_resource_licenses(
+        "d", resources, [{"name": "MIT", "ethos:applies_to": ["*.nc"]}]
+    )
     assert "covered by no licence at all" in capsys.readouterr().err
 
 
 # -- end to end ------------------------------------------------------------
+
 
 def test_build_renders_package_and_resource_licences():
     with tempfile.TemporaryDirectory() as tmp:
@@ -168,21 +203,27 @@ def test_build_renders_package_and_resource_licences():
 
         dataset_dir = root / "datasets" / "demo"
         dataset_dir.mkdir(parents=True)
-        (dataset_dir / "dataset.yaml").write_text(yaml.safe_dump({
-            "name": "demo",
-            "title": "Mixed provenance",
-            "source_dir": str(source),
-            "ethos:access": "public",
-            "ethos:visibility": "public",
-            "ethos:origin": "derived",
-            "ethos:derivation": "gdalwarp, lossless.",
-            "sources": [{"title": "upstream", "path": "https://example.invalid/"}],
-            "contributors": [{"title": "A Researcher", "roles": ["author"]}],
-            "licenses": [
-                {"name": "CC-BY-4.0", "ethos:applies_to": ["originals/**"]},
-                {"name": "CC0-1.0"},
-            ],
-        }))
+        (dataset_dir / "dataset.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "name": "demo",
+                    "title": "Mixed provenance",
+                    "source_dir": str(source),
+                    "ethos:access": "public",
+                    "ethos:visibility": "public",
+                    "ethos:origin": "derived",
+                    "ethos:derivation": "gdalwarp, lossless.",
+                    "sources": [
+                        {"title": "upstream", "path": "https://example.invalid/"}
+                    ],
+                    "contributors": [{"title": "A Researcher", "roles": ["author"]}],
+                    "licenses": [
+                        {"name": "CC-BY-4.0", "ethos:applies_to": ["originals/**"]},
+                        {"name": "CC0-1.0"},
+                    ],
+                }
+            )
+        )
 
         package = json.loads(render_dataset(dataset_dir)["datapackage.json"])
 

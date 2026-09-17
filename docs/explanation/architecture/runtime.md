@@ -3,9 +3,10 @@
 The scenarios use the block names from [section 5](building-blocks.md).
 
 The ordinary Python `fetch()` path loads a collections file, selects catalogue
-resources, determines where they belong on this machine, and returns a mapping
-from resource keys to local paths. It may read metadata over the network even
-when all dataset bytes are already local.
+resources, checks the collection's `paths` handles against that selection,
+determines where the resources belong on this machine, and returns a mapping
+from resource keys to local paths, with the handles resolved beside it. It may
+read metadata over the network even when all dataset bytes are already local.
 
 ## 6.1 Data request
 
@@ -34,14 +35,14 @@ entry in the public cache means use the existing files in place. The existing
 | Download-managed file is absent or fails its hash check | Pooch retrieves and verifies it | Network/storage failures can stop the request |
 | File resolves in place | Fetch checks that it exists and returns its path without copying | Fetch does not hash-check this local file; use explicit verification when needed |
 | Expected in-place file is missing | Raises an access error with concrete paths | A configured location does not silently fall back to another copy |
-| Restricted data has no configured location | Fails, or marks it unavailable when skipping is enabled | Skipped resources are absent from the returned mapping and a warning is emitted |
+| Restricted data has no configured location | Fails, or marks it unavailable when skipping is enabled | Skipped resources are absent from the returned mapping, and so is any `paths` handle that depends on them; a warning names both |
 
 A download also checks that its destination dataset directory is not a symbolic
 link before passing work to Pooch. This protects storage borrowed by the cache
 from being treated as a download destination.
 
 `plan()` estimates download work from presence and size; it does not establish
-checksum validity. See [Check and repair the cache](../../how-to/verify-and-repair.md)
+checksum validity. See [Check and repair the cache](../../how-to/data-users/verify-and-repair.md)
 for explicit integrity checks.
 
 ## 6.2 Access failures and development data
@@ -58,23 +59,29 @@ supports changing work in progress. Neither should be mistaken for a verified
 copy solely because fetch returned a path. Staging warnings and the
 [licensing and immutability rules](../licensing.md) explain these boundaries.
 
-For configuration steps, see [Use data already on disk](../../how-to/use-data-already-on-disk.md)
-and [Work with restricted data](../../how-to/restricted-data.md).
+For configuration steps, see [Manage local dataset copies](../../how-to/catalogue-maintainers/link-cluster-data.md#dataset-root-overrides)
+and [Work with restricted data](../../how-to/data-users/set-up-your-machine.md#restricted-data).
 
 ### Failure boundaries
 
-Selection rejects unknown datasets and collections. A pattern that matches no
+Loading a collections file fails first if the catalogue index it pins cannot be
+read (`CatalogUnavailable`). Selection rejects unknown datasets and collections,
+and a collection whose `test` and `full` variants name different `paths` — the
+check runs for every collection a resolution reaches through `extends`, so a
+plain collection extending a lopsided one is rejected too. A pattern that matches no
 resources can produce an empty selection; consuming packages must check that
 their required inputs were selected. Bundle export rejects empty collections. If Access
 policy finds inaccessible required data,
 Retrieval fails before returning an apparently complete result. Explicitly
-skipping unavailable data changes the returned keys, so the consuming workflow
+skipping unavailable data changes the returned keys and leaves the affected
+`paths` handles out of the named mapping — recorded in `NamedPaths.omitted`
+and named in a warning, never a path to nothing — so the consuming workflow
 must distinguish required from optional inputs.
 
 Local development can overlay catalogue data with staging entries. A staging
 overlay changes metadata selection as well as file locations: new resources must
 be visible to Selection before Retrieval can use them. Python collection loading and CLI collection loading both apply the overlay;
-`fetch_one()` applies it before looking up the resource. The overlay uses a
+`Catalog.path()` applies it, once per handle, before looking up the resource. The overlay uses a
 separate catalogue object so the caller's canonical `Catalog` is retained. Export
 operations use `include_staging=False` to select authoritative metadata.
 
@@ -104,7 +111,7 @@ location, provenance, licences, and publication policy. Building produces the
 JSON index, descriptors, and any inventory shards. Consumers read these generated
 files; they do not need access to a maintainer's source directory.
 
-[Describe a dataset](../../how-to/describe-a-dataset.md) gives the procedure;
+[Describe a dataset](../../how-to/catalogue-maintainers/describe-a-dataset.md) gives the procedure;
 [The catalogue format](../catalogue-format.md) explains the representation.
 
 ### Validate the selected upload batch
@@ -138,7 +145,7 @@ verification because anonymous access is intentionally unavailable. See
 
 A batch records returned per-dataset failures and reports an unsuccessful exit
 status; completed transfers are not rolled back. Review the results before
-releasing catalogue metadata. See [Upload a dataset](../../how-to/upload-a-dataset.md)
+releasing catalogue metadata. See [Upload a dataset](../../how-to/catalogue-maintainers/upload-a-dataset.md)
 for commands and recovery steps.
 
 ### Generate and release the published catalogue
@@ -147,7 +154,7 @@ Publication selects descriptors by visibility, strips internal fields, and copie
 required shards and archived licence documents into the target catalogue checkout.
 It does not upload dataset bytes or by itself commit, push, or tag the repository.
 The maintainer reviews and releases that generated output as described in
-[Publish the catalogue](../../how-to/publish-the-catalogue.md).
+[Publish the catalogue](../../how-to/catalogue-maintainers/publish-the-catalogue.md).
 
 Publication is not gated by a transaction shared with upload. The maintainer must
 ensure that advertised files are ready before consumers see the new metadata.
@@ -158,7 +165,7 @@ Changed bytes need new paths so existing catalogue versions retain their meaning
 Withdrawing a dataset starts by removing its entry from the published view; any
 necessary deletion of remote bytes follows. Old catalogue pins still describe
 old resources, but cannot make deleted bytes available. Follow
-[Withdraw a dataset](../../how-to/withdraw-a-dataset.md) for the procedure.
+[Withdraw a dataset](../../how-to/catalogue-maintainers/withdraw-a-dataset.md) for the procedure.
 
 ## 6.4 Repository test data
 
@@ -194,5 +201,5 @@ before replacing the repository copy. The current feature supports public,
 non-staged datasets; it rejects internal/restricted data and hidden entries.
 The exported bundle retains the selected metadata and expanded sidecars needed
 by its collections. It is a bundle manifest, not a replacement full catalogue.
-See [Keep test data in a repository](../../how-to/keep-test-data-in-a-repository.md)
+See [Keep test data in a repository](../../how-to/package-maintainers/keep-test-data-in-a-repository.md)
 for commands and examples.

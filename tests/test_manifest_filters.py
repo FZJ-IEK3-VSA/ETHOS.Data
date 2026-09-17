@@ -30,21 +30,27 @@ CAN_HOLD_QUERY_STRING = os.name != "nt"
 
 # Shaped like /shared_data/Global_Wind_Atlas/GWA_4.0: five rasters worth keeping,
 # a 67 GB derivative that is a different dataset, and the download plumbing.
-GWA_RASTERS = sorted([
-    "wind_speed_cog_10m.tif",
-    "wind_speed_cog_50m.tif",
-    "wind_speed_cog_100m.tif",
-    "wind_speed_cog_150m.tif",
-    "wind_speed_cog_200m.tif",
-    "wind_speed_cog_100m.tif.aux.xml",
-])
-GWA_FILES = GWA_RASTERS + [
-    "wind_speed_cog_100m_expanded_by_ERA5_x_mean_global.tif",
-    "url_list.txt",
-    "url_list2.txt",
-    "download.sh",
-    "wget-log",
-] + ([QUERY_STRING_FILE] if CAN_HOLD_QUERY_STRING else [])
+GWA_RASTERS = sorted(
+    [
+        "wind_speed_cog_10m.tif",
+        "wind_speed_cog_50m.tif",
+        "wind_speed_cog_100m.tif",
+        "wind_speed_cog_150m.tif",
+        "wind_speed_cog_200m.tif",
+        "wind_speed_cog_100m.tif.aux.xml",
+    ]
+)
+GWA_FILES = (
+    GWA_RASTERS
+    + [
+        "wind_speed_cog_100m_expanded_by_ERA5_x_mean_global.tif",
+        "url_list.txt",
+        "url_list2.txt",
+        "download.sh",
+        "wget-log",
+    ]
+    + ([QUERY_STRING_FILE] if CAN_HOLD_QUERY_STRING else [])
+)
 
 
 def _exclude_query_string(pattern: str) -> str:
@@ -92,7 +98,9 @@ def inventory(extra_yaml: str, tree=gwa_tree) -> list[str]:
         dataset_dir.mkdir(parents=True)
         (workspace / "catalog.yaml").write_text(CATALOG)
         (dataset_dir / "dataset.yaml").write_text(
-            f"name: d\ntitle: t\nsource_dir: {source}\nethos:remote_prefix: d\n" + extra_yaml)
+            f"name: d\ntitle: t\nsource_dir: {source}\nethos:remote_prefix: d\n"
+            + extra_yaml
+        )
 
         files = render_dataset(dataset_dir)
         package = json.loads(files["datapackage.json"])
@@ -135,30 +143,41 @@ class TestSelection:
         # The point of borrowing the reader's matcher: *m.tif must anchor at the
         # end, so the 67 GB ..._mean_global.tif derivative is not swept in.
         assert inventory('ethos:include:\n  - "wind_speed_cog_*m.tif"\n') == sorted(
-            name for name in GWA_RASTERS if name.endswith("m.tif"))
+            name for name in GWA_RASTERS if name.endswith("m.tif")
+        )
 
     def test_exclude_by_bare_folder_name_drops_the_subtree(self):
-        assert inventory(
-            'ethos:exclude:\n  - "test"\n  - "url_list*.txt"\n  - "download.sh"\n'
-            '  - "wget-log"\n' + _exclude_query_string('"54313655?private_link=abc"')
-            + '  - "*expanded_by_ERA5*"\n') == GWA_RASTERS
+        assert (
+            inventory(
+                'ethos:exclude:\n  - "test"\n  - "url_list*.txt"\n  - "download.sh"\n'
+                '  - "wget-log"\n'
+                + _exclude_query_string('"54313655?private_link=abc"')
+                + '  - "*expanded_by_ERA5*"\n'
+            )
+            == GWA_RASTERS
+        )
 
     def test_double_star_reaches_into_subdirectories(self):
-        assert inventory(
-            'ethos:include:\n  - "**"\nethos:exclude:\n  - "**/wget-log"\n  - "test/"\n'
-            '  - "*expanded*"\n  - "url_list*"\n  - "download.sh"\n'
-            + _exclude_query_string('"54313655*"')) == GWA_RASTERS
+        assert (
+            inventory(
+                'ethos:include:\n  - "**"\nethos:exclude:\n  - "**/wget-log"\n  - "test/"\n'
+                '  - "*expanded*"\n  - "url_list*"\n  - "download.sh"\n'
+                + _exclude_query_string('"54313655*"')
+            )
+            == GWA_RASTERS
+        )
 
     def test_two_datasets_can_share_one_source_dir(self):
         # global-wind-atlas and global-wind-atlas-era5-expanded both live in
         # GWA_4.0; neither may see the other's files.
         assert inventory('ethos:include:\n  - "*expanded_by_ERA5*"\n') == [
-            "wind_speed_cog_100m_expanded_by_ERA5_x_mean_global.tif"]
+            "wind_speed_cog_100m_expanded_by_ERA5_x_mean_global.tif"
+        ]
 
     def test_filter_applies_before_sharding(self):
         assert inventory(
-            'ethos:shard_depth: 1\nethos:exclude:\n  - "**/*.zip"\n',
-            tree=vintage_tree) == ["v1/data.tif", "v2/data.tif"]
+            'ethos:shard_depth: 1\nethos:exclude:\n  - "**/*.zip"\n', tree=vintage_tree
+        ) == ["v1/data.tif", "v2/data.tif"]
 
 
 class TestGuardRails:
@@ -189,7 +208,11 @@ class TestGuardRails:
         # A .shp without its .dbf/.shx is unreadable, and an include list is
         # exactly where somebody would forget them.
         assert inventory('ethos:include:\n  - "*.shp"\n', tree=shapefile_tree) == [
-            "sites.dbf", "sites.prj", "sites.shp", "sites.shx"]
+            "sites.dbf",
+            "sites.prj",
+            "sites.shp",
+            "sites.shx",
+        ]
 
 
 if __name__ == "__main__":

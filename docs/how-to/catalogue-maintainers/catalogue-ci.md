@@ -1,7 +1,7 @@
 # Run catalogue checks in CI
 
 This guide is for catalogue maintainers. For a consuming package's tests, see
-[Run package tests in CI](run-in-ci.md).
+[Run package tests in CI](../package-maintainers/run-in-ci.md).
 
 Run the source-catalogue checks from a checkout containing `catalog.yaml` with
 the maintainer tooling installed:

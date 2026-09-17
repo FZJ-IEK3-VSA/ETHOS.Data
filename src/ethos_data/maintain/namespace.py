@@ -1,24 +1,30 @@
 """Building the public cache as a namespace of links, from the catalogue.
 
-    ethos-data catalog link-cache --root /shared/ethos/public --dry-run
-    ethos-data catalog link-cache --root /shared/ethos/public
+    ethos-data link --all --root /shared/ethos/public --dry-run
+    ethos-data link --all --root /shared/ethos/public
 
 The result is one entry per dataset, named for the dataset, pointing at wherever
 that data already sits on this machine:
 
-    /shared/ethos/public/
-    |-- global-wind-atlas  -> /fast/central/shared_data/Global_Wind_Atlas/GWA_4.0
-    |-- corine-land-cover  -> /fast/central/shared_data/2023_gears/.../clc2018
+    <public cache>/
+    |-- global-wind-atlas  -> /legacy/shared/Global_Wind_Atlas/GWA_4.0
+    |-- corine-land-cover  -> /legacy/shared/landcover/clc2018
+    |-- test-data/era5     -> /legacy/shared/era5-subset   (a nested dataset,
+    |                                                       entry where its name says)
     `-- submarine-cables/     (a real directory, downloaded from dCache)
 
 Nothing is copied and nothing is moved: the entries cost a few hundred bytes in
 total. What they buy is a stable name for each dataset, so that when the storage
 behind one is reorganised, exactly one link changes and every user follows.
 
-This is maintainer-side on purpose. ``source_dir`` is never published -- it is a
-statement about one machine -- so the namespace is built once by somebody who
-knows where things are, and everybody else just points ``public_cache`` at the
-result. That is what keeps the user-facing configuration down to two settings.
+The command that drives this planner sits with the user-facing ``link`` rather
+than under ``catalog``, because filling a whole cache from a checkout and
+pointing one dataset at a directory are the same job at two scales. The planner
+itself still reads a source checkout, and that has not changed: ``source_dir``
+is never published -- it is a statement about one machine -- so the namespace is
+built once by somebody who knows where things are, and everybody else just
+points ``public_cache`` at the result. That is what keeps the user-facing
+configuration down to two settings.
 
 **Real directories are never touched.** An entry that has been downloaded from
 dCache, or materialised with ``ethos-data materialize``, is data the cache owns;
@@ -32,7 +38,8 @@ from pathlib import Path
 
 import yaml
 
-from . import datasets_dir
+from ..catalogs import license_settled
+from . import dataset_name_for, datasets_dir, is_namespace, iter_dataset_dirs
 
 __all__ = ["Action", "plan", "apply", "run"]
 
@@ -61,15 +68,31 @@ class Action:
 
 
 def _declared(catalog_root: Path) -> list[tuple[str, dict]]:
-    """Every dataset directory with a dataset.yaml, in name order."""
+    """Every dataset with a dataset.yaml, at any depth, by catalogue name.
+
+    Not a listing of the top level, because a nested family is described as a
+    dataset.yaml naming the family with the datasets that actually hold files
+    *below* it. Reading only the top level found the family node, reported it as
+    having no ``source_dir`` -- true, and not its job to have one -- and left
+    every member unlinked, which is the whole family missing from the cache.
+
+    The name is the path below ``datasets/``, so a member is ``family/member``
+    and its entry is ``<root>/family/member``: the same name the manifest
+    builder writes, the collections file uses, and the reader looks up.
+
+    Namespace nodes are dropped rather than reported: a namespace owns no files,
+    so "no source_dir" is not a finding about it.
+    """
     root = datasets_dir(catalog_root)
     found = []
-    for directory in sorted(p for p in root.iterdir() if p.is_dir()):
-        descriptor = directory / "dataset.yaml"
-        if not descriptor.is_file():
+    for directory in iter_dataset_dirs(root):
+        if is_namespace(directory):
             continue
-        meta = yaml.safe_load(descriptor.read_text(encoding="utf-8")) or {}
-        found.append((directory.name, meta))
+        meta = (
+            yaml.safe_load((directory / "dataset.yaml").read_text(encoding="utf-8"))
+            or {}
+        )
+        found.append((dataset_name_for(root, directory), meta))
     return found
 
 
@@ -83,6 +106,19 @@ def _source_of(catalog_root: Path, name: str, meta: dict) -> Path | None:
     return source
 
 
+def _same_target(current: Path, source: Path) -> bool:
+    """Whether a link already points where the catalogue says it should.
+
+    Compared as text, because a link *is* text -- resolving both would call two
+    different curated paths the same thing the moment either went through
+    another link, which is exactly what source_dir is allowed to do. The one
+    spelling difference that is not a real difference is Windows's ``\\\\?\\``
+    extended-length prefix, added when the link is stored: without stripping it,
+    every run would repoint an entry that is already correct.
+    """
+    return str(current).removeprefix("\\\\?\\") == str(source).removeprefix("\\\\?\\")
+
+
 def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
     """Decide what the namespace needs, without touching the filesystem."""
     actions: list[Action] = []
@@ -94,44 +130,84 @@ def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
         access = meta.get("ethos:access", "public")
 
         if access == RESTRICTED:
-            actions.append(Action(
-                name, "skip", entry,
-                detail="restricted: belongs in the restricted cache as a real, owned copy, "
-                       "not as a link"))
+            actions.append(
+                Action(
+                    name,
+                    "skip",
+                    entry,
+                    detail="restricted: belongs in the restricted cache as a real, owned copy, "
+                    "not as a link",
+                )
+            )
+            continue
+
+        if not license_settled(meta):
+            # Building this namespace is how a dataset reaches everybody on the
+            # machine. An absent licence is a question, not a permission, and
+            # answering it is one line in dataset.yaml.
+            actions.append(
+                Action(
+                    name,
+                    "skip",
+                    entry,
+                    detail="unresolved licensing: record the terms in dataset.yaml before "
+                    "linking it into a shared cache",
+                )
+            )
             continue
 
         source = _source_of(catalog_root, name, meta)
         if source is None:
-            actions.append(Action(name, "skip", entry, detail="no source_dir in dataset.yaml"))
+            actions.append(
+                Action(name, "skip", entry, detail="no source_dir in dataset.yaml")
+            )
             continue
 
         if not source.is_dir():
-            actions.append(Action(
-                name, "missing", entry, source,
-                detail=f"source_dir does not exist: {source}"))
+            actions.append(
+                Action(
+                    name,
+                    "missing",
+                    entry,
+                    source,
+                    detail=f"source_dir does not exist: {source}",
+                )
+            )
             continue
 
         if entry.is_symlink():
             current = entry.readlink()
-            if current == source:
+            if _same_target(current, source):
                 actions.append(Action(name, "unchanged", entry, source))
             else:
-                actions.append(Action(
-                    name, "repoint", entry, source, detail=f"was {current}"))
+                actions.append(
+                    Action(name, "repoint", entry, source, detail=f"was {current}")
+                )
         elif entry.exists():
-            actions.append(Action(
-                name, "keep", entry, source,
-                detail="a real directory the cache owns; not replaced with a link"))
+            actions.append(
+                Action(
+                    name,
+                    "keep",
+                    entry,
+                    source,
+                    detail="a real directory the cache owns; not replaced with a link",
+                )
+            )
         else:
             actions.append(Action(name, "link", entry, source))
 
     if prune and root.is_dir():
-        for existing in sorted(root.iterdir()):
-            if existing.name in names or not existing.is_symlink():
+        # The reader's own walk, so that a nested entry is found where its name
+        # says it is (``family/member``) rather than not at all: listing the top
+        # level would see ``family``, never look inside it, and prune nothing.
+        from ..access import cache_entries
+
+        for name, existing in cache_entries(root):
+            if name in names or not existing.is_symlink():
                 continue
-            actions.append(Action(
-                existing.name, "prune", existing,
-                detail="not in the catalogue any more"))
+            actions.append(
+                Action(name, "prune", existing, detail="not in the catalogue any more")
+            )
 
     return actions
 
@@ -150,9 +226,26 @@ def apply(actions: list[Action]) -> list[Action]:
     return actions
 
 
-def run(catalog_root: Path, args) -> int:
-    root = Path(args.root).expanduser()
-    actions = plan(catalog_root, root, prune=args.prune)
+def run(
+    catalog_root: Path,
+    root: Path,
+    *,
+    dry_run: bool = False,
+    prune: bool = False,
+) -> int:
+    """Plan the namespace, report it, and -- unless ``dry_run`` -- build it.
+
+    ``root`` arrives already decided, and deliberately has no default. The
+    earlier signature took the argparse namespace and looked the public cache up
+    itself when ``--root`` was absent, which put a second cache lookup inside a
+    command that had already done one. The two could answer differently -- a
+    top-level ``--root`` the second lookup never saw, or ``$ETHOS_DATA_DIR`` read
+    at a different moment -- and the result was a full link tree built in a
+    directory the rest of the command had never mentioned, printed as a success.
+    Deciding once, in the caller, is what makes that impossible rather than
+    merely unlikely.
+    """
+    actions = plan(catalog_root, root, prune=prune)
 
     changes = [a for a in actions if a.changes_anything]
     problems = [a for a in actions if a.verb == "missing"]
@@ -162,7 +255,7 @@ def run(catalog_root: Path, args) -> int:
     for action in actions:
         print(f"  {action}")
 
-    if args.dry_run:
+    if dry_run:
         print(f"\n{len(changes)} change(s) would be made. Nothing was written.")
         return 1 if problems else 0
 
@@ -173,7 +266,9 @@ def run(catalog_root: Path, args) -> int:
     apply(changes)
     print(f"\n{len(changes)} change(s) applied.")
     if problems:
-        print(f"{len(problems)} dataset(s) have a source_dir that does not exist -- "
-              f"fix dataset.yaml or the storage, then run this again.")
+        print(
+            f"{len(problems)} dataset(s) have a source_dir that does not exist -- "
+            f"fix dataset.yaml or the storage, then run this again."
+        )
         return 1
     return 0

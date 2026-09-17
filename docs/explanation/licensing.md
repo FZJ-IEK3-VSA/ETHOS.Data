@@ -19,8 +19,38 @@ permission — produces a catalogue where nobody can tell the datasets somebody
 cleared from the datasets nobody looked at, and the distinction only becomes
 visible when it is a problem.
 
+## Unresolved licensing stops distribution, not work
+
+A warning is the right answer for somebody who already has the data in front of
+them. It is the wrong answer at the moment the data is handed to other people,
+so the two operations that do that **refuse**:
+
+| Operation | With unresolved licensing |
+|---|---|
+| `ethos-data link <dataset>` | refused — the command fails, nothing is linked |
+| `ethos-data link --all` | refused — the dataset is left out of the namespace, the rest of the catalogue is still linked |
+| `catalog upload` | refused — nothing is transferred (`--verify-only` still works) |
+| `reskit-data staging add` | **allowed** |
+| `fetch`, `verify` on data already here | allowed, with the warning |
+
+Linking is one command refusing in two shapes, because the two mistakes are
+different ones. Naming a dataset is a request for that dataset, so the request
+fails and says what has to be recorded; `--all` is a request for everything that
+is ready, so the unresolved dataset is named in the plan as skipped and every
+dataset that *is* settled is still linked. Failing the whole run over one
+unanswered licence question would teach people to stop asking it.
+
+Staging is the deliberate exception, and the refusals name it. A staged dataset
+is one person's, on one machine; it shadows nothing for anybody else, it is
+never uploaded, and it verifies as `unverifiable` by construction. Development
+does not have to wait for a legal answer — publication does.
+
+A dataset counts as settled when it carries a `licenses:` entry, or an explicit
+`ethos:license_status: resolved`. Nothing else does, including silence: the
+default has to be "nobody has looked" rather than "nothing applies".
+
 The status is promoted into the catalogue **index**, so warning about licensing
-does not require loading every dataset descriptor. `ethos-data list` stays cheap.
+does not require loading every dataset descriptor. `ethos-data ls` stays cheap.
 
 Resolving it means someone actually reads the upstream terms and adds a
 `licenses:` block with an
@@ -98,7 +128,7 @@ enforces that structurally rather than by convention:
 
 - it is never downloaded, under any configuration;
 - it is never written into the public cache;
-- the [staging root](../how-to/stage-unpublished-data.md) never shadows it —
+- the [staging root](../how-to/package-maintainers/propose-a-dataset.md#stage-development-data) never shadows it —
   licence terms are not a development concern;
 - `ethos-data catalog upload` refuses it outright;
 - repository test-bundle export rejects it.
@@ -108,8 +138,8 @@ it fails with an explanation. An administrator may relocate an installation only
 where its terms permit that local copy, preserving access restrictions. Explicit
 `materialize <dataset>` supports this for a link in the restricted root; ordinary
 retrieval continues to read in place. See
-[Migrate cluster data](../how-to/migrate-cluster-data.md#restricted-data) and
-[Work with restricted data](../how-to/restricted-data.md).
+[Manage local dataset copies](../how-to/catalogue-maintainers/link-cluster-data.md#materialize-copies) and
+[Work with restricted data](../how-to/data-users/set-up-your-machine.md#restricted-data).
 
 ## Access and visibility are two questions
 
@@ -169,7 +199,7 @@ And when it is genuinely a withdrawal, the order matters and is the opposite of
 publishing: **unpublish the catalogue entry first, then delete the bytes**. The
 other way round leaves a public catalogue pointing at a path that 404s, and
 anyone resolving it mid-way gets a broken reference instead of a clean "not
-published". See [Withdraw a dataset](../how-to/withdraw-a-dataset.md).
+published". See [Withdraw a dataset](../how-to/catalogue-maintainers/withdraw-a-dataset.md).
 
 ## What this does not cover
 

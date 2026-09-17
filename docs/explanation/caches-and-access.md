@@ -70,8 +70,8 @@ For one dataset, first match wins:
 
 ## The rule that does not bend
 
-Restricted data is never written into a shared cache and never silently
-downloaded. If there is nowhere to read it from, asking for it **fails with an
+Retrieval never writes restricted data into the public cache and never
+downloads it. If there is nowhere to read it from, asking for it **fails with an
 explanation** rather than doing something surprising.
 
 Having no restricted cache is a legitimate, permanent state — most people, most
@@ -92,23 +92,52 @@ reaching one means a bug or a race — a link created between planning and
 fetching. `download` checks again anyway, because the consequence would be
 writing into shared project storage that the cache only borrows.
 
-The same reasoning runs the other way in `ethos-data catalog link-cache`, which
-refuses to replace a real directory with a link: that directory is data the
-cache owns, and replacing it would silently discard it.
+The same reasoning runs the other way in `ethos-data link`, which refuses to
+replace a real directory with a link: that directory is data the cache owns, and
+replacing it would silently discard it. The refusal holds in both of that
+command's modes — naming one dataset fails outright, and `--all` reports such an
+entry as `keep` and carries on with the rest — because the bytes at risk are the
+same bytes either way.
 
 ## Where each mechanism belongs
 
 | Situation | Use |
 |---|---|
-| a dataset the whole machine already has | a namespace link, built by a maintainer |
+| a dataset the whole machine already has | a namespace link, built by a maintainer with `ethos-data link --all` |
+| one dataset whose files are already here | `ethos-data link <dataset> <directory>` |
 | a private copy, or one dataset in an odd place | `ethos-data config set-root` |
 | licensed data you have access to | `ethos-data config set-restricted-cache` |
 | licensed data you do not have | `--skip-unavailable` |
-| data that is not catalogued yet | the [staging root](../how-to/stage-unpublished-data.md) |
+| data that is not catalogued yet | the [staging root](../how-to/package-maintainers/propose-a-dataset.md#stage-development-data) |
 | a link that is about to break | `ethos-data materialize` |
+
+## Copy ownership and frozen inventories
+
+A link borrows a directory: moving or editing its target changes what every
+reader sees. A materialized entry owns a separate copy. Materialization copies
+only catalogued resources, checks their size and hash, and records the source in
+`.ethos-data-materialized.json`. It is not a backup of unrelated project files.
+It also does not reproduce ownership or ACLs; destination permissions determine
+who can read the new copy.
+
+The original and copy can coexist. While `source_dir` remains the build input,
+a rebuild reflects changes to that original and the independent cache may then
+fail verification. `materialize --force` does not overwrite a real directory;
+changed data needs a deliberate version/migration decision.
+
+If the original is retired, a verified local installation can retain its
+inventory using `ethos:frozen: true` without `source_dir`. Uploaded data uses
+`ethos:uploaded: true` instead. Both preserve recorded resource hashes while
+allowing metadata to be regenerated. Rehashing the cache itself would erase the
+independent baseline needed to detect corruption. Frozen metadata does not back
+up bytes; the storage owner still needs retention and recovery arrangements.
+
+Size checks detect some damage cheaply but miss changes of equal length. A deep
+verification reads every byte and compares SHA-256. In-place reads do not
+automatically perform that check. See [Check and repair](../how-to/data-users/verify-and-repair.md).
 
 ## See also
 
-- [Use data already on disk](../how-to/use-data-already-on-disk.md).
-- [Work with restricted data](../how-to/restricted-data.md).
+- [Manage local dataset copies](../how-to/catalogue-maintainers/link-cluster-data.md) — overrides, cache links and materialized copies.
+- [Work with restricted data](../how-to/data-users/set-up-your-machine.md#restricted-data).
 - [Configuration reference](../reference/configuration.md).

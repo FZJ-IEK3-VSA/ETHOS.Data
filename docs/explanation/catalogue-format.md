@@ -44,7 +44,7 @@ and republish* — with the path to the source catalogue next to it.
 
 ## Writer and reader ship together
 
-`ethos_data.maintain` writes the descriptors that `ethos_data.catalog` reads, and
+`ethos_data.maintain` writes the descriptors that `ethos_data.catalogs` reads, and
 both live in this one distribution. That is deliberate.
 
 The `ethos:` extensions are a format. A format whose writer and reader sit in
@@ -75,7 +75,7 @@ So the index carries everything that can be answered without an inventory:
 | `ethos:remote_prefix` | where are its bytes |
 | `ethos:license_status` | should this warn |
 
-`ethos-data list` and every access check are therefore free. Note in particular
+`ethos-data ls` can list the index without fetching dataset inventories. Note in particular
 that the **access class is read from the index, not the descriptor**: deciding
 *where* a dataset comes from must never be the thing that pulls its file
 inventory in.
@@ -143,5 +143,5 @@ without the header `urllib` sends `Accept-Encoding: identity`.
 ## See also
 
 - [File formats](../reference/schemas.md) — every key, exhaustively.
-- [Describe a dataset](../how-to/describe-a-dataset.md) — writing one.
+- [Describe a dataset](../how-to/catalogue-maintainers/describe-a-dataset.md) — writing one.
 - [API: catalogue and collections](../reference/api/catalog.md).

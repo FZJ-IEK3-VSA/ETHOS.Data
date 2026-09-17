@@ -10,6 +10,7 @@ uploaded to dCache and nothing is published anywhere.
 You need an installed `ethos-data` and a shell: bash, zsh, or Git Bash on
 Windows. Step 5 creates a symbolic link, which on Windows requires Developer
 Mode.
+Allow about 30 minutes. The paths in this exercise are local practice paths.
 
 ## 1. Set up the practice catalogue
 
@@ -142,8 +143,8 @@ On a machine that several people or projects share, data already on disk does
 not need to be downloaded at all. Link it into the cache everybody uses:
 
 ```bash
-ethos-data catalog link-cache --root ../shared-cache --dry-run
-ethos-data catalog link-cache --root ../shared-cache
+ethos-data link --all --root ../shared-cache --dry-run
+ethos-data link --all --root ../shared-cache
 cd ..
 ```
 
@@ -168,11 +169,27 @@ collections:
       - dataset: station-temperatures
 ```
 
+Save this small package-style wrapper as `data_cli.py` beside `collections.yaml`:
+
+```python
+from pathlib import Path
+from ethos_data import tool_main
+
+if __name__ == "__main__":
+    raise SystemExit(tool_main(
+        Path(__file__).with_name("collections.yaml"), prog="python data_cli.py"
+    ))
+```
+
+It provides the same collection, bundle and staging commands a consuming package
+exposes through `tool_main`, without needing RESKit installed for this lesson.
+
+
 Plan the collection the way a data user would, with the shared cache as the
 public cache:
 
 ```bash
-ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
+python data_cli.py --catalog public-catalogue/datacatalog.json \
   --root shared-cache plan temperatures
 ```
 
@@ -188,9 +205,9 @@ may have configured for your everyday work cannot take its place. Now fetch the
 collection and check it against the catalogue:
 
 ```bash
-ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
+python data_cli.py --catalog public-catalogue/datacatalog.json \
   --root shared-cache fetch temperatures
-ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
+python data_cli.py --catalog public-catalogue/datacatalog.json \
   --root shared-cache verify temperatures --deep
 ```
 
@@ -204,9 +221,9 @@ reorganised or retired, replace the link with a verified copy that the cache
 owns:
 
 ```bash
-ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
+ethos-data --catalog public-catalogue/datacatalog.json \
   --root shared-cache materialize station-temperatures --dry-run
-ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
+ethos-data --catalog public-catalogue/datacatalog.json \
   --root shared-cache materialize station-temperatures
 ```
 
@@ -216,7 +233,7 @@ ethos-data -c collections.yaml --catalog public-catalogue/datacatalog.json \
 
 `shared-cache/station-temperatures` is now a real directory, and
 `.ethos-data-materialized.json` inside it records where the copy came from. Run
-the `plan` command from step 6 again: the file is now `already cached` rather
+the `fetch --plan` command from step 6 again: the file is now `already cached` rather
 than `used in place`. `incoming/station-temperatures` is still there;
 `materialize` never deletes the original.
 
@@ -227,7 +244,7 @@ than `used in place`. `incoming/station-temperatures` is still there;
 | `ethos-data catalog build` | inventoried `source_dir`, left out the excluded log, hashed the rest |
 | `ethos-data catalog build --check` | compared the inventory with the files, and wrote nothing |
 | `ethos-data catalog publish` | generated the public view without maintainer-only fields |
-| `ethos-data catalog link-cache` | linked data already on disk into a shared cache |
+| `ethos-data link --all` | linked data already on disk into a shared cache |
 | `ethos-data materialize` | replaced that link with a verified copy |
 
 A real catalogue has one more step between building and publishing:
@@ -238,11 +255,14 @@ When you are done, delete the `catalogue-lesson` directory.
 
 ## Next
 
-- [Accept a dataset proposal](../how-to/accept-a-dataset.md) — the checklist for
+- [Catalogues and storage](../explanation/catalogues-and-storage.md) — why metadata
+  publication, local access, and remote storage are separate operations.
+
+- [Accept a dataset proposal](../how-to/catalogue-maintainers/accept-a-dataset.md) — the checklist for
   a real submission, from review to release.
-- [Upload a dataset](../how-to/upload-a-dataset.md) — credentials, transfer, and
+- [Upload a dataset](../how-to/catalogue-maintainers/upload-a-dataset.md) — credentials, transfer, and
   verification.
-- [Add internal and restricted datasets](../how-to/add-internal-and-restricted-data.md)
+- [Add internal and restricted datasets](../how-to/catalogue-maintainers/describe-a-dataset.md#restricted-installations)
   — data that is not uploaded publicly.
-- [Migrate cluster data](../how-to/migrate-cluster-data.md) — linking and
-  copying on real shared storage.
+- [Manage local dataset copies](../how-to/catalogue-maintainers/link-cluster-data.md) — overrides, linking
+  and copying on real shared storage.

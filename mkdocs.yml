@@ -4,12 +4,15 @@ site_name: ETHOS.Data
 site_description: Shared, deduplicating data access for ETHOS tools and workflows
 site_author: ICE-2 Jülich Systems Analysis
 
-# The canonical URL is whatever the host serves this from. GitLab CI sets
-# CI_PAGES_URL for a Pages job; SITE_URL is the manual override. The localhost
-# default keeps `mkdocs serve` honest -- an absolute site_url baked in from
-# somebody's laptop makes every <link rel="canonical"> and the 404 page's
-# root-absolute asset paths point at a host that does not serve this site.
-site_url: !ENV [SITE_URL, CI_PAGES_URL, "http://localhost:8000/"]
+# The canonical URL is whatever the host serves this from. Read the Docs sets
+# READTHEDOCS_CANONICAL_URL per version (.../en/latest/, .../en/stable/), so
+# every version's pages point at themselves rather than all at one; GitLab CI
+# sets CI_PAGES_URL for a Pages job; SITE_URL is the manual override that beats
+# both. The localhost default keeps `mkdocs serve` honest -- an absolute
+# site_url baked in from somebody's laptop makes every <link rel="canonical">
+# and the 404 page's root-absolute asset paths point at a host that does not
+# serve this site.
+site_url: !ENV [SITE_URL, READTHEDOCS_CANONICAL_URL, CI_PAGES_URL, "http://localhost:8000/"]
 
 repo_url: https://github.com/FZJ-IEK3-VSA/ETHOS.Data
 repo_name: FZJ-IEK3-VSA/ETHOS.Data
@@ -169,6 +172,7 @@ nav:
           - Overview: tutorials/index.md
           - Data users:
                 - Your first fetch: tutorials/first-fetch.md
+                - Find restricted data: tutorials/restricted-access.md
           - Package maintainers:
                 - Develop and propose a dataset: tutorials/develop-and-propose-data.md
                 - Run a test with repository data: tutorials/bundled-tests.md
@@ -178,36 +182,35 @@ nav:
     - How-to guides:
           - Overview: how-to/index.md
           - Data users:
-                - Configure the cache: how-to/configure-the-cache.md
-                - Work with restricted data: how-to/restricted-data.md
-                - Add the internal data catalogue: how-to/add-internal-catalogue.md
-                - Get data for a task: how-to/get-data-for-a-task.md
-                - Use data already on disk: how-to/use-data-already-on-disk.md
-                - Check and repair the cache: how-to/verify-and-repair.md
+                - Set up your machine: how-to/data-users/set-up-your-machine.md
+                - Get data by catalogue key: how-to/data-users/get-data-for-a-task.md
+                - Check and repair the cache: how-to/data-users/verify-and-repair.md
+                - Diagnose catalogue problems: how-to/data-users/troubleshoot-catalogue.md
           - Package maintainers:
-                - Use ETHOS.Data in your package: how-to/use-from-a-package.md
-                - Write a collections file: how-to/write-a-collections-file.md
-                - Stage uncatalogued data: how-to/stage-unpublished-data.md
-                - Propose a dataset: how-to/propose-a-dataset.md
-                - Keep test data in the repository: how-to/keep-test-data-in-a-repository.md
-                - Run package tests in CI: how-to/run-in-ci.md
+                - Use ETHOS.Data in your package: how-to/package-maintainers/use-from-a-package.md
+                - Write a collections file: how-to/package-maintainers/write-a-collections-file.md
+                - Develop and propose data: how-to/package-maintainers/propose-a-dataset.md
+                - Keep test data in the repository: how-to/package-maintainers/keep-test-data-in-a-repository.md
+                - Run package tests in CI: how-to/package-maintainers/run-in-ci.md
           - Catalogue maintainers:
-                - Accept a dataset proposal: how-to/accept-a-dataset.md
-                - Describe a dataset: how-to/describe-a-dataset.md
-                - Upload a dataset: how-to/upload-a-dataset.md
-                - Add internal and restricted datasets: how-to/add-internal-and-restricted-data.md
-                - Publish the catalogue: how-to/publish-the-catalogue.md
-                - Serve catalogues on the cluster and GitHub: how-to/catalogue-hosting.md
-                - Migrate cluster data from symlinks: how-to/migrate-cluster-data.md
-                - Check catalogue changes in CI: how-to/catalogue-ci.md
-                - Diagnose catalogue problems: how-to/troubleshoot-catalogue.md
-                - Withdraw a dataset: how-to/withdraw-a-dataset.md
-                - Bootstrap a new catalogue: how-to/bootstrap-a-catalogue.md
+                - Accept a dataset proposal: how-to/catalogue-maintainers/accept-a-dataset.md
+                - Describe a dataset: how-to/catalogue-maintainers/describe-a-dataset.md
+                - Set up dCache access: how-to/catalogue-maintainers/set-up-dcache-access.md
+                - Upload a public dataset: how-to/catalogue-maintainers/upload-a-dataset.md
+                - Manage dCache folders: how-to/catalogue-maintainers/manage-dcache-folders.md
+                - Publish the catalogue: how-to/catalogue-maintainers/publish-the-catalogue.md
+                - Serve catalogues on the cluster and GitHub: how-to/catalogue-maintainers/catalogue-hosting.md
+                - Manage local dataset copies: how-to/catalogue-maintainers/link-cluster-data.md
+                - Check catalogue changes in CI: how-to/catalogue-maintainers/catalogue-ci.md
+                - Withdraw a dataset: how-to/catalogue-maintainers/withdraw-a-dataset.md
+                - Bootstrap a new catalogue: how-to/catalogue-maintainers/bootstrap-a-catalogue.md
 
     - Explanation:
           - Overview: explanation/index.md
           - Data concepts:
                 - Overview: explanation/data-concepts.md
+                - Catalogues and storage: explanation/catalogues-and-storage.md
+                - Test data and reproducibility: explanation/test-data.md
                 - Why one catalogue: explanation/deduplication.md
                 - Caches, classes and roots: explanation/caches-and-access.md
                 - The catalogue format: explanation/catalogue-format.md
@@ -230,6 +233,7 @@ nav:
     - Reference:
           - Command line:
                 - ethos-data: reference/cli/ethos-data.md
+                - Package data commands: reference/cli/package-data.md
                 - ethos-data catalog: reference/cli/catalog.md
           - Configuration: reference/configuration.md
           - File formats: reference/schemas.md

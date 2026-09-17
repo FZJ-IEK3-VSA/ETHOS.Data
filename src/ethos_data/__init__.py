@@ -7,18 +7,41 @@ once.
 
     import ethos_data
 
-    placements = ethos_data.path("reskit-test-data/placements/turbine_placements.csv")
-    files = ethos_data.fetch("onshore_wind", package="reskit")
+    data = ethos_data.collections("reskit/data/collections.yaml", tool="reskit")
+    inputs = data.paths("onshore_wind", test=True)    # {handle: Path}
+    files = data.fetch("onshore_wind")                # {key: Path}
+    clc = data.catalog.path("landcover/C3S-LC-L4-LCCS-Map-300m-P1Y-2018-v2.1.1.tif")
+
+Two kinds of name, two handles. A **collection** is what a tool's workflow
+needs, named once by its maintainer in the tool's ``collections.yaml``;
+:func:`collections` loads that file and ``paths`` hands the workflow
+``{handle: absolute path}`` without it knowing a single resource key.
+``test=True`` selects the small fixtures the maintainer paired with the full
+data, so an example runs in seconds and the same code runs on the real inputs.
+A **key** (``"<dataset>/<path>"``) names one dataset, folder or file in the
+catalogue; :func:`catalog` -- or a handle's ``.catalog``, for the version a tool
+pins -- answers those with ``path`` and ``resources``.
+
+A tool builds its handle once, from the file beside its own code, and exposes
+the same commands as its own console script with :meth:`Collections.main`;
+nothing is registered anywhere. See :func:`collections`.
 """
 
 from __future__ import annotations
 
-import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from .bundles import Bundle, BundleError, export_bundle, load_bundle
 from .access import AccessError, Location, locate
-from .catalog import Catalog, Dataset, Resource, UnknownDataset, describe_catalog, load_catalog
+from .catalogs import (
+    Catalog,
+    CatalogUnavailable,
+    Dataset,
+    IncompleteCatalog,
+    Resource,
+    UnknownDataset,
+    load_catalog,
+)
 from .config import (
     CATALOG_ENV_VAR,
     DEFAULT_CATALOG,
@@ -43,16 +66,17 @@ from .config import (
     unset_dataset_root,
     unset_option,
 )
-from .retrieval import DataFiles, cache_dir, download, local_path, plan
+from .retrieval import DataFiles, NamedPaths, cache_dir, download, local_path, plan
 from .materialize import materialize
+from .linking import LinkError, link, unlink
 from .selection import (
+    CollectionError,
     Collections,
     CollectionsNotFound,
+    UnknownCollection,
     load_collections,
-    package_collections,
-    registered_packages,
 )
-from .staging import apply_staging, classify_staged, staged_only, with_staging
+from .staging import apply_staging, classify_staged, staged_only
 from .verify import Finding, repair, verify
 
 __all__ = [
@@ -62,6 +86,8 @@ __all__ = [
     "load_bundle",
     "CATALOG_ENV_VAR",
     "Catalog",
+    "CatalogUnavailable",
+    "CollectionError",
     "Collections",
     "CollectionsNotFound",
     "DEFAULT_CATALOG",
@@ -69,30 +95,35 @@ __all__ = [
     "AccessError",
     "DataFiles",
     "ENV_VAR",
+    "IncompleteCatalog",
     "Location",
     "Finding",
+    "NamedPaths",
     "RESTRICTED_ENV_VAR",
     "Resolved",
     "Resource",
     "Roots",
     "STAGING_ENV_VAR",
+    "UnknownCollection",
     "UnknownDataset",
     "apply_staging",
     "cache_dir",
+    "catalog",
     "classify_staged",
+    "collections",
     "config_path",
     "config_sources",
     "download",
     "fetch",
-    "fetch_one",
+    "LinkError",
+    "link",
+    "unlink",
     "load_catalog",
     "load_collections",
     "local_path",
     "materialize",
-    "package_collections",
-    "path",
+    "paths",
     "plan",
-    "registered_packages",
     "repair",
     "resolve",
     "resolve_public_cache",
@@ -107,125 +138,175 @@ __all__ = [
     "set_dataset_root",
     "staged_only",
     "set_option",
+    "tool_main",
     "unset_dataset_root",
     "unset_option",
     "verify",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
-def path(
-    key: str,
+def collections(
+    path: str | Path,
     *,
-    package: str | None = None,
+    tool: str | None = None,
     catalog: str | Catalog | None = None,
     root: str | Path | None = None,
-    progressbar: bool = False,
-) -> Path:
-    """The absolute local path of a file or folder, fetching it if necessary.
+) -> Collections:
+    """A handle on a collections file: what a tool's workflows need, by name.
 
-    ``key`` is ``"<dataset>/<path>"`` for one file -- a shapefile brings its
-    sidecars along -- or ``"<dataset>/<folder>"``, ``"<dataset>"`` or a dataset
-    family for a directory, in which case every file under it is fetched first.
+    The object a tool builds once, from the file beside its own code, and then
+    calls ``fetch``, ``paths``, ``resolve`` and ``plan`` on::
 
-    The catalogue is ``catalog`` if given, else ``$ETHOS_DATA_CATALOG`` or a
-    configured one, else the version ``package``'s collections file pins, else
-    the built-in public catalogue.
+        COLLECTIONS_FILE = Path(__file__).with_name("collections.yaml")
+        data = ethos_data.collections(COLLECTIONS_FILE, tool="reskit")
+        inputs = data.paths("onshore_wind", test=True)
+
+    ``tool`` is the tool's short name, used in messages and as the default
+    name of its command (``reskit-data``; see :meth:`Collections.main`). The
+    catalogue is ``catalog`` if given, else ``$ETHOS_DATA_CATALOG`` or a
+    configured one, else the version the file pins, else the built-in public
+    catalogue -- so a user can repoint every tool at once without any tool
+    knowing. ``root`` overrides the public cache directory. The file is read
+    once, here, and ``.catalog`` is the catalogue it resolved to, for access
+    by key.
+    """
+    roots = Roots.coerce(root) if root is not None else None
+    return load_collections(
+        path, catalog=_configured_catalog(catalog), roots=roots, tool=tool
+    )
+
+
+def catalog(
+    location: str | Catalog | None = None,
+    *,
+    root: str | Path | None = None,
+) -> Catalog:
+    """A handle on a catalogue, for access by key rather than by collection.
+
+    ``location`` is a ``datacatalog.json`` path or URL; without one, the
+    catalogue is ``$ETHOS_DATA_CATALOG`` or a configured one, else the
+    built-in public catalogue. The staging overlay is applied once, here. A
+    tool's pinned catalogue is ``ethos_data.collections(...).catalog``::
+
+        era5 = ethos_data.catalog().path("era5/2015")
+        files = ethos_data.catalog().resources("global-wind-atlas-v3")
     """
     roots = Roots.coerce(root)
-    loaded = _catalog_for(catalog, package, roots)
-    name, inner = _split_key(loaded, key)
-    resources, target = _select(loaded, name, inner, key)
-    files = download(loaded, resources, root=roots, progressbar=progressbar)
-    if target is not None:
-        if target.key not in files:
-            raise AccessError(f"{key!r} is not available on this machine.")
-        return Path(os.path.abspath(files[target.key]))
-    return Path(os.path.abspath(_directory_of(files, resources, name, inner, key)))
+    if isinstance(location, Catalog):
+        return location.overlaid(roots)
+    chosen = _configured_catalog(location)
+    return load_catalog(chosen or DEFAULT_CATALOG).overlaid(roots)
+
+
+def tool_main(
+    path: str | Path,
+    *,
+    tool: str | None = None,
+    prog: str | None = None,
+    catalog: str | None = None,
+    argv: list[str] | None = None,
+) -> int:
+    """The body of a tool's data command, bound to its shipped collections file.
+
+    Two lines in the tool make the command::
+
+        # reskit/data/__init__.py
+        def main(argv=None):
+            return ethos_data.tool_main(COLLECTIONS_FILE, tool="reskit", argv=argv)
+
+        # pyproject.toml
+        [project.scripts]
+        reskit-data = "reskit.data:main"
+
+    ``show``, ``fetch`` and ``verify`` for the file's collections, against the
+    catalogue it pins, plus ``bundle``, ``staging`` and ``config``. A single
+    catalogue key belongs to ``ethos-data``, not here -- which is what keeps
+    this to six commands whatever the tool.
+    ``prog`` names the command in help and messages
+    (default ``<tool>-data``); ``catalog`` is the tool's own catalogue override,
+    applied below ``--catalog`` and above ``$ETHOS_DATA_CATALOG``. The handle
+    is built only for the commands that need one, so ``--help`` and ``config
+    show`` never load the catalogue.
+    """
+    from .cli import run_tool
+
+    return run_tool(path, tool=tool, prog=prog, catalog=catalog, argv=argv)
 
 
 def resolve(
     collection: str,
-    collections: str | Path | None = None,
+    collections: str | Path,
     catalog: str | Catalog | None = None,
     *,
-    package: str | None = None,
+    test: bool = False,
 ) -> list[Resource]:
-    """List the resources a collection selects, without downloading anything."""
-    source = _collections_file(collections, package)
-    return load_collections(source, catalog=_configured_catalog(catalog)).resolve(collection)
+    """List the resources a collection in the file ``collections`` selects,
+    without downloading anything.
 
-
-def fetch_one(
-    key: str,
-    catalog: str | Catalog | None = None,
-    root: str | Path | None = None,
-    progressbar: bool = False,
-) -> Path:
-    """Make a single named resource available and return its path.
-
-    ``key`` is ``"<dataset>/<resource path>"`` -- the same key ``fetch`` returns.
-    :func:`path` does the same and also accepts folders.
+    ``test=True`` selects the collection's ``test`` variant where it has one.
+    One-call form of ``ethos_data.collections(collections).resolve(...)``.
     """
-    roots = Roots.coerce(root)
-    loaded = _catalog_for(catalog, None, roots, warn=False)
-    name, inner = _split_key(loaded, key)
-    dataset = loaded.dataset(name)
-    resource = dataset.resource_at(inner) if inner else None
-    if resource is None:
-        raise KeyError(
-            f"{key!r} is not in the catalogue. "
-            f"{name!r} has {dataset.file_count} resources; "
-            f"e.g. {', '.join(list(dataset.resources)[:3])}"
-        )
-    files = download(loaded, [resource], root=roots, progressbar=progressbar)
-    return files[resource.key]
+    return _handle(collections, catalog).resolve(collection, test=test)
 
 
 def fetch(
     collection: str,
-    collections: str | Path | None = None,
+    collections: str | Path,
     catalog: str | Catalog | None = None,
     root: str | Path | None = None,
     progressbar: bool = True,
     *,
-    package: str | None = None,
+    test: bool = False,
+    skip_unavailable: bool | None = None,
 ) -> DataFiles:
-    """Make a collection available locally and return ``{key: Path}``.
+    """Make a collection in the file ``collections`` available locally.
 
-    Name the collections with ``package="reskit"`` -- the file an installed
-    package registered -- or with ``collections=`` as a path. Keys are
-    ``"<dataset>/<resource path>"``. Files already present and matching their
-    recorded checksum are not re-downloaded -- including files another tool
-    fetched earlier. Datasets with a configured local root are used in place.
+    Returns ``{key: Path}``; see :meth:`Collections.fetch` for the details.
+    One-call form of ``ethos_data.collections(collections).fetch(...)`` -- a
+    tool that fetches more than once builds the handle instead, so the file
+    and the catalogue are read once.
     """
-    roots = Roots.coerce(root)
-    loaded = load_collections(
-        _collections_file(collections, package),
-        catalog=_configured_catalog(catalog),
-        roots=roots,
-    )
-    resources = loaded.resolve(collection)
-    return download(
-        loaded.catalog,
-        resources,
-        root=roots,
+    return _handle(collections, catalog, root).fetch(
+        collection,
+        test=test,
         progressbar=progressbar,
+        skip_unavailable=skip_unavailable,
     )
 
 
-def _collections_file(collections: str | Path | None, package: str | None) -> str | Path:
-    if collections is not None and package is not None:
-        raise TypeError("give collections= or package=, not both")
-    if package is not None:
-        return package_collections(package)
-    if collections is None:
-        raise TypeError(
-            "say which collections to use: package='reskit' for the ones an "
-            "installed package ships, or collections='collections.yaml' for a file"
-        )
-    return collections
+def paths(
+    collection: str,
+    collections: str | Path,
+    catalog: str | Catalog | None = None,
+    root: str | Path | None = None,
+    progressbar: bool = True,
+    *,
+    test: bool = False,
+    skip_unavailable: bool | None = None,
+) -> NamedPaths:
+    """The inputs a collection names, as ``{handle: absolute Path}``, fetched.
+
+    See :meth:`Collections.paths`. One-call form of
+    ``ethos_data.collections(collections).paths(...)``.
+    """
+    return _handle(collections, catalog, root).paths(
+        collection,
+        test=test,
+        progressbar=progressbar,
+        skip_unavailable=skip_unavailable,
+    )
+
+
+def _handle(
+    source: str | Path | Collections,
+    catalog: str | Catalog | None,
+    root: str | Path | None = None,
+) -> Collections:
+    if isinstance(source, Collections):
+        return source
+    return collections(source, catalog=catalog, root=root)
 
 
 def _configured_catalog(catalog: str | Catalog | None) -> str | Catalog | None:
@@ -238,100 +319,3 @@ def _configured_catalog(catalog: str | Catalog | None) -> str | Catalog | None:
         return catalog
     configured = resolve_catalog()
     return configured[0] if configured else None
-
-
-def _catalog_for(
-    catalog: str | Catalog | None, package: str | None, roots: Roots, warn: bool = True
-) -> Catalog:
-    """The catalogue a key is looked up in, with the staging overlay applied."""
-    if isinstance(catalog, Catalog):
-        loaded = catalog
-    else:
-        location = _configured_catalog(catalog)
-        if location is None and package is not None:
-            return load_collections(package_collections(package), roots=roots).catalog
-        loaded = load_catalog(location or DEFAULT_CATALOG)
-    return with_staging(loaded, roots, warn=warn)
-
-
-def _split_key(catalog: Catalog, key: str) -> tuple[str, str]:
-    """Split a key into the dataset it names and the path inside that dataset.
-
-    Dataset names can contain "/" themselves -- ``reskit-test-data/era5`` is a
-    member of the ``reskit-test-data`` family -- so the longest dataset name
-    that prefixes the key wins, not whatever precedes the first slash.
-    """
-    key = key.strip("/")
-    if key in catalog.datasets:
-        return key, ""
-    parts = key.split("/")
-    for cut in range(len(parts) - 1, 0, -1):
-        name = "/".join(parts[:cut])
-        dataset = catalog.datasets.get(name)
-        if dataset is not None and not dataset.namespace:
-            return name, "/".join(parts[cut:])
-    catalog.dataset(parts[0])  # an unknown name raises, listing what there is
-    members = ", ".join(d.name for d in catalog.members_of(parts[0])) or "none"
-    raise UnknownDataset(
-        f"{key!r} names no dataset in the {describe_catalog(catalog.descriptor, catalog.location)}: "
-        f"{parts[0]!r} is a family, and none of its members ({members}) starts the key."
-    )
-
-
-def _select(
-    catalog: Catalog, name: str, inner: str, key: str
-) -> tuple[list[Resource], Resource | None]:
-    """The resources to fetch for a key, and the one file it names, if it names one."""
-    if not inner:
-        resources = [r for member in catalog.members_of(name) for r in member.resources.values()]
-        if not resources:
-            raise KeyError(f"{key!r} has no files in the catalogue")
-        return resources, None
-    dataset = catalog.dataset(name)
-    resource = dataset.resource_at(inner)
-    if resource is not None:
-        sidecars = [dataset.resource_at(sidecar) for sidecar in resource.sidecars]
-        return [resource, *(s for s in sidecars if s is not None)], resource
-    # Not a file, so a folder -- matched on a directory boundary, so that
-    # "merra-like" means the folder and not also the sibling "merra-like.nc4".
-    prefix = inner + "/"
-    under = [r for p, r in dataset.resources_matching([prefix + "**"]).items()
-             if p.startswith(prefix)]
-    if not under:
-        raise KeyError(
-            f"{key!r} is not in the catalogue: {name!r} has no file or folder {inner!r}"
-        )
-    return sorted(under, key=lambda r: r.key), None
-
-
-def _directory_of(
-    files: DataFiles, resources: list[Resource], name: str, inner: str, key: str
-) -> Path:
-    """Where a folder, a dataset or a family ended up on this machine.
-
-    Read off the files themselves rather than off a root setting: a dataset may
-    come from the public cache, the restricted cache, staging or its own root,
-    and each returned path already says which.
-    """
-    found = set()
-    for resource in resources:
-        local = files.get(resource.key)
-        if local is None:
-            continue
-        # Up from the file to its dataset's directory, then from a member up to
-        # the family the key named (reskit-test-data/era5 -> reskit-test-data).
-        levels = len(PurePosixPath(resource.path).parts) + resource.dataset.count("/") - name.count("/")
-        directory = Path(local)
-        for _ in range(levels):
-            directory = directory.parent
-        found.add(directory)
-    if not found:
-        raise AccessError(f"nothing under {key!r} is available on this machine.")
-    if len(found) > 1:
-        raise AccessError(
-            f"{key!r} is spread over {len(found)} directories "
-            f"({', '.join(sorted(map(str, found)))}); ask for its members one at a time, "
-            f"or use fetch() for the individual files."
-        )
-    base = found.pop()
-    return base / inner if inner else base

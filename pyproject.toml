@@ -24,6 +24,29 @@ dependencies = [
 
 [project.optional-dependencies]
 progress = ["tqdm"]
+# Documentation toolchain, for `pip install -e ".[docs]"` and the Read the Docs
+# build (.readthedocs.yaml). Mirrors the MkDocs block in environment.yml; a bound
+# changed in one place must be changed in the other, or the hosted site and a
+# developer's local preview render with different versions.
+#
+# Every entry is capped at the next major. Read the Docs resolves this extra
+# fresh on every build with no lockfile, so without a ceiling the first breaking
+# release upstream lands straight in the published site -- and mkdocstrings and
+# griffe have each already crossed a major since the floors below were first
+# written. The floors name the oldest combination the docs are actually built
+# against; all of them are on conda-forge, so environment.yml can mirror them.
+docs = [
+  "mkdocs>=1.6,<1.7",
+  "mkdocs-material>=9.5,<10",
+  "mkdocstrings>=1.0,<2",
+  "mkdocstrings-python>=2.0,<3",
+  "griffe>=2.3,<3",
+  # mkdocstrings formats the separated signatures with Ruff (or Black) when one
+  # is importable and otherwise prints them on one line. environment.yml has
+  # ruff as the linter, so without it here the hosted API pages would not match
+  # a developer's preview.
+  "ruff",
+]
 
 [project.scripts]
 # One executable. The maintainer commands are `ethos-data catalog ...`; they need

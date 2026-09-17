@@ -9,9 +9,9 @@ hard-coded paths that have to be unpicked later.
 The staging root is that middle ground. It is an ordinary directory whose
 entries are dataset names, exactly like the public cache:
 
-    ethos-data staging add my-new-dataset /scratch/me/new-data
-    ethos-data staging list
-    ethos-data staging remove my-new-dataset
+    reskit-data staging add my-new-dataset /scratch/me/new-data
+    reskit-data staging list
+    reskit-data staging remove my-new-dataset
 
 An entry here shadows the catalogue completely, and is **described by what is on
 disk** rather than by any manifest -- which is the point: the file list is still
@@ -41,7 +41,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .access import AccessError
-from .catalog import Catalog, Dataset, Resource
+from .catalogs import Catalog, Dataset, Resource
 from .config import Roots, current_user, resolve_staging_cache
 
 __all__ = [
@@ -139,15 +139,20 @@ def _read_index(root: Path) -> dict:
     except ValueError:
         # A corrupt index costs provenance, not data -- the entries on disk are
         # the truth. Say so rather than refusing to work.
-        warnings.warn(f"{path} is not valid JSON; staging provenance is unavailable",
-                      UserWarning, stacklevel=2)
+        warnings.warn(
+            f"{path} is not valid JSON; staging provenance is unavailable",
+            UserWarning,
+            stacklevel=2,
+        )
         return {}
 
 
 def _write_index(root: Path, index: dict) -> None:
     _index_path(root).write_text(
         json.dumps(index, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8", newline="\n")
+        encoding="utf-8",
+        newline="\n",
+    )
 
 
 def iter_files(directory: Path):
@@ -186,7 +191,7 @@ def add(
     if entry.exists() or entry.is_symlink():
         raise SystemExit(
             f"{name!r} is already staged at {entry}.\n"
-            f"Remove it first:  ethos-data staging remove {name}"
+            f"Remove it first with your package's data command: staging remove {name}"
         )
 
     if copy:
@@ -226,7 +231,7 @@ def remove(name: str, root: str | Path | None = None, force: bool = False) -> Pa
         if not force:
             raise SystemExit(
                 f"{entry} is a real directory, not a link -- removing it deletes the data.\n"
-                f"If that is what you mean:  ethos-data staging remove {name} --force"
+                f"Use your package's data command: staging remove {name} --force"
             )
         import shutil
 
@@ -308,11 +313,13 @@ def classify_staged(
     for name in staged_names(staging):
         official = _official_entry(roots, name)
         base = _describe(staging, name, index)
-        described.append(replace(
-            base,
-            status=SHADOWING if official is not None else NEW,
-            official=official,
-        ))
+        described.append(
+            replace(
+                base,
+                status=SHADOWING if official is not None else NEW,
+                official=official,
+            )
+        )
     return described
 
 
@@ -333,7 +340,8 @@ def staged_names(root: str | Path | None = None) -> list[str]:
     if staging is None or not staging.is_dir():
         return []
     return sorted(
-        p.name for p in staging.iterdir()
+        p.name
+        for p in staging.iterdir()
         if p.name != INDEX_FILE and (p.is_dir() or p.is_symlink())
     )
 
@@ -371,7 +379,9 @@ def synthesize(name: str, directory: Path, access: str = STAGING_ACCESS) -> Data
         "ethos:file_count": len(resources),
         "ethos:total_bytes": total,
     }
-    dataset = Dataset(name=name, title=f"{name} (staged, not in the catalogue)", entry=entry)
+    dataset = Dataset(
+        name=name, title=f"{name} (staged, not in the catalogue)", entry=entry
+    )
     # Setting the descriptor is what makes load() a no-op: there is no
     # datapackage.json to fetch, and asking for one must not reach the network.
     dataset._descriptor = {
@@ -434,12 +444,14 @@ def apply_staging(
     return shadowed
 
 
-def with_staging(catalog: Catalog, roots: Roots | None = None, warn: bool = True) -> Catalog:
+def with_staging(
+    catalog: Catalog, roots: Roots | None = None, warn: bool = True
+) -> Catalog:
     """Return a staging view without replacing datasets in the caller's catalogue.
 
     The catalogue can be reused for an official-data check after development;
     applying a temporary overlay must not leave hashless datasets in that object.
     """
-    view = replace(catalog, datasets=dict(catalog.datasets))
+    view = replace(catalog, datasets=dict(catalog.datasets), staged=True)
     apply_staging(view, roots, warn=warn)
     return view

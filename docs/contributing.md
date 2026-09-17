@@ -17,7 +17,7 @@ saves most of the confusion:
 
 A tool that *consumes* data (RESKit, say) changes none of these: it only edits
 its own `collections.yaml`. See
-[Use ETHOS.Data in your package](how-to/use-from-a-package.md).
+[Use ETHOS.Data in your package](how-to/package-maintainers/use-from-a-package.md).
 
 Both halves of the format — the code that writes descriptors and the code that
 reads them — deliberately live in this one distribution. A format whose writer
@@ -56,8 +56,8 @@ cache path from the same catalogue entry, or the sharing stops silently and
 nobody finds out for months. Anything touching `local_path`, `Resource.key`, or
 the cache layout is a compatibility change, not a refactor.
 
-**Restricted data is never written into a shared cache and never silently
-downloaded.** If it cannot be reached, asking for it fails with an explanation.
+**Retrieval never writes restricted data into the public cache or downloads
+it.** If it cannot be reached, asking for it fails with an explanation.
 See [Caches, classes and roots](explanation/caches-and-access.md).
 
 ## Changing the catalogue format
@@ -66,7 +66,7 @@ See [Caches, classes and roots](explanation/caches-and-access.md).
 together:
 
 1. Emit it in `ethos_data/maintain/manifest.py`.
-2. Read it in `ethos_data/catalog.py`.
+2. Read it in `ethos_data/catalogs.py`.
 3. Decide whether `ethos_data/maintain/publish.py` should **strip** it from the
    public catalogue (`source_dir`, `ethos:embargo` and `ethos:license_note` are
    stripped; a leak of any of them is the failure that matters).
@@ -79,15 +79,34 @@ if any is stale, which is what CI should run.
 
 These pages are MkDocs + Material; see
 [Building this documentation](installation.md#building-this-documentation).
+The published site is built by [Read the Docs](https://about.readthedocs.com/)
+from `.readthedocs.yaml` whenever `main` changes. That build runs
+`mkdocs build --strict`, so a warning that a plain local build only prints
+fails the hosted one. The tools it installs are the `docs` extra in
+`pyproject.toml`; `environment.yml` lists the same tools for developers, and
+the two lists are kept in step by hand.
+
 The structure follows [Diátaxis](https://diataxis.fr/), so a new page has a
 section by construction:
 
-- a **tutorial** teaches by doing, start to finish, and assumes nothing;
+- a **tutorial** teaches by doing, start to finish, with stated prerequisites,
+  practice inputs, and observable results;
 - a **how-to** gets one task done for somebody who already knows what they want;
 - an **explanation** justifies a design decision;
 - **reference** describes what exists, exhaustively and without narrative.
 
 If a page would fit two of those, it is two pages.
+
+Keep how-to guides focused on prerequisites, necessary actions, and a success
+check. Tutorials give learners a reliable exercise with expected results and
+brief cues about what to notice. Put extended rationale and comparisons in
+Explanation and option inventories in Reference. This follows the
+[Diátaxis tutorial guidance](https://diataxis.fr/tutorials/), including its
+recommendation to keep explanation brief during an exercise.
+
+Public documentation uses clearly labelled example cluster paths. Obtain actual
+deployment locations and internal support contacts through the internal onboarding
+channel; do not copy them into these pages.
 
 Tutorials and how-to guides are the pair that blur most easily. A page that
 gets one real task done is a how-to guide, even when it is written for
@@ -142,7 +161,8 @@ python docs/diagrams/render.py usecases-overview --force
 
 That means an ordinary `mkdocs build` needs no LaTeX — only editing a diagram
 does. The toolchain (`tectonic` for TikZ → PDF, `poppler` for PDF → SVG) is in
-`environment.yml` as a dev dependency, and the docs CI job installs neither.
+`environment.yml` as a dev dependency, and the Read the Docs build installs
+neither.
 Tectonic rather than a system TeX Live because it fetches LaTeX packages on
 demand: these diagrams use `standalone` and `arrows.meta`, which a distro TeX
 install frequently lacks.
@@ -160,3 +180,11 @@ between them with Material's `#only-light` / `#only-dark` convention:
 The pair is necessary, not belt-and-braces: `pdftocairo` converts text to vector
 paths, so there is no text left in the SVG for CSS to recolour, and one render
 would be unreadable in one of the two themes.
+
+`render.py` renders every `*.tex` beside it except `ethosstyle.tex`, and two of
+those diagrams -- `usecases-getting-data` and `usecases-maintainer` -- are
+source-only: their SVG pairs are rendered and committed, but no page embeds
+them. Editing one therefore reaches no reader, and `mkdocs build --strict` will
+not tell you so, because there is no reference for it to check. If a change to
+one of them was meant for the documentation, embed the diagram in the same
+commit.

@@ -17,7 +17,7 @@ fixture divergence.
 | ID | Trigger and environment | Expected response | Evidence or acceptance check |
 |---|---|---|---|
 | Q1 | Two tools select the same resource under the same public cache root | Both derive the same path; a valid download is reused | `retrieval.local_path`, Pooch registry; [deduplication](../deduplication.md) |
-| Q2 | A download-managed file is corrupt | Hash validation prevents accepting it as a valid cache hit; retrieval replaces it from its declared source | Pooch fetch in `retrieval.download`; [verification guide](../../how-to/verify-and-repair.md) |
+| Q2 | A download-managed file is corrupt | Hash validation prevents accepting it as a valid cache hit; retrieval replaces it from its declared source | Pooch fetch in `retrieval.download`; [verification guide](../../how-to/data-users/verify-and-repair.md) |
 | Q3 | A required restricted dataset has no available local root | Fail without downloading; explicit skipping warns and omits keys | `access.locate`, `retrieval.download` |
 | Q4 | Internal metadata contains hidden datasets and private fields | Public generation omits hidden entries and removes defined internal fields | `maintain.publish.strip` and `public_datasets`; schema review |
 | Q5 | A caller loads an index containing large dataset inventories | Inventories remain lazy until needed by selection | `catalog.load_catalog`, `Dataset`; [catalogue format](../catalogue-format.md) |

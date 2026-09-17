@@ -3,7 +3,7 @@
 Use a filesystem catalogue for cluster users and a versioned public catalogue
 for external users. Uploaded datasets have their authoritative published bytes
 on dCache; restricted datasets remain in authorised local installations.
-[Register both kinds](add-internal-and-restricted-data.md) in the internal
+[Register both kinds](describe-a-dataset.md#restricted-installations) in the internal
 catalogue. Git hosts store metadata; repository test fixtures are local copies
 of selected published data.
 
@@ -14,7 +14,7 @@ The paths below are examples to replace with your cluster's actual location.
 Keep the internal catalogue's Git history on jugit and a maintainer checkout on
 the cluster. Review changes, build the descriptors, and synchronize that checkout
 through Git. Package contributors can submit proposals without access to the
-maintainer checkout; see [Propose a dataset](propose-a-dataset.md).
+maintainer checkout; see [Propose a dataset](../package-maintainers/propose-a-dataset.md).
 
 Serve a complete, validated version directory separately from the working tree:
 
@@ -33,8 +33,11 @@ revision must not be paired with inventories from another.
 Point a CLI invocation at the convenient alias:
 
 ```bash
-ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json -p reskit list
+reskit-data --catalog /shared/ethos/catalogue/current/datacatalog.json list
 ```
+
+`collections.yaml` is the collections file your project uses or the one a
+package ships.
 
 An administrator may set a site default; an individual can set a user default:
 
@@ -42,9 +45,9 @@ An administrator may set a site default; an individual can set a user default:
 ethos-data config set-catalog /shared/ethos/catalogue/current/datacatalog.json
 ```
 
-This setting, or `ETHOS_DATA_CATALOG`, replaces the catalogue version a package
-pins, in the CLI and the Python API alike; see
-[Add the internal data catalogue](add-internal-catalogue.md). For a published
+This setting, or `ETHOS_DATA_CATALOG`, replaces the catalogue version a
+collections file pins, in the CLI and the Python API alike; see
+[Add the internal data catalogue](../data-users/set-up-your-machine.md#select-the-catalogue). For a published
 calculation, record and use the concrete `versions/<commit>/datacatalog.json`
 path rather than the moving `current` alias.
 

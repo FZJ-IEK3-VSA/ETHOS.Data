@@ -37,13 +37,14 @@ from .access import (
     locate,
     unavailable,
 )
-from .catalog import Catalog, Resource
+from .catalogs import Catalog, Resource
 from .config import ENV_VAR, Roots, dataset_roots, resolve_public_cache
 
 __all__ = [
     "AccessError",
     "DataFiles",
     "ENV_VAR",
+    "NamedPaths",
     "cache_dir",
     "download",
     "local_path",
@@ -51,12 +52,51 @@ __all__ = [
 ]
 
 
+class NamedPaths(dict):
+    """A collection's ``paths``, resolved: ``{handle: absolute Path}``.
+
+    An ordinary dict whose missing-key error lists the handles the collection
+    does define. The handles are the maintainer's vocabulary for a workflow's
+    inputs -- ``era5``, ``gwa_100m`` -- and a typo in one should say so, not
+    fail three frames later inside a raster reader.
+    """
+
+    def __init__(self, *args, collection: str = "", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.collection = collection
+        #: Handles the collection defines but this machine cannot reach, left
+        #: out under ``skip_unavailable``. Kept so a missing-key error can say
+        #: "unavailable here" rather than "never defined".
+        self.omitted: list[str] = []
+
+    def __missing__(self, handle):
+        offered = ", ".join(sorted(self)) or "none"
+        where = f" in collection {self.collection!r}" if self.collection else ""
+        if handle in self.omitted:
+            raise KeyError(
+                f"named path {handle!r}{where} is not available on this machine "
+                f"(left out under skip_unavailable); available: {offered}"
+            )
+        raise KeyError(f"no named path {handle!r}{where}; it defines: {offered}")
+
+
 class DataFiles(dict):
     """The files a collection resolved to: ``{"<dataset>/<path>": Path}``.
 
     Behaves as an ordinary dict, with two conveniences for the common cases --
-    handing the whole set to a workflow, and pulling out one known file.
+    handing the whole set to a workflow, and pulling out one known file -- and,
+    for a collection that declares ``paths``, the handles it named as
+    :attr:`named`.
     """
+
+    def __init__(self, *args, named: NamedPaths | dict | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        #: ``{handle: Path}`` for the collection's ``paths`` -- what
+        #: :func:`ethos_data.paths` returns. Empty for a collection that
+        #: declares none, and for the plain ``download()`` of a resource list.
+        self.named: NamedPaths = (
+            named if isinstance(named, NamedPaths) else NamedPaths(named or {})
+        )
 
     @property
     def paths(self) -> list[Path]:
@@ -79,9 +119,13 @@ class DataFiles(dict):
         """
         matches = [key for key in self if key.endswith(suffix)]
         if not matches:
-            raise KeyError(f"no file ending in {suffix!r}; have: {', '.join(sorted(self))}")
+            raise KeyError(
+                f"no file ending in {suffix!r}; have: {', '.join(sorted(self))}"
+            )
         if len(matches) > 1:
-            raise KeyError(f"{suffix!r} is ambiguous, matches: {', '.join(sorted(matches))}")
+            raise KeyError(
+                f"{suffix!r} is ambiguous, matches: {', '.join(sorted(matches))}"
+            )
         return self[matches[0]]
 
 
@@ -174,12 +218,17 @@ def download(
 
     unreadable = check_missing(locations)
     if unreadable:
-        listing = "\n".join(f"    {loc.path}   [{loc.origin}]" for loc in unreadable[:8])
-        more = "" if len(unreadable) <= 8 else f"\n    ... and {len(unreadable) - 8} more"
+        listing = "\n".join(
+            f"    {loc.path}   [{loc.origin}]" for loc in unreadable[:8]
+        )
+        more = (
+            "" if len(unreadable) <= 8 else f"\n    ... and {len(unreadable) - 8} more"
+        )
         raise AccessError(
             f"{len(unreadable)} file(s) are missing from where they were expected:\n"
             f"{listing}{more}\n"
-            "Run `ethos-data verify` for a per-file account, or check the roots with "
+            "Run your package's data command with `verify` for a per-file account, "
+            "or check the roots with "
             "`ethos-data config show`."
         )
 
@@ -244,7 +293,11 @@ def _warn_about_licensing(catalog: Catalog, resources: list[Resource]) -> None:
     ethos:license_status until somebody has actually read the upstream terms.
     """
     unresolved = sorted(
-        {r.dataset for r in resources if catalog.dataset(r.dataset).license_status != "resolved"}
+        {
+            r.dataset
+            for r in resources
+            if catalog.dataset(r.dataset).license_status != "resolved"
+        }
     )
     for name in unresolved:
         note = catalog.dataset(name).descriptor.get("ethos:license_note", "")

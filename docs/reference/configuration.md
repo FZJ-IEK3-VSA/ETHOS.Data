@@ -8,7 +8,8 @@ ethos-data config show
 ```
 
 which prints the resolved values, the provenance of each, and every file
-consulted along the way.
+consulted along the way. A cache path this machine cannot reach, such as a
+network drive that is not connected, is marked `NOT REACHABLE` with the reason.
 
 ## Precedence
 
@@ -55,13 +56,12 @@ Written into a config file, or into `ethos-data.yaml` for the project scope.
 | Key | Set with | |
 |---|---|---|
 | `public_cache` | `config set-public-cache` | public and internal data: read from, and downloaded into |
-| `cache_dir` | `config set-cache` | what `public_cache` used to be called. Still read and still writable, so existing files keep working |
-| `restricted_cache` | `config set-restricted-cache` | licensed data; never downloaded, never written to |
+| `cache_dir` | Legacy read fallback | Older spelling of `public_cache`; `config set-cache` now writes `public_cache`. |
+| `restricted_cache` | `config set-restricted-cache` | licensed data; retrieval only reads it in place |
 | `staging_cache` | `config set-staging-cache` | work in progress that shadows the catalogue |
 | `skip_unavailable` | `config set-skip-unavailable` | `true` to carry on without data this machine cannot reach |
 | `dataset_roots` | `config set-root <dataset> <dir>` | a mapping of dataset name to directory. Roots from different scopes **combine** rather than clobbering each other |
 | `catalog` | `config set-catalog` | the catalogue to use instead of a collections file's pin or the built-in public catalogue |
-| `collections` | `config set-collections` | a default collections file, so `-c` is not needed every time |
 | `publication_url` | `config set-publication-url` | fetch bytes from a different door than the catalogue declares |
 
 A minimal project file:
@@ -91,6 +91,7 @@ dataset_roots:
 | `ETHOS_DATA_CATALOG` | `catalog` |
 | `ETHOS_SKIP_UNAVAILABLE` | `skip_unavailable` |
 | `ETHOS_CATALOG_NO_CACHE` | if set, a fetched catalogue descriptor is never cached on disk |
+| `ETHOS_PUBLICATION_URL` | override the dataset download base URL |
 
 `ETHOS_DATA_DIR` is named for the era when there was only one root. It is kept
 under that name because it is in scripts, job files and people's shell profiles.
@@ -100,7 +101,7 @@ under that name because it is in scripts, job files and people's shell profiles.
 | Root | Holds | Written to |
 |---|---|---|
 | public | public and internal data — symlinks to data already here, plus real directories for downloads | yes, for downloads into real directories |
-| restricted | licensed data, real files, ideally read-only | never |
+| restricted | authorised licensed installations or links | only explicit local administration, such as `link` or `materialize`; never retrieval |
 | staging | uncatalogued work in progress | only by `staging add --copy` |
 
 Which root a dataset comes from follows from its access class; whether it is
@@ -109,46 +110,60 @@ read in place follows from whether its entry is a symbolic link. See
 
 ## Catalogue resolution
 
-Strongest first:
+The catalogue used by `ethos-data` and `ethos_data.catalog()` is the first of:
 
-1. `--catalog` on the command line, or `catalog=` in Python
-2. `$ETHOS_DATA_CATALOG`
-3. the `catalog:` key in a config file (`config set-catalog`)
-4. the `catalog:` key at the top of the collections file — for `-p` /
-   `package=`, the file the package ships
-5. the built-in public catalogue,
-   `https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json`
+1. `--catalog` on the command line, or the location passed in Python.
+2. `ETHOS_DATA_CATALOG`.
+3. The `catalog` setting in configuration.
+4. The built-in public catalogue:
+   `https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json`.
 
-A local relative path in a collections file is resolved **relative to that
-file**, not to the caller's working directory. A `@ref` suffix pins a version:
-for a git host it selects the tag, and for a local path it is stripped.
+Package wrappers and collections handles also use the file's `catalog:` pin
+before the built-in fallback. A package-specific override, such as
+`RESKIT_DATA_CATALOG` passed by RESKit through `catalog=`, ranks below the CLI's
+`--catalog` and above `ETHOS_DATA_CATALOG`. To compare a direct fetch with a
+package workflow, explicitly select the same catalogue.
 
-A catalogue fetched from a version-pinned URL is cached on disk indefinitely.
-One whose URL names `main`, `master`, `HEAD`, `latest`, `dev` or `develop` is
-recognised as moving and re-fetched every time.
+Relative pins are resolved relative to the collections file. Pin a revision in
+the URL path, for example `.../ETHOS.Data-Catalogue/COMMIT/datacatalog.json`.
+A legacy `@ref` suffix is stripped; it does not select a revision.
+
+Metadata fetched from version-pinned URLs is cached indefinitely. URLs naming
+`main`, `master`, `HEAD`, `latest`, `dev` or `develop` are treated as moving and
+re-fetched. `ETHOS_CATALOG_NO_CACHE=1` bypasses metadata caching.
 
 ## Collections resolution
 
-Strongest first:
+A package command reads the collections file shipped beside its code.
+`ethos-data` reads catalogue keys directly and does not discover a collections
+file in the working directory or from configuration.
 
-1. `-c` / `--collections` on the command line, or `-p` / `--package` for the
-   file an installed package registers
-2. the `collections:` key in a config file (`config set-collections`)
-3. `collections.yaml` in the current directory
+In Python, use `ethos_data.collections(path, tool=...)`, or pass the file to
+the one-call `fetch`, `paths` and `resolve` APIs. The handle's `.catalog`
+provides access by key against its selected catalogue. See
+[Package integration](../how-to/package-maintainers/use-from-a-package.md).
 
-In Python, `fetch()` and `resolve()` take either `collections=` (a path) or
-`package=` (a registered package name). `path()` needs neither.
+## Configuration commands
 
-A package registers its collections file with an entry point in the
-`ethos_data.collections` group; the entry point's value names the module whose
-directory holds `collections.yaml`:
+Prefix these with `ethos-data` or a package wrapper such as `reskit-data`.
 
-```toml title="pyproject.toml"
-[project.entry-points."ethos_data.collections"]
-reskit = "reskit.data"
-```
+| Command | Value |
+| --- | --- |
+| `config show` | Display shared configuration without network access. |
+| `config set-public-cache DIR`, `set-cache DIR` | Public cache; the second spelling is an alias. |
+| `config set-restricted-cache DIR` | Authorised restricted installation. |
+| `config set-staging-cache DIR` | Shared development overlay. |
+| `config set-catalog LOCATION` | Catalogue index path or URL. |
+| `config set-root DATASET DIR` | One dataset's existing directory. |
+| `config set-skip-unavailable true\|false` | Whether collection results may omit inaccessible inputs. |
+| `config set-publication-url URL` | Override the dataset download base URL. |
 
-!!! warning
-    A project-scope `collections` setting applies everywhere the project config
-    is found — the same walk-up rule as `cache_dir` — not just in the directory
-    where you set it.
+Each setter accepts `--scope`, as described above. Remove a setting with the
+matching `unset-*` command in the same scope; `unset-root` takes the dataset
+name. There is no `unset-publication-url` command: remove that key from the
+configuration file shown by `config show` and clear `ETHOS_PUBLICATION_URL`
+if set. Unsetting configuration does not move or delete data.
+
+`config show` reports shared settings, not a package's pin, package-specific
+environment override, or per-command options. `ethos-data ls` and a wrapper's
+`show` report the catalogue they actually selected.

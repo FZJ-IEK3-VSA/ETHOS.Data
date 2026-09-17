@@ -16,7 +16,7 @@ the calculation.
 | Component | Responsibility | Interface |
 |---|---|---|
 | Consuming package, such as ETHOS.RESKit | Declares the slices of data its workflows need | Collections YAML and Python API |
-| `ethos-data` reader | Selects resources, resolves locations, retrieves files | Python API or CLI; local paths returned |
+| `ethos_data` reader | Selects resources, resolves locations, retrieves files | Python API, package wrappers, or direct `ethos-data ls/fetch`; local paths returned |
 | Source catalogue | Maintainer-owned dataset descriptions and generated inventories | YAML inputs, JSON descriptors and shards |
 | Published catalogue | Generated view selected by visibility, with internal fields removed | JSON read locally or over HTTP(S) |
 | Remote storage (DESY dCache) | Authoritative centrally published dataset bytes, including test data | Download URLs; maintainer upload interfaces |
@@ -38,7 +38,7 @@ missing optional dataset is acceptable to the calculation.
 The package does not host a central data service of its own, run calculations,
 or automatically provision licensed datasets. For first use, follow
 [Your first fetch](../../tutorials/first-fetch.md); for integration, see
-[Use ETHOS.Data in your package](../../how-to/use-from-a-package.md).
+[Use ETHOS.Data in your package](../../how-to/package-maintainers/use-from-a-package.md).
 
 The intended internal metadata source is a generated catalogue on cluster
 storage, synchronised with JuGit. Public metadata is a reviewed, stripped view
@@ -48,7 +48,7 @@ local debugging; their published origin remains dCache.
 
 | Boundary | Information exchanged | Technical interface |
 |---|---|---|
-| Consuming package → reader | Collection name, catalogue location, options; resource keys and local paths returned | Python `fetch()` / `fetch_one()` or CLI; collections YAML |
+| Consuming package → reader | Collection name, variant, catalogue location, options; resource keys, named paths and local paths returned | Python `Collections.fetch()` / `paths()`, `Catalog.path()` or CLI; collections YAML |
 | Reader → metadata location | Index, requested descriptors and shards | Filesystem reads or HTTP(S) JSON; relative references resolved from the catalogue |
 | Reader → local storage | Presence checks, reads and verified cache downloads | Paths, directories and symbolic links |
 | Reader → dCache | Published dataset files | HTTP(S), with content hashes supplied by metadata |

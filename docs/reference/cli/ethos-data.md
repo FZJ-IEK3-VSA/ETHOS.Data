@@ -1,124 +1,185 @@
 # `ethos-data`
 
-The consumer-side command: reading the catalogue, planning, fetching, verifying.
-It never writes to a catalogue — that is [`ethos-data catalog`](catalog.md).
+Catalogue access, shared configuration, cache administration and catalogue
+maintenance. Collection workflows, test bundles and staging use a
+[package data command](package-data.md), such as `reskit-data`.
 
+```text
+ethos-data [--catalog LOCATION] [--root DIR] COMMAND ...
 ```
-ethos-data [-c COLLECTIONS | -p PACKAGE] [--catalog LOCATION] [--root DIR] [--skip-unavailable]
-          <command> ...
-```
-
-An `AccessError` — restricted bytes, or a local root that is not set up — is
-the catalogue working as designed, so it is printed as a message and exits `2`,
-not as a traceback.
 
 ## Global options
 
-| Option | |
-|---|---|
-| `-c`, `--collections PATH` | path to a collections file. Default: `collections.yaml` in the current directory, or a configured default — see `config show`. |
-| `-p`, `--package NAME` | the collections file an installed package registers under `NAME`, e.g. `-p reskit`. Not combined with `-c`. |
-| `--catalog LOCATION` | the catalogue to use for this run. A local path or an `http(s)` URL. |
-| `--root DIR` | override the public cache directory for this run. |
-| `--skip-unavailable` | carry on without data this machine cannot reach (licensed data you have no copy of), listing what was left out instead of stopping. |
+Put global options before the subcommand.
 
-The catalogue is the first of: `--catalog`, `$ETHOS_DATA_CATALOG`, a configured
-catalogue (`config set-catalog`), the collections file's `catalog:` pin, and
-the built-in public catalogue
-`https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json`.
+| Option | Behaviour |
+| --- | --- |
+| `--catalog LOCATION` | Select a local `datacatalog.json` or an HTTP(S) URL for this invocation. |
+| `--root DIR` | Override the local public cache directory for this invocation. |
+| `-h`, `--help` | Show help without loading catalogue metadata. |
 
-## `list`
+The catalogue is chosen from `--catalog`, `ETHOS_DATA_CATALOG`, configuration,
+then the built-in public catalogue. `ethos-data` does not read a collections
+file. A package command instead uses its own file's pin when no override is
+set; see [catalogue resolution](../configuration.md#catalogue-resolution).
 
-```bash
-ethos-data -p reskit list
-ethos-data -c probe-collections.yaml list
-```
+`--root` here names a local cache, and so does `--root` after `link --all`. They
+differ in reach: the global one changes the cache every command in this
+invocation uses, the one after `link` changes only the namespace that single run
+builds, and it wins where both are given. `catalog upload --root` is a third
+thing entirely — a publication folder on the remote. Use
+`ethos-data COMMAND --help` for command options.
 
-Every collection the file defines, with file count, total size and title.
-
-```title="Output"
-catalogue: /path/to/datacatalog.json
-cache:     /path/to/cache
-
-  probe                          25 files      8.5 MB   Everything synthetic -- the full upload/download round trip
-  probe-small                     7 files     14.7 KB   A handful of files, for a fast first check
-```
-
-A collection naming a dataset the catalogue does not describe is reported as
-`[unresolvable]` with the reason, and the rest are still listed. Exit status is
-`1` if any collection was unresolvable.
-
-## `path <key>`
+## `ls [key]` {#ls-key}
 
 ```bash
-ethos-data path reskit-test-data/placements/turbine_placements.csv
-ethos-data path reskit-test-data/era5
-ethos-data -p reskit path reskit-test-data/era5     # the catalogue version RESKit pins
+ethos-data ls
+ethos-data ls global-wind-atlas-v4
+ethos-data ls reskit-test-data/era5
 ```
 
-Print the absolute local path of a file or folder, fetching it first if it is
-not on this machine yet. `<key>` is `<dataset>/<file>`, `<dataset>/<folder>`,
-a dataset name, or a dataset family name. A shapefile is fetched together with
-its companion files. Needs no collections file. The Python equivalent is
-[`ethos_data.path`][ethos_data.path].
+Without a key, list dataset names, access classes and titles from the catalogue
+index without loading each dataset's inventory. With a dataset, family, folder
+or file key, list matching resource keys and sizes. A file includes its sidecars.
+No data bytes are fetched; remote metadata can require network access.
 
-## `info <collection>`
+The Python equivalent for files under a key is
+[`Catalog.resources`][ethos_data.catalogs.Catalog.resources].
+Dataset entries are available through `catalog.datasets`.
 
-Every file a collection selects, with its size. Resolves the catalogue but
-touches no data.
+## `fetch <key>` {#fetch-key}
 
-```title="Output"
-probe-small: 7 files, 14.7 KB
-
-  probe-basic/probe-notes.txt                                           114 B
-  probe-basic/vectors/probe_sites.shp                                  8.0 KB
+```bash
+ethos-data fetch reskit-test-data/placements/turbine_placements.csv
+ethos-data fetch reskit-test-data/era5
 ```
 
-## `plan <collection>`
+Fetch a file, folder, dataset or dataset family and print its absolute local
+path. A shapefile brings its sidecars. Downloaded files are checked against
+catalogue hashes and reused when they match. Files resolved through local roots,
+cache links, staging or an authorised restricted installation are read in place.
+Restricted data is never downloaded.
 
-What a fetch would do. No dataset bytes are downloaded, but resolving remote
-catalogue metadata can require network access.
+The Python equivalent is [`Catalog.path`][ethos_data.catalogs.Catalog.path] on
+[`ethos_data.catalog()`][ethos_data.catalog]. To use the catalogue a package
+pins, point `--catalog` at that pin, or use its collections handle's `.catalog`.
 
-```title="Output"
-public cache:    /path/to/cache
-used in place:      3 files      1.2 GB  (namespace link, never copied)
-already cached:     7 files     14.7 KB
-to download:        2 files    140.6 MB
-    + reskit-test-data/era5-like/100m_u_component_of_wind.nc
-not available here:  4 files                  (licensed-example -- left out)
+## `config`
+
+`ethos-data config show` prints configured catalogue and cache settings, their
+origins, local dataset overrides and one level of public-cache entries. It works
+offline and marks unreachable cache paths with the reason. It reports shared
+settings, not per-command overrides or a package's resolved catalogue pin.
+
+Use `ethos-data ls` to see the catalogue selected for direct access, or
+`reskit-data show` for RESKit's selected catalogue and collections.
+
+All setters/unsetters accept `--scope project|user|environment|site`, defaulting
+to `user`. Settings affect package wrappers too. The
+[configuration reference](../configuration.md) lists keys, commands, environment
+variables, scopes and precedence. For setup steps, see
+[Set up your machine](../../how-to/data-users/set-up-your-machine.md).
+
+## `link [dataset] [directory]` {#link-dataset-directory}
+
+Point cache entries at data already on this machine — one dataset by name, or
+every dataset the source catalogue describes.
+
+```bash
+ethos-data link global-wind-atlas /data/GWA_4.0     # this directory
+ethos-data link global-wind-atlas                   # its source_dir
+ethos-data link global-wind-atlas --force           # repoint an existing link
+ethos-data link --all                               # every source_dir there is
+ethos-data link --all --root /shared/ethos/public   # into a cache named here
+ethos-data link --all --prune --dry-run             # review a full rebuild first
 ```
 
-Presence is checked by size, which is cheap; `fetch` verifies the hash and
-re-fetches anything that fails, so `plan`'s "already cached" is an estimate, not
-a promise.
+| Flag | | Mode |
+|---|---|---|
+| `--all` | link every dataset in the source catalogue that has a `source_dir` | selects catalogue mode |
+| `--force` | repoint an entry that is already a link | dataset only |
+| `--root DIR` | build the namespace in this directory instead of the public cache this machine reads | `--all` only |
+| `--prune` | the only flag that removes anything: links for names the catalogue no longer describes | `--all` only |
+| `--dry-run` | show what would change, write nothing | honoured only with `--all`; a single-dataset link is applied immediately |
+| `--catalog-root DIR` | catalogue checkout to read `source_dir` from (default: searched upward from the current directory) | both |
 
-Files expected in place but missing are reported separately, under `MISSING
-from where they were expected`.
+A flag that belongs to the other mode is refused with exit `2` rather than
+quietly ignored: `--root` or `--prune` beside a dataset name, `--force` beside
+`--all`, and a dataset or directory beside `--all` each say which mode the
+argument belongs to. Naming no dataset and passing no `--all` is an error for the
+same reason — the two modes write to different places, so there is no safe
+default to guess.
 
-## `fetch <collection>`
+`--dry-run` is the one exception, and the one to know before relying on it:
+beside a dataset name it is accepted, has no effect, and the link is made and
+reported as `linked`. Dataset mode has no plan to show — one entry, one target,
+both of them named on the command line — but a flag that reads as a rehearsal and
+is not one is how a link gets created by somebody who meant to look first.
+Previewing belongs to `--all`, where the plan covers a whole catalogue and a
+mistaken `--root` is worth catching before it is built.
 
-Download whatever is missing and return. Files already present and matching
-their recorded checksum are skipped — including files another tool fetched
-earlier into the same cache. Datasets resolved in place are used where they lie
-and never copied.
+Entries go in the root for each dataset's access class, so a restricted dataset
+lands in the restricted cache or is refused. The directory is recorded as given,
+not resolved. A real directory in the cache is never replaced: that is data the
+cache owns. If the catalogue's first listed file is not under the directory, the
+link is still made and a warning names the file — the usual cause is naming a
+level too high.
 
-## `verify [collection]`
+Without a directory, `source_dir` is read from the hand-written
+`datasets/<name>/dataset.yaml`, which is the only place it exists: it is popped
+out of the descriptor when the manifest is built. An uploaded dataset has none
+by design, and is refused with the explicit form to use instead.
 
-Check the data on disk against the catalogue's checksums. Never writes anything
-unless `--repair` is given.
+A dataset with **unresolved licensing is refused**, and skipped by `--all`: a
+cache entry hands it to everyone reading that cache. Record the terms, or use
+[a package's `staging add`](package-data.md#staging), which is deliberately not gated. See
+[Licensing and immutability](../../explanation/licensing.md).
 
-| Flag | |
-|---|---|
-| `--all` | every collection in the file (the default when no collection is named) |
-| `--deep` | compare checksums, not just sizes — reads every byte |
-| `--repair` | re-fetch whatever no longer matches, from dCache |
-| `--dry-run` | with `--repair`: say what would be re-fetched, change nothing |
-| `-q`, `--quiet` | only report problems |
+`--all` runs the same planner over a whole catalogue, and one difference from
+naming a dataset is deliberate: it leaves **restricted datasets out of the
+namespace it builds**. A namespace everybody sharing the machine reads must never
+hand out licensed bytes to a reader who was never granted them. Naming a
+restricted dataset explicitly does link it, into the restricted root — that is
+how one authorised installation gets registered, by somebody who knows it is
+authorised. The asymmetry is the design, not an oversight.
 
-Statuses, worst first: `dangling`, `wrong checksum`, `wrong size`, `missing`,
-`unreadable`, `unavailable here`, `unverifiable`, `ok`.
+Without `--root`, `--all` builds the namespace in the public cache the rest of
+this invocation is already using — the configured public cache, or the global
+`--root` when one was given — so the cache you inspect afterwards is the cache
+you just wrote to. The run names it before it writes: its opening lines report
+the root and the catalogue checkout, and `--dry-run` prints the same preamble
+while writing nothing. Read the destination there rather than from
+`ethos-data config show`, which reports the shared settings this machine is
+configured with and never sees a global `--root`. A namespace built in a
+directory nobody meant still reads as success from the terminal, so the line
+naming the root is the one worth checking. `--root` after `link` overrides all
+of this for this run alone, which is how a maintainer populates a shared cache
+from a machine configured to read its own.
 
-See [Check and repair the cache](../../how-to/verify-and-repair.md).
+### What `--prune` removes {#namespace-prune}
+
+`--prune` is the only flag that removes anything, and it removes one kind of
+entry: a link for a name the catalogue no longer describes.
+
+It only ever unlinks a symbolic link: a link is a pointer, so removing it costs
+nothing but the name, while a real directory is the bytes themselves, and a
+catalogue that has stopped naming them says something about the catalogue rather
+than about the data. A real directory the catalogue no longer names is therefore
+left alone **silently** — the prune pass skips it before it becomes anything to
+report, so it gets no line in the output at all. Read the plan as the changes
+that are planned, not as an inventory of the cache: where the catalogue would
+otherwise have linked a dataset, its real directory is listed as `keep`; where
+the catalogue has dropped the dataset, its directory is not listed at all.
+
+On Windows a symbolic link needs Developer Mode or an elevated shell. Without
+either, use `config set-root` instead. A junction (`mklink /J`) is **not** a
+substitute: it is reported as an ordinary directory, so the cache would treat
+borrowed data as a copy it owns and could write downloads into it.
+
+## `unlink <dataset>`
+
+Remove a cache entry that is a symbolic link. The data it points at is not
+touched. A real directory is refused — it holds the cache's own copy.
 
 ## `materialize [datasets...]`
 
@@ -128,112 +189,73 @@ Replace symbolic-link cache entries with real, verified copies.
 |---|---|
 | `--all` | every entry in the public cache that is currently a link |
 | `--dry-run` | show the cost, copy nothing |
-| `--force` | do not stop at entries that are already real directories |
+| `--force` | compatibility option; existing real directories are still skipped |
 | `--no-verify` | skip checksum verification of each copied file (not advised) |
+| `--from DIR` | copy from this directory instead of the entry's link target |
+| `--catalog-root DIR` | catalogue checkout to read `source_dir` from, when there is no entry and no `--from` |
 
 Only files the catalogue describes are copied. Refuses if the copy would leave
 less than 2% of the filesystem free. Explicit dataset names use the root for
 their access class, including the restricted root. A local copy of licensed
 files requires permission under that installation's terms and an appropriately
-protected destination; see [Migrate cluster data](../../how-to/migrate-cluster-data.md#restricted-data).
-Provenance is written to `.ethos-data-materialized.json` in the new directory.
+protected destination; see [Move linked data into the cache](../../how-to/catalogue-maintainers/link-cluster-data.md#materialize-copies).
+`--from` names one dataset (not `--all`) and also fills an entry that does not
+exist yet, which is how a cache is seeded from bytes already on the machine
+instead of an upload and a download back. With no entry and no `--from`, the
+catalogue's `source_dir` is used. This also supports seeding an authorised
+restricted installation. It will not write over a real directory the cache owns,
+and `--all` still walks the public cache only. Provenance is written to
+`.ethos-data-materialized.json` in the new directory; `was_a_link_at` is null
+when no link was replaced.
 
-## `staging`
+## `catalog`
 
-Data that is not in the catalogue yet. See
-[Stage uncatalogued data](../../how-to/stage-unpublished-data.md).
-
-```bash
-ethos-data staging add <name> <directory> [--note TEXT] [--copy]
-ethos-data staging list [--new-only]
-ethos-data staging remove <name> [--force]
-```
-
-| Flag | |
-|---|---|
-| `--note TEXT` | what this is, for the next person |
-| `--copy` | copy the data instead of linking to it |
-| `--new-only` | only datasets with no entry in the public or restricted cache |
-| `--force` | on `remove`: required if the entry is a real directory, not a link |
-
-## `config`
-
-### `config show`
-
-The resolved cache directories, why each was chosen, every config file
-consulted with an exists flag, the datasets read from a local root, and the
-catalogue and collections file in use. Needs no catalogue and no network.
-
-### Setting a cache root
-
-```bash
-ethos-data config set-cache             <directory> [--scope SCOPE]   # alias of set-public-cache
-ethos-data config set-public-cache      <directory> [--scope SCOPE]
-ethos-data config set-restricted-cache  <directory> [--scope SCOPE]
-ethos-data config set-staging-cache     <directory> [--scope SCOPE]
-```
-
-Each has a matching `unset-…`. `--scope` is one of `project`, `user` (default),
-`environment`, `site`.
-
-### Other settings
-
-| Command | |
-|---|---|
-| `config set-root <dataset> <directory>` | read one dataset from a local directory |
-| `config unset-root <dataset>` | stop using a local directory for it |
-| `config set-skip-unavailable true\|false` | carry on without licensed data this machine cannot reach |
-| `config unset-skip-unavailable` | remove the setting |
-| `config set-catalog <location>` | use this catalogue instead of the one a collections file pins, or the built-in public one |
-| `config unset-catalog` | remove it |
-| `config set-collections <path>` | permanently point at a collections file, so `-c` is not needed every time |
-| `config unset-collections` | remove it |
-| `config set-publication-url <url>` | fetch bytes from a different door (the high-throughput one, for CI) |
-
-All take `--scope`. See [Configuration](../configuration.md) for precedence and
-file locations.
-
-## Environment variables
-
-| Variable | |
-|---|---|
-| `ETHOS_DATA_DIR` | the public cache directory |
-| `ETHOS_RESTRICTED_DIR` | the restricted cache directory |
-| `ETHOS_STAGING_DIR` | the staging directory |
-| `ETHOS_DATA_CATALOG` | the catalogue, for every tool in this shell or job |
-| `ETHOS_SKIP_UNAVAILABLE` | carry on without unreachable data |
-| `ETHOS_CATALOG_NO_CACHE` | never cache a fetched catalogue descriptor on disk |
+Build, upload and publish catalogue metadata and dataset bytes, and probe storage
+access. Shared cache links are `ethos-data link`, not a `catalog` subcommand. See
+the [`ethos-data catalog` reference](catalog.md).
 
 ## Exit status
 
-| | |
-|---|---|
-| `0` | success |
-| `1` | a collection could not be resolved, or `verify` found problems |
-| `2` | an `AccessError`, an unknown dataset or package, or no collections file — printed as a message, not a traceback |
+Successful operations return `0`. Unknown keys, unreadable/incomplete catalogues
+and unavailable data produce an error message and return `2`. Maintenance
+commands can return `1` for failed checks or partial results; their reference
+pages describe the individual contracts.
 
-## `bundle`
+`link --all` is the one access command with a partial-success code, and it has a
+single rule. `0` means every dataset the catalogue names now has an entry where
+its name says, or was deliberately skipped — a restricted dataset, one whose
+licensing is unresolved, one with no `source_dir`, or a real directory the cache
+owns. `1` means one or more datasets have a `source_dir` that does not exist on
+this machine (`missing`). Each is named on its own line, and a run that applied
+changes closes by counting them, because a directory that has moved is a fact
+about this machine worth reporting, not a reason to abandon the other twenty
+entries. `--dry-run` prints the same lines and returns the same code, and writes
+nothing.
 
-A bundle is a repository copy of selected catalogue resources plus generated
-metadata. dCache remains authoritative. Bundle reads use only local files and
-never overwrite fixtures or fall back to downloads.
+`2` is separate and means the run did not happen: a flag that belongs to the
+other mode — `--root` or `--prune` beside a dataset name, `--force` beside
+`--all` — a dataset or directory named beside `--all`, or neither a dataset nor
+`--all`.
 
-```bash
-ethos-data -p reskit bundle export tests/data-bundle test_suite --source-revision v2026.09
-ethos-data bundle verify tests/data-bundle test_suite
-ethos-data bundle fetch tests/data-bundle test_suite
-ethos-data bundle fetch tests/data-bundle test_suite --allow-modified
-```
+## Migrating earlier commands {#tool-command}
 
-| Command/option | Behaviour |
-|---|---|
-| `export TARGET COLLECTION...` | Export to a new directory; refuses an existing target. Canonical metadata is selected without staging. |
-| `export --source-root DATASET=PATH` | Use an existing local source and verify it against catalogue hashes; repeat for several datasets. |
-| `export --source-revision REF` | Record the source commit/tag as provenance; this label does not change the catalogue URL or select a revision. |
-| `verify DIRECTORY COLLECTION` | Report hash/presence findings; exits 1 for modified or missing fixtures. |
-| `fetch DIRECTORY COLLECTION` | Check hashes and report local paths; no network or repair. |
-| `fetch --allow-modified` | Explicit development override for changed bytes; warns and retains original metadata. Missing files still fail. |
+| Earlier invocation | Current invocation |
+| --- | --- |
+| `ethos-data path KEY` | `ethos-data fetch KEY` |
+| `ethos-data -c reskit/data/collections.yaml fetch COLLECTION` | `reskit-data fetch COLLECTION` |
+| Collection `list`, `info` | `reskit-data show [COLLECTION]` |
+| Collection `plan`, `paths` | `reskit-data fetch COLLECTION --plan` / `--paths` |
+| `reskit-data path KEY`, `reskit-data ls [KEY]` | `ethos-data fetch KEY`, `ethos-data ls [KEY]` |
+| `ethos-data staging ...` or `ethos-data bundle ...` | The package's `staging ...` or `bundle ...` command |
+| `ethos-data catalog link-cache --root DIR` | `ethos-data link --all --root DIR` |
 
-Global cache, staging, and skip-unavailable settings do not redirect bundle reads.
-`-c`, `-p` and `--catalog` select inputs for export only. Invalid bundle inputs exit 2.
-See [Keep test data in a repository](../../how-to/keep-test-data-in-a-repository.md).
+`-c` / `--collections`, default collections-file discovery, and
+`config set-collections` / `unset-collections` have been removed from the CLI.
+`--test` and `--skip-unavailable` are package-wrapper options.
+Applications without a wrapper can still pass an explicit file to
+[`ethos_data.collections`][ethos_data.collections] in Python.
+
+`catalog link-cache` was a second name for the planner behind `link --all`, and
+two entrances to one mechanism is how a maintainer ends up wondering which of
+them prunes. `--root`, `--prune` and `--dry-run` mean on `link --all` exactly what
+they meant there.

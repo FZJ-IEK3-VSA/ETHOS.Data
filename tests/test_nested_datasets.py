@@ -96,7 +96,9 @@ class TestDiscovery:
             catalog = build(Path(tmp), {"alpha": PUBLIC_MEMBER})
             directory = catalog / "datasets" / "family" / "alpha"
             text = directory.joinpath("dataset.yaml").read_text()
-            directory.joinpath("dataset.yaml").write_text("name: something-else\n" + text)
+            directory.joinpath("dataset.yaml").write_text(
+                "name: something-else\n" + text
+            )
             with pytest.raises(SystemExit, match="the directory it is in makes it"):
                 render_dataset(directory, name="family/alpha")
 
@@ -130,7 +132,9 @@ class TestNamespaces:
             (catalog / "datasets" / "family" / "dataset.yaml").write_text(
                 NAMESPACE + f"source_dir: {tmp / 'stray'}\n"
             )
-            with pytest.raises(SystemExit, match="cannot also describe files of its own"):
+            with pytest.raises(
+                SystemExit, match="cannot also describe files of its own"
+            ):
                 build_run(catalog, [])
 
     def test_a_namespace_may_not_carry_licensing(self):
@@ -160,7 +164,9 @@ class TestInheritance:
             catalog = build(Path(tmp), {"alpha": PUBLIC_MEMBER})
             build_run(catalog, [])
             package = json.loads(
-                (catalog / "datasets" / "family" / "alpha" / "datapackage.json").read_text()
+                (
+                    catalog / "datasets" / "family" / "alpha" / "datapackage.json"
+                ).read_text()
             )
             assert package["homepage"] == "https://example.invalid/family"
             assert package["ethos:contact"] == "a-maintainer"
@@ -170,14 +176,21 @@ class TestInheritance:
         with tempfile.TemporaryDirectory() as tmp:
             catalog = build(
                 Path(tmp),
-                {"alpha": {**PUBLIC_MEMBER, "extra": (
-                    "ethos:license_status: unresolved\n"
-                    "ethos:contact: someone-else\n"
-                )}},
+                {
+                    "alpha": {
+                        **PUBLIC_MEMBER,
+                        "extra": (
+                            "ethos:license_status: unresolved\n"
+                            "ethos:contact: someone-else\n"
+                        ),
+                    }
+                },
             )
             build_run(catalog, [])
             package = json.loads(
-                (catalog / "datasets" / "family" / "alpha" / "datapackage.json").read_text()
+                (
+                    catalog / "datasets" / "family" / "alpha" / "datapackage.json"
+                ).read_text()
             )
             assert package["ethos:contact"] == "someone-else"
 
@@ -190,7 +203,13 @@ class TestInheritance:
         """
         from ethos_data.maintain import INHERITED_KEYS
 
-        for key in ("licenses", "ethos:access", "ethos:visibility", "ethos:origin", "source_dir"):
+        for key in (
+            "licenses",
+            "ethos:access",
+            "ethos:visibility",
+            "ethos:origin",
+            "source_dir",
+        ):
             assert key not in INHERITED_KEYS
 
 
@@ -292,7 +311,7 @@ class TestAddressing:
             tmp = Path(tmp)
             catalog = build(tmp, {"alpha": PUBLIC_MEMBER})
             build_run(catalog, [])
-            from ethos_data.catalog import load_catalog
+            from ethos_data.catalogs import load_catalog
 
             loaded = load_catalog(str(catalog / "datacatalog.json"))
             dataset = loaded.dataset("family/alpha")

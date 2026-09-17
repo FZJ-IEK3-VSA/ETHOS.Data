@@ -24,52 +24,68 @@ drift and the sharing would silently stop.
 
 ## Usage
 
-```python
-import ethos_data
+For direct catalogue access:
 
-placements = ethos_data.path("reskit-test-data/placements/turbine_placements.csv")
-files = ethos_data.fetch("test_suite", package="reskit")
+```bash
+ethos-data config show
+ethos-data ls
+ethos-data ls global-wind-atlas-v4
+ethos-data fetch reskit-test-data/era5
+```
+
+`fetch` takes a dataset, family, folder or file key and prints its local path.
+Use `--catalog LOCATION` before the subcommand to select a particular index.
+
+For a package workflow, use its Python API or thin wrapper. For example, with
+RESKit installed:
+
+```python
+from reskit import data
+
+inputs = data.paths("onshore_wind", test=True)
 ```
 
 ```bash
-ethos-data -p reskit list                  # what is on offer
-ethos-data -p reskit info test_suite       # what is in a collection
-ethos-data -p reskit plan test_suite       # what a fetch would download
-ethos-data -p reskit fetch test_suite      # download it
-ethos-data path reskit-test-data/era5      # the local path of a file or folder
+reskit-data show
+reskit-data fetch onshore_wind --test --paths
+reskit-data staging list
 ```
 
-The public catalogue is built in. A package makes its collections available
-under `-p` / `package=` with one entry point:
+Packages expose collections, named inputs, test variants, bundles and staging
+through `ethos_data.tool_main`. The shared CLI owns configuration, direct
+catalogue access and `link`, `unlink`, `materialize` and `catalog` maintenance.
+Staging uses a shared development root even though package wrappers manage it.
 
-```toml
-[project.entry-points."ethos_data.collections"]
-reskit = "reskit.data"      # the module whose directory holds collections.yaml
-```
+Applications can also use `ethos_data.catalog().path(KEY)` for keys or
+`ethos_data.collections("collections.yaml").paths(COLLECTION)` for an explicit
+collections file. See [Package integration](docs/how-to/package-maintainers/use-from-a-package.md)
+and the [package-command reference](docs/reference/cli/package-data.md).
 
 ## Documentation
 
-Full documentation lives in [`docs/`](docs/) — tutorials, how-to guides,
-explanation and reference, organised by what you came for:
+Full documentation is published at <https://ethos-data.readthedocs.io/> and
+lives in [`docs/`](docs/) — tutorials, how-to guides, explanation and
+reference, organised by what you came for:
 
 ```bash
+pip install -e ".[docs]"
 mkdocs serve      # live preview on http://localhost:8000
 mkdocs build      # static site into ./site
 ```
 
 | | |
 |---|---|
-| [Your first fetch](docs/tutorials/first-fetch.md) | find a package's collections, fetch one, use the paths from Python |
-| [Get data for a task](docs/how-to/get-data-for-a-task.md) | `ethos_data.path()` in scripts, and the command line |
-| [Use ETHOS.Data in your package](docs/how-to/use-from-a-package.md) | ship and register a `collections.yaml` |
+| [Your first fetch](docs/tutorials/first-fetch.md) | fetch a file from a practice catalogue, use the path from Python, repair a damaged cache copy |
+| [Get data by catalogue key](docs/how-to/data-users/get-data-for-a-task.md) | inspect and fetch a dataset, folder or file with the shared CLI or Python API |
+| [Use ETHOS.Data in your package](docs/how-to/package-maintainers/use-from-a-package.md) | ship a `collections.yaml`, a handle on it and a console script of your own via `ethos_data.tool_main` |
 | [Add a dataset to the catalogue](docs/tutorials/add-a-dataset.md) | the maintainer round trip, on a practice catalogue |
 | [How-to guides](docs/how-to/index.md) | cache configuration, internal catalogue, restricted data, verify/repair, CI, uploading, publishing |
 | [Explanation](docs/explanation/index.md) | why one catalogue; caches, classes and roots; the catalogue format; licensing |
-| [Reference](docs/reference/cli/ethos-data.md) | both CLIs, configuration keys, file formats, glossary, API |
+| [Reference](docs/reference/cli/ethos-data.md) | the `ethos-data` and `ethos-data catalog` commands, configuration keys, file formats, glossary, API |
 
 ## Maintaining a catalogue
 
-The `ethos-data catalog` command, installed alongside `ethos-data`, is the writing
+The `ethos-data catalog` subcommand is the writing
 half of the same format. A catalogue repository holds metadata only; the code
 that generates and publishes it lives here, so that the descriptors written and
 the descriptors read can never drift apart.
@@ -89,4 +105,4 @@ else here has dependencies beyond the package's own.
 `ethos-data` — the software in this repository — is under the
 [MIT License](LICENSE).
 
-**The licence of the software is not the licence of the data.** 
+**The licence of the software is not the licence of the data.**

@@ -9,5 +9,7 @@ matches what you need to understand:
 | [Architecture](architecture/index.md) | You want the overall system, its components and interactions, deployment, decisions, and quality requirements in the twelve-section arc42 structure |
 
 Both guides serve data users, package maintainers, and catalogue maintainers.
+Start with [Catalogues and storage](catalogues-and-storage.md) for the roles and
+locations, or [Test data and reproducibility](test-data.md) for fixture choices.
 For commands and task instructions, use the [how-to guides](../how-to/index.md);
 for guided practice, use the [tutorials](../tutorials/index.md).

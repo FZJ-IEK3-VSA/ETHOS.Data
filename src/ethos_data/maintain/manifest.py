@@ -35,7 +35,7 @@ rendered as a resource-level ``licenses`` override.
 A dataset that declares ``ethos:shard_depth: N`` is written *sharded*: the
 inventory is split across ``manifests/<prefix>.json``, one file per directory
 prefix of N segments, and ``datapackage.json`` carries an ``ethos:shards`` index
-instead of a ``resources`` array.  ``ethos_data.catalog`` then parses only the
+instead of a ``resources`` array.  ``ethos_data.catalogs`` then parses only the
 shards a selection can match.  The grouping rule is imported from the reader
 rather than reimplemented -- writer and reader must agree on it exactly.
 
@@ -66,7 +66,7 @@ from pathlib import Path
 
 import yaml
 
-from ..catalog import CATALOG_ROLES, ROLE_KEY, ROLE_SOURCE, ROOT_SHARD, shard_key
+from ..catalogs import CATALOG_ROLES, ROLE_KEY, ROLE_SOURCE, ROOT_SHARD, shard_key
 from ..selection import path_matches
 from . import (
     INHERITED_KEYS,
@@ -95,7 +95,17 @@ EXTRA_MEDIATYPES = {
 
 # An ESRI shapefile is several files that are useless apart.  Selecting the .shp
 # must drag the rest along, or GDAL fails at read time with a confusing error.
-SHAPEFILE_SIDECAR_EXTS = [".shx", ".dbf", ".prj", ".cpg", ".qpj", ".qmd", ".sbn", ".sbx", ".xml"]
+SHAPEFILE_SIDECAR_EXTS = [
+    ".shx",
+    ".dbf",
+    ".prj",
+    ".cpg",
+    ".qpj",
+    ".qmd",
+    ".sbn",
+    ".sbx",
+    ".xml",
+]
 
 ACCESS_CLASSES = ("public", "internal", "restricted")
 VISIBILITIES = ("public", "hidden")
@@ -121,6 +131,27 @@ DERIVATION_KEY = "ethos:derivation"
 #: than no path, since nothing about the descriptor would say it stopped being
 #: the truth.
 UPLOADED_KEY = "ethos:uploaded"
+
+#: The same freeze, without the claim about dCache: the inventory is final and
+#: there is no local build input any more.
+#:
+#: Uploading is one way a dataset reaches that state and it is not the only one.
+#: Restricted data is never uploaded -- the authorised installation *is* the
+#: permanent copy, and this manifest's hashes are what says it is still intact --
+#: so once it has been moved into the restricted cache and the original retired,
+#: there is nothing left to build from and nothing that should be rebuilt. The
+#: same is true of public data materialised into a cache.
+#:
+#: Why freeze rather than repoint ``source_dir`` at the copy: a rebuild re-reads
+#: and re-hashes whatever it is pointed at. Pointed at the copy, it would record
+#: that copy's current bytes as the truth -- so a corrupted copy would be written
+#: into the manifest as correct, and the check that would have caught it is the
+#: thing that just destroyed the evidence. Hashes taken from the original are an
+#: independent witness; keeping them is the whole point.
+#:
+#: ``ethos:uploaded: true`` implies this. Both are maintainer bookkeeping and
+#: neither is published.
+FROZEN_KEY = "ethos:frozen"
 
 CONTRIBUTORS_KEY = "contributors"
 #: Data Package's suggested roles. `author` is the one that carries weight here:
@@ -180,13 +211,18 @@ def save_hash_cache(dataset_dir: Path, cache: dict) -> None:
     """Persist the hash cache. Best-effort: a cache write must not fail the build."""
     try:
         (dataset_dir / HASH_CACHE_NAME).write_text(
-            json.dumps(cache), encoding="utf-8", newline="\n")
+            json.dumps(cache), encoding="utf-8", newline="\n"
+        )
     except OSError as error:
-        print(f"warning: could not write {HASH_CACHE_NAME} in {dataset_dir}: {error}",
-              file=sys.stderr)
+        print(
+            f"warning: could not write {HASH_CACHE_NAME} in {dataset_dir}: {error}",
+            file=sys.stderr,
+        )
 
 
-def resolve_hashes(paths: list[Path], root: Path, cache: dict) -> dict[Path, tuple[int, str]]:
+def resolve_hashes(
+    paths: list[Path], root: Path, cache: dict
+) -> dict[Path, tuple[int, str]]:
     """SHA-256 (and size) for every path, as ``{path: (size, digest)}``.
 
     Reuses ``cache`` when a path's size and mtime match what was last recorded
@@ -206,7 +242,11 @@ def resolve_hashes(paths: list[Path], root: Path, cache: dict) -> dict[Path, tup
     for path in paths:
         stat = stats[path]
         entry = cache.get(relative[path])
-        if entry and entry.get("size") == stat.st_size and entry.get("mtime_ns") == stat.st_mtime_ns:
+        if (
+            entry
+            and entry.get("size") == stat.st_size
+            and entry.get("mtime_ns") == stat.st_mtime_ns
+        ):
             digests[path] = entry["hash"]
         else:
             misses.append(path)
@@ -270,7 +310,9 @@ def iter_data_files(root: Path):
         if path.suffix in EXCLUDE_SUFFIXES:
             continue
         relative = path.relative_to(root)
-        if len(relative.parts) == 1 and any(relative.match(g) for g in EXCLUDE_ROOT_GLOBS):
+        if len(relative.parts) == 1 and any(
+            relative.match(g) for g in EXCLUDE_ROOT_GLOBS
+        ):
             continue
         yield path
 
@@ -301,7 +343,8 @@ def expand_pattern(pattern: str) -> list[str]:
     if pattern.startswith("/"):
         raise SystemExit(
             f"{INCLUDE_KEY}/{EXCLUDE_KEY}: {pattern!r} starts with '/'. Patterns are "
-            "relative to source_dir; drop the leading slash.")
+            "relative to source_dir; drop the leading slash."
+        )
     if pattern.endswith("/"):
         return [pattern.rstrip("/") + "/**"]
     if any(character in pattern for character in "*?["):
@@ -315,11 +358,14 @@ def _patterns(name: str, meta: dict, key: str) -> list[str] | None:
     if raw is None:
         return None
     if isinstance(raw, str) or not isinstance(raw, list):
-        raise SystemExit(f"{name}: {key} must be a list of patterns, got {type(raw).__name__}")
+        raise SystemExit(
+            f"{name}: {key} must be a list of patterns, got {type(raw).__name__}"
+        )
     if not raw:
         raise SystemExit(
             f"{name}: {key} is an empty list, which would select nothing. "
-            f"Remove the key instead -- absent means 'no filter'.")
+            f"Remove the key instead -- absent means 'no filter'."
+        )
     if not all(isinstance(entry, str) for entry in raw):
         raise SystemExit(f"{name}: every entry in {key} must be a string")
     return raw
@@ -375,7 +421,8 @@ def select(name: str, root: Path, paths: list[Path], meta: dict) -> list[Path]:
                 f"{name}: {INCLUDE_KEY} pattern(s) match no file under {root}:\n"
                 + "".join(f"    {pattern}\n" for pattern in empty)
                 + "Fix the pattern, or drop it if the file is gone. An include list that\n"
-                  "silently matches nothing would publish a smaller dataset than intended.")
+                "silently matches nothing would publish a smaller dataset than intended."
+            )
         wanted = set().union(*hits.values())
         kept = {path for path in paths if relative[path] in wanted}
 
@@ -383,8 +430,11 @@ def select(name: str, root: Path, paths: list[Path], meta: dict) -> list[Path]:
         hits = matched_by(exclude)
         for pattern, found in hits.items():
             if not found:
-                print(f"warning: {name}: {EXCLUDE_KEY} pattern {pattern!r} matches nothing "
-                      f"under {root} -- already cleaned up, or a typo?", file=sys.stderr)
+                print(
+                    f"warning: {name}: {EXCLUDE_KEY} pattern {pattern!r} matches nothing "
+                    f"under {root} -- already cleaned up, or a typo?",
+                    file=sys.stderr,
+                )
         unwanted = set().union(*hits.values()) if hits else set()
         kept = {path for path in kept if relative[path] not in unwanted}
 
@@ -395,15 +445,20 @@ def select(name: str, root: Path, paths: list[Path], meta: dict) -> list[Path]:
         for extension in SHAPEFILE_SIDECAR_EXTS:
             companion = path.with_suffix(extension)
             if companion in relative and companion not in kept:
-                print(f"note: {name}: keeping {relative[companion]} -- companion of "
-                      f"{relative[path]}, which a filter would otherwise have dropped",
-                      file=sys.stderr)
+                print(
+                    f"note: {name}: keeping {relative[companion]} -- companion of "
+                    f"{relative[path]}, which a filter would otherwise have dropped",
+                    file=sys.stderr,
+                )
                 kept.add(companion)
 
     skipped = len(paths) - len(kept)
     if skipped:
-        print(f"  {name}: {len(kept)} of {len(paths)} files under {root} "
-              f"selected, {skipped} filtered out", file=sys.stderr)
+        print(
+            f"  {name}: {len(kept)} of {len(paths)} files under {root} "
+            f"selected, {skipped} filtered out",
+            file=sys.stderr,
+        )
     return [path for path in paths if path in kept]
 
 
@@ -421,11 +476,17 @@ def frozen_resources(name: str, dataset_dir: Path) -> list[dict]:
     package_file = dataset_dir / "datapackage.json"
     if not package_file.is_file():
         raise SystemExit(
-            f"{name}: {UPLOADED_KEY} is true but there is no datapackage.json to freeze. "
-            f"Build once with source_dir set, upload it, then set {UPLOADED_KEY}: true."
+            f"{name}: the inventory is declared final but there is no datapackage.json to "
+            f"freeze. Build once with source_dir set, check the result, and only then set "
+            f"{FROZEN_KEY}: true (or {UPLOADED_KEY}: true) and remove source_dir."
         )
-    resources = resources_of(json.loads(package_file.read_text(encoding="utf-8")), dataset_dir)
-    return [{k: v for k, v in resource.items() if k != LICENSES_KEY} for resource in resources]
+    resources = resources_of(
+        json.loads(package_file.read_text(encoding="utf-8")), dataset_dir
+    )
+    return [
+        {k: v for k, v in resource.items() if k != LICENSES_KEY}
+        for resource in resources
+    ]
 
 
 def build_resource(path: Path, root: Path, size: int, digest: str) -> dict:
@@ -461,9 +522,13 @@ def validate_classification(name: str, meta: dict) -> tuple[str, str]:
     visibility = meta.setdefault("ethos:visibility", "public")
 
     if access not in ACCESS_CLASSES:
-        raise SystemExit(f"{name}: ethos:access must be one of {ACCESS_CLASSES}, got {access!r}")
+        raise SystemExit(
+            f"{name}: ethos:access must be one of {ACCESS_CLASSES}, got {access!r}"
+        )
     if visibility not in VISIBILITIES:
-        raise SystemExit(f"{name}: ethos:visibility must be one of {VISIBILITIES}, got {visibility!r}")
+        raise SystemExit(
+            f"{name}: ethos:visibility must be one of {VISIBILITIES}, got {visibility!r}"
+        )
     if access == "public" and visibility == "hidden":
         raise SystemExit(
             f"{name}: access=public with visibility=hidden makes no sense -- "
@@ -479,6 +544,17 @@ def validate_classification(name: str, meta: dict) -> tuple[str, str]:
         raise SystemExit(
             f"{name}: restricted data must not declare ethos:remote_prefix -- "
             "it is never uploaded. Configure dataset_roots on each machine instead."
+        )
+    if access == "restricted" and meta.get(UPLOADED_KEY):
+        # The freeze this asks for is right; the claim attached to it is not.
+        # Restricted data never reaches dCache, so "dCache holds it now" would be
+        # a false statement sitting in the catalogue -- and there is a key that
+        # says the true half on its own.
+        raise SystemExit(
+            f"{name}: restricted data is never uploaded, so {UPLOADED_KEY}: true cannot "
+            f"be right. If its inventory is final -- the authorised installation is the "
+            f"permanent copy and there is nothing local left to build from -- say that "
+            f"instead:\n    {FROZEN_KEY}: true"
         )
     return access, visibility
 
@@ -521,11 +597,15 @@ def validate_licenses(name: str, meta: dict) -> list[dict]:
         if not isinstance(patterns, list) or not all(
             isinstance(p, str) and p for p in patterns
         ):
-            raise SystemExit(f"{where}: {APPLIES_TO_KEY} must be a list of glob patterns.")
+            raise SystemExit(
+                f"{where}: {APPLIES_TO_KEY} must be a list of glob patterns."
+            )
     return licenses
 
 
-def apply_resource_licenses(name: str, resources: list[dict], licenses: list[dict]) -> None:
+def apply_resource_licenses(
+    name: str, resources: list[dict], licenses: list[dict]
+) -> None:
     """Attach per-file licences, for a dataset whose files differ.
 
     Frictionless lets a *resource* carry its own ``licenses``, which override the
@@ -599,7 +679,9 @@ def validate_provenance(name: str, meta: dict) -> str:
     """
     origin = meta.setdefault(ORIGIN_KEY, DEFAULT_ORIGIN)
     if origin not in ORIGINS:
-        raise SystemExit(f"{name}: {ORIGIN_KEY} must be one of {ORIGINS}, got {origin!r}")
+        raise SystemExit(
+            f"{name}: {ORIGIN_KEY} must be one of {ORIGINS}, got {origin!r}"
+        )
 
     contributors = meta.get(CONTRIBUTORS_KEY) or []
     if not isinstance(contributors, list):
@@ -635,7 +717,7 @@ def validate_provenance(name: str, meta: dict) -> str:
         raise SystemExit(
             f"{name}: {ORIGIN_KEY} is {origin!r}, which claims this data was made here, "
             f"so it has to say by whom. Add a {CONTRIBUTORS_KEY} entry with "
-            f'roles: [{AUTHOR_ROLE}]:\n'
+            f"roles: [{AUTHOR_ROLE}]:\n"
             f"    {CONTRIBUTORS_KEY}:\n"
             f"      - title: Some Person\n"
             f"        roles: [{AUTHOR_ROLE}]\n"
@@ -732,23 +814,33 @@ def render_dataset(
     validate_provenance(name, meta)
     licenses = validate_licenses(name, meta)
 
-    # Both local to the maintainer, never published -- see the module docstring.
+    # All local to the maintainer, never published -- see the module docstring.
     uploaded = bool(meta.pop(UPLOADED_KEY, False))
+    # Uploading implies it; it does not imply uploading. See FROZEN_KEY.
+    frozen = bool(meta.pop(FROZEN_KEY, False)) or uploaded
     raw_source_dir = meta.pop("source_dir", None)
 
-    if uploaded:
+    if frozen:
         if raw_source_dir is not None:
+            reason = (
+                "Once uploaded, dCache is the source of truth and source_dir is never "
+                "read again -- remove it."
+                if uploaded
+                else "A frozen inventory is never rebuilt from local files; the copy it "
+                "describes is the permanent one -- remove it."
+            )
+            declared = UPLOADED_KEY if uploaded else FROZEN_KEY
             raise SystemExit(
-                f"{name}: declares {UPLOADED_KEY}: true and still has "
-                f"source_dir: {raw_source_dir!r}. Once uploaded, dCache is the source of "
-                "truth and source_dir is never read again -- remove it."
+                f"{name}: declares {declared}: true and still has "
+                f"source_dir: {raw_source_dir!r}. {reason}"
             )
         resources = frozen_resources(name, dataset_dir)
     else:
         if raw_source_dir is None:
             raise SystemExit(
-                f"{name}: source_dir is required, unless {UPLOADED_KEY}: true "
-                "says the dataset was already uploaded and dCache is now the source of truth."
+                f"{name}: source_dir is required, unless {UPLOADED_KEY}: true says the "
+                f"dataset was already uploaded, or {FROZEN_KEY}: true says its inventory "
+                "is final and there is nothing local left to build from."
             )
         source_dir = Path(raw_source_dir).expanduser()
         # Only a *relative* source_dir is resolved, and only to make it absolute.
@@ -769,7 +861,8 @@ def render_dataset(
         if not selected:
             raise SystemExit(
                 f"{name}: {INCLUDE_KEY}/{EXCLUDE_KEY} filtered out every one of the "
-                f"{len(found)} files under {source_dir}")
+                f"{len(found)} files under {source_dir}"
+            )
 
         cache = load_hash_cache(dataset_dir)
         hashes = resolve_hashes(selected, source_dir, cache)
@@ -785,7 +878,10 @@ def render_dataset(
     if depth < 0:
         raise SystemExit(f"{name}: ethos:shard_depth must not be negative")
 
-    package = {"$schema": "https://datapackage.org/profiles/2.0/datapackage.json", **meta}
+    package = {
+        "$schema": "https://datapackage.org/profiles/2.0/datapackage.json",
+        **meta,
+    }
     files: dict[str, str] = {}
 
     if depth:
@@ -847,7 +943,13 @@ def _render_namespace(
     the parent's own inventory, or everything beneath it. Forbidding it is what
     keeps the name unambiguous.
     """
-    for forbidden in ("source_dir", "ethos:uploaded", "ethos:shard_depth", INCLUDE_KEY, EXCLUDE_KEY):
+    for forbidden in (
+        "source_dir",
+        "ethos:uploaded",
+        "ethos:shard_depth",
+        INCLUDE_KEY,
+        EXCLUDE_KEY,
+    ):
         if forbidden in meta:
             raise SystemExit(
                 f"{name}: is a namespace -- it holds other datasets -- so it cannot also "
@@ -873,7 +975,7 @@ def _render_namespace(
         **meta,
         NAMESPACE_KEY: True,
         # Reported, not owned: these are the sum over the members, so that
-        # `ethos-data list` can show what the family costs without loading every
+        # a package's `show` command can report what the family costs without loading every
         # member's inventory. There is no `resources` key at all -- a namespace
         # has nothing to download, and a tool must not be able to try.
         "ethos:total_bytes": total_bytes,
@@ -918,12 +1020,17 @@ def stale_files(dataset_dir: Path, files: dict[str, str]) -> list[Path]:
     stale = [
         dataset_dir / relative
         for relative, text in files.items()
-        if not (dataset_dir / relative).is_file() or (dataset_dir / relative).read_text(encoding="utf-8") != text
+        if not (dataset_dir / relative).is_file()
+        or (dataset_dir / relative).read_text(encoding="utf-8") != text
     ]
     shard_root = dataset_dir / SHARD_DIR
     if shard_root.is_dir():
         generated = {dataset_dir / relative for relative in files}
-        stale += [p for p in sorted(shard_root.rglob("*")) if p.is_file() and p not in generated]
+        stale += [
+            p
+            for p in sorted(shard_root.rglob("*"))
+            if p.is_file() and p not in generated
+        ]
     return stale
 
 
@@ -942,7 +1049,9 @@ def catalog_meta(catalog_root: Path) -> dict:
     # a catalogue mislabelled `published` would make every tool refuse to touch it.
     role = meta.setdefault(ROLE_KEY, ROLE_SOURCE)
     if role not in CATALOG_ROLES:
-        raise SystemExit(f"catalog.yaml: {ROLE_KEY} must be one of {CATALOG_ROLES}, got {role!r}")
+        raise SystemExit(
+            f"catalog.yaml: {ROLE_KEY} must be one of {CATALOG_ROLES}, got {role!r}"
+        )
     if role != ROLE_SOURCE:
         raise SystemExit(
             f"catalog.yaml declares {ROLE_KEY}: {role!r}, but this is the catalogue being built "
@@ -957,7 +1066,9 @@ def build_catalog(catalog_root: Path, dataset_dirs: list[Path]) -> dict:
     datasets_root = datasets_dir(catalog_root)
     datasets = []
     for dataset_dir in sorted(dataset_dirs):
-        package = json.loads((dataset_dir / "datapackage.json").read_text(encoding="utf-8"))
+        package = json.loads(
+            (dataset_dir / "datapackage.json").read_text(encoding="utf-8")
+        )
         if package.get(NAMESPACE_KEY):
             # A namespace row carries no access class, no remote prefix and no
             # licence status, because it has no bytes for any of those to be
@@ -995,9 +1106,12 @@ def build_catalog(catalog_root: Path, dataset_dirs: list[Path]) -> dict:
                 # "where does it live?" and "is the licence settled?" from the
                 # index alone. Without these, laziness buys nothing: locating a
                 # file or warning about licensing would pull the whole inventory.
-                "ethos:remote_prefix": package.get("ethos:remote_prefix", package["name"]),
+                "ethos:remote_prefix": package.get(
+                    "ethos:remote_prefix", package["name"]
+                ),
                 "ethos:license_status": (
-                    "resolved" if package.get("licenses")
+                    "resolved"
+                    if package.get("licenses")
                     else package.get("ethos:license_status", "unknown")
                 ),
             }
@@ -1023,7 +1137,9 @@ def _inherited_for(root: Path, dataset_dir: Path) -> dict:
             chain.append(current)
         current = current.parent
     for parent in reversed(chain):
-        meta = yaml.safe_load((parent / "dataset.yaml").read_text(encoding="utf-8")) or {}
+        meta = (
+            yaml.safe_load((parent / "dataset.yaml").read_text(encoding="utf-8")) or {}
+        )
         for key in INHERITED_KEYS:
             if key in meta:
                 inherited[key] = meta[key]
@@ -1091,9 +1207,15 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
             shards = ""
         else:
             klass = f"{package['ethos:access']}/{package['ethos:visibility']}"
-            shards = f"  {len(package['ethos:shards']):>4} shards" if "ethos:shards" in package else ""
-        rows.append(f"  {package['name']:<34} {package['ethos:file_count']:>5} files  "
-                    f"{size_gb:8.3f} GB  {klass}{shards}")
+            shards = (
+                f"  {len(package['ethos:shards']):>4} shards"
+                if "ethos:shards" in package
+                else ""
+            )
+        rows.append(
+            f"  {package['name']:<34} {package['ethos:file_count']:>5} files  "
+            f"{size_gb:8.3f} GB  {klass}{shards}"
+        )
 
     for row in sorted(rows):
         print(row)
@@ -1103,7 +1225,10 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
     catalog_text = dumps(build_catalog(catalog_root, all_dirs))
 
     if check:
-        if not catalog_path.exists() or catalog_path.read_text(encoding="utf-8") != catalog_text:
+        if (
+            not catalog_path.exists()
+            or catalog_path.read_text(encoding="utf-8") != catalog_text
+        ):
             stale.append(catalog_path)
         if stale:
             print("Out of date (re-run `ethos-data catalog build`):", file=sys.stderr)

@@ -6,7 +6,7 @@
 cache locations), so it installs cleanly next to whatever scientific stack you
 already have. Python 3.10 or newer.
 
-Installing it gives you **two commands**:
+Installing it gives you one executable with a catalogue-maintenance command group:
 
 | Command | For | Needs |
 |---------|-----|-------|
@@ -32,7 +32,7 @@ dependencies = [
 ### Optional extras
 
 ```bash
-pip install "ethos-data[progress]"      # tqdm progress bars during a fetch
+pip install "ethos-data[progress] @ git+https://github.com/FZJ-IEK3-VSA/ETHOS.Data.git"
 ```
 
 Without `tqdm`, `fetch(..., progressbar=True)` still works — pooch just falls
@@ -78,9 +78,13 @@ mamba install -c conda-forge rclone oidc-agent
     the Linux package works. `check-store` is a shell script and also wants a
     `bash` on `PATH`; the one Git for Windows ships will do.
 
-Everything else — `build`, `publish`, `link-cache` — needs only the package.
+Everything else in the group — `build` and `publish` — needs only the package,
+and so does `ethos-data link`, which builds shared cache links from a top-level
+command rather than a `catalog` subcommand: filling a cache on the machine that
+already holds the data touches no remote storage, so it asks nothing of
+`rclone` or `oidc-agent`.
 The one-time credential setup is in
-[Upload a dataset](how-to/upload-a-dataset.md#credentials-once-per-machine).
+[Upload a dataset](how-to/catalogue-maintainers/upload-a-dataset.md#credentials-once-per-machine).
 
 ## Check the installation
 
@@ -102,7 +106,7 @@ python -c "import ethos_data; print(ethos_data.__version__)"
 Nothing more is required for public data: the cache defaults to your OS's
 per-user cache directory (`~/.cache/ethos-data` on Linux). If you want it
 somewhere with room — a project filesystem, a scratch volume — see
-[Point the cache somewhere](how-to/configure-the-cache.md).
+[Point the cache somewhere](how-to/data-users/set-up-your-machine.md#cache-locations).
 
 ## Development install
 
@@ -113,8 +117,7 @@ pip install -e .
 pytest
 ```
 
-Linting uses [Ruff](https://docs.astral.sh/ruff/), pinned in the repository's
-`ruff.toml`:
+Linting uses [Ruff](https://docs.astral.sh/ruff/):
 
 ```bash
 ruff check src/ tests/
@@ -123,15 +126,21 @@ ruff format src/ tests/
 
 ## Building this documentation
 
+The published copy is at <https://ethos-data.readthedocs.io/>, rebuilt by
+[Read the Docs](https://about.readthedocs.com/) whenever `main` changes.
+
 The docs are [MkDocs](https://www.mkdocs.org/) with the
 [Material](https://squidfunk.github.io/mkdocs-material/) theme and
-[mkdocstrings](https://mkdocstrings.github.io/) for the API reference:
+[mkdocstrings](https://mkdocstrings.github.io/) for the API reference. The
+toolchain is the package's `docs` extra, which is also what the hosted build
+installs:
 
 ```bash
-mamba install -c conda-forge mkdocs mkdocs-material mkdocstrings mkdocstrings-python
+pip install -e ".[docs]"
 mkdocs serve        # live preview on http://localhost:8000
 mkdocs build        # static site into ./site
 ```
 
-`ethos-data` itself must be importable for the API reference pages to render, so
-run these from an environment where the package is installed (`pip install -e .`).
+The mamba environment from `environment.yml` already carries the same tools.
+`ethos-data` itself must be importable for the API reference pages to render;
+the editable install above takes care of that.
