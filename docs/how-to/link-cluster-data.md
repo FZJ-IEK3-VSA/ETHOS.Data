@@ -41,19 +41,24 @@ ethos-data --catalog /path/to/datacatalog.json --root /shared/ethos/public unlin
 
 A link is visible to everyone sharing that cache. `unlink` removes only symbolic
 links and leaves their sources intact; it refuses real directories.
-`--force` on `link` deliberately repoints an existing link.
+`--force` on a named dataset deliberately repoints an existing link.
 
 If the directory is omitted, `link` reads `source_dir` from the source checkout
 selected with `--catalog-root`. Keep that value pointing at the original.
-To populate a cache from all eligible source descriptors:
+To populate a cache from every eligible source descriptor at once, pass `--all`
+in place of a dataset name:
 
 ```bash
-ethos-data catalog --catalog-root /path/to/source-catalogue link-cache --root /shared/ethos/public --dry-run
-ethos-data catalog --catalog-root /path/to/source-catalogue link-cache --root /shared/ethos/public
+ethos-data link --all --catalog-root /path/to/source-catalogue --root /shared/ethos/public --dry-run
+ethos-data link --all --catalog-root /path/to/source-catalogue --root /shared/ethos/public
 ```
 
-Review the preview. This skips restricted or unresolved-licence entries and
-never replaces real directories. Avoid `--prune` during migration.
+Review the preview. Restricted and unresolved-licence datasets are left out of
+the namespace, and real directories are never replaced with a link.
+
+Avoid `--prune` during migration: it also removes links for datasets the
+catalogue no longer lists, and mid-migration the catalogue is deliberately
+behind the filesystem. It never removes a real directory.
 
 Create and inspect links on the hosting machine. Windows symbolic links require
 Developer Mode or elevation; otherwise use a dataset-root setting. Directory
@@ -104,7 +109,7 @@ For a materialized dataset, also confirm that the cache entry is a real director
 
 ## Restricted data {#restricted-data}
 
-`link-cache` and `materialize --all` discover public-cache entries only.
+`link --all` and `materialize --all` discover public-cache entries only.
 Configure a protected restricted root, then explicitly name a licensed dataset:
 
 ```bash

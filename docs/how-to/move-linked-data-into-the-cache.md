@@ -9,4 +9,4 @@
 <span id="restricted-data"></span>
 <span id="then-upload"></span>
 
-This guide has moved to [Link cluster data](link-cluster-data.md#materialize-copies).
+This guide has moved to [Manage local dataset copies](link-cluster-data.md#materialize-copies).

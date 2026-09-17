@@ -8,9 +8,21 @@ Both halves ship in one distribution on purpose. The `ethos:` extensions are a
 format, and a format whose writer and reader live in separate repositories
 drifts silently.
 
-The command-line entry point is
-[`ethos-data catalog`](../cli/catalog.md); this page documents the functions
-behind it.
+Two commands lead here. [`ethos-data catalog`](../cli/catalog.md) drives the
+manifest builder, the publisher and the uploader below — the work that writes
+and ships metadata about the data. The cache namespace builder is the exception:
+it is reached from
+[`ethos-data link --all`](../cli/ethos-data.md#link-dataset-directory), because
+building a namespace is site administration on the machine that holds the data
+rather than catalogue maintenance. It writes symbolic links into one machine's
+cache and never a descriptor, and filling a whole cache from a checkout is the
+same job as pointing one dataset at a directory, only at a larger scale. That is
+exactly why its command sits with the user-facing `link` rather than under
+`catalog`.
+
+The catalogue-locating helpers below serve both entry points: `link --all` reads
+`source_dir` from the hand-written `dataset.yaml` of a source checkout, and it
+finds that checkout the same way the maintainer commands find theirs.
 
 ## Locating a catalogue
 
@@ -67,6 +79,13 @@ behind it.
       heading_level: 3
 
 ## The cache namespace
+
+Built by [`ethos-data link --all`](../cli/ethos-data.md#link-dataset-directory).
+`run` takes the catalogue checkout and the namespace root as plain arguments,
+neither of them optional, because the command decides which cache it means once
+and hands the answer down: a planner that looked the cache up for itself could
+answer differently from the caller that had already looked, and the result would
+be a whole link tree built somewhere nobody named.
 
 ::: ethos_data.maintain.namespace
     options:

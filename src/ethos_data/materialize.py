@@ -26,8 +26,8 @@ That is a shortcut for speed, not for trust -- the copy is checked against the
 same manifest either way. It exists because uploading a dataset and downloading
 it back is a slow way to put files somewhere they already are, and because a
 dataset that has been uploaded has no ``source_dir`` left for
-``ethos-data catalog link-cache`` to link from, so an explicit source is the only
-thing left to point at.
+``ethos-data link --all`` to link from, so an explicit source is the only thing
+left to point at.
 
 With neither a link nor a ``--from``, the source catalogue's ``source_dir`` is
 used, exactly as ``ethos-data link`` uses it:
@@ -36,10 +36,10 @@ used, exactly as ``ethos-data link`` uses it:
 
 That is the restricted-data workflow in one command. Licensed data belongs in
 the restricted cache as a **real, owned copy** rather than a link -- which is
-why ``catalog link-cache`` skips it -- so there is no link for a copy to follow
-and never was one. The entry still goes wherever the access class says, and
-``--all`` still walks the public cache only: copying licensed bytes is subject
-to that installation's terms, and is something somebody names on purpose.
+why ``ethos-data link --all`` skips it -- so there is no link for a copy to
+follow and never was one. The entry still goes wherever the access class says,
+and ``--all`` still walks the public cache only: copying licensed bytes is
+subject to that installation's terms, and is something somebody names on purpose.
 
 Only files the catalogue describes are copied. A cache is not a backup of
 somebody's project directory -- it holds the inventory the manifest lists, and
@@ -133,7 +133,7 @@ def plan_materialize(
                     name,
                     "unknown",
                     "there is an entry with this name in the cache, but the catalogue does "
-                    "not describe it; `ethos-data catalog link-cache --prune` removes stale links",
+                    "not describe it; `ethos-data link --all --prune` removes stale links",
                 )
             )
             continue
