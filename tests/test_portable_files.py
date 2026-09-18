@@ -144,6 +144,29 @@ class TestPublishing:
         assert build_run(catalog, []) == 0
         assert "datasets/d/datapackage.json" in {p.as_posix() for p in render(catalog)}
 
+    def test_the_source_line_ending_rules_are_published_too(self, catalog, tmp_path):
+        """A public checkout is used from Windows as well. Without the source's
+        .gitattributes, core.autocrlf=true would rewrite the licence documents
+        whose sha256 the descriptors record."""
+        from ethos_data.maintain.publish import run as publish_run
+
+        rules = (
+            "* text=auto eol=lf" + chr(10) + "datasets/**/licenses/** -text" + chr(10)
+        )
+        write_utf8(catalog / ".gitattributes", rules)
+        assert build_run(catalog, []) == 0
+        assert render(catalog)[Path(".gitattributes")] == rules
+        destination = tmp_path / "public"
+        destination.mkdir()
+        assert publish_run(catalog, str(destination)) == 0
+        assert (destination / ".gitattributes").read_text(encoding="utf-8") == rules
+        # --check knows the copy is generated, not a stray file to be removed.
+        assert publish_run(catalog, str(destination), check=True) == 0
+
+    def test_without_source_rules_none_are_invented(self, catalog):
+        assert build_run(catalog, []) == 0
+        assert Path(".gitattributes") not in render(catalog)
+
 
 class TestCommandLineOutput:
     def test_a_non_ascii_title_survives_a_redirected_run(self, catalog, tmp_path):

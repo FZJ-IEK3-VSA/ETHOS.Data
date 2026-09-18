@@ -218,6 +218,12 @@ def render(catalog_root: Path) -> dict[Path, str]:
     )
     files[Path("README.md")] = GENERATED_README.format(table=table)
     files[Path(".gitignore")] = GENERATED_GITIGNORE
+    # The source catalogue's line-ending rules travel with the tree. A public
+    # checkout is used from Windows too, and without them core.autocrlf=true
+    # would rewrite the licence documents whose sha256 the descriptors record.
+    attributes = catalog_root / ".gitattributes"
+    if attributes.is_file():
+        files[Path(".gitattributes")] = attributes.read_text(encoding="utf-8")
     return files
 
 

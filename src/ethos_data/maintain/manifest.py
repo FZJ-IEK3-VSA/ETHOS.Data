@@ -62,7 +62,7 @@ import mimetypes
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import yaml
 
@@ -165,6 +165,13 @@ LICENSES_KEY = "licenses"
 #: originals beside conversions we made, say. Matched by the same rule as
 #: ``ethos:include`` and a collection's ``files:``.
 APPLIES_TO_KEY = "ethos:applies_to"
+#: Optional on one entry of ``licenses``: an archived copy of the terms, as a path
+#: relative to the dataset directory. Carried verbatim into the published catalogue.
+DOCUMENT_KEY = "ethos:document"
+#: Derived: the build hashes the archived document and records the digest here,
+#: exactly as it does for a resource. Written in dataset.yaml by hand it is a pin
+#: the build verifies instead -- for terms somebody has actually reviewed.
+DOCUMENT_HASH_KEY = "ethos:document_sha256"
 
 # Where a sharded dataset keeps the split inventory, relative to its own directory.
 SHARD_DIR = "manifests"
@@ -603,6 +610,70 @@ def validate_licenses(name: str, meta: dict) -> list[dict]:
     return licenses
 
 
+def record_license_documents(
+    name: str, dataset_dir: Path, licenses: list[dict]
+) -> None:
+    """Hash every archived licence document into its entry, or verify the hash it pins.
+
+    The digest is taken from the file, as a resource's is: the document is a
+    file the catalogue ships, and a hand-typed hash drifts the moment the text
+    is replaced. Three of them had, unnoticed, until a bundle export checked.
+    A digest already written in dataset.yaml is kept as a pin and verified, so
+    "these are the terms somebody reviewed" can still be said where it matters;
+    a mismatch stops the build rather than publishing a hash nothing matches.
+    A missing document fails here, where the maintainer is, not later in publish.
+    """
+    for index, entry in enumerate(licenses):
+        where = f"{name}: {LICENSES_KEY}[{index}]"
+        document = entry.get(DOCUMENT_KEY)
+        if document is None:
+            if DOCUMENT_HASH_KEY in entry:
+                raise SystemExit(
+                    f"{where} has {DOCUMENT_HASH_KEY} but no {DOCUMENT_KEY} to hash. "
+                    "Archive the terms beside dataset.yaml and name the file, or drop "
+                    "the hash."
+                )
+            continue
+        relative = PurePosixPath(str(document))
+        if (
+            not isinstance(document, str)
+            or not document
+            or "\\" in document
+            or relative.is_absolute()
+            or PureWindowsPath(document).drive
+            or any(part in ("", ".", "..") for part in relative.parts)
+        ):
+            raise SystemExit(
+                f"{where}: {DOCUMENT_KEY} must be a relative path inside the dataset "
+                f"directory, such as licenses/terms.txt; got {document!r}."
+            )
+        path = dataset_dir.joinpath(*relative.parts)
+        if not path.is_file():
+            raise SystemExit(
+                f"{where} names {DOCUMENT_KEY} {document}, which is not a file at "
+                f"{path}. Archive the terms there, or drop {DOCUMENT_KEY}."
+            )
+        actual = sha256_of(path)
+        pinned = entry.get(DOCUMENT_HASH_KEY)
+        if pinned is not None:
+            if not isinstance(pinned, str):
+                raise SystemExit(
+                    f"{where}: {DOCUMENT_HASH_KEY} must be a hex digest in quotes; YAML "
+                    f"read {pinned!r} as a number, which loses leading zeros. Quote it, "
+                    f"or delete it and let the build record the digest."
+                )
+            declared = pinned.strip().lower().removeprefix("sha256:")
+            if declared != actual:
+                raise SystemExit(
+                    f"{where}: {document} hashes to {actual}, but dataset.yaml pins "
+                    f"{DOCUMENT_HASH_KEY}: {declared}. The archived text is not the one "
+                    f"that hash was recorded for. If the file is right, delete "
+                    f"{DOCUMENT_HASH_KEY} and rebuild -- the build records the digest "
+                    "itself. If the hash is right, restore the file."
+                )
+        entry[DOCUMENT_HASH_KEY] = actual
+
+
 def apply_resource_licenses(
     name: str, resources: list[dict], licenses: list[dict]
 ) -> None:
@@ -813,6 +884,7 @@ def render_dataset(
     validate_classification(name, meta)
     validate_provenance(name, meta)
     licenses = validate_licenses(name, meta)
+    record_license_documents(name, dataset_dir, licenses)
 
     # All local to the maintainer, never published -- see the module docstring.
     uploaded = bool(meta.pop(UPLOADED_KEY, False))

@@ -454,7 +454,13 @@ described by no licence at all.
 of the licence itself, stored beside `dataset.yaml` (by convention in
 `licenses/`) and carried into the published catalogue verbatim.
 
-**`ethos:document_sha256`** — *hex digest of that file.*
+**`ethos:document_sha256`** — *hex digest of that file; derived.* The build hashes the
+archived file and writes the digest into `datapackage.json`, exactly as it does for
+every resource, so nothing has to be typed and nothing can drift. Writing the key in
+`dataset.yaml` yourself turns it into a **pin**: the build verifies it and stops when
+the archived text no longer matches, which is how to say "these are the terms
+somebody reviewed" for a document that matters. Delete the pin and rebuild if the
+new text is the one you mean.
 
 ```yaml
 licenses:
@@ -485,7 +491,7 @@ Two things worth knowing:
   `00README_catalogue_and_licence.txt` and `landcover`'s `license/` directory both
   travel with the data. Archive the documents those *point at*, not the pointers.
 - **`ethos:document` is carried into the published catalogue** — `publish` copies
-  the file next to the descriptor, and fails loudly if it is missing. It is the
+  the file next to the descriptor; the build already failed if it is missing. It is the
   one part of the public tree that is not generated text, so the renderer handles
   bytes for it.
 
