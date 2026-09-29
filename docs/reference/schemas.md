@@ -587,7 +587,7 @@ matching nothing **fails the build**.
 **`ethos:exclude`** — *list of globs.* Applied after `include`. A pattern matching
 nothing only warns.
 
-**`ethos:shard_depth`** — *int.* Split the inventory into `manifests/<prefix>.json`
+**`ethos:shard_depth`** — *int.* Split the inventory into `shards/<prefix>.json`
 at this directory depth. Must not be negative, and must be shallow enough that
 some file is actually nested that deep.
 
@@ -695,7 +695,7 @@ answers a question nobody is asking.
 A resource with no `licenses` key inherits the package's — which is why the
 build warns when every entry is narrowed and files are left over.
 
-### `manifests/<prefix>.json`
+### `shards/<prefix>.json`
 
 One shard of a sharded inventory: a `resources` array plus `ethos:shard`,
 `ethos:file_count` and `ethos:total_bytes`. Files sitting at the dataset root,
@@ -703,5 +703,10 @@ above any shard directory, land in `_root`.
 
 Shard paths in the index are relative to the **dataset** directory, not the
 catalogue root.
+
+The directory used to be called `manifests/`. Readers do not care, because they
+follow the path the index records. The build still owns the old name: the next
+`ethos-data catalog build` moves every shard to `shards/` and deletes
+`manifests/`, and until then `--check` reports it as out of date.
 
 See [The catalogue format](../explanation/catalogue-format.md).

@@ -13,7 +13,7 @@ fetch, so ``ethos-data ls`` and access checks stay free.
 
 A large dataset may additionally be **sharded**: its ``datapackage.json`` carries
 an ``ethos:shards`` index instead of a ``resources`` array, and the inventory is
-split across ``manifests/<prefix>.json`` files, one per directory prefix of
+split across ``shards/<prefix>.json`` files, one per directory prefix of
 ``ethos:shard_depth`` segments.  Selecting ``4/6/5/**`` then parses the 664
 resources of that one tile rather than all 170k.  Sharding is transparent: ask
 for ``.resources`` and every shard is pulled in, exactly as before.

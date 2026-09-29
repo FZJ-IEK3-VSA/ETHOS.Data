@@ -983,7 +983,7 @@ def incomplete(world):
         json.dumps(
             {
                 "name": "sharded",
-                "ethos:shards": [{"prefix": "a", "path": "manifests/a.json"}],
+                "ethos:shards": [{"prefix": "a", "path": "shards/a.json"}],
                 "ethos:shard_depth": 1,
             }
         )
@@ -1032,7 +1032,7 @@ class TestIncompleteCatalog:
         message = str(caught.value)
         assert "dataset 'sharded'" in message
         assert "shard 'a' is missing" in message
-        assert "manifests/a.json" in message
+        assert "shards/a.json" in message
 
     def test_a_collection_selecting_from_a_ghost_dataset_raises_it(
         self, define, incomplete, download_spy

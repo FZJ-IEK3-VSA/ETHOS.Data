@@ -33,7 +33,7 @@ may narrow itself to some of the files with ``ethos:applies_to``, which is
 rendered as a resource-level ``licenses`` override.
 
 A dataset that declares ``ethos:shard_depth: N`` is written *sharded*: the
-inventory is split across ``manifests/<prefix>.json``, one file per directory
+inventory is split across ``shards/<prefix>.json``, one file per directory
 prefix of N segments, and ``datapackage.json`` carries an ``ethos:shards`` index
 instead of a ``resources`` array.  ``ethos_data.catalogs`` then parses only the
 shards a selection can match.  The grouping rule is imported from the reader
@@ -70,7 +70,9 @@ from ..catalogs import CATALOG_ROLES, ROLE_KEY, ROLE_SOURCE, ROOT_SHARD, shard_k
 from ..selection import path_matches
 from . import (
     INHERITED_KEYS,
+    LEGACY_SHARD_DIR,
     NAMESPACE_KEY,
+    SHARD_DIR,
     dataset_name_for,
     datasets_dir,
     is_namespace,
@@ -172,9 +174,6 @@ DOCUMENT_KEY = "ethos:document"
 #: exactly as it does for a resource. Written in dataset.yaml by hand it is a pin
 #: the build verifies instead -- for terms somebody has actually reviewed.
 DOCUMENT_HASH_KEY = "ethos:document_sha256"
-
-# Where a sharded dataset keeps the split inventory, relative to its own directory.
-SHARD_DIR = "manifests"
 
 # Per-dataset, maintainer-local, never published -- see the module docstring.
 HASH_CACHE_NAME = ".ice2-hash-cache.json"
@@ -841,7 +840,7 @@ def render_dataset(
     """Build every generated file for one dataset.
 
     Returns ``{path relative to dataset_dir -> file text}``: always
-    ``datapackage.json``, plus one ``manifests/<prefix>.json`` per shard when the
+    ``datapackage.json``, plus one ``shards/<prefix>.json`` per shard when the
     dataset declares ``ethos:shard_depth``.  Rendering the whole set in memory is
     what lets ``--check`` detect a stale *shard* as readily as a stale index.
 
@@ -1074,17 +1073,29 @@ def write_dataset(dataset_dir: Path, files: dict[str, str]) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8", newline="\n")
 
-    shard_root = dataset_dir / SHARD_DIR
-    if not shard_root.is_dir():
-        return
     generated = {dataset_dir / relative for relative in files}
-    for path in sorted(shard_root.rglob("*"), reverse=True):
-        if path.is_file() and path not in generated:
-            path.unlink()
-        elif path.is_dir() and not any(path.iterdir()):
-            path.rmdir()
-    if not any(shard_root.iterdir()):
-        shard_root.rmdir()
+    for shard_root in shard_roots(dataset_dir):
+        for path in sorted(shard_root.rglob("*"), reverse=True):
+            if path.is_file() and path not in generated:
+                path.unlink()
+            elif path.is_dir() and not any(path.iterdir()):
+                path.rmdir()
+        if not any(shard_root.iterdir()):
+            shard_root.rmdir()
+
+
+def shard_roots(dataset_dir: Path) -> list[Path]:
+    """The build-owned shard directories that exist for this dataset.
+
+    Normally ``shards/`` or nothing. A catalogue built before the rename also
+    has ``manifests/``, which nothing generates any more: every file in it is
+    left over, so a rebuild deletes it and ``--check`` reports it as stale.
+    """
+    return [
+        dataset_dir / name
+        for name in (SHARD_DIR, LEGACY_SHARD_DIR)
+        if (dataset_dir / name).is_dir()
+    ]
 
 
 def stale_files(dataset_dir: Path, files: dict[str, str]) -> list[Path]:
@@ -1095,9 +1106,8 @@ def stale_files(dataset_dir: Path, files: dict[str, str]) -> list[Path]:
         if not (dataset_dir / relative).is_file()
         or (dataset_dir / relative).read_text(encoding="utf-8") != text
     ]
-    shard_root = dataset_dir / SHARD_DIR
-    if shard_root.is_dir():
-        generated = {dataset_dir / relative for relative in files}
+    generated = {dataset_dir / relative for relative in files}
+    for shard_root in shard_roots(dataset_dir):
         stale += [
             p
             for p in sorted(shard_root.rglob("*"))

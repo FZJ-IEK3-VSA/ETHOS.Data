@@ -29,7 +29,7 @@ For every dataset marked `ethos:visibility: public`:
 - `datacatalog.json` — the index, with the per-dataset totals, access class,
   remote prefix and licence status that let a consumer answer questions without
   loading any inventory;
-- `datasets/<name>/datapackage.json` (and `manifests/*.json` for a sharded
+- `datasets/<name>/datapackage.json` (and `shards/*.json` for a sharded
   dataset) — the inventory, with `source_dir`, `ethos:embargo` and
   `ethos:license_note` and `ethos:uploaded` **stripped**;
 - the README table.

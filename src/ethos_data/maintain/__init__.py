@@ -113,6 +113,18 @@ def datasets_dir(catalog_root: Path) -> Path:
     return catalog_root / "datasets"
 
 
+#: Where a sharded dataset keeps its split inventory, beside its own
+#: ``datapackage.json``: one ``shards/<prefix>.json`` per shard. The build owns
+#: this directory outright and deletes whatever in it it did not just generate.
+SHARD_DIR = "shards"
+
+#: What SHARD_DIR was called before it was renamed. The build still owns it, so
+#: the first rebuild of an older catalogue moves every shard across and deletes
+#: it, and ``--check`` reports it until somebody does. Readers never needed
+#: either name: they follow the path the ``ethos:shards`` index records.
+LEGACY_SHARD_DIR = "manifests"
+
+
 #: Keys a nested dataset inherits from the namespace above it when it does not
 #: state its own. Deliberately short, and the rule that keeps it short is: a key
 #: may be inherited only if inheriting it cannot *weaken* a claim.
@@ -142,14 +154,18 @@ def iter_dataset_dirs(root: Path) -> list[Path]:
     as ``reskit-test-data/era5``.
 
     Recursion does not stop at the first dataset.yaml -- that is the whole point,
-    a dataset directory may contain more of them. It does skip ``manifests/``,
-    which holds generated shard files and never a dataset.
+    a dataset directory may contain more of them. It does skip ``shards/`` (and
+    the legacy ``manifests/``), which holds generated shard files and never a
+    dataset.
     """
     found: list[Path] = []
     if not root.is_dir():
         return found
     for path in sorted(root.rglob("dataset.yaml")):
-        if any(part == "manifests" for part in path.relative_to(root).parts):
+        if any(
+            part in (SHARD_DIR, LEGACY_SHARD_DIR)
+            for part in path.relative_to(root).parts
+        ):
             continue
         found.append(path.parent)
     return found
@@ -191,7 +207,7 @@ def resources_of(package: dict, dataset_dir: Path) -> list[dict]:
     """Every resource in a dataset, whether its inventory is inline or sharded.
 
     A sharded descriptor carries an ``ethos:shards`` index instead of
-    ``resources``; the inventory lives in ``manifests/<prefix>.json`` beside it.
+    ``resources``; the inventory lives in ``shards/<prefix>.json`` beside it.
     Shared by the manifest builder (freezing an uploaded dataset's inventory
     without re-reading source_dir) and the uploader (finding what to copy and
     verify) so the two can never disagree about what a sharded package contains.

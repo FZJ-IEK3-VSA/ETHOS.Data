@@ -84,13 +84,13 @@ inventory in.
 
 A large dataset may go further. Its `datapackage.json` carries an `ethos:shards`
 index instead of a `resources` array, and the inventory is split across
-`manifests/<prefix>.json` files, one per directory prefix of
+`shards/<prefix>.json` files, one per directory prefix of
 `ethos:shard_depth` segments:
 
 ```
 datasets/era5/
 |-- datapackage.json          # shard index only, no resources
-`-- manifests/
+`-- shards/
     |-- _root.json
     |-- 4/6/5.json            # shard_depth: 3
     `-- 4/6/6.json

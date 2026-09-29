@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ethos_data.maintain.manifest import render_dataset, write_dataset
+from ethos_data.maintain.manifest import render_dataset, stale_files, write_dataset
 
 
 def make_dataset(
@@ -174,6 +174,73 @@ class TestFreezingAfterUpload:
             assert after_package["ethos:shards"] == before_package["ethos:shards"]
             for shard in after_package["ethos:shards"]:
                 assert after_files[shard["path"]] == before_files[shard["path"]]
+        finally:
+            shutil.rmtree(workspace)
+
+
+def make_legacy(dataset_dir: Path) -> None:
+    """Rewrite a built sharded dataset as a build from before the rename made it."""
+    (dataset_dir / "shards").rename(dataset_dir / "manifests")
+    package_file = dataset_dir / "datapackage.json"
+    package = json.loads(package_file.read_text(encoding="utf-8"))
+    for shard in package["ethos:shards"]:
+        shard["path"] = shard["path"].replace("shards/", "manifests/", 1)
+    package_file.write_text(json.dumps(package), encoding="utf-8")
+
+
+class TestShardDirectory:
+    def test_shards_are_written_under_shards(self):
+        workspace = Path(tempfile.mkdtemp())
+        try:
+            dataset_dir, _ = make_dataset(
+                workspace,
+                {"ethos:shard_depth": 1},
+                {"2019/a.tif": b"x", "2020/a.tif": b"y"},
+            )
+            files = render_dataset(dataset_dir)
+            write_dataset(dataset_dir, files)
+
+            package = json.loads(files["datapackage.json"])
+            assert [s["path"] for s in package["ethos:shards"]] == [
+                "shards/2019.json",
+                "shards/2020.json",
+            ]
+            assert (dataset_dir / "shards" / "2019.json").is_file()
+            assert not (dataset_dir / "manifests").exists()
+        finally:
+            shutil.rmtree(workspace)
+
+    def test_frozen_legacy_shards_move_to_shards_on_rebuild(self):
+        workspace = Path(tempfile.mkdtemp())
+        try:
+            dataset_dir, source = make_dataset(
+                workspace,
+                {"ethos:shard_depth": 1},
+                {"2019/a.tif": b"x", "2020/a.tif": b"y"},
+            )
+            freeze(dataset_dir)
+            shutil.rmtree(source)
+            before = {
+                p.name: p.read_text(encoding="utf-8")
+                for p in (dataset_dir / "shards").iterdir()
+            }
+            make_legacy(dataset_dir)
+
+            # The only inventory left is the one under manifests/, so this also
+            # proves the legacy index is still readable.
+            files = render_dataset(dataset_dir)
+            stale = stale_files(dataset_dir, files)
+            assert dataset_dir / "manifests" / "2019.json" in stale
+            assert dataset_dir / "shards" / "2019.json" in stale
+
+            write_dataset(dataset_dir, files)
+            assert not (dataset_dir / "manifests").exists()
+            after = {
+                p.name: p.read_text(encoding="utf-8")
+                for p in (dataset_dir / "shards").iterdir()
+            }
+            assert after == before
+            assert stale_files(dataset_dir, render_dataset(dataset_dir)) == []
         finally:
             shutil.rmtree(workspace)
 

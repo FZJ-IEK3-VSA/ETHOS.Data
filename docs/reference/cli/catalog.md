@@ -25,7 +25,7 @@ catalogue gets an explicit refusal naming the source catalogue to use instead.
 
 ## `build [datasets...]`
 
-Regenerate `datapackage.json` (and `manifests/*.json` for a sharded dataset)
+Regenerate `datapackage.json` (and `shards/*.json` for a sharded dataset)
 from each `dataset.yaml`, plus the catalogue-wide `datacatalog.json`.
 
 ```bash
@@ -41,6 +41,10 @@ plumbing, `__pycache__` and root `README*`/`LICENSE*`/`CHANGELOG*`.
 An `ethos:include` pattern matching nothing **fails**; an `ethos:exclude` pattern
 matching nothing only warns. See
 [Describe a dataset](../../how-to/catalogue-maintainers/describe-a-dataset.md#the-asymmetry-is-deliberate).
+
+A sharded dataset built before the shard directory was renamed still has
+`manifests/`. The build moves its shards to `shards/` and deletes the old
+directory, and `--check` fails until that has happened.
 
 | Flag | |
 |---|---|
