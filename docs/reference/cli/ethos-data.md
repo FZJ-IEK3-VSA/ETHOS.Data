@@ -2,7 +2,7 @@
 
 Catalogue access, shared configuration, cache administration and catalogue
 maintenance. Collection workflows, test bundles and staging use a
-[package data command](package-data.md), such as `reskit-data`.
+[package data command](package-data.md), such as `<your-tool>-data`.
 
 ```text
 ethos-data [--catalog LOCATION] [--root DIR] COMMAND ...
@@ -72,7 +72,7 @@ offline and marks unreachable cache paths with the reason. It reports shared
 settings, not per-command overrides or a package's resolved catalogue pin.
 
 Use `ethos-data ls` to see the catalogue selected for direct access, or
-`reskit-data show` for RESKit's selected catalogue and collections.
+`<your-tool>-data show` for a package's selected catalogue and collections.
 
 All setters/unsetters accept `--scope project|user|environment|site`, defaulting
 to `user`. Settings affect package wrappers too. The
@@ -198,7 +198,7 @@ Only files the catalogue describes are copied. Refuses if the copy would leave
 less than 2% of the filesystem free. Explicit dataset names use the root for
 their access class, including the restricted root. A local copy of licensed
 files requires permission under that installation's terms and an appropriately
-protected destination; see [Move linked data into the cache](../../how-to/catalogue-maintainers/link-cluster-data.md#materialize-copies).
+protected destination; see [Materialize linked data](../../how-to/catalogue-maintainers/materialize-linked-data.md#materialize-copies).
 `--from` names one dataset (not `--all`) and also fills an entry that does not
 exist yet, which is how a cache is seeded from bytes already on the machine
 instead of an upload and a download back. With no entry and no `--from`, the
@@ -242,10 +242,10 @@ other mode — `--root` or `--prune` beside a dataset name, `--force` beside
 | Earlier invocation | Current invocation |
 | --- | --- |
 | `ethos-data path KEY` | `ethos-data fetch KEY` |
-| `ethos-data -c reskit/data/collections.yaml fetch COLLECTION` | `reskit-data fetch COLLECTION` |
-| Collection `list`, `info` | `reskit-data show [COLLECTION]` |
-| Collection `plan`, `paths` | `reskit-data fetch COLLECTION --plan` / `--paths` |
-| `reskit-data path KEY`, `reskit-data ls [KEY]` | `ethos-data fetch KEY`, `ethos-data ls [KEY]` |
+| `ethos-data -c reskit/data/collections.yaml fetch COLLECTION` | `<your-tool>-data fetch COLLECTION` |
+| Collection `list`, `info` | `<your-tool>-data show [COLLECTION]` |
+| Collection `plan`, `paths` | `<your-tool>-data fetch COLLECTION --plan` / `--paths` |
+| `<your-tool>-data path KEY`, `<your-tool>-data ls [KEY]` | `ethos-data fetch KEY`, `ethos-data ls [KEY]` |
 | `ethos-data staging ...` or `ethos-data bundle ...` | The package's `staging ...` or `bundle ...` command |
 | `ethos-data catalog link-cache --root DIR` | `ethos-data link --all --root DIR` |
 

@@ -143,5 +143,5 @@ without the header `urllib` sends `Accept-Encoding: identity`.
 ## See also
 
 - [File formats](../reference/schemas.md) — every key, exhaustively.
-- [Describe a dataset](../how-to/catalogue-maintainers/describe-a-dataset.md) — writing one.
+- [Add a dataset](../how-to/catalogue-maintainers/add-a-dataset.md) — writing one.
 - [API: catalogue and collections](../reference/api/catalog.md).

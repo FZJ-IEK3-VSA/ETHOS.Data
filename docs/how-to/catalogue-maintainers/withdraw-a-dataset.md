@@ -1,45 +1,77 @@
-# Withdraw a dataset
+# Remove a dataset
 
-Remove an entry from the current public catalogue, and only delete remote bytes
-if withdrawal requires it. For a correction, publish a new version while
-retaining the old paths; see [Licensing and immutability](../../explanation/licensing.md).
+Take a dataset that should not have been added out of the catalogue, the
+shared caches and dCache. Removal is for data that must stop existing: a
+wrongly accepted candidate, a licence that turned out to forbid what was done,
+test data nobody needs. A correction is not a removal; it is a new version at
+new paths, see [Licensing and immutability](../../explanation/licensing.md).
 
-## 1. Remove the current public entry
+The order is the reverse of publishing: **metadata first, bytes second**.
+A catalogue that points at deleted bytes breaks every reader half-way.
 
-In the source catalogue, set `ethos:visibility: hidden` and add the required
-`ethos:embargo` block, or remove the dataset's metadata directory if the entry
-is being removed entirely.
+## 1. Remove the catalogue entry
+
+In the source checkout, delete the dataset's directory and rebuild:
 
 ```bash
+git rm -r datasets/<name>
 ethos-data catalog build
 ethos-data catalog publish ../ETHOS.Data-Catalogue
 ```
 
-Review the generated diff. Release the source/public revisions and deploy the
-updated internal tree as appropriate. Record why the dataset was withdrawn and
-which replacement, if any, consumers should use.
+If only the public listing was wrong, keep the dataset and hide it instead:
+`ethos:visibility: hidden` with an embargo block that says why. Review both
+diffs, then [release](release-the-catalogue.md) the internal version and the
+public revision. Note why the dataset was removed and what replaces it in the
+commit and in the issue.
 
-## 2. Check old consumers before deleting bytes
+## 2. Remove the cache entries
 
-An older pinned catalogue still describes the dataset. Hiding today's entry does
-not revoke those pins, erase existing caches, or prevent access through a known
-URL. Prefer retaining bytes needed for reproduction.
+```bash
+ethos-data --root /shared/ethos/public unlink <name>
+```
 
-If withdrawal requires removing bytes, identify the exact remote prefix and
-check whether other datasets share it. Follow
-[Delete a file or folder](manage-dcache-folders.md#delete-a-file-or-an-entire-folder)
-with a preview first. Do not delete the publication root.
+`unlink` removes a link and leaves its target alone. A materialized entry is a
+real directory the cache owns; `unlink` refuses it, so remove it by hand after
+checking that nothing else reads it:
 
-## 3. Verify and communicate the withdrawal
+```bash
+ls -ld /shared/ethos/public/<name>
+rm -r /shared/ethos/public/<name>
+```
 
-Confirm the entry is absent from the newly published index. If bytes were deleted,
-check the exact former resource URL without credentials and confirm it is no
-longer retrievable.
+A restricted entry lives in the restricted cache; treat it the same way.
 
-Tell affected package maintainers the withdrawn identifiers, reason, last usable
-revision, and replacement. Ask them to update their collections or document why
-an old pin is retained. Existing copies remain on users' machines; deletion does
-not notify users or correct their previous results.
+## 3. Delete the bytes on dCache
 
-See [Publish the catalogue](publish-the-catalogue.md) and
-[Report a problem](../data-users/troubleshoot-catalogue.md#report-a-problem).
+Only after the new catalogue is released. Find the exact remote prefix from
+the removed descriptor and check that no other dataset shares it:
+
+```bash
+rclone lsf -R HIFIS:ethos-data/<remote prefix>
+rclone purge HIFIS:ethos-data/<remote prefix> --dry-run
+rclone purge HIFIS:ethos-data/<remote prefix>
+```
+
+`purge` removes the folder and everything in it without a trash area. Never
+target the publication root to clean one dataset. See
+[Manage dCache folders](manage-dcache-folders.md).
+
+## 4. Check and tell people
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ethos-data/<remote prefix>/<one file>
+ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json ls | grep <name>
+```
+
+Expect `404` and no listing. Then tell the maintainers of every package that
+pinned the dataset: the removed name, the reason, the last revision that
+still describes it, and the replacement. Older pinned catalogue revisions
+still describe the dataset, and copies on users' machines remain; removal
+notifies nobody and corrects no earlier result.
+
+!!! warning "Gap: removal is four manual steps"
+    No command removes a dataset from the catalogue, the caches and dCache
+    together, and nothing checks the order. A `catalog remove <dataset>` that
+    refuses to delete bytes while a released catalogue still lists them would
+    encode the rule above.

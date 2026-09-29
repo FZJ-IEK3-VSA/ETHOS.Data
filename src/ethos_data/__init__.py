@@ -7,7 +7,7 @@ once.
 
     import ethos_data
 
-    data = ethos_data.collections("reskit/data/collections.yaml", tool="reskit")
+    data = ethos_data.collections("mytool/data/collections.yaml", tool="mytool")
     inputs = data.paths("onshore_wind", test=True)    # {handle: Path}
     files = data.fetch("onshore_wind")                # {key: Path}
     clc = data.catalog.path("landcover/C3S-LC-L4-LCCS-Map-300m-P1Y-2018-v2.1.1.tif")
@@ -160,11 +160,11 @@ def collections(
     calls ``fetch``, ``paths``, ``resolve`` and ``plan`` on::
 
         COLLECTIONS_FILE = Path(__file__).with_name("collections.yaml")
-        data = ethos_data.collections(COLLECTIONS_FILE, tool="reskit")
+        data = ethos_data.collections(COLLECTIONS_FILE, tool="mytool")
         inputs = data.paths("onshore_wind", test=True)
 
     ``tool`` is the tool's short name, used in messages and as the default
-    name of its command (``reskit-data``; see :meth:`Collections.main`). The
+    name of its command (``<tool>-data``; see :meth:`Collections.main`). The
     catalogue is ``catalog`` if given, else ``$ETHOS_DATA_CATALOG`` or a
     configured one, else the version the file pins, else the built-in public
     catalogue -- so a user can repoint every tool at once without any tool
@@ -212,13 +212,13 @@ def tool_main(
 
     Two lines in the tool make the command::
 
-        # reskit/data/__init__.py
+        # mytool/data/__init__.py
         def main(argv=None):
-            return ethos_data.tool_main(COLLECTIONS_FILE, tool="reskit", argv=argv)
+            return ethos_data.tool_main(COLLECTIONS_FILE, tool="mytool", argv=argv)
 
         # pyproject.toml
         [project.scripts]
-        reskit-data = "reskit.data:main"
+        mytool-data = "mytool.data:main"
 
     ``show``, ``fetch`` and ``verify`` for the file's collections, against the
     catalogue it pins, plus ``bundle``, ``staging`` and ``config``. A single

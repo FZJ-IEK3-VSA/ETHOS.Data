@@ -258,11 +258,11 @@ When you are done, delete the `catalogue-lesson` directory.
 - [Catalogues and storage](../explanation/catalogues-and-storage.md) — why metadata
   publication, local access, and remote storage are separate operations.
 
-- [Accept a dataset proposal](../how-to/catalogue-maintainers/accept-a-dataset.md) — the checklist for
+- [Add a dataset](../how-to/catalogue-maintainers/add-a-dataset.md) — the checklist for
   a real submission, from review to release.
 - [Upload a dataset](../how-to/catalogue-maintainers/upload-a-dataset.md) — credentials, transfer, and
   verification.
-- [Add internal and restricted datasets](../how-to/catalogue-maintainers/describe-a-dataset.md#restricted-installations)
+- [Add a dataset, restricted datasets](../how-to/catalogue-maintainers/add-a-dataset.md#restricted-installations)
   — data that is not uploaded publicly.
-- [Manage local dataset copies](../how-to/catalogue-maintainers/link-cluster-data.md) — overrides, linking
+- [Link existing data into the cache](../how-to/catalogue-maintainers/link-existing-data.md) — overrides, linking
   and copying on real shared storage.

@@ -120,7 +120,7 @@ The catalogue used by `ethos-data` and `ethos_data.catalog()` is the first of:
 
 Package wrappers and collections handles also use the file's `catalog:` pin
 before the built-in fallback. A package-specific override, such as
-`RESKIT_DATA_CATALOG` passed by RESKit through `catalog=`, ranks below the CLI's
+`<YOUR_TOOL>_DATA_CATALOG` passed by the package through `catalog=`, ranks below the CLI's
 `--catalog` and above `ETHOS_DATA_CATALOG`. To compare a direct fetch with a
 package workflow, explicitly select the same catalogue.
 
@@ -145,7 +145,7 @@ provides access by key against its selected catalogue. See
 
 ## Configuration commands
 
-Prefix these with `ethos-data` or a package wrapper such as `reskit-data`.
+Prefix these with `ethos-data` or a package wrapper such as `<your-tool>-data`.
 
 | Command | Value |
 | --- | --- |

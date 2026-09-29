@@ -56,5 +56,5 @@ remote deletion; old pins and existing copies still need separate consideration.
 
 See [Caches, classes and roots](caches-and-access.md),
 [The catalogue lifecycle](architecture/lifecycle.md), and
-[Serve catalogues on the cluster and GitHub](../how-to/catalogue-maintainers/catalogue-hosting.md).
+[Release the catalogue](../how-to/catalogue-maintainers/release-the-catalogue.md).
 

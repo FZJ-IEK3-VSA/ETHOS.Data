@@ -51,7 +51,7 @@ ethos-data catalog upload my-dataset --verify-only --no-chmod
 `--no-chmod` for a diagnostic that does not change permissions. Storage-locality
 lookup still requires authentication.
 
-For failures, use [Diagnose catalogue problems](../data-users/troubleshoot-catalogue.md).
+For failures, use [Diagnose a report](diagnose-a-report.md).
 
 ## 4. Record and release the accepted inventory
 
@@ -64,7 +64,7 @@ ethos-data catalog build --check
 ethos-data catalog publish ../ETHOS.Data-Catalogue
 ```
 
-[Review and release the generated metadata](publish-the-catalogue.md).
+[Release the catalogue](release-the-catalogue.md).
 `upload` does not mark the dataset uploaded automatically, and `publish` does
 not push or deploy it.
 
@@ -77,7 +77,7 @@ still checks anonymously and can report failure for correctly private bytes.
 
 Use a separate protected storage location agreed with the administrator; never
 assume `--allow-internal` makes a public parent private. Prefer the
-[local internal-data workflow](describe-a-dataset.md#restricted-installations) until an
+[local internal-data workflow](add-a-dataset.md#restricted-installations) until an
 authenticated transfer/read procedure is established.
 
 See [Upload options](../../reference/cli/catalog.md#upload-dataset-dataset) for the

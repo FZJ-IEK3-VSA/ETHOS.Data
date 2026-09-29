@@ -45,6 +45,7 @@ theme:
         code: Roboto Mono
     features:
         - navigation.tabs
+        - navigation.expand
         - navigation.sections
         - navigation.indexes
         - navigation.top
@@ -183,27 +184,32 @@ nav:
           - Overview: how-to/index.md
           - Data users:
                 - Set up your machine: how-to/data-users/set-up-your-machine.md
-                - Get data by catalogue key: how-to/data-users/get-data-for-a-task.md
+                - Use data in a script: how-to/data-users/use-data-in-a-script.md
                 - Check and repair the cache: how-to/data-users/verify-and-repair.md
-                - Diagnose catalogue problems: how-to/data-users/troubleshoot-catalogue.md
+                - Report a problem: how-to/data-users/report-a-problem.md
           - Package maintainers:
                 - Use ETHOS.Data in your package: how-to/package-maintainers/use-from-a-package.md
                 - Write a collections file: how-to/package-maintainers/write-a-collections-file.md
-                - Develop and propose data: how-to/package-maintainers/propose-a-dataset.md
-                - Keep test data in the repository: how-to/package-maintainers/keep-test-data-in-a-repository.md
-                - Run package tests in CI: how-to/package-maintainers/run-in-ci.md
+                - Stage development data: how-to/package-maintainers/stage-development-data.md
+                - Propose a dataset: how-to/package-maintainers/propose-a-dataset.md
+                - Keep data in the repository: how-to/package-maintainers/keep-data-in-the-repository.md
+                - Run tests and examples in CI: how-to/package-maintainers/run-in-ci.md
           - Catalogue maintainers:
-                - Accept a dataset proposal: how-to/catalogue-maintainers/accept-a-dataset.md
-                - Describe a dataset: how-to/catalogue-maintainers/describe-a-dataset.md
-                - Set up dCache access: how-to/catalogue-maintainers/set-up-dcache-access.md
-                - Upload a public dataset: how-to/catalogue-maintainers/upload-a-dataset.md
-                - Manage dCache folders: how-to/catalogue-maintainers/manage-dcache-folders.md
-                - Publish the catalogue: how-to/catalogue-maintainers/publish-the-catalogue.md
-                - Serve catalogues on the cluster and GitHub: how-to/catalogue-maintainers/catalogue-hosting.md
-                - Manage local dataset copies: how-to/catalogue-maintainers/link-cluster-data.md
-                - Check catalogue changes in CI: how-to/catalogue-maintainers/catalogue-ci.md
-                - Withdraw a dataset: how-to/catalogue-maintainers/withdraw-a-dataset.md
-                - Bootstrap a new catalogue: how-to/catalogue-maintainers/bootstrap-a-catalogue.md
+                - Setup:
+                      - Set up dCache access: how-to/catalogue-maintainers/set-up-dcache-access.md
+                      - Set up the shared machine: how-to/catalogue-maintainers/set-up-the-shared-machine.md
+                      - Bootstrap a catalogue: how-to/catalogue-maintainers/bootstrap-a-catalogue.md
+                - Regular tasks:
+                      - Add a dataset: how-to/catalogue-maintainers/add-a-dataset.md
+                      - Verify provenance: how-to/catalogue-maintainers/verify-provenance.md
+                      - Upload a public dataset: how-to/catalogue-maintainers/upload-a-dataset.md
+                      - Link existing data into the cache: how-to/catalogue-maintainers/link-existing-data.md
+                      - Materialize linked data: how-to/catalogue-maintainers/materialize-linked-data.md
+                      - Add restricted data: how-to/catalogue-maintainers/add-restricted-data.md
+                      - Remove a dataset: how-to/catalogue-maintainers/withdraw-a-dataset.md
+                      - Release the catalogue: how-to/catalogue-maintainers/release-the-catalogue.md
+                      - Manage dCache folders: how-to/catalogue-maintainers/manage-dcache-folders.md
+                      - Diagnose a report: how-to/catalogue-maintainers/diagnose-a-report.md
 
     - Explanation:
           - Overview: explanation/index.md

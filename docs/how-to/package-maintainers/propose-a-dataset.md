@@ -1,103 +1,156 @@
-# Develop and propose a dataset
+# Propose a dataset
 
-Use a package's data wrapper to develop against unpublished data, then hand a
-stable candidate to the catalogue maintainer. This needs no dCache credentials
-or write access to the catalogue repository. Examples use `reskit-data`;
-substitute your own package command.
+Hand a new or changed dataset to the catalogue maintainer so it can be
+accepted, published where its terms allow, and used by your package. The
+dataset may be something you downloaded or something you created. You need no
+catalogue write access and no dCache credentials.
 
-## Stage development data {#stage-development-data}
+Test data that lives in your repository as a [bundle](keep-data-in-the-repository.md)
+is proposed the same way; the bundle already carries a description for each
+of its datasets, and the maintainer imports it as a new bundle version.
 
-Choose a separate development root and register a source directory:
+## 1. Decide what kind of change it is
+
+| Situation | Propose |
+| --- | --- |
+| Data the catalogue does not have | A new dataset with its own name |
+| A changed version of a catalogued dataset, for example test data for a changed function | A new dataset name or versioned resource paths. Published paths never change, so changed bytes need new paths; unchanged files keep theirs and are not downloaded again. |
+| More files for an existing dataset, unchanged otherwise | An addition to the existing dataset |
+| A tiny synthetic fixture your package owns | Nothing: keep it in the package |
+
+If the change is only in code, say so; a bug fix does not need new data.
+
+## 2. Put the bytes where the reviewer can read them, and stop changing them
+
+The relative paths inside the directory become the resource keys, so keep the
+layout the workflow expects.
+
+=== "Downloaded"
+
+    Put the files as obtained from the source, unpacked but otherwise
+    unchanged, into one directory. Keep the download URL and the date; both
+    go into the description.
+
+=== "Created or derived"
+
+    Put the output of your script into one directory and keep the script,
+    its version and its parameters: they go into the description as
+    `ethos:derivation`, and the reviewer may rerun it. Data derived from a
+    licensed product inherits that product's terms, so name the inputs.
+
+Then stop changing the files. There is no command for this; make the
+directory read-only so nothing can be edited by accident:
 
 ```bash
-reskit-data config set-staging-cache /scratch/me/ethos-staging
-reskit-data staging add my-new-dataset /scratch/me/candidate --note "candidate for review"
-reskit-data staging list
+chmod -R a-w /projects/shared/candidates/my-dataset
 ```
 
-Registration links by default; use `--copy` where links are unavailable.
-A copied entry is a snapshot, so later source edits require restaging.
-Management commands work offline.
+Every edit after the inventory was built invalidates its checksums; if you do
+change something, say so and the reviewer rebuilds.
 
-Add the dataset to a collection in your package's shipped file, following
-[Write a collections file](write-a-collections-file.md), then call the ordinary
-wrapper or Python API:
+Where the directory lives depends on your installation. On the ICE-2 cluster computer
+computer, a project directory the maintainer can read is enough; say how long
+it stays. From a public installation, attach an archive to the proposal or
+give a download link, and keep the directory until acceptance.
 
-```bash
-reskit-data fetch my_workflow
-```
+## 3. Draft the description
 
-`my_workflow` is the collection you just added. Collection resolution still needs
-a readable catalogue index, even for newly staged datasets. The
-[development tutorial](../../tutorials/develop-and-propose-data.md) provides a local
-practice index and wrapper.
+Write a `dataset.yaml` beside the data if you can; otherwise supply the same
+facts in the proposal. Which facts depend on where the data came from.
 
-Staging adds to or shadows non-restricted datasets in a **shared** overlay.
-Other packages using that root see it too. Reads warn, files have no catalogue
-checksums, and verification reports them as `unverifiable`. Restricted data
-must stay in its authorised installation.
+=== "Downloaded"
 
-`staging list --new-only` compares entries with local public/restricted caches;
-it does not prove a dataset is absent from the catalogue. See the
-[staging command reference](../../reference/cli/package-data.md#staging) for flags.
+    ```yaml
+    name: global-wind-atlas-v4
+    title: Global Wind Atlas 4.0 mean wind speed
+    description: What it contains and which release.
+    source_dir: /projects/shared/candidates/global-wind-atlas-v4
+    ethos:access: public
+    ethos:visibility: public
+    ethos:origin: downloaded
+    sources:
+      - title: Global Wind Atlas 4.0
+        path: https://globalwindatlas.info/
+    licenses:
+      - name: CC-BY-4.0
+        path: https://creativecommons.org/licenses/by/4.0/
+    ethos:retrieved: "2026-09-01"
+    ethos:attribution: The attribution text the source requires.
+    ethos:contact: Your name
+    ```
 
-## Prepare the review material
+    Record the download URL, the retrieval date and the licence as published
+    by the source. The maintainer will [verify the provenance](../catalogue-maintainers/verify-provenance.md)
+    against that source.
 
-Supply these items through the project's agreed issue, merge request, or
-submission channel:
+=== "Created or derived"
 
-| Item | What the reviewer needs |
-|---|---|
-| Purpose and identity | Proposed dataset name, version, title, intended workflows, and whether it adds data or revises an existing input |
-| Source metadata | A draft `dataset.yaml`, following [Describe a dataset](../catalogue-maintainers/describe-a-dataset.md) |
-| Provenance | Original source or DOI, retrieval date, authors, and any derivation script with its version and parameters |
-| Redistribution and visibility | Applicable licences, attribution, access class, and any proposed embargo; identify unresolved questions |
-| Inventory | Selected relative paths, sizes, SHA-256 hashes, and required sidecars; preferably a generated manifest |
-| Access to the bytes | An agreed shared directory or transfer location that the reviewer can read, and how long it will remain available |
-| Validation | Commands/tests used, relevant results, and the collection selection that the package will use |
+    ```yaml
+    name: your-tool-test-data/era5
+    title: ERA5 fixtures for the test suite of your_tool
+    description: Spatial and temporal subsets, resampled; for tests only.
+    source_dir: /projects/shared/candidates/era5-fixtures
+    ethos:access: public
+    ethos:visibility: public
+    ethos:origin: derived
+    contributors:
+      - title: Your name
+        roles: [author]
+    sources:
+      - title: ERA5 hourly data on single levels
+        path: https://doi.org/10.24381/cds.adbb2d47
+    ethos:derivation: scripts/cut_era5.py at your_tool commit abc1234, bbox 5-7E 50-52N
+    licenses:
+      - name: CC-BY-4.0
+        path: https://creativecommons.org/licenses/by/4.0/
+    ethos:attribution: Contains modified Copernicus Climate Change Service information 2026.
+    ethos:contact: Your name
+    ```
 
-An archive attached to a proposal is a transfer copy. Once accepted and
-uploaded, dCache remains the authoritative store, including for test data.
+    `created` is data made from scratch here; `derived` is computed from other
+    data and inherits that data's obligations, so name the inputs and the
+    method. Test data cut from a licensed product is derived data under that
+    product's terms.
 
-If you can read the source catalogue, prepare a branch in a personal checkout
-and add `datasets/<name>/dataset.yaml`. If you cannot, submit the draft metadata
-and inventory separately; the reviewer can integrate and build them. Avoid
-putting machine-specific paths in the consuming package's committed
-collections file.
+If the terms are unclear, write `ethos:license_status: unresolved` and the
+question in `ethos:license_note`; do not guess a licence. Data that may not be
+redistributed is `ethos:access: restricted` and is never uploaded; see
+[Add restricted data](../catalogue-maintainers/add-restricted-data.md). The
+full key list is in [Add a dataset](../catalogue-maintainers/add-a-dataset.md#write-the-description)
+and the [format reference](../../reference/schemas.md#datasetyaml).
 
-## Make the proposed bytes stable for review
+## 4. Submit
 
-Finish the local experiment in a development directory and preserve that
-version for the reviewer. Changes to the files after inventory generation
-invalidate its checksums. Rebuild and update the proposal if the candidate
-changes.
+Open an issue, with the items below, at:
 
-Keep the proposed published paths distinct from paths with already published,
-different bytes. A bug fix does not authorize overwriting an immutable remote
-object. Explain whether the fix is only in code or also requires new data.
+- <https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data-catalog-internal>
+  from a cluster installation, or for any dataset that is internal or
+  restricted;
+- <https://github.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/issues> from a public
+  installation, for public data.
 
-## Hand off publication
+| Item | Content |
+| --- | --- |
+| Identity and purpose | Name, version, title, the workflows that use it, new dataset or revision |
+| Description | The draft `dataset.yaml`, or the bundle directory that holds it |
+| Bytes | The readable directory, archive or link, and how long it stays |
+| Validation | The tests or examples you ran against it, staged or bundled, and their result |
+| Collection | The `collections.yaml` entry your package will use |
 
-The catalogue maintainer follows [Accept a dataset proposal](../catalogue-maintainers/accept-a-dataset.md):
-review metadata, build and inspect the inventory, upload and verify the bytes,
-then release the appropriate metadata. A successful local test or metadata
-build alone does not establish that data is available to consumers.
+## 5. After acceptance
 
-## Adopt the accepted version
+The maintainer replies with the accepted dataset name and the catalogue
+release that contains it.
 
-After the maintainer supplies the released catalogue version:
+1. Raise `catalog.min_version` in `collections.yaml` to that release and add
+   or update the collection.
+2. Remove the [staging entry](stage-development-data.md#4-remove-it) and any
+   dataset-root override used during development.
+3. Fetch and run the affected workflow against the released catalogue and
+   check that no staging warning remains.
+4. If the data lives in your repository as a bundle, run
+   [`bundle update`](keep-data-in-the-repository.md#sync) once more so it
+   records the release and its warning stops.
+5. Commit the collections file, the bundle and the tests together.
 
-1. Update your package's catalogue pin and collection definitions as needed.
-2. Remove the staging entry with `reskit-data staging remove <name>`; remove any
-   dataset-specific local root override that was used for development.
-3. Fetch and run the affected workflow against the accepted catalogue, checking
-   that no staging warning remains.
-4. Update any repository test-data snapshot deliberately, then run both the
-   required local tests and the relevant live integration test.
-
-
-A linked staging entry can be removed without deleting its source. A copied
-entry requires `staging remove NAME --force` and its copy is deleted.
-Unset `staging_cache` only when other experiments no longer need the root.
-
-Continue with [Run package tests in CI](run-in-ci.md).
+Continue with [Run tests and examples in CI](run-in-ci.md).

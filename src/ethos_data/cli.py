@@ -3,7 +3,7 @@
 Use 'ls' to inspect the catalogue and 'fetch' to get a dataset, folder or file
 by its catalogue key. Catalogue maintenance and dCache uploads use 'catalog'.
 Collections, test bundles and staging belong to a package's own data command,
-such as reskit-data, built with ethos_data.tool_main.
+such as <tool>-data, built with ethos_data.tool_main.
 """
 
 from __future__ import annotations
@@ -116,7 +116,7 @@ def run_tool(
 
     What :func:`ethos_data.tool_main` and :meth:`ethos_data.Collections.main`
     run, and all a tool needs to offer its users a data command -- geokit's is
-    reskit's with another file and another name. The parser offers ``show``,
+    a tool's, with its file and its name. The parser offers ``show``,
     ``fetch`` and ``verify`` for the file's collections and the ``bundle``,
     ``staging`` and ``config`` groups. Access by catalogue key and shared cache
     and catalogue maintenance belong to ``ethos-data``.
@@ -124,7 +124,7 @@ def run_tool(
     The handle -- and with it the catalogue -- is built only when a command
     needs it, so ``--help`` and ``config show`` work offline and a pin nobody
     can reach can still be overridden with ``--catalog`` for one run.
-    ``catalog`` is the tool's own override (``$RESKIT_DATA_CATALOG``), applied
+    ``catalog`` is the tool's own override (``$<TOOL>_DATA_CATALOG``), applied
     below ``--catalog`` and above the environment; ``loaded`` is a handle that
     already exists, reused when nothing overrides its catalogue.
     """

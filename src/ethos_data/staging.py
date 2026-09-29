@@ -9,9 +9,9 @@ hard-coded paths that have to be unpicked later.
 The staging root is that middle ground. It is an ordinary directory whose
 entries are dataset names, exactly like the public cache:
 
-    reskit-data staging add my-new-dataset /scratch/me/new-data
-    reskit-data staging list
-    reskit-data staging remove my-new-dataset
+    <tool>-data staging add my-new-dataset /scratch/me/new-data
+    <tool>-data staging list
+    <tool>-data staging remove my-new-dataset
 
 An entry here shadows the catalogue completely, and is **described by what is on
 disk** rather than by any manifest -- which is the point: the file list is still

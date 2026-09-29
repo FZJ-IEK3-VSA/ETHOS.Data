@@ -1,129 +1,130 @@
 # Set up your machine
 
-Choose shared catalogue and cache locations for your account. You need
-[ETHOS.Data installed](../../installation.md). All paths below are examples;
-obtain deployment paths and restricted-data permission from your administrator.
+Point your account at the catalogue and the caches it should use. You need
+[ETHOS.Data installed](../../installation.md), usually as a dependency of the
+package you work with. Which section applies depends on the machine, not on
+who you are:
 
-## Inspect existing settings
+| | Public installation | Cluster installation |
+| --- | --- | --- |
+| Machine | A laptop, a workstation or a CI runner, anywhere outside the ICE-2 cluster computer | The ICE-2 cluster computer |
+| Catalogue | The public catalogue, built in, or the version a package declares | The internal catalogue on the cluster computer, which includes every public entry |
+| Caches | Your own public cache; no restricted cache | The shared public and restricted caches |
+| Restricted data | Not reachable, unless you register your own authorised copy | Read in place, if you are in the dataset's group |
+
+An ICE-2 member working on a laptop is a public installation user: the
+internal catalogue and the shared caches exist only on the cluster computer.
+
+## Check what is in effect
 
 ```bash
 ethos-data config show
 ```
 
-Keep suitable site defaults. This command reports shared settings and their
-origins without loading the catalogue. It does not resolve a package's pin or
-per-command overrides.
+The command prints the catalogue and cache settings, where each came from, and
+every configuration file it read. It needs no network and loads no catalogue.
+Run it before and after every change below.
 
-## Select the catalogue {#select-the-catalogue}
+## Public installation users {#public-installation-users}
 
-Without an override, `ethos-data` uses the public catalogue and package commands
-use their shipped pin. For institute data, select the complete internal index:
+Nothing has to be configured. Without a setting, every ETHOS tool reads the
+public catalogue, or the version of it that the package declares, and
+downloads into the per-user cache directory (`~/.cache/ethos-data` on Linux).
 
-```bash
-ethos-data config set-catalog /shared/ethos/catalogue/current/datacatalog.json
-```
-
-The setting takes an index path or URL. The internal catalogue includes public
-entries. Use `versions/REVISION/datacatalog.json` for a reproducible run.
-Append `--scope project` for one project; the default is `user`. A package may
-supply a stronger override such as `RESKIT_DATA_CATALOG`.
-
-To select metadata for one command:
+To put the cache on a disk with room:
 
 ```bash
-ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json ls
+ethos-data config set-public-cache /data/ethos/public
 ```
 
-Use the same `--catalog` with `reskit-data show` when comparing RESKit's
-selections. If a pin is unreachable, obtain a complete built catalogue from its
-maintainer; the [practice lesson](../../tutorials/first-fetch.md) needs no release.
-
-## Select cache locations {#cache-locations}
-
-The per-user public cache works without setup. To use another disk:
+Licensed datasets are described in the public catalogue but never downloaded.
+If a workflow you run names one, either obtain your own copy under its terms
+and register it:
 
 ```bash
-ethos-data config set-public-cache /data/ethos/public --scope environment
+ethos-data config set-restricted-cache /data/ethos/restricted
+ethos-data link gadm-3.6 /data/licensed/gadm36_levels_shp
 ```
 
-For licensed inputs you are authorised to read:
+or, when the workflow can run without it, carry on and have it left out:
 
 ```bash
-ethos-data config set-restricted-cache /data/ethos/restricted --scope environment
+ethos-data config set-skip-unavailable true
 ```
 
-Keep public, restricted and development roots separate. Each cache uses
-`<root>/<dataset>/<resource path>`. Settings do not move existing files or grant
-permissions. Retrieval reads restricted data in place and never downloads or
-repairs it. If one dataset lives elsewhere, use the
-[local-copy guide](../catalogue-maintainers/link-cluster-data.md#dataset-root-overrides).
+`link` puts a dataset whose access class is `restricted` into the restricted
+cache; the entry is read in place and never copied. See
+[Add restricted data](../catalogue-maintainers/add-restricted-data.md) for what a
+link does and does not do.
 
-Project settings should contain paths usable by the intended team. Administrators
-can use `--scope site` for machine defaults. The
-[configuration reference](../../reference/configuration.md) defines all scopes and
-precedence. Configure a staging root only while
-[developing a dataset](../package-maintainers/propose-a-dataset.md#stage-development-data).
+## Cluster users {#cluster-users}
 
-## Override one shell or run {#temporary-overrides}
+Work on the ICE-2 cluster computer, in the environment your package is
+installed in. Take the three locations below from the ICE-2 wiki; the paths
+here are placeholders.
+
+!!! note "Data on the cluster computer may not be shared"
+    The shared caches hold datasets the institute is not permitted to pass
+    on. Do not copy data out of them, and do not put cluster paths or
+    restricted dataset details into public repositories or issue trackers.
+
+```bash
+ethos-data config set-catalog /shared/ethos/catalogue/datacatalog.json
+ethos-data config set-public-cache /shared/ethos/public
+ethos-data config set-restricted-cache /shared/ethos/restricted
+```
+
+| Setting | What it does |
+| --- | --- |
+| catalogue | Selects the internal catalogue, which includes every public entry plus the internal and restricted ones. It replaces the public catalogue and any version a package declares. |
+| public cache | The shared directory where public and internal data already lies, as links or copies, and where downloads land. |
+| restricted cache | The shared directory holding the licensed datasets the institute may use. Retrieval reads it in place and never writes to it. |
+
+Every user runs these three commands for their own account; there is no
+machine-wide default. The settings locate data; they grant no permission.
+Reading a restricted dataset still needs the filesystem permission its
+custodian gives you, and asking for a dataset you are not in the group of
+fails with an explanation.
+
+Use `--scope environment` to store a setting inside one conda environment, or
+`--scope project` to write an `ethos-data.yaml` next to your work that a team
+can commit. The default scope, `user`, is your account. Record the catalogue
+version that `ethos-data config show` and `<your-tool>-data show` print with
+your results.
+
+## Override one shell or one run {#temporary-overrides}
 
 === "Bash"
 
     ```bash
+    export ETHOS_DATA_CATALOG=/shared/ethos/catalogue/datacatalog.json
     export ETHOS_DATA_DIR=/scratch/me/ethos-public
-    export ETHOS_RESTRICTED_DIR=/data/ethos/restricted
-    export ETHOS_DATA_CATALOG=/shared/ethos/catalogue/current/datacatalog.json
+    export ETHOS_RESTRICTED_DIR=/shared/ethos/restricted
     ```
 
 === "PowerShell"
 
     ```powershell
+    $env:ETHOS_DATA_CATALOG = "D:/catalogue/datacatalog.json"
     $env:ETHOS_DATA_DIR = "D:/ethos/public"
     $env:ETHOS_RESTRICTED_DIR = "D:/ethos/restricted"
-    $env:ETHOS_DATA_CATALOG = "D:/catalogue/datacatalog.json"
     ```
 
-Environment variables override stored settings. For one invocation, use
-`ethos-data --root /scratch/me/ethos-public fetch KEY`, or put the same option
-before a package subcommand. Per-dataset roots and staging can still redirect
-individual inputs.
+Environment variables win over stored settings. For one command, put
+`--catalog LOCATION` or `--root DIR` before the subcommand of `ethos-data` or of
+your package's `<your-tool>-data` command.
 
-## Handle an unavailable restricted input {#restricted-data}
+## Remove a setting {#check-and-remove-settings}
 
-Read the dataset's access note and ask its custodian for permission and the
-installation location. Required inputs must remain errors when absent.
-Only if the workflow supports omitted inputs, use:
-
-```bash
-reskit-data --skip-unavailable fetch onshore_wind
-```
-
-In Python, pass `skip_unavailable=True` to the collections handle's `fetch` or
-`paths`. Skipped files and named inputs are absent from the returned mapping;
-check for the keys before using them. A project preference can be stored with
-`ethos-data config set-skip-unavailable true --scope project`.
-
-## Check and remove settings {#check-and-remove-settings}
-
-```bash
-ethos-data config show
-ethos-data ls
-reskit-data show
-reskit-data fetch onshore_wind --test --plan
-```
-
-The first listing checks the direct catalogue; the second names RESKit's actual
-catalogue and collections. The plan reports transfers and missing inputs without
-downloading data. For integrity checks, use [Verify and repair](verify-and-repair.md).
-
-Remove a setting in the scope where it was written:
+Unset in the scope where the setting was written:
 
 ```bash
 ethos-data config unset-catalog
 ethos-data config unset-public-cache --scope environment
-ethos-data config unset-restricted-cache --scope environment
-ethos-data config unset-skip-unavailable --scope project
+ethos-data config unset-restricted-cache
+ethos-data config unset-skip-unavailable
 ```
 
-Clear any corresponding environment override too. Unsetting does not delete
-data. Continue with [Get data by catalogue key](get-data-for-a-task.md) or
-[diagnose a failure](troubleshoot-catalogue.md).
+Unsetting changes configuration only; no data is moved or deleted. Clear the
+matching environment variables too. Continue with
+[Use data in a script](use-data-in-a-script.md).

@@ -8,7 +8,7 @@ factory that builds the handle defined here.)
 its own code, via :func:`ethos_data.collections` -- and then calls ``fetch``,
 ``paths``, ``resolve`` and ``plan`` on. Its ``catalog`` attribute is the
 catalogue the file pins, for access by key. ``main`` runs the collection
-commands as the tool's own console script (``reskit-data``), so the tool ships
+commands as the tool's own console script (``<tool>-data``), so the tool ships
 a file and two lines of code and nothing has to be registered anywhere.
 
 A collections file names slices of the shared catalogue; it never repeats file
@@ -127,7 +127,7 @@ class Collections:
     path: Path
     catalog: Catalog
     definitions: dict
-    #: The tool whose file this is (``"reskit"``), for messages and as the
+    #: The tool whose file this is (``"mytool"``), for messages and as the
     #: default name of its command; None for a file named on its own.
     tool: str | None = None
     #: The cache roots the staging overlay was built for; None means the

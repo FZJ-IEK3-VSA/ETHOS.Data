@@ -1,0 +1,150 @@
+# Add a dataset
+
+Put a dataset into the catalogue: review its `dataset.yaml`, which a proposer
+supplied or you write yourself, copy it into the catalogue, build, make the
+bytes available, release. Work in your checkout of the source catalogue, with
+read access to the candidate bytes, which must not change while you work.
+
+## 1. Get the description {#write-the-description}
+
+A [proposal](../package-maintainers/propose-a-dataset.md) brings a draft
+`dataset.yaml`, beside the data or inside a bundle's `datasets/` directory. For
+a dataset you add on your own decision, write it:
+
+```yaml
+name: my-dataset
+title: A short human-readable title
+description: What this dataset contains and which release it describes.
+source_dir: /projects/shared/candidates/my-dataset
+ethos:access: public
+ethos:visibility: public
+ethos:origin: downloaded
+ethos:remote_prefix: my-dataset-v1
+sources:
+  - title: Original release
+    path: https://example.org/dataset-release
+licenses:
+  - name: CC-BY-4.0
+    path: https://creativecommons.org/licenses/by/4.0/
+ethos:retrieved: "2026-09-01"
+ethos:attribution: The attribution text the source requires.
+ethos:contact: Dataset maintainer
+```
+
+`source_dir` is the directory you can read the bytes from; a relative path is
+relative to the dataset's directory in the catalogue. For created or derived
+data, add `contributors` with an `author`, and for derived data `sources` and
+`ethos:derivation`. Every key is in the
+[format reference](../../reference/schemas.md#datasetyaml).
+
+### Select the files {#select-the-files}
+
+If the source holds unrelated files, select:
+
+```yaml
+ethos:include:
+  - "rasters/**"
+ethos:exclude:
+  - "**/*.tmp"
+```
+
+An include pattern matching nothing fails the build; an unmatched exclude only
+warns. The asymmetry is deliberate: silently describing no files is how a
+dataset ends up published empty. For a large inventory set
+`ethos:shard_depth`, see the [sharding explanation](../../explanation/catalogue-format.md#sharding).
+
+### Datasets that are not ready to publish {#not-ready}
+
+```yaml
+ethos:access: internal
+ethos:visibility: hidden
+ethos:embargo:
+  until: "2027-06-30"           # or "unspecified", with a reason
+  reason: Pending publication of the accompanying paper.
+  becomes: public
+```
+
+### Restricted datasets {#restricted-installations}
+
+A licensed dataset that may not be redistributed:
+
+```yaml
+ethos:access: restricted
+ethos:visibility: hidden
+ethos:restriction: Contact the dataset custodian for authorised access.
+ethos:embargo:
+  until: "unspecified"
+  reason: Metadata publication has not been approved; review with the custodian.
+  becomes: restricted
+```
+
+A restricted dataset has no `ethos:remote_prefix` and is never marked
+`ethos:uploaded`. With the custodian's approval it may be listed publicly
+without offering bytes.
+
+## 2. Review it
+
+Settle every row before the file enters the catalogue:
+
+| Question | Settled when |
+| --- | --- |
+| What is it, and for which workflows | Name, version, title and purpose are agreed. A revision of existing data gets new paths, never the old ones. |
+| Where does it come from | `ethos:origin` is right. Downloaded data names its source and retrieval date and [matches that source](verify-provenance.md). Created or derived data names its authors, inputs and method. |
+| May it be redistributed | A `licenses:` entry, or an explicit `resolved` status, based on terms somebody read. Unclear terms stay `ethos:license_status: unresolved` with the question in `ethos:license_note`, which blocks linking and upload until answered. Attribution text is recorded where the licence requires it. |
+| Who may read it | `ethos:access` and `ethos:visibility` are right, and a hidden dataset has an embargo block. |
+| Which files | The selection covers the files the workflows need, their sidecars, and nothing unrelated. |
+| Does it work | The proposer ran the affected workflow or tests against the staged or bundled candidate. |
+
+## 3. Copy it into the catalogue and build
+
+```bash
+mkdir -p datasets/my-dataset
+cp /projects/shared/candidates/my-dataset/dataset.yaml datasets/my-dataset/
+ethos-data catalog build my-dataset
+ethos-data catalog build my-dataset --check
+git diff -- datasets/my-dataset datacatalog.json
+```
+
+A family from a bundle is imported with `ethos-data catalog add-bundle <bundle
+directory>`, which writes one directory per member,
+`datasets/your-tool-test-data/era5/dataset.yaml`, with the family's own
+`dataset.yaml` above them, as the bundle's next version; see
+[Keep data in the repository](../package-maintainers/keep-data-in-the-repository.md#sync). The build walks `source_dir`, hashes every
+selected file and writes `datapackage.json` beside the description; never
+hand-edit the generated JSON. Check the generated paths, counts, sizes and
+hashes against the proposal and resolve every difference before going on.
+
+## 4. Make the bytes available
+
+Which step depends on the access class:
+
+| Access | Do |
+| --- | --- |
+| `public` | [Upload the dataset](upload-a-dataset.md) to dCache and verify it anonymously. |
+| `internal` | [Link the directory into the public cache](link-existing-data.md) on the cluster computer. Internal data is read there in place and is not uploaded. |
+| `restricted` | [Register the authorised installation in the restricted cache](add-restricted-data.md). Nothing is copied or uploaded. |
+
+Internal data has no download route, by decision: it is available on cluster
+installations only, and a dataset that should be downloadable is made
+`public`. A dataset that is `internal` until an embargo ends is linked now and
+uploaded when it becomes public.
+
+## 5. Record the authoritative copy
+
+After a successful upload and verification, set `ethos:uploaded: true`,
+remove `source_dir`, and rebuild: the recorded inventory is now frozen and
+dCache is the authority. For linked data, keep `source_dir` as long as the
+original directory is the build input; when it is later
+[materialized](materialize-linked-data.md#retire-the-original), replace
+`source_dir` by `ethos:frozen: true`.
+
+## 6. Release and hand off
+
+[Release the catalogue](release-the-catalogue.md). A dataset is available to
+consumers only after this step; a successful build alone publishes nothing.
+
+Then tell the proposer the accepted dataset name and the release that holds
+it. Ask them to raise their `catalog.min_version`, remove staging entries and
+root overrides, run `bundle update` so their bundle records the release,
+and run their workflow against the released catalogue. Keep the proposal, the review findings, the upload report
+and the release identifiers together in the issue.

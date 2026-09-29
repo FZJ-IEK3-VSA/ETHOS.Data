@@ -3,7 +3,7 @@
 [`ethos_data.tool_main`][ethos_data.tool_main] and
 [`Collections.main`][ethos_data.selection.Collections.main] provide the shared
 CLI used by consuming packages. Replace `<tool>-data` below with the installed
-command, for example `reskit-data`.
+command, for example `<your-tool>-data`.
 
 ```text
 <tool>-data [--catalog LOCATION] [--root DIR] [--skip-unavailable] [--test] COMMAND ...
@@ -25,7 +25,7 @@ to expose the wrapper.
 
 Place global options before the subcommand, except `--test`, which works in
 either position. A package may supply an environment override such as
-`RESKIT_DATA_CATALOG`; it ranks below `--catalog` and above shared settings.
+`<YOUR_TOOL>_DATA_CATALOG`; it ranks below `--catalog` and above shared settings.
 See [catalogue resolution](../configuration.md#catalogue-resolution).
 
 `--help`, `config show`, staging management, and bundle reads do not load the
@@ -43,9 +43,9 @@ dataset, folder or file — belongs to [`ethos-data ls` and
 Each answers with the line to type instead:
 
 ```text
-$ reskit-data plan onshore_wind
-error: `reskit-data plan` is gone -- use `reskit-data fetch <collection> --plan`.
-Run `reskit-data --help` for the commands this version has.
+$ <your-tool>-data plan onshore_wind
+error: `<your-tool>-data plan` is gone -- use `<your-tool>-data fetch <collection> --plan`.
+Run `<your-tool>-data --help` for the commands this version has.
 ```
 
 ## `--test` { #test }
@@ -106,7 +106,7 @@ file list buries them.
 onshore_wind [test]: 6 files, 42.3 MB
   Data for onshore wind workflows
 
-named paths (`reskit-data fetch onshore_wind --test --paths` resolves them to this machine):
+named paths (`<your-tool>-data fetch onshore_wind --test --paths` resolves them to this machine):
   era5      ->  reskit-test-data/era5
   gwa_100m  ->  reskit-test-data/global-wind-atlas/gwa100-like.tif
   gwa_50m   ->  reskit-test-data/global-wind-atlas/gwa50-like.tif
@@ -226,7 +226,7 @@ ethos-data fetch reskit-test-data/era5
 ## `staging`
 
 Data that is not in the catalogue yet. See
-[Stage uncatalogued data](../../how-to/package-maintainers/propose-a-dataset.md#stage-development-data).
+[Stage uncatalogued data](../../how-to/package-maintainers/stage-development-data.md#stage-development-data).
 
 ```bash
 <tool>-data staging add <name> <directory> [--note TEXT] [--copy]
@@ -241,7 +241,7 @@ Data that is not in the catalogue yet. See
 | `--new-only` | only datasets with no entry in the public or restricted cache |
 | `--force` | on `remove`: required if the entry is a real directory, not a link |
 
-Staging registrations use the shared staging root; they are not private to
+Staging registrations use your configured staging root; they are not private to
 the package that created them. They add to or shadow non-restricted datasets.
 Registration/listing/removal works offline; fetching a collection with staged
 data still needs a readable catalogue index. `staging list --new-only` compares
@@ -275,7 +275,7 @@ never overwrite fixtures or fall back to downloads.
 
 Global cache, staging, and skip-unavailable settings do not redirect bundle reads.
 The package's collections file and `--catalog` select inputs for export only. Invalid bundle inputs exit 2.
-See [Keep test data in a repository](../../how-to/package-maintainers/keep-test-data-in-a-repository.md).
+See [Keep data in the repository](../../how-to/package-maintainers/keep-data-in-the-repository.md).
 ## `config`
 
 The wrapper exposes the same shared [configuration commands](../configuration.md)

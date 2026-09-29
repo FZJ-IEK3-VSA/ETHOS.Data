@@ -37,18 +37,18 @@ ethos-data fetch reskit-test-data/era5
 Use `--catalog LOCATION` before the subcommand to select a particular index.
 
 For a package workflow, use its Python API or thin wrapper. For example, with
-RESKit installed:
+a package built on ETHOS.Data installed, written here as `your_tool` and `<your-tool>-data`:
 
 ```python
-from reskit import data
+from your_tool import data
 
 inputs = data.paths("onshore_wind", test=True)
 ```
 
 ```bash
-reskit-data show
-reskit-data fetch onshore_wind --test --paths
-reskit-data staging list
+<your-tool>-data show
+<your-tool>-data fetch onshore_wind --test --paths
+<your-tool>-data staging list
 ```
 
 Packages expose collections, named inputs, test variants, bundles and staging
@@ -76,7 +76,7 @@ mkdocs build      # static site into ./site
 | | |
 |---|---|
 | [Your first fetch](docs/tutorials/first-fetch.md) | fetch a file from a practice catalogue, use the path from Python, repair a damaged cache copy |
-| [Get data by catalogue key](docs/how-to/data-users/get-data-for-a-task.md) | inspect and fetch a dataset, folder or file with the shared CLI or Python API |
+| [Use data in a script](docs/how-to/data-users/use-data-in-a-script.md) | get a workflow's inputs in Python, fetching them or only resolving their paths; single keys with the CLI |
 | [Use ETHOS.Data in your package](docs/how-to/package-maintainers/use-from-a-package.md) | ship a `collections.yaml`, a handle on it and a console script of your own via `ethos_data.tool_main` |
 | [Add a dataset to the catalogue](docs/tutorials/add-a-dataset.md) | the maintainer round trip, on a practice catalogue |
 | [How-to guides](docs/how-to/index.md) | cache configuration, internal catalogue, restricted data, verify/repair, CI, uploading, publishing |

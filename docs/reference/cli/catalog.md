@@ -40,7 +40,7 @@ plumbing, `__pycache__` and root `README*`/`LICENSE*`/`CHANGELOG*`.
 
 An `ethos:include` pattern matching nothing **fails**; an `ethos:exclude` pattern
 matching nothing only warns. See
-[Describe a dataset](../../how-to/catalogue-maintainers/describe-a-dataset.md#the-asymmetry-is-deliberate).
+[Add a dataset](../../how-to/catalogue-maintainers/add-a-dataset.md#select-the-files).
 
 A sharded dataset built before the shard directory was renamed still has
 `manifests/`. The build moves its shards to `shards/` and deletes the old
@@ -67,7 +67,7 @@ longer generates is deleted from the target.
 
 !!! danger "It wipes everything in its target except `.git`"
     Point it only at the public repository. See
-    [Publish the catalogue](../../how-to/catalogue-maintainers/publish-the-catalogue.md).
+    [Release the catalogue](../../how-to/catalogue-maintainers/release-the-catalogue.md).
 
 | Flag | |
 |---|---|
@@ -166,11 +166,11 @@ checkout.
 - [`ethos-data link --all`](ethos-data.md#link-dataset-directory) — build the shared
   cache as links to data already on this machine. It reads `source_dir` from the
   same source checkout these commands do.
-- [Describe a dataset](../../how-to/catalogue-maintainers/describe-a-dataset.md)
-- [Publish the catalogue](../../how-to/catalogue-maintainers/publish-the-catalogue.md)
+- [Add a dataset](../../how-to/catalogue-maintainers/add-a-dataset.md)
+- [Release the catalogue](../../how-to/catalogue-maintainers/release-the-catalogue.md)
 - [Bootstrap a new catalogue](../../how-to/catalogue-maintainers/bootstrap-a-catalogue.md)
 - [API: maintainer tooling](../api/maintain.md)
 
 
-For the complete cluster migration, see [Manage local dataset copies](../../how-to/catalogue-maintainers/link-cluster-data.md), which covers overrides, cache links and
-[materialized copies](../../how-to/catalogue-maintainers/link-cluster-data.md#materialize-copies) in one guide. Restricted entries are registered through [Add internal and restricted datasets](../../how-to/catalogue-maintainers/describe-a-dataset.md#restricted-installations).
+For the complete cluster migration, see [Link existing data into the cache](../../how-to/catalogue-maintainers/link-existing-data.md), which covers overrides, cache links and
+[materialized copies](../../how-to/catalogue-maintainers/materialize-linked-data.md#materialize-copies) in one guide. Restricted entries are registered through [Add a dataset, restricted datasets](../../how-to/catalogue-maintainers/add-a-dataset.md#restricted-installations).
