@@ -80,12 +80,14 @@ ethos-data catalog upload my-dataset
 ethos-data catalog upload my-dataset --verify-only
 ```
 
-Name one dataset, or any subset of the catalogue. Each is uploaded and verified
-in turn, in the order given, and a run ends with a per-dataset summary:
+Name one dataset, or any subset of the catalogue. A family name stands for every
+member beneath it, since the family itself has no files. Each dataset is uploaded
+and verified in turn, in the order given, and a run ends with a per-dataset summary:
 
 ```bash
 ethos-data catalog upload global-wind-atlas-v4 global-solar-atlas
 ethos-data catalog upload datasets/global-wind-atlas-v4   # a path works too
+ethos-data catalog upload reskit-test-data                # a family: all 15 members
 ```
 
 Every dataset named is loaded and checked **before any of them is uploaded**, so

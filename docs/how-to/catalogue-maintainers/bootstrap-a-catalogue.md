@@ -24,7 +24,7 @@ Create `catalog.yaml`:
 name: my-catalogue
 title: Shared inputs for our workflows
 ethos:catalog_role: source
-ethos:publication_url: https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ice2-data-files
+ethos:publication_url: https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ethos-data
 ethos:contact: Catalogue maintenance team
 ```
 
@@ -52,13 +52,13 @@ For a root dedicated to **public data**, create it and establish public
 permissions before any upload:
 
 ```bash
-rclone mkdir HIFIS:ice2-data-files
+rclone mkdir HIFIS:ethos-data
 curl --fail-with-body -H "Authorization: Bearer $(oidc-token HIFIS)" \
   -H "Content-Type: application/json" -X POST \
-  "https://hifis-storage-web.desy.de/api/v1/namespace/Helmholtz/FZJ-ICE2/ice2-data-files" \
+  "https://hifis-storage-web.desy.de/api/v1/namespace/Helmholtz/FZJ-ICE2/ethos-data" \
   -d '{"action":"chmod","mode":493}'
 curl -s -o /dev/null -w '%{http_code}\n' \
-  https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ice2-data-files/
+  https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ethos-data/
 ```
 
 The last request has no credentials; expect `200`. Do not make a mixed/private

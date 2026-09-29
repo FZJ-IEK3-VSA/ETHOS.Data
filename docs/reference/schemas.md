@@ -611,7 +611,7 @@ title: ETHOS.Data Catalogue
 description: >-
   What this catalogue is, who maintains it, and what it is for.
 
-ethos:publication_url: https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ice2-data-files
+ethos:publication_url: https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ethos-data
 ethos:contact: iek-3-data
 ethos:catalog_role: source
 ```

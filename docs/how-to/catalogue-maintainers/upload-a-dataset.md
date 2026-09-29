@@ -28,7 +28,8 @@ Do not combine it with `--verify-only`.
 ethos-data catalog upload my-dataset
 ```
 
-For several datasets, name them in one invocation. Every named dataset is checked
+For several datasets, name them in one invocation; naming a family such as
+`reskit-test-data` uploads every member beneath it. Every named dataset is checked
 before transfer; uploads then run per dataset without rollback of earlier successes.
 
 Require `readable N/N`, no wrong sizes, and a successful exit. The final check

@@ -49,6 +49,7 @@ from . import (
     catalogue_role,
     dataset_name_for,
     datasets_dir,
+    is_namespace,
     iter_dataset_dirs,
     resources_of,
 )
@@ -276,6 +277,40 @@ def resolve_name(catalog_root: Path, argument: str) -> str:
     )
 
 
+def expand_families(catalog_root: Path, names: list[str]) -> list[str]:
+    """Replace a family name by its member datasets, in name order.
+
+    A namespace -- ``reskit-test-data`` -- describes no files and carries no
+    licence of its own, so as an upload it is nothing, and checking it as one
+    dataset only produces a puzzling "unresolved licensing". What somebody
+    naming it means is "every member under it". Expanded here, before any
+    check, so the members are vetted and uploaded exactly as if listed.
+    """
+    root = datasets_dir(catalog_root)
+    expanded: list[str] = []
+    for name in names:
+        dataset_dir = root / name
+        if not (dataset_dir / "dataset.yaml").is_file() or not is_namespace(
+            dataset_dir
+        ):
+            expanded.append(name)
+            continue
+        members = [
+            dataset_name_for(root, member)
+            for member in iter_dataset_dirs(dataset_dir)
+            if member != dataset_dir and not is_namespace(member)
+        ]
+        if not members:
+            raise SystemExit(
+                f"{name} is a family with no member dataset beneath it; nothing to upload."
+            )
+        print(
+            f"{name} is a family: its {len(members)} members are uploaded in its place"
+        )
+        expanded.extend(members)
+    return expanded
+
+
 class Plan(NamedTuple):
     """One dataset, loaded and cleared for upload."""
 
@@ -422,7 +457,8 @@ def run(catalog_root: Path, args) -> int:
     # The upload destination and the URL we verify afterwards have to name the
     # same folder, so derive the default from the catalogue rather than repeating
     # it. They drifted apart once already, when the publication root moved from
-    # reskit-data to ice2-data-files: bytes would have gone to the old folder and
+    # reskit-data to ice2-data-files (and since then on to ethos-data): bytes
+    # would have gone to the old folder and
     # every verification HEAD would have 404d against the new one, which reads
     # like a permissions problem and is not one.
     published_root = base_url.rstrip("/").rsplit("/", 1)[-1]
@@ -438,7 +474,10 @@ def run(catalog_root: Path, args) -> int:
     # Deduplicated, because naming a dataset twice should cost one upload, and
     # ordered, so the run reads in the order it was asked for.
     names = dict.fromkeys(
-        resolve_name(catalog_root, argument) for argument in args.datasets
+        expand_families(
+            catalog_root,
+            [resolve_name(catalog_root, argument) for argument in args.datasets],
+        )
     )
 
     # Load and check EVERY dataset before uploading ANY of them. The checks that

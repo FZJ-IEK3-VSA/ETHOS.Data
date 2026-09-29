@@ -21,6 +21,7 @@ import yaml
 
 from ethos_data.maintain import upload
 from ethos_data.maintain.manifest import render_dataset, write_dataset
+from ethos_data.maintain.manifest import run as build_run
 
 CATALOG = (
     "name: t\n"
@@ -208,3 +209,60 @@ class TestUploadingTheSubset:
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))
+
+
+def make_family(root: Path, members: dict[str, dict]) -> Path:
+    """A source catalogue with one family ``fam`` and the given members, built."""
+    (root / "catalog.yaml").write_text(CATALOG)
+    family = root / "datasets" / "fam"
+    family.mkdir(parents=True)
+    # A namespace names the family and describes no files of its own.
+    (family / "dataset.yaml").write_text(
+        "title: the family" + chr(10) + "description: members only" + chr(10)
+    )
+    for member, extra in members.items():
+        source = root / "src" / "fam" / member
+        source.mkdir(parents=True)
+        (source / "a.txt").write_bytes(b"hello")
+        meta = {
+            "title": member,
+            "source_dir": str(source),
+            "ethos:remote_prefix": f"fam/{member}",
+            "licenses": [{"name": "CC-BY-4.0"}],
+        }
+        meta.update(extra)
+        if meta.get("ethos:access") == "restricted":
+            del meta["ethos:remote_prefix"]
+        (family / member).mkdir()
+        (family / member / "dataset.yaml").write_text(yaml.safe_dump(meta))
+    assert build_run(root, []) == 0
+    return root
+
+
+class TestNamingAFamily:
+    def test_the_family_name_uploads_each_member_once_in_name_order(
+        self, workspace, no_rclone
+    ):
+        make_family(workspace, {"b": {}, "a": {}})
+        assert upload.run(workspace, make_args(["fam"])) == 0
+        destinations = [command[3] for command in no_rclone]
+        assert destinations == [
+            "HIFIS:ice2-data-files/fam/a",
+            "HIFIS:ice2-data-files/fam/b",
+        ]
+
+    def test_a_family_and_one_of_its_members_still_cost_one_upload_each(
+        self, workspace, no_rclone
+    ):
+        make_family(workspace, {"a": {}, "b": {}})
+        upload.run(workspace, make_args(["fam/b", "fam"]))
+        assert [command[3] for command in no_rclone] == [
+            "HIFIS:ice2-data-files/fam/b",
+            "HIFIS:ice2-data-files/fam/a",
+        ]
+
+    def test_an_ineligible_member_stops_the_whole_family(self, workspace, no_rclone):
+        make_family(workspace, {"a": {}, "b": {"ethos:access": "restricted"}})
+        with pytest.raises(SystemExit, match="restricted"):
+            upload.run(workspace, make_args(["fam"]))
+        assert no_rclone == []

@@ -126,7 +126,8 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     uploader.add_argument(
         "datasets",
         nargs="+",
-        help="dataset directory names, or paths to them (e.g. datasets/global-wind-atlas-v4)",
+        help="dataset directory names, or paths to them (e.g. datasets/global-wind-atlas-v4); "
+        "a family name such as reskit-test-data uploads every member beneath it",
     )
     uploader.add_argument(
         "--remote", default="HIFIS", help="rclone remote name (default: HIFIS)"
