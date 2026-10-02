@@ -9,7 +9,14 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-__all__ = ["Collection", "CollectionsFile", "IncludeRule", "Selection", "lint"]
+__all__ = [
+    "CatalogBounds",
+    "Collection",
+    "CollectionsFile",
+    "IncludeRule",
+    "Selection",
+    "lint",
+]
 
 
 class _Part(BaseModel):
@@ -43,12 +50,36 @@ class Collection(Selection):
     full: Selection | None = Field(None, description="The real inputs; the default.")
 
 
-class CollectionsFile(_Part):
-    """The whole file: the catalogue it reads and its collections."""
+_RELEASE = r"^v\d{4}\.\d{2}\.\d+$"
 
-    catalog: str | None = Field(
+
+class CatalogBounds(_Part):
+    """The catalogue releases a package works with: one exactly, or a range."""
+
+    min_version: str | None = Field(
         None,
-        description="The catalogue location; a relative path is relative to this file.",
+        description="The oldest release the package was tested with.",
+        json_schema_extra={"pattern": _RELEASE},
+    )
+    max_version: str | None = Field(
+        None,
+        description="Refuse anything newer.",
+        json_schema_extra={"pattern": _RELEASE},
+    )
+    exact_version: str | None = Field(
+        None,
+        description="The one release the package resolves to.",
+        json_schema_extra={"pattern": _RELEASE},
+    )
+
+
+class CollectionsFile(_Part):
+    """The whole file: the catalogue versions it accepts and its collections."""
+
+    catalog: CatalogBounds | str | None = Field(
+        None,
+        description="The catalogue releases the package works with; a path or URL, "
+        "relative to this file, still pins one catalogue.",
     )
     collections: dict[str, Collection] = Field(
         {}, description="Collection name to definition."

@@ -28,6 +28,11 @@ class CatalogMeta(BaseModel):
         description="Root of the public data store; a resource is <url>/<remote_prefix>/<path>.",
     )
     contact: str | None = field(k.CONTACT, description="Team or username.")
+    version: str | None = field(
+        k.VERSION,
+        description="The release this is, vYYYY.MM.N; the build writes it into the index.",
+        schema={"pattern": r"^v\d{4}\.\d{2}\.\d+$"},
+    )
     catalog_role: str = field(
         k.CATALOG_ROLE,
         k.ROLE_SOURCE,
@@ -44,6 +49,13 @@ def check(meta: dict) -> None:
     a wrong value is refused outright: a catalogue mislabelled ``published``
     would make every tool refuse to touch it.
     """
+    if meta.get(k.VERSION) is not None:
+        from ..model.versions import Version
+
+        try:
+            Version.parse(meta[k.VERSION])
+        except ValueError as error:
+            raise DescriptorError(f"catalog.yaml: {k.VERSION}: {error}") from None
     role = meta.get(k.CATALOG_ROLE, k.ROLE_SOURCE)
     if role not in k.CATALOG_ROLES:
         raise DescriptorError(

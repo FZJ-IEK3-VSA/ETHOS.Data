@@ -160,11 +160,14 @@ Every handle and command chooses the catalogue the same way, the first of:
 1. `--catalog` on the command line, or the location passed in Python.
 2. `ETHOS_DATA_CATALOG`.
 3. The `catalog` setting.
-4. For a collections file, its `catalog:` pin.
+4. For a collections file, its `catalog:` pin, or, when it bounds the
+   release instead, the newest public release within the bounds.
 5. The built-in public catalogue:
    `https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json`.
 
-`ethos-data` reads no collections file, so it skips step 4. A package-specific override, such as
+`ethos-data` reads no collections file, so it skips step 4. A collections
+file that bounds the release refuses whichever catalogue steps 1 to 4 chose
+when it is outside the bounds, or records no release. A package-specific override, such as
 `<YOUR_TOOL>_DATA_CATALOG` passed by the package through `catalog=`, ranks below the CLI's
 `--catalog` and above `ETHOS_DATA_CATALOG`. To compare a direct fetch with a
 package workflow, explicitly select the same catalogue.

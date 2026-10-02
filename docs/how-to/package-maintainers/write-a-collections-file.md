@@ -52,14 +52,6 @@ versions in the message, on the command line and in Python alike. With no
 configured catalogue, `exact_version` selects that public release and
 `min_version` the newest public release within the bounds.
 
-!!! warning "Gap: version keys are not implemented"
-    Today `catalog:` takes only a path or URL, and a catalogue index carries
-    no version stamp. This needs `build` and `publish` to write the release
-    into `datacatalog.json`, the loader to read the three keys and compare,
-    and a way to find the public release for a version. The example file
-    used in [Use data in a script](../data-users/use-data-in-a-script.md)
-    therefore still pins a URL.
-
 ## 2. Select the inputs
 
 ```yaml

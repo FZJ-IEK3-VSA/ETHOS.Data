@@ -83,6 +83,14 @@ STAGING = "staging"
 DATASETS = "datasets"
 PUBLICATION_URL = "ethos:publication_url"
 CATALOG_ROLE = "ethos:catalog_role"
+#: Of the published index: every public release, the current one included.
+RELEASES = "ethos:releases"
+
+# -- the catalogue versions a collections file accepts ---------------------------
+
+MIN_VERSION = "min_version"
+MAX_VERSION = "max_version"
+EXACT_VERSION = "exact_version"
 
 # -- closed vocabularies -----------------------------------------------------------
 

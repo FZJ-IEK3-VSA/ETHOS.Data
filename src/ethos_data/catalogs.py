@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING
 from .errors import (
     AccessError,
     CatalogUnavailable,
+    CatalogVersionError,
     IncompleteCatalog,
     UnknownDataset,
     UnknownKey,
@@ -50,6 +51,7 @@ from .formats.derived import (
 )
 from .model import digest, names
 from .model.resource import Resource, extras_of, from_record, to_record, with_sidecars
+from .model.versions import Bounds, Version
 
 if TYPE_CHECKING:
     from .config import Roots, Settings
@@ -689,6 +691,75 @@ def catalog_for(settings: Settings, *, explicit: str | None = None) -> Catalog:
     loaded = load_catalog(location)
     loaded._settings = settings.with_catalog(location, source, loaded.version)
     return loaded
+
+
+def releases_of(catalog: Catalog) -> list[Version]:
+    """The releases a published index lists, its own included, oldest first."""
+    names = list(catalog.descriptor.get(keys.RELEASES) or [])
+    if catalog.version:
+        names.append(catalog.version)
+    found = set()
+    for name in names:
+        try:
+            found.add(Version.parse(name))
+        except ValueError:
+            continue
+    return sorted(found)
+
+
+def public_release(bounds: Bounds) -> tuple[str, str]:
+    """The public release ``bounds`` select, and why, when no catalogue is set.
+
+    ``exact_version`` names its release outright. Otherwise the public
+    catalogue lists its releases, and the newest within the bounds is taken.
+    Either way the location is that release's own, which never changes.
+    """
+    from .config import DEFAULT_CATALOG, PUBLIC_RELEASE_URL
+
+    if bounds.exact is not None:
+        return (
+            PUBLIC_RELEASE_URL.format(version=bounds.exact),
+            f"the public release {bounds.exact}",
+        )
+    published = releases_of(load_catalog(DEFAULT_CATALOG))
+    admitted = [release for release in published if bounds.admits(release)]
+    if not admitted:
+        listed = ", ".join(map(str, published)) or "none"
+        raise CatalogVersionError(
+            f"no public catalogue release is within {bounds}; the public releases "
+            f"are: {listed}."
+        )
+    newest = admitted[-1]
+    return (
+        PUBLIC_RELEASE_URL.format(version=newest),
+        f"the public release {newest}, the newest within {bounds}",
+    )
+
+
+def check_release(catalog: Catalog, bounds: Bounds, file_name: str) -> None:
+    """Refuse a catalogue that is not a release ``bounds`` accept, naming both."""
+    where = describe_catalog(catalog.descriptor, catalog.location)
+    advice = (
+        "Read a catalogue release within the bounds with --catalog / catalog=, "
+        "or ask the package's maintainers to widen them."
+    )
+    if not catalog.version:
+        raise CatalogVersionError(
+            f"the {where} records no release, but {file_name} accepts only {bounds}.\n"
+            f"{advice}"
+        )
+    try:
+        release = Version.parse(catalog.version)
+    except ValueError:
+        raise CatalogVersionError(
+            f"the {where} records release {catalog.version!r}, which is not of the form "
+            f"vYYYY.MM.N; {file_name} accepts only {bounds}.\n{advice}"
+        ) from None
+    if not bounds.admits(release):
+        raise CatalogVersionError(
+            f"the {where} is release {release}, but {file_name} accepts only "
+            f"{bounds}.\n{advice}"
+        )
 
 
 def load_catalog(location: str) -> Catalog:

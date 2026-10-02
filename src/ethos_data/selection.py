@@ -46,12 +46,15 @@ from . import retrieval
 from .catalogs import (
     Catalog,
     Resource,
+    check_release,
     directory_of,
     load_catalog,
+    public_release,
     select_key,
     split_key,
 )
 from .errors import CollectionError, CollectionsNotFound, UnknownCollection
+from .model.versions import Bounds
 from .retrieval import DataFiles, NamedPaths
 
 if TYPE_CHECKING:
@@ -671,18 +674,26 @@ def load_collections(
     if roots is None:
         roots = settings.roots
 
+    bounds = catalog_bounds(path, document)
     if isinstance(catalog, Catalog):
         resolved = catalog
         source = (
             resolved._settings.catalog_source if resolved._settings else "passed in"
         )
     else:
-        location, source = settings.choose_catalog(
-            explicit=str(catalog) if catalog else None,
-            pin=catalog_pin(path, document),
-            pin_source=f"the pin in {path.name}",
-        )
+        explicit = str(catalog) if catalog else None
+        pin = catalog_pin(path, document)
+        if bounds is not None and explicit is None and settings.catalog is None:
+            # Which catalogue is read stays the user's setting; the file only
+            # bounds its release. With nothing set, a public release is read.
+            location, source = public_release(bounds)
+        else:
+            location, source = settings.choose_catalog(
+                explicit=explicit, pin=pin, pin_source=f"the pin in {path.name}"
+            )
         resolved = load_catalog(location)
+    if bounds is not None:
+        check_release(resolved, bounds, path.name)
     settings = settings.with_catalog(resolved.location, source, resolved.version)
     if not isinstance(catalog, Catalog):
         # Loaded here, so it is this handle's: a catalogue passed in is not
@@ -715,7 +726,7 @@ def catalog_pin(path: str | Path, document: dict | None = None) -> str | None:
     if document is None:
         document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     location = document.get("catalog")
-    if not location:
+    if not location or isinstance(location, dict):
         return None
     # Retain compatibility with legacy '@ref' suffixes by stripping them.
     # Remote revisions must be part of the URL itself; this does not
@@ -726,6 +737,21 @@ def catalog_pin(path: str | Path, document: dict | None = None) -> str | None:
     if not location.startswith(("http://", "https://")):
         location = str((path.parent / location).resolve())
     return location
+
+
+def catalog_bounds(path: Path, document: dict) -> Bounds | None:
+    """The catalogue releases a collections file accepts, or None if it sets none.
+
+    A ``catalog:`` mapping of ``min_version``, ``max_version`` or
+    ``exact_version``; a path or URL there pins a catalogue instead.
+    """
+    value = document.get("catalog")
+    if not isinstance(value, dict):
+        return None
+    try:
+        return Bounds.from_document(value)
+    except ValueError as error:
+        raise CollectionError(f"{path.name}: {error}") from None
 
 
 #: The conventional name of the file a tool ships beside its data module.

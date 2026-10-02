@@ -9,6 +9,10 @@ tag.
 
 ## 1. Build, check, commit, tag
 
+Set the release in `catalog.yaml` first, `version: v2026.09.2`: the build
+writes it into the index, where packages compare it with the versions their
+collections files accept.
+
 ```bash
 ethos-data catalog build
 ethos-data catalog build --check
