@@ -71,8 +71,6 @@ __all__ = [
     "ENV_VAR",
     "PUBLICATION_URL_ENV_VAR",
     "RESTRICTED_ENV_VAR",
-    "SKIP_UNAVAILABLE_ENV_VAR",
-    "SKIP_UNAVAILABLE_KEY",
     "STAGING_ENV_VAR",
     "Roots",
     "Settings",
@@ -83,7 +81,6 @@ __all__ = [
     "load_config",
     "read_settings",
     "remove_restricted_cache",
-    "resolve_skip_unavailable",
     "set_cache",
     "set_option",
     "unset_option",
@@ -111,11 +108,6 @@ RESTRICTED_ENV_VAR = "ETHOS_RESTRICTED_DIRS"
 STAGING_ENV_VAR = "ETHOS_STAGING_DIR"
 PUBLICATION_URL_ENV_VAR = "ETHOS_PUBLICATION_URL"
 
-#: "I do not have the licensed data, carry on without it." Set once by anybody
-#: working away from the institute cluster, where the restricted cache does not
-#: and cannot exist.
-SKIP_UNAVAILABLE_KEY = "skip_unavailable"
-SKIP_UNAVAILABLE_ENV_VAR = "ETHOS_SKIP_UNAVAILABLE"
 
 APP = "ethos-data"
 
@@ -506,36 +498,6 @@ def _publication_url(settings: dict, origin: dict[str, str]) -> tuple[str, str] 
     return None
 
 
-#: Strings a person plausibly types meaning yes.
-_TRUTHY = {"1", "true", "yes", "on"}
-_FALSY = {"0", "false", "no", "off"}
-
-
-def resolve_skip_unavailable(explicit: bool | None = None) -> tuple[bool, str]:
-    """Whether to carry on when licensed data cannot be reached here.
-
-    Off by default: a dataset quietly missing from a result is worse than a
-    command that stops and says so. Somebody who simply does not have access to
-    the licensed data -- most people, most of the time, away from the institute
-    cluster -- sets this once and stops being asked.
-    """
-    if explicit is not None:
-        return bool(explicit), "explicit argument"
-    from_env = os.environ.get(SKIP_UNAVAILABLE_ENV_VAR)
-    if from_env is not None:
-        lowered = from_env.strip().lower()
-        if lowered in _TRUTHY:
-            return True, f"${SKIP_UNAVAILABLE_ENV_VAR}"
-        if lowered in _FALSY:
-            return False, f"${SKIP_UNAVAILABLE_ENV_VAR}"
-        raise ConfigurationError(
-            f"${SKIP_UNAVAILABLE_ENV_VAR}={from_env!r} is not a yes/no value; "
-            f"use one of {', '.join(sorted(_TRUTHY | _FALSY))}"
-        )
-    settings, origin = load_config()
-    if SKIP_UNAVAILABLE_KEY in settings:
-        return bool(settings[SKIP_UNAVAILABLE_KEY]), origin[SKIP_UNAVAILABLE_KEY]
-    return False, "built-in default (stop rather than omit data)"
 
 
 def current_user() -> str:

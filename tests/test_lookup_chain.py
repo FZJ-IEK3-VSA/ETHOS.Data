@@ -40,7 +40,7 @@ def place(reader, name: str, path: str, roots: Roots) -> tuple[str, Path | None]
     """Where the chain reads one file from, as ``(origin, path)``."""
     catalog = load_catalog(str(reader.write()))
     resource = catalog.dataset(name).resource_at(path)
-    [found] = locate(catalog, [resource], roots, skip_unavailable=False)
+    [found] = locate(catalog, [resource], roots)
     return found.origin, found.path
 
 
@@ -81,7 +81,7 @@ class TestTheOrder:
         reader.dataset("licensed", {"a.csv": "1\n"}, access="restricted", where="cache")
         roots = Roots(public=reader.cache)
 
-        with pytest.raises(AccessError, match="is restricted and is never downloaded"):
+        with pytest.raises(AccessError, match="is restricted, and this machine cannot"):
             place(reader, "licensed", "a.csv", roots)
 
     def test_a_link_wins_over_a_download(self, reader, tmp_path):

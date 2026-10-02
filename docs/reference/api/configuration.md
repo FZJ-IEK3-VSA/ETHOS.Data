@@ -22,7 +22,6 @@ which cache holds an entry that `link` or `materialize` makes.
         - Settings
         - read_settings
         - Roots
-        - resolve_skip_unavailable
         - set_cache
         - add_restricted_cache
         - remove_restricted_cache

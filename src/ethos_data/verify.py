@@ -28,7 +28,6 @@ from dataclasses import dataclass
 
 from .access import (
     ORIGIN_LINK,
-    ORIGIN_RESTRICTED,
     ORIGIN_STAGING,
     RESTRICTED,
     Location,
@@ -147,17 +146,17 @@ def verify(
     resources: list[Resource],
     roots: Roots | None = None,
     deep: bool = False,
-    skip_unavailable: bool | None = None,
 ) -> list[Finding]:
     """Check every resource against the manifest. Never writes anything.
 
     Without ``deep`` this compares sizes, which catches truncation, replacement
     by a different file, and an empty placeholder -- the common failures -- for
     the cost of one ``stat`` per file. With ``deep`` it compares checksums,
-    which catches everything and reads every byte.
+    which catches everything and reads every byte. Licensed data this
+    machine cannot read is reported as ``unavailable here``, with the reason.
     """
     roots = roots if roots is not None else catalog.settings.roots
-    locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)
+    locations = locate(catalog, resources, roots, describe=True)
 
     findings: list[Finding] = []
     link_state: dict[str, str | None] = {}
@@ -171,11 +170,9 @@ def verify(
                 Finding(location, NOTE, note) for note in _notes(catalog, roots, name)
             )
         if not location.available:
-            detail = "no access to this dataset from this machine; nothing was checked"
-            if location.origin == ORIGIN_RESTRICTED:
-                reasons = restricted_entry(roots.restricted, name)[1]
-                detail = " ".join([detail, *reasons])
-            findings.append(Finding(location, UNAVAILABLE, detail))
+            findings.append(
+                Finding(location, UNAVAILABLE, f"{location.reason}; nothing was checked")
+            )
             continue
         if name not in link_state:
             link_state[name] = _broken_link(roots, name, location.origin)

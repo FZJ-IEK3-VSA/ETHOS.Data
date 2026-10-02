@@ -546,14 +546,6 @@ licence forbids the mirror, and what they should do — buy a seat, ask a named
 colleague, point at an existing copy. A note that only says "restricted" tells
 them nothing they did not just learn from the line above it.
 
-!!! warning "Gap: the error is to say how to obtain and register a copy"
-    With [every input is
-    required](../explanation/architecture/decisions/0013-every-input-is-required.md),
-    the error names the dataset, says how to obtain it and how to register a
-    copy, wherever a restricted dataset cannot be read on this machine. It
-    prints no other part of the description and offers no
-    `--skip-unavailable`; `--meta` prints the full description. To be implemented separately.
-
 ### Inventory control
 
 **`ethos:include`** — *list of globs.* Only these files are the dataset. A pattern

@@ -79,13 +79,6 @@ links your copy into it, and the copy is read in place.
 
 Every input a workflow names is required; no setting lets it run without one.
 
-!!! warning "Gap: inputs can be left out"
-    The code's refusal names the dataset and prints the `ethos:restriction`
-    note only, and it offers to carry on without the dataset, through `--skip-unavailable`,
-    `skip_unavailable=True`, `config set-skip-unavailable` or
-    `ETHOS_SKIP_UNAVAILABLE`. See [every input is
-    required](../../explanation/architecture/decisions/0013-every-input-is-required.md).
-
 ## Cluster users {#cluster-users}
 
 Work on the ICE-2 cluster computer, in the environment your package is

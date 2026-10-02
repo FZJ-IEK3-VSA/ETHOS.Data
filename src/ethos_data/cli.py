@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-from .access import cache_entries, chain_for
+from .access import cache_entries, chain_for, locate
 from .bundles import export_bundle, load_bundle
 from .catalogs import Catalog, catalog_for
 from .config import (
@@ -25,13 +25,11 @@ from .config import (
     DEFAULT_CATALOG,
     ENV_VAR,
     RESTRICTED_ENV_VAR,
-    SKIP_UNAVAILABLE_KEY,
     STAGING_ENV_VAR,
     add_restricted_cache,
     config_path,
     read_settings,
     remove_restricted_cache,
-    resolve_skip_unavailable,
     set_cache,
     set_option,
     unset_option,
@@ -280,14 +278,6 @@ def _add_common_options(
     )
     if not tool_commands:
         return
-    parser.add_argument(
-        "--skip-unavailable",
-        action="store_true",
-        default=None,
-        help="carry on without data this machine has no access to "
-        "(licensed data you have no copy of), "
-        "listing what was left out instead of stopping",
-    )
     # Accepted here as well as after the subcommand: `--test fetch onshore_wind`
     # is what people type after reading "put global options first", and a bare
     # "unrecognized arguments: --test" would send them looking for a typo.
@@ -494,14 +484,6 @@ def _add_config_commands(sub) -> None:
         "remove-restricted-cache", help="remove a restricted cache from the list"
     )
     remover.add_argument("directory")
-
-    skipper = config_sub.add_parser(
-        "set-skip-unavailable",
-        help="carry on without licensed data this machine cannot reach (for people "
-        "not working on the institute cluster)",
-    )
-    skipper.add_argument("value", choices=("true", "false"))
-    config_sub.add_parser("unset-skip-unavailable", help="remove the setting again")
 
     puburl = config_sub.add_parser(
         "set-publication-url",
@@ -900,7 +882,7 @@ def _collection_fetch_command(args, loaded, roots) -> int:
     if args.paths:
         return _paths_command(args, loaded, roots)
 
-    report = plan(loaded.catalog, resources, roots, args.skip_unavailable)
+    report = plan(loaded.catalog, resources, roots)
     if args.plan:
         print(f"public cache:    {report['root']}")
         for origin, items in sorted(report["in_place_by_origin"].items()):
@@ -922,7 +904,7 @@ def _collection_fetch_command(args, loaded, roots) -> int:
             names = sorted({r.dataset for r in report["unavailable"]})
             print(
                 f"not available here: {len(report['unavailable']):>4} files            "
-                f"      ({', '.join(names)} -- left out)"
+                f"      ({', '.join(names)} -- a fetch stops here)"
             )
         if report["unreadable"]:
             print(
@@ -932,47 +914,22 @@ def _collection_fetch_command(args, loaded, roots) -> int:
                 print(f"    ! {location.path}   [{location.origin}]")
         return 0
 
-    omitted = len(report["unavailable"])
-    if omitted:
-        names = sorted({r.dataset for r in report["unavailable"]})
-        print(
-            f"{label}: leaving out {omitted} file(s) from "
-            f"{', '.join(names)} -- not available on this machine.",
-            file=sys.stderr,
-        )
+    if report["unavailable"]:
+        # Every input is required: stop before anything is printed or fetched,
+        # with the refusal that says what the dataset is and how to get it.
+        locate(loaded.catalog, resources, roots)
     if not report["missing"]:
-        if omitted and omitted == len(resources):
-            print(
-                f"{label}: nothing to fetch -- none of its {omitted} file(s) is available "
-                f"on this machine."
-            )
-            return 0
         note = (
             f" ({len(report['in_place'])} used in place)" if report["in_place"] else ""
         )
-        print(
-            f"{label}: all {len(resources) - omitted} available files "
-            f"already present{note}"
-        )
-        loaded.fetch(
-            args.collection,
-            test=args.test,
-            root=roots,
-            progressbar=False,
-            skip_unavailable=args.skip_unavailable,
-        )
+        print(f"{label}: all {len(resources)} files already present{note}")
+        loaded.fetch(args.collection, test=args.test, root=roots, progressbar=False)
         return 0
     print(
         f"{label}: fetching {len(report['missing'])} of {len(resources)} files "
         f"({_human(report['bytes_to_download'])}) into {report['root']}"
     )
-    loaded.fetch(
-        args.collection,
-        test=args.test,
-        root=roots,
-        progressbar=True,
-        skip_unavailable=args.skip_unavailable,
-    )
+    loaded.fetch(args.collection, test=args.test, root=roots, progressbar=True)
     print("done.")
     return 0
 
@@ -991,17 +948,10 @@ def _paths_command(args, loaded, roots) -> int:
 
     Tab-separated so a shell can read it back -- `while IFS=$'\\t' read handle
     path` -- which is the whole point of naming inputs rather than files. Runs
-    on the collections file already loaded, so the catalogue is read once and
-    --skip-unavailable means what it means for `fetch`.
+    on the collections file already loaded, so the catalogue is read once.
     """
-    files = loaded.fetch(
-        args.collection,
-        test=args.test,
-        root=roots,
-        progressbar=True,
-        skip_unavailable=args.skip_unavailable,
-    )
-    if not files.named and not files.named.omitted:
+    files = loaded.fetch(args.collection, test=args.test, root=roots, progressbar=True)
+    if not files.named:
         raise CollectionError(
             f"collection {args.collection!r} declares no named paths -- nothing under 'paths:' "
             f"in its definition. `fetch {args.collection}` gets its files; ask the "
@@ -1088,7 +1038,6 @@ def _verify_command(args, loaded, roots) -> int:
         ordered,
         roots,
         deep=args.deep,
-        skip_unavailable=args.skip_unavailable,
     )
     grouped = summarise(findings)
 
@@ -1528,24 +1477,6 @@ def _config_command(args) -> int:
         print(f"resolved now: {_resolved_now(key)}")
         return 0
 
-    if command == "set-skip-unavailable":
-        path = set_option(SKIP_UNAVAILABLE_KEY, args.value == "true")
-        wanted, _ = resolve_skip_unavailable()
-        print(f"{SKIP_UNAVAILABLE_KEY} written to {path}")
-        if wanted:
-            print(
-                "Licensed datasets this machine cannot reach will now be left out of "
-                "results and listed,\nrather than stopping the command."
-            )
-        else:
-            print("Commands will now stop when licensed data cannot be reached.")
-        return 0
-
-    if command == "unset-skip-unavailable":
-        path = unset_option(SKIP_UNAVAILABLE_KEY)
-        print(f"removed from {path}" if path else _nothing_set())
-        return 0
-
     if command == "set-publication-url":
         path = set_option(k.SETTING_PUBLICATION_URL, args.url)
         print(f"{k.SETTING_PUBLICATION_URL} written to {path}")
@@ -1681,11 +1612,6 @@ def _config_show() -> int:
         if label == "catalogue" and settings.catalog is None:
             print(f"{'':<{width}}  public catalogue: {DEFAULT_CATALOG}")
 
-    skip, skip_source = resolve_skip_unavailable()
-    if skip:
-        print(f"\nunreachable data  left out and listed, not an error  ({skip_source})")
-    elif not roots.restricted:
-        print("\nunreachable data  stops the command (the default)")
 
     print("\nprecedence for each setting, first match wins:")
     print("  1. an explicit argument   --root / root=, --catalog / catalog=")

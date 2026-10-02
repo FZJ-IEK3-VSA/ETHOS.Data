@@ -48,9 +48,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .catalogs import Catalog, Dataset
-from .config import Roots, resolve_skip_unavailable
+from .config import Roots
 from .errors import AccessError
 from .formats import keys as k
+from .formats.derived import reader_description
 from .model import names
 from .model.resource import Resource
 
@@ -104,6 +105,8 @@ class Location:
     mode: str
     #: Which of the resolution rules produced this, for diagnostics.
     origin: str = ""
+    #: Why this machine cannot reach the file, when ``mode`` is "unavailable".
+    reason: str = ""
 
     @property
     def in_place(self) -> bool:
@@ -294,12 +297,15 @@ class RestrictedCache(Locator):
 
     The first listed cache whose entry is readable wins. Never passes. Listing
     no restricted cache is a legitimate, permanent state -- an account that
-    reads public data only lists none, on the cluster too. It is reported, not
-    guessed around.
+    reads public data only lists none, on the cluster too. Without a readable
+    entry the file is refused before anything is downloaded, with the
+    dataset's description and how to register a copy: a workflow cannot run
+    without one of its inputs. With ``describe_only`` it is reported as not
+    available here instead, for commands that only say what a fetch would do.
     """
 
     caches: tuple[Path, ...]
-    skip_unavailable: bool = False
+    describe_only: bool = False
     _entries: dict[str, tuple[Path | None, list[str]]] = field(
         default_factory=dict, repr=False
     )
@@ -324,30 +330,37 @@ class RestrictedCache(Locator):
             return Location(
                 resource, entry / resource.path, "in-place", ORIGIN_RESTRICTED
             )
-        if self.skip_unavailable:
-            return Location(resource, None, UNAVAILABLE, ORIGIN_RESTRICTED)
-        raise AccessError(_no_readable_entry(dataset, reasons))
+        why = "; ".join(reasons) or "no listed restricted cache has an entry for it"
+        if self.describe_only:
+            return Location(resource, None, UNAVAILABLE, ORIGIN_RESTRICTED, why)
+        raise AccessError(restricted_refusal(dataset, why))
 
 
-def _no_readable_entry(dataset: Dataset, reasons: list[str]) -> str:
-    note = dataset.descriptor.get(k.RESTRICTION, "")
-    lines = [f"dataset {dataset.name!r} is restricted and is never downloaded."]
-    if note:
-        lines.append(f"  {note}")
-    lines.extend(f"  {reason}" for reason in reasons)
-    lines.append("")
-    lines.append("Once you have a copy you may use, register it:")
-    lines.append("    ethos-data config add-restricted-cache DIR")
-    lines.append(f"    ethos-data link {dataset.name} DIR")
-    lines.append("")
-    lines.append("If you do not, carry on without it:")
-    lines.append("    ethos-data ... --skip-unavailable")
-    lines.append(
-        "    ethos-data config set-skip-unavailable true    # once, for this machine"
-    )
-    lines.append(
-        "Datasets you cannot reach are then left out of the result and listed, "
-        "rather than silently missing."
+def restricted_refusal(dataset: Dataset, why: str) -> str:
+    """The refusal for a restricted dataset this machine cannot read.
+
+    What the person who meets it needs: what the dataset is and how to obtain
+    it, from its catalogue entry, and the two commands that register a copy
+    once they have one.
+    """
+    lines = [
+        (
+            f"dataset {dataset.name!r} is restricted, and this machine cannot read "
+            f"it: {why}."
+        ),
+        "",
+    ]
+    lines.extend(f"  {line}" for line in reader_description(dataset.descriptor))
+    lines.extend(
+        [
+            "",
+            (
+                "Every input a workflow names is required. If you have a copy you "
+                "may use, register it:"
+            ),
+            "    ethos-data config add-restricted-cache DIR",
+            f"    ethos-data link {dataset.name} DIR",
+        ]
     )
     return "\n".join(lines)
 
@@ -470,16 +483,18 @@ class Chain:
         )
 
 
-def chain_for(roots: Roots, *, skip_unavailable: bool = False) -> Chain:
+def chain_for(roots: Roots, *, describe: bool = False) -> Chain:
     """The lookup chain, built from ``roots``; building it touches nothing.
 
-    Bundles are not in the chain: they are read through
-    :func:`ethos_data.load_bundle`.
+    ``describe`` builds the chain for a command that only says what a fetch
+    would do: restricted data this machine cannot read is reported as not
+    available here instead of refused. Bundles are not in the chain: they are
+    read through :func:`ethos_data.load_bundle`.
     """
     return Chain(
         (
             Staging(roots.staging),
-            RestrictedCache(roots.restricted, skip_unavailable),
+            RestrictedCache(roots.restricted, describe),
             PublicCache(roots.public),
             Download(roots.public),
         )
@@ -490,28 +505,22 @@ def locate(
     catalog: Catalog,
     resources: list[Resource],
     roots: Roots | None = None,
-    skip_unavailable: bool | None = None,
+    *,
+    describe: bool = False,
 ) -> list[Location]:
     """Work out where every resource should be read from.
 
     ``roots`` are the cache roots to read; without them, those of the
     catalogue's settings snapshot.
 
-    ``skip_unavailable`` decides what happens to licensed data this machine has
-    no access to: ``False`` raises, ``True`` marks it "unavailable" and carries
-    on with everything else. ``None`` takes the configured answer, which
-    defaults to raising.
-
-    Raises AccessError -- naming the dataset and what to configure -- rather than
-    falling back to the cache or to a download when neither is permitted. The
-    chain it runs is :func:`chain_for`.
+    Every input is required: licensed data this machine cannot read raises
+    AccessError, describing the dataset and how to register a copy, before
+    anything is downloaded. ``describe=True`` reports it as "unavailable"
+    instead, for commands that only say what a fetch would do. The chain it
+    runs is :func:`chain_for`.
     """
     roots = roots if roots is not None else catalog.settings.roots
-    if skip_unavailable is None:
-        skip_unavailable = resolve_skip_unavailable()[0]
-    return chain_for(roots, skip_unavailable=skip_unavailable).locate(
-        catalog, resources
-    )
+    return chain_for(roots, describe=describe).locate(catalog, resources)
 
 
 def check_missing(locations: list[Location]) -> list[Location]:

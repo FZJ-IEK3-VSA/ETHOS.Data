@@ -11,13 +11,6 @@ which prints the settings file it read, the resolved values and the provenance
 of each. A cache path this machine cannot reach, such as a network drive that is
 not connected, is marked `NOT REACHABLE` with the reason.
 
-!!! warning "Gap: `skip_unavailable` is to be removed"
-    With [every input is
-    required](../explanation/architecture/decisions/0013-every-input-is-required.md),
-    the `skip_unavailable` key, `config set-skip-unavailable`,
-    `unset-skip-unavailable` and `ETHOS_SKIP_UNAVAILABLE` go. To be
-    implemented separately.
-
 ## Precedence
 
 Each setting is the first of:
@@ -68,7 +61,6 @@ when it is read, and every problem is reported at once, naming the key.
 | `public_cache` | `config set-public-cache` | public data: read from, and downloaded into |
 | `restricted_caches` | `config add-restricted-cache`, `remove-restricted-cache` | a list of directories, read in order for restricted data, in place; none by default |
 | `staging_cache` | `config set-staging-cache` | work in progress that shadows the catalogue |
-| `skip_unavailable` | `config set-skip-unavailable` | `true` to carry on without data this machine cannot reach |
 | `catalog` | `config set-catalog` | the catalogue to use instead of a collections file's pin or the built-in public catalogue |
 | `publication_url` | `config set-publication-url` | fetch bytes from a different door than the catalogue declares |
 
@@ -91,7 +83,6 @@ catalog: /shared/ethos/catalogue/datacatalog.json
 | `ETHOS_RESTRICTED_DIRS` | `restricted_caches`: directories separated by `:`, on Windows by `;` |
 | `ETHOS_STAGING_DIR` | `staging_cache` |
 | `ETHOS_DATA_CATALOG` | `catalog` |
-| `ETHOS_SKIP_UNAVAILABLE` | `skip_unavailable` |
 | `ETHOS_CATALOG_NO_CACHE` | if set, a fetched catalogue descriptor is never cached on disk |
 | `ETHOS_PUBLICATION_URL` | `publication_url` |
 
@@ -208,7 +199,6 @@ Prefix these with `ethos-data` or a package wrapper such as `<your-tool>-data`.
 | `config remove-restricted-cache DIR` | Remove a restricted cache from the list. |
 | `config set-staging-cache DIR` | Development overlay. |
 | `config set-catalog LOCATION` | Catalogue index path or URL. |
-| `config set-skip-unavailable true\|false` | Whether collection results may omit inaccessible inputs. |
 | `config set-publication-url URL` | Override the dataset download base URL. |
 
 Every setter writes to the settings file in effect. Remove a setting with the

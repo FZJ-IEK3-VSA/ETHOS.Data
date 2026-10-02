@@ -26,7 +26,6 @@ def public(monkeypatch, tmp_path) -> Path:
         config.RESTRICTED_ENV_VAR,
         config.STAGING_ENV_VAR,
         config.CATALOG_ENV_VAR,
-        config.SKIP_UNAVAILABLE_ENV_VAR,
         "ETHOS_PUBLICATION_URL",
     ):
         monkeypatch.delenv(variable, raising=False)

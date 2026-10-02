@@ -61,19 +61,10 @@ class NamedPaths(dict):
     def __init__(self, *args, collection: str = "", **kwargs):
         super().__init__(*args, **kwargs)
         self.collection = collection
-        #: Handles the collection defines but this machine cannot reach, left
-        #: out under ``skip_unavailable``. Kept so a missing-key error can say
-        #: "unavailable here" rather than "never defined".
-        self.omitted: list[str] = []
 
     def __missing__(self, handle):
         offered = ", ".join(sorted(self)) or "none"
         where = f" in collection {self.collection!r}" if self.collection else ""
-        if handle in self.omitted:
-            raise KeyError(
-                f"named path {handle!r}{where} is not available on this machine "
-                f"(left out under skip_unavailable); available: {offered}"
-            )
         raise KeyError(f"no named path {handle!r}{where}; it defines: {offered}")
 
 
@@ -130,11 +121,15 @@ def plan(
     catalog: Catalog,
     resources: list[Resource],
     roots: Roots | None = None,
-    skip_unavailable: bool | None = None,
 ) -> dict:
-    """Report what a fetch would do, without touching the network."""
+    """Report what a fetch would do, without touching the network.
+
+    Restricted data this machine cannot read is listed under ``unavailable``,
+    with the reason on each location, rather than refused: the report only
+    describes. The fetch itself refuses it.
+    """
     roots = roots if roots is not None else catalog.settings.roots
-    locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)
+    locations = locate(catalog, resources, roots, describe=True)
 
     present, missing, in_place = [], [], []
     by_origin: dict[str, list[Resource]] = {}
@@ -173,7 +168,6 @@ def download(
     resources: list[Resource],
     root: Roots | None = None,
     progressbar: bool = True,
-    skip_unavailable: bool | None = None,
     *,
     fetch: bool = True,
 ) -> DataFiles:
@@ -182,7 +176,9 @@ def download(
     Resources resolved in place -- a link in the public cache, the restricted
     cache or a staging entry -- are used where they lie and never copied; the
     rest are downloaded into the public cache, skipping anything already
-    present and hash-verified.
+    present and hash-verified. Every resource is required: restricted data
+    this machine cannot read raises AccessError, describing the dataset,
+    before anything is downloaded.
 
     With ``fetch=False`` nothing is downloaded and no store is contacted: a
     copy already in the public cache is returned as it is, and a file that
@@ -192,19 +188,7 @@ def download(
     roots = root if root is not None else catalog.settings.roots
     _warn_about_licensing(catalog, resources)
 
-    locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)
-
-    absent = unavailable(locations)
-    if absent:
-        names = sorted({loc.resource.dataset for loc in absent})
-        warnings.warn(
-            f"{len(absent)} file(s) from {', '.join(names)} are not available on this "
-            f"machine and have been left out of the result. The returned mapping has no "
-            f"entry for them -- check for the keys you need rather than assuming they "
-            f"are there.",
-            UserWarning,
-            stacklevel=3,
-        )
+    locations = locate(catalog, resources, roots)
 
     unreadable = check_missing(locations)
     if unreadable:
@@ -225,8 +209,6 @@ def download(
     files = DataFiles()
     to_download: dict[str, list[Location]] = {}
     for location in locations:
-        if not location.available:
-            continue
         if location.in_place or (not fetch and location.origin == ORIGIN_CACHED):
             files[location.resource.key] = location.path
         else:
@@ -254,14 +236,8 @@ def download(
             fetched = puller.fetch(location.resource.path, progressbar=progressbar)
             files[location.resource.key] = Path(fetched)
 
-    # Return in catalogue order, not download order. Unavailable resources are
-    # simply absent -- a missing key is something a caller can notice, whereas a
-    # path to a file that is not there is not.
-    return DataFiles(
-        (loc.resource.key, files[loc.resource.key])
-        for loc in locations
-        if loc.available
-    )
+    # In catalogue order, not download order.
+    return DataFiles((loc.resource.key, files[loc.resource.key]) for loc in locations)
 
 
 def _not_fetched(locations: list[Location]) -> str:

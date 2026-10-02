@@ -15,8 +15,8 @@ setting this lesson makes goes into the lesson and not into your account:
 export ETHOS_DATA_CONFIG="$PWD/lesson-settings.yaml"
 ```
 
-Use a shell without `ETHOS_RESTRICTED_DIRS` or `ETHOS_SKIP_UNAVAILABLE`, which
-would win over the lesson's settings.
+Use a shell without `ETHOS_RESTRICTED_DIRS`, which would win over the lesson's
+settings.
 
 ## 1. Look for a hidden dataset
 
