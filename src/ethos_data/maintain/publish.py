@@ -138,8 +138,10 @@ def render(catalog_root: Path, earlier: list[str] | None = None) -> dict[Path, s
     keeps listing beside the one being published: a package that bounds its
     catalogue version finds the newest public release within its bounds there.
     """
+    from ..formats.catalogue import STRIPPED as STRIP_FROM_INDEX
+
     catalog_meta = read_catalog_meta(catalog_root)
-    for key in STRIP_FROM_PACKAGE:
+    for key in (*STRIP_FROM_PACKAGE, *STRIP_FROM_INDEX):
         catalog_meta.pop(key, None)
     # Overwritten, not inherited: this copy is generated whatever the source says.
     # It is the only durable marker of that -- the public tree has no catalog.yaml,
@@ -311,14 +313,22 @@ def _published_releases(destination_root: Path) -> list[str]:
     return names
 
 
-@report.reported
-def run(catalog_root: Path, target: str, check: bool = False) -> int:
-    destination_root = Path(target).expanduser().resolve()
-    files = render(catalog_root, _published_releases(destination_root))
+def plan(
+    catalog_root: Path, destination_root: Path
+) -> tuple[dict[Path, str | bytes], list[str], list[str]]:
+    """The public tree for ``destination_root``, the datasets it withholds, its leaks.
 
+    Withheld are the datasets the tree leaves out, hidden ones among them; a
+    withdrawn dataset is neither published nor withheld.
+    """
+    from .manifest import left_out
+
+    files = render(catalog_root, _published_releases(destination_root))
     root = datasets_dir(catalog_root)
     all_datasets = [
-        d for d in iter_dataset_dirs(root) if (d / "datapackage.json").is_file()
+        d
+        for d in iter_dataset_dirs(root)
+        if (d / "datapackage.json").is_file() and not left_out(d)
     ]
     published = {
         Path(*p.parts[1:-1]).as_posix()
@@ -330,11 +340,16 @@ def run(catalog_root: Path, target: str, check: bool = False) -> int:
         for d in all_datasets
         if dataset_name_for(root, d) not in published
     ]
+    return files, withheld, leaks(files, withheld)
 
+
+@report.reported
+def run(catalog_root: Path, target: str, check: bool = False) -> int:
+    destination_root = Path(target).expanduser().resolve()
     # Before anything is compared or written: a tree that would leak is refused
     # whatever the target holds, and in both modes, so CI's --check fails on
     # exactly what would stop a publish.
-    leaked = leaks(files, withheld)
+    files, withheld, leaked = plan(catalog_root, destination_root)
 
     if check:
         stale = [

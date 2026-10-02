@@ -583,6 +583,11 @@ ethos:publication_url: https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ethos-da
 ethos:contact: iek-3-data
 ethos:catalog_role: source
 version: v2026.09.2
+ethos:store:                     # optional; these are the defaults
+  remote: HIFIS
+  vo_path: Helmholtz/FZJ-ICE2
+  oidc_profile: HIFIS
+  frontend: https://hifis-storage-web.desy.de/api/v1
 ```
 
 | Key | | |
@@ -591,7 +596,8 @@ version: v2026.09.2
 | `ethos:publication_url` | | root of the public data store. Every resource URL is `<publication_url>/<remote_prefix>/<resource path>`. Override per machine with `ethos-data config set-publication-url` |
 | `ethos:contact` | | team or username |
 | `ethos:catalog_role` | `source` \| `published` | always `source` in a hand-written file — `build` defaults it and **rejects** any other value. `ethos-data catalog publish` stamps `published` into the generated copy |
-| `version` | `vYYYY.MM.N` | the release this catalogue is, set before it is released; `build` refuses any other form and writes it into the index |
+| `version` | `vYYYY.MM.N` | the release this catalogue is; `ethos-data catalog release` writes it, `build` refuses any other form and writes it into the index |
+| `ethos:store` | mapping | how `upload`, `release --upload` and `remove --purge` reach the publication store: the rclone `remote`, the VO's `vo_path`, the `oidc_profile` that issues tokens, and the REST `frontend`. Each defaults to today's dCache. Never in an index |
 
 ---
 
@@ -638,7 +644,7 @@ history:
 | `source_dir` | path | the build input: required while the dataset is `draft`, `built` or `available`, gone once it is `frozen`. Relative to the dataset directory if relative |
 | `copies` | list | every place a command made the bytes available: `kind` (`uploaded`, `linked` or `materialized`), `location` (the dataset's folder on the store, or the cache entry), `target` for a link, and `verified`, when every file was last found there |
 | `authority` | a copy's `location` | the authoritative copy, once the dataset is frozen |
-| `history` | list | every step taken, oldest first: `at` (UTC), `by`, `step`, `from` when the step changed the state, `to`, and what the step read or made: `files` and `bytes`, the `copy`, a `note`, and the `source_dir` a freeze retired |
+| `history` | list | every step taken, oldest first: `at` (UTC), `by`, `step`, `from` when the step changed the state, `to`, and what the step read or made: `files` and `bytes`, the `copy`, a `note`, the `source_dir` a freeze retired, and the `release` a release step made |
 
 | State | Means | Reached by |
 |---|---|---|
@@ -647,7 +653,7 @@ history:
 | `available` | bytes reachable for the access class: uploaded and verified, linked, or registered | `ethos-data catalog upload`; `ethos-data link` and `materialize` given `--catalog-root` |
 | `frozen` | inventory final, no build input left, authoritative copy recorded | `ethos-data catalog record` |
 | `withdrawn` | out of the catalogue; bytes not yet deleted | `ethos-data catalog remove`, see [Remove a dataset](../how-to/catalogue-maintainers/withdraw-a-dataset.md) |
-| `purged` | bytes deleted after the release that dropped the dataset | removing its bytes |
+| `purged` | bytes deleted after the release that dropped the dataset; only the status file is left | `ethos-data catalog remove --purge` |
 
 Every command checks its step against the state first: a draft is built
 before it is uploaded or linked, a dataset is frozen only with a copy that
@@ -656,6 +662,11 @@ rechecked, never uploaded again. A rebuild that finds other files than the
 inventory before is recorded as a `change`, and returns an available dataset
 to built, because what was checked is no longer what the inventory describes.
 A rebuild that changes no file records nothing.
+
+`ethos-data catalog release` adds a `release` step to the history of every
+dataset with steps since its last release, so the history says which release
+holds each change, and `catalog status` shows the last release and how many
+steps came after it.
 
 Keys a later release adds are kept as they are when an older one rewrites the
 file. See [`ethos-data catalog status`](cli/catalog.md#status-datasets).

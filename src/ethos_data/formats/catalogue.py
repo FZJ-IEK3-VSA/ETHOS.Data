@@ -2,13 +2,38 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from collections.abc import Mapping
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..errors import DescriptorError
 from . import keys as k
-from .fields import field
+from .fields import field, keys_with
 
-__all__ = ["CatalogMeta", "check"]
+__all__ = ["STRIPPED", "CatalogMeta", "StoreSettings", "check", "store_of"]
+
+#: The DESY dCache REST interface the store settings name by default.
+DCACHE_FRONTEND = "https://hifis-storage-web.desy.de/api/v1"
+
+
+class StoreSettings(BaseModel):
+    """How the maintainer commands reach the publication store; today's dCache by default."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    remote: str = Field(
+        "HIFIS", description="The rclone remote that reaches the store."
+    )
+    vo_path: str = Field(
+        "Helmholtz/FZJ-ICE2", description="The VO's path in the store's namespace."
+    )
+    oidc_profile: str = Field(
+        "HIFIS", description="The oidc-agent profile that issues the store's tokens."
+    )
+    frontend: str = Field(
+        DCACHE_FRONTEND,
+        description="The store's REST interface, for permissions and locality.",
+    )
 
 
 class CatalogMeta(BaseModel):
@@ -39,6 +64,27 @@ class CatalogMeta(BaseModel):
         description="Always source in a hand-written file; publish stamps published.",
         schema={"enum": list(k.CATALOG_ROLES)},
     )
+    store: StoreSettings | None = field(
+        k.STORE,
+        description="How upload, release and purge reach the store; today's dCache by default.",
+        published=False,
+    )
+
+
+#: Never in an index: how the maintainers reach the store is theirs to know.
+STRIPPED = keys_with(CatalogMeta, "published", False)
+
+
+def store_of(meta: Mapping) -> StoreSettings:
+    """The store settings ``catalog.yaml`` gives, with today's values for any it leaves out."""
+    try:
+        return StoreSettings.model_validate(meta.get(k.STORE) or {})
+    except ValidationError as error:
+        from .dataset import describe
+
+        raise DescriptorError(
+            f"catalog.yaml: {k.STORE}: {'; '.join(describe(error))}"
+        ) from None
 
 
 def check(meta: dict) -> None:
@@ -49,6 +95,7 @@ def check(meta: dict) -> None:
     a wrong value is refused outright: a catalogue mislabelled ``published``
     would make every tool refuse to touch it.
     """
+    store_of(meta)
     if meta.get(k.VERSION) is not None:
         from ..model.versions import Version
 

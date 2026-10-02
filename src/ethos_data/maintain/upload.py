@@ -37,6 +37,7 @@ A verified upload, or a recheck that passes, is recorded in the dataset's
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import urllib.error
@@ -50,6 +51,7 @@ from ..adapters import Store
 from ..adapters.dcache import FRONTEND, MODE_0755, DcacheStore
 from ..errors import UploadError
 from ..formats import keys as k
+from ..formats.catalogue import store_of
 from ..formats.derived import license_settled, remote_prefix_of, resource_url
 from ..formats.keys import ROLE_PUBLISHED
 from ..formats.status_file import Copy, StatusFile
@@ -69,11 +71,15 @@ from . import status as dataset_status
 
 @dataclass(frozen=True)
 class UploadOptions:
-    """The flags of ``ethos-data catalog upload``, with the command's defaults."""
+    """The flags of ``ethos-data catalog upload``, with the command's defaults.
 
-    remote: str = "HIFIS"
-    oidc_profile: str = "HIFIS"
-    vo_path: str = "Helmholtz/FZJ-ICE2"
+    ``remote``, ``oidc_profile`` and ``vo_path`` left None are taken from
+    ``catalog.yaml``'s ``ethos:store``, whose own defaults are today's dCache.
+    """
+
+    remote: str | None = None
+    oidc_profile: str | None = None
+    vo_path: str | None = None
     #: The publication root under the VO; None means the catalogue's own.
     root: str | None = None
     dry_run: bool = False
@@ -430,9 +436,17 @@ def run(
     dCache through ``options.remote`` by default; ``reporter=`` takes the
     progress. Returns a process-style exit status.
     """
-    options = options or UploadOptions()
-    store = store if store is not None else DcacheStore(options.remote)
     catalog_meta = read_catalog_meta(catalog_root)
+    settings = store_of(catalog_meta)
+    options = options or UploadOptions()
+    options = dataclasses.replace(
+        options,
+        remote=options.remote or settings.remote,
+        oidc_profile=options.oidc_profile or settings.oidc_profile,
+        vo_path=options.vo_path or settings.vo_path,
+    )
+    if store is None:
+        store = DcacheStore(options.remote, settings.frontend)
     base_url = catalog_meta[k.PUBLICATION_URL].rstrip("/")
 
     # The upload destination and the URL we verify afterwards have to name the

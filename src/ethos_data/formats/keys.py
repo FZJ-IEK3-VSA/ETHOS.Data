@@ -82,6 +82,8 @@ STAGING = "staging"
 
 DATASETS = "datasets"
 PUBLICATION_URL = "ethos:publication_url"
+#: Of catalog.yaml: how the maintainer commands reach the publication store.
+STORE = "ethos:store"
 CATALOG_ROLE = "ethos:catalog_role"
 #: Of the published index: every public release, the current one included.
 RELEASES = "ethos:releases"

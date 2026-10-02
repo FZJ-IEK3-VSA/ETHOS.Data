@@ -27,6 +27,7 @@ import hashlib
 import http.server
 import io
 import json
+import shutil
 import textwrap
 import threading
 from pathlib import Path
@@ -119,6 +120,10 @@ class Store:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(as_bytes(content))
         return target
+
+    def remove(self, prefix: str) -> None:
+        """Delete a folder and everything in it, as a purge on the store does."""
+        shutil.rmtree(self.root / prefix, ignore_errors=True)
 
     def close(self) -> None:
         self._server.shutdown()

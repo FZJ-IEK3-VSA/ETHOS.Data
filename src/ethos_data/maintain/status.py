@@ -270,6 +270,28 @@ def record_copy(
     return take(directory, status, step, dataset=dataset, copy=copy, **details).state
 
 
+def releases(status: StatusFile) -> tuple[str | None, int]:
+    """The last release that holds the dataset's steps, and how many came after it."""
+    last, after = None, 0
+    for entry in status.history:
+        if entry.step == "release":
+            last, after = entry.release, 0
+        else:
+            after += 1
+    return last, after
+
+
+def released_since(status: StatusFile, step: str) -> str | None:
+    """The first release after the last ``step``, or None if no release holds it yet."""
+    seen, found = False, None
+    for entry in status.history:
+        if entry.step == step:
+            seen, found = True, None
+        elif seen and entry.step == "release" and found is None:
+            found = entry.release
+    return found
+
+
 def unrecorded(names: list[str]) -> str:
     """The warning for datasets a step could not be recorded for."""
     listed = ", ".join(names[:5]) + (
@@ -435,8 +457,14 @@ def evidence(
 # -- the command ---------------------------------------------------------------
 
 
-def datasets(catalog_root: Path, names: list[str]) -> list[tuple[str, Path]]:
-    """The named datasets, or every one with files, as (name, directory)."""
+def datasets(
+    catalog_root: Path, names: list[str], *, tombstones: bool = False
+) -> list[tuple[str, Path]]:
+    """The named datasets, or every one with files, as (name, directory).
+
+    ``tombstones`` adds, to every dataset, those purged: a directory holding
+    only its ``status.yaml``.
+    """
     root = datasets_dir(catalog_root)
     if names:
         found = []
@@ -453,11 +481,18 @@ def datasets(catalog_root: Path, names: list[str]) -> list[tuple[str, Path]]:
             else:
                 found.append((name, directory))
         return found
-    return [
+    found = [
         (dataset_name_for(root, directory), directory)
         for directory in iter_dataset_dirs(root)
         if not is_namespace(directory)
     ]
+    if tombstones and root.is_dir():
+        found += [
+            (dataset_name_for(root, path.parent), path.parent)
+            for path in sorted(root.rglob(STATUS))
+            if not (path.parent / "dataset.yaml").is_file()
+        ]
+    return sorted(found)
 
 
 @report.reported
@@ -467,20 +502,27 @@ def run(catalog_root: Path, names: list[str], *, check: bool = False) -> int:
     Returns 1 when a status file cannot be read, or ``check`` found a record
     that does not hold, else 0.
     """
-    rows = datasets(catalog_root, names)
+    rows = datasets(catalog_root, names, tombstones=not names)
     width = max([len(name) for name, _ in rows] + [7])
-    report.info(f"  {'dataset':<{width}}  {'state':<10} {'access':<11} next")
+    report.info(
+        f"  {'dataset':<{width}}  {'state':<10} {'access':<11} {'release':<16} next"
+    )
     failed = 0
     for name, dataset_dir in rows:
-        meta = read_descriptor(dataset_dir)
-        access = meta.get(k.ACCESS, k.PUBLIC)
+        described = (dataset_dir / "dataset.yaml").is_file()
+        meta = read_descriptor(dataset_dir) if described else {}
+        access = meta.get(k.ACCESS, k.PUBLIC) if described else "-"
         try:
             status = read(dataset_dir)
         except DescriptorError as error:
             failed += 1
-            report.info(f"  {name:<{width}}  {'?':<10} {access:<11} {error.message}")
+            report.info(
+                f"  {name:<{width}}  {'?':<10} {access:<11} {'':<16} {error.message}"
+            )
             continue
         state = status.state if status else "-"
+        last, after = releases(status) if status else (None, 0)
+        release = (last or "-") + (f" +{after}" if after and last else "")
         hint = lifecycle.next_step(
             name,
             status.state if status else None,
@@ -490,8 +532,10 @@ def run(catalog_root: Path, names: list[str], *, check: bool = False) -> int:
             licensed=license_settled(meta),
             checkout=str(catalog_root),
         )
-        report.info(f"  {name:<{width}}  {state:<10} {access:<11} {hint or '-'}")
-        if check:
+        report.info(
+            f"  {name:<{width}}  {state:<10} {access:<11} {release:<16} {hint or '-'}"
+        )
+        if check and described:
             for finding in evidence(catalog_root, dataset_dir, name, status):
                 failed += not finding.ok
                 report.info(f"  {'':<{width}}    {finding}")

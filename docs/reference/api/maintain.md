@@ -165,6 +165,26 @@ run is the plan.
       show_root_toc_entry: false
       heading_level: 3
 
+::: ethos_data.maintain.release
+    options:
+      members:
+        - run
+        - Release
+        - stamped
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.checkout
+    options:
+      members:
+        - run
+        - Update
+        - latest
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
 ::: ethos_data.maintain.provenance
     options:
       members:

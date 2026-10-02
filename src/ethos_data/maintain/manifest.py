@@ -901,6 +901,8 @@ def write_index(catalog_root: Path) -> Path:
 
 def build_catalog(catalog_root: Path, dataset_dirs: list[Path]) -> dict:
     meta = catalog_meta(catalog_root)
+    for key in catalogue_format.STRIPPED:
+        meta.pop(key, None)
     datasets_root = datasets_dir(catalog_root)
     datasets = []
     for dataset_dir in sorted(dataset_dirs):
