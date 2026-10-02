@@ -53,9 +53,6 @@ That file is the start of the later [proposal](propose-a-dataset.md); fill in
 the source, licence and origin as you learn them. Staging itself does not
 read it.
 
-!!! warning "Gap: `staging add` writes no `dataset.yaml`"
-    In the code, a staging entry is a name and a directory.
-
 ## 3. Use it
 
 Add the dataset to a collection in your package's file as under

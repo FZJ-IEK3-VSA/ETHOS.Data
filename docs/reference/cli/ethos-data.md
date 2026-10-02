@@ -30,18 +30,23 @@ listed restricted cache. `link --all` builds the cache that `--root` after
 given. `catalog upload --root` is a third thing entirely — a publication folder
 on the remote. Use `ethos-data COMMAND --help` for command options.
 
-## `ls [key]` {#ls-key}
+## `ls [key] [--meta]` {#ls-key}
 
 ```bash
 ethos-data ls
 ethos-data ls global-wind-atlas-v4
 ethos-data ls reskit-test-data/era5
+ethos-data ls reskit-test-data/gebco --meta
 ```
 
 Without a key, list dataset names, access classes and titles from the catalogue
 index without loading each dataset's inventory. With a dataset, family, folder
 or file key, list matching resource keys and sizes. A file includes its sidecars.
 No data bytes are fetched; remote metadata can require network access.
+With `--meta`, print instead the description of each dataset under the key:
+title and version, description, access class and origin, homepage, sources,
+licences, attribution, restriction, upstream status and contact, as far as
+the catalogue records them.
 
 The Python equivalent for files under a key is
 [`Catalog.resources`][ethos_data.catalogs.Catalog.resources].
@@ -88,11 +93,35 @@ catalogue names. Settings affect package wrappers too. The
 variables and precedence. For setup steps, see
 [Set up your machine](../../how-to/data-users/set-up-your-machine.md).
 
-!!! warning "Gap: `selftest` is missing"
-    The target adds `ethos-data selftest`, which fetches the small public
-    collection that ships with the package and reports each step; see
-    [Check that a download works](../../how-to/data-users/set-up-your-machine.md#check-a-download).
-    It is to be implemented separately.
+## `selftest` {#selftest}
+
+Check that this machine can obtain data at all, with the small public
+collections file that ships with ETHOS.Data
+(`ethos_data.EXAMPLE_COLLECTIONS`, under 200 KB):
+
+```bash
+ethos-data selftest
+ethos-data --root selftest-download selftest     # force a real download
+```
+
+It reports three steps and stops at the first that fails: the settings in
+effect, with any cache this machine cannot reach marked; the catalogue they
+choose and its version; and every file, `downloaded`, `already present` or
+`read in place`, checked against the catalogue's checksums. It ends with
+`selftest passed` and exit `0`, or names the failed step and exits `1`.
+`--catalog` and `--root` apply as for every command.
+
+## `verify <key>` {#verify}
+
+Check the files under a dataset, folder or file against the catalogue, as a
+package's `verify` checks a collection.
+
+| Flag | |
+|---|---|
+| `--deep` | compare checksums, not just sizes |
+| `--repair` | download damaged copies the public cache owns again; never a link |
+| `--dry-run` | with `--repair`: say what would be re-fetched, change nothing |
+| `-q`, `--quiet` | report only problems |
 
 ## `link [dataset] [directory]` {#link-dataset-directory}
 

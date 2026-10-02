@@ -97,6 +97,9 @@ class StagedDataset:
     status: str = ""
     #: Where the official version lives, when this entry is SHADOWING one.
     official: Path | None = None
+    #: The ``dataset.yaml`` that :func:`add` wrote into the directory; None if
+    #: the directory already had one, which is then left alone.
+    descriptor: Path | None = None
 
     @property
     def is_link(self) -> bool:
@@ -180,6 +183,9 @@ def iter_files(directory: Path):
         relative = path.relative_to(directory)
         if any(part in EXCLUDE_NAMES for part in relative.parts):
             continue
+        # The description `add` writes describes the files; it is not one.
+        if relative.as_posix() == "dataset.yaml":
+            continue
         if path.suffix in EXCLUDE_SUFFIXES:
             continue
         yield path, relative.as_posix()
@@ -197,6 +203,10 @@ def add(
     By default this links rather than copies: work in progress usually lives in
     a scratch or project directory that is still being written to, and a copy
     would go stale the moment it was made.
+
+    The directory gets a minimal ``dataset.yaml`` unless it has one: the start
+    of the dataset's description, and later of its proposal. Staging itself
+    never reads it.
     """
     staging = _require_root(root)
     staging.mkdir(parents=True, exist_ok=True)
@@ -228,6 +238,7 @@ def add(
             f"Remove it first with your package's data command: staging remove {name}"
         )
 
+    descriptor = _describe_new(source, name, note)
     entry.parent.mkdir(parents=True, exist_ok=True)
     if copy:
         import shutil
@@ -245,7 +256,25 @@ def add(
         "copied": bool(copy),
     }
     _write_index(staging, index)
-    return _describe(staging, name, index)
+    return replace(_describe(staging, name, index), descriptor=descriptor)
+
+
+def _describe_new(directory: Path, name: str, note: str) -> Path | None:
+    """Write the format's minimal ``dataset.yaml`` into ``directory``, unless it has one."""
+    path = directory / "dataset.yaml"
+    if path.exists():
+        return None
+    from .formats import template
+
+    # Quoted as JSON strings, which YAML reads as they are: a note may hold a
+    # colon or a hash that would otherwise end the value early.
+    text = template(
+        "dataset-minimal",
+        name=json.dumps(name),
+        description=json.dumps(note or "What this data is and what it is for."),
+    )
+    path.write_text(text, encoding="utf-8", newline="\n")
+    return path
 
 
 def remove(name: str, root: str | Path | None = None, force: bool = False) -> Path:

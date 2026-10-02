@@ -164,15 +164,6 @@ print(data.paths("offshore_siting"))
 same file the examples in [Use data in a script](use-data-in-a-script.md)
 work with.
 
-!!! warning "Gap: no self-test"
-    `ethos-data selftest` and `ethos_data.EXAMPLE_COLLECTIONS` do not
-    exist, and the example collections file is only in the documentation, as
-    [collections.yaml](../../assets/examples/collections.yaml). With the
-    code, `ethos-data fetch
-    reskit-test-data/placements/turbine_placements.csv` checks a single
-    download. See [the self-test
-    collection](../../explanation/architecture/decisions/0017-self-test-collection.md).
-
 ## Use another settings file {#another-settings-file}
 
 Name a file in `ETHOS_DATA_CONFIG` to use it instead of the one in your

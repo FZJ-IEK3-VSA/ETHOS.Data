@@ -108,11 +108,6 @@ catalogue in effect and checks them, so it confirms that downloads work on
 this machine. See
 [Check that a download works](how-to/data-users/set-up-your-machine.md#check-a-download).
 
-!!! warning "Gap: `selftest` is not implemented"
-    Until it is, `ethos-data fetch
-    reskit-test-data/placements/turbine_placements.csv` checks a single
-    download.
-
 ```bash
 python -c "import ethos_data; print(ethos_data.__version__)"
 ```
