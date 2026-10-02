@@ -65,8 +65,15 @@ For one dataset, first match wins:
    development. Never applies to restricted data.
 3. **The restricted root**, for restricted datasets: always in place, never
    downloaded, never written to.
-4. **The public root**, for everything else: in place if the entry is a symbolic
-   link, downloaded otherwise.
+4. **The public root**, for everything else: in place if the dataset's entry,
+   or its family's, is a symbolic link; a copy already there if it has the
+   recorded size; downloaded otherwise, for public data only.
+
+Each step is one locator in a chain. A locator that finds the file answers, one
+that does not have it passes to the next, and one that may not serve it refuses,
+which ends the search: a restricted file without an installation never reaches
+the public cache or a download. See the [configuration
+reference](../reference/configuration.md#lookup-order).
 
 ## The rule that does not bend
 

@@ -421,7 +421,9 @@ the status file.
 
 ## One lookup chain decides where a file is read (2026-10-02)
 
-**Status: proposed.** Implemented by the refactoring pull requests.
+**Status: implemented, except the bundle locator,** which arrives with
+repository-first bundles. The chain is `ethos_data.access.chain_for`, the
+catalogue resolver `Settings.choose_catalog`.
 
 Where a file is read is decided by one long function, and package bundles are
 not part of it: a package that ships its test data has to implement

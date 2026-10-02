@@ -47,6 +47,10 @@ keeps as its `settings`.
     options:
       members:
         - locate
+        - chain_for
+        - Chain
+        - Locator
+        - linked_entry
         - Location
         - AccessError
         - requires_local_root

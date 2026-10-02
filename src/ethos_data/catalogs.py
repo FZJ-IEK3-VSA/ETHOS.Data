@@ -63,6 +63,7 @@ __all__ = [
     "Resource",
     "UnknownDataset",
     "UnknownKey",
+    "catalog_for",
     "directory_of",
     "license_settled",
     "load_catalog",
@@ -650,6 +651,7 @@ class Catalog:
         *,
         root: Roots | str | Path | None = None,
         progressbar: bool = False,
+        fetch: bool = True,
     ) -> Path:
         """The absolute local path of a file or folder, fetching it if necessary.
 
@@ -658,6 +660,8 @@ class Catalog:
         a dataset family for a directory, in which case every file under it is
         fetched first. :meth:`resources` says what is under a key without
         fetching. Files already in the cache are not downloaded again.
+        ``fetch=False`` downloads nothing, and raises
+        :class:`~ethos_data.errors.NotFetched` for a file that is not here.
         """
         from .retrieval import download
 
@@ -665,12 +669,26 @@ class Catalog:
         catalog = self.overlaid(roots)
         name, inner = split_key(catalog, key)
         found, target = select_key(catalog, name, inner, key)
-        files = download(catalog, found, root=roots, progressbar=progressbar)
+        files = download(
+            catalog, found, root=roots, progressbar=progressbar, fetch=fetch
+        )
         if target is not None:
             if target.key not in files:
                 raise AccessError(f"{key!r} is not available on this machine.")
             return Path(os.path.abspath(files[target.key]))
         return Path(os.path.abspath(directory_of(files, found, name, inner, key)))
+
+
+def catalog_for(settings: Settings, *, explicit: str | None = None) -> Catalog:
+    """The catalogue ``settings`` choose, loaded, and keeping those settings.
+
+    The one place a catalogue handle is opened from settings, so the choice
+    follows :meth:`~ethos_data.config.Settings.choose_catalog` everywhere.
+    """
+    location, source = settings.choose_catalog(explicit=explicit)
+    loaded = load_catalog(location)
+    loaded._settings = settings.with_catalog(location, source, loaded.version)
+    return loaded
 
 
 def load_catalog(location: str) -> Catalog:
