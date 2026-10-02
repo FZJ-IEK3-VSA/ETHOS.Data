@@ -77,6 +77,20 @@ Regular tasks:
 | Create, rename and delete folders on dCache | [Manage dCache folders](catalogue-maintainers/manage-dcache-folders.md) |
 | Trace a user's report through metadata, files and storage | [Diagnose a report](catalogue-maintainers/diagnose-a-report.md) |
 
+## How the roles work together {#roles-together}
+
+Each guide above is one oval in the figure, in the same order. A blue arrow
+marks a task that hands something to another role: a package release, a
+proposal and its answer, a notice about a release or a removal, a problem
+report and its answer, the locations on the ICE-2 wiki. A teal line marks a
+task that reaches dCache: data users and package maintainers only download
+from it, catalogue maintainers maintain it.
+
+<figure markdown="span">
+  ![Three lanes with one task per guide. Data user: set up your machine, use data in a script, check and repair the cache, report a problem. Package maintainer: use ETHOS.Data in your package, write a collections file, stage development data, propose a dataset, keep data in the repository, run tests and examples in CI. Catalogue maintainer, set up once: set up dCache access, set up the shared machine, bootstrap a catalogue; regular tasks: add a dataset, verify provenance, upload a public dataset, link existing data into the cache, materialize linked data, add restricted data, remove a dataset, release the catalogue, manage dCache folders, diagnose a report. Blue arrows: the package's collections file and data command reach the data user; the shared machine's locations reach cluster users through the ICE-2 wiki; staging and a bundle both end in a proposal, which goes to the catalogue maintainer, who answers with the accepted name and release; release and removal notices and collection issues reach the collections file, and a release also reaches cluster users; a problem report goes to the catalogue maintainer, who answers. Teal lines to dCache: the data user's self-test, fetch and repair and the package maintainer's bundle export and live CI job download anonymously; the catalogue maintainer's dCache access, bootstrap, upload, removal, release, folder management and diagnosis maintain it with authentication.](../assets/diagrams/usecases-interactions-light.svg#only-light){ .diagram }
+  ![Three lanes with one task per guide. Data user: set up your machine, use data in a script, check and repair the cache, report a problem. Package maintainer: use ETHOS.Data in your package, write a collections file, stage development data, propose a dataset, keep data in the repository, run tests and examples in CI. Catalogue maintainer, set up once: set up dCache access, set up the shared machine, bootstrap a catalogue; regular tasks: add a dataset, verify provenance, upload a public dataset, link existing data into the cache, materialize linked data, add restricted data, remove a dataset, release the catalogue, manage dCache folders, diagnose a report. Blue arrows: the package's collections file and data command reach the data user; the shared machine's locations reach cluster users through the ICE-2 wiki; staging and a bundle both end in a proposal, which goes to the catalogue maintainer, who answers with the accepted name and release; release and removal notices and collection issues reach the collections file, and a release also reaches cluster users; a problem report goes to the catalogue maintainer, who answers. Teal lines to dCache: the data user's self-test, fetch and repair and the package maintainer's bundle export and live CI job download anonymously; the catalogue maintainer's dCache access, bootstrap, upload, removal, release, folder management and diagnosis maintain it with authentication.](../assets/diagrams/usecases-interactions-dark.svg#only-dark){ .diagram }
+</figure>
+
 For options, see the [ethos-data CLI](../reference/cli/ethos-data.md),
 [package data commands](../reference/cli/package-data.md),
 [catalogue CLI](../reference/cli/catalog.md) and

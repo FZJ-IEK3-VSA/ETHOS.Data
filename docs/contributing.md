@@ -156,7 +156,7 @@ and node vocabulary in `ethosstyle.tex`; the rendered SVGs live in
 
 ```bash
 python docs/diagrams/render.py                # re-render what changed
-python docs/diagrams/render.py usecases-overview --force
+python docs/diagrams/render.py usecases-interactions --force
 ```
 
 That means an ordinary `mkdocs build` needs no LaTeX — only editing a diagram
