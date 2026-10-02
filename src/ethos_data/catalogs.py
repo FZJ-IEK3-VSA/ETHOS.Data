@@ -51,7 +51,7 @@ from .model import digest, names
 from .model.resource import Resource, extras_of, from_record, to_record, with_sidecars
 
 if TYPE_CHECKING:
-    from .config import Roots
+    from .config import Roots, Settings
 
 __all__ = [
     "LICENSE_RESOLVED",
@@ -455,6 +455,30 @@ class Catalog:
     #: catalogue handed back into the API is not overlaid -- and warned about --
     #: a second time.
     staged: bool = False
+    #: The settings this handle uses, read once; see :attr:`settings`.
+    _settings: Settings | None = field(default=None, repr=False)
+
+    @property
+    def settings(self) -> Settings:
+        """The settings file, this catalogue, the caches, and where each came from.
+
+        Read when first needed, then kept: every later call of this handle uses
+        the same caches and publication URL, whatever changes in the
+        environment meanwhile. ``print(catalog.settings)`` reports them.
+        """
+        if self._settings is None:
+            from .config import read_settings
+
+            self._settings = read_settings().with_catalog(
+                self.location, "loaded directly", self.version
+            )
+        return self._settings
+
+    @property
+    def version(self) -> str | None:
+        """The catalogue release this index records, if it records one."""
+        version = self.descriptor.get(keys.VERSION)
+        return str(version) if version else None
 
     @property
     def name(self) -> str:
@@ -470,13 +494,12 @@ class Catalog:
         """Base URL for bytes, honouring a local override.
 
         Defaults to whatever the catalogue declares; ETHOS_PUBLICATION_URL or a
-        `publication_url` config key can point at a different DESY door without
-        the catalogue changing.
+        `publication_url` setting can point at a different DESY door without
+        the catalogue changing. Taken from :attr:`settings`, so read once.
         """
-        from .config import resolve_publication_url
-
+        override = self.settings.publication_url
         default = self.descriptor.get(keys.PUBLICATION_URL, "")
-        return resolve_publication_url(default)[0].rstrip("/")
+        return (override or default).rstrip("/")
 
     def members_of(self, name: str) -> list[Dataset]:
         """The datasets that carry files under a family name, innermost included.
@@ -578,6 +601,16 @@ class Catalog:
     # builds a handle for the configured catalogue; ``Collections.catalog`` is
     # the one a tool's collections file pins.
 
+    def _roots(self, root: Roots | str | Path | None) -> Roots:
+        """The roots of :attr:`settings`, or of one call that names its own."""
+        from .config import Roots
+
+        if root is None:
+            return self.settings.roots
+        if isinstance(root, Roots):
+            return root
+        return self.settings.roots.with_public(root)
+
     def overlaid(self, roots: Roots | None = None, warn: bool = True) -> Catalog:
         """This catalogue with the staging overlay applied, once.
 
@@ -619,10 +652,9 @@ class Catalog:
         fetched first. :meth:`resources` says what is under a key without
         fetching. Files already in the cache are not downloaded again.
         """
-        from .config import Roots
         from .retrieval import download
 
-        roots = Roots.coerce(root)
+        roots = self._roots(root)
         catalog = self.overlaid(roots)
         name, inner = split_key(catalog, key)
         found, target = select_key(catalog, name, inner, key)

@@ -1,25 +1,16 @@
 # Configuration
 
-Every setting, where it can be written, and how it is resolved. The
-authoritative answer for any given machine is always:
+Every setting, where it is written, and how it is resolved. The authoritative
+answer for any given machine is always:
 
 ```bash
 ethos-data config show
 ```
 
-which prints the resolved values, the provenance of each, and every file
-consulted along the way. A cache path this machine cannot reach, such as a
-network drive that is not connected, is marked `NOT REACHABLE` with the reason.
-
-!!! warning "Gap: one settings file per account is planned"
-    This page describes the current release. The planned change replaces
-    layers 3 to 6 below with one settings file: the file `ETHOS_DATA_CONFIG`
-    names, else the file in the user's account. It removes `--scope`, moves
-    the Windows file to `%LOCALAPPDATA%\ethos-data\config.yaml`, and gives
-    every handle a `settings` snapshot, read once per process. See
-    [Where the settings are stored](../how-to/data-users/set-up-your-machine.md#settings-file)
-    and the [decision record](../explanation/architecture/decisions/0010-one-settings-file-per-account.md).
-    It is to be implemented separately; this page is rewritten with it.
+which prints the settings file it read, the resolved values and the provenance
+of each, and any settings file of an earlier release that it now ignores. A
+cache path this machine cannot reach, such as a network drive that is not
+connected, is marked `NOT REACHABLE` with the reason.
 
 !!! warning "Gap: `skip_unavailable` is to be removed"
     With [every input is
@@ -48,45 +39,51 @@ network drive that is not connected, is marked `NOT REACHABLE` with the reason.
 
 ## Precedence
 
-First match wins:
+Each setting is the first of:
 
 | | Source | |
 |---|---|---|
-| 1 | an explicit argument | `--root` / `root=` (public cache only) |
+| 1 | an explicit argument | `--root` / `root=` (public cache), `--catalog` / `catalog=` |
 | 2 | an environment variable | `$ETHOS_DATA_DIR`, `$ETHOS_RESTRICTED_DIR`, … |
-| 3 | project config | `./ethos-data.yaml`, searched upward from the cwd |
-| 4 | user config | the per-user config directory, all platforms |
-| 5 | environment config | `<sys.prefix>/etc/ethos-data/config.yaml` |
-| 6 | site config | the machine-wide config directory |
-| 7 | built-in default | the per-user OS cache directory (public cache only) |
+| 3 | the settings file | the file `$ETHOS_DATA_CONFIG` names, else the file in the account |
+| 4 | the built-in default | the per-user cache directory (public cache only) |
 
-Layer 3 is found by walking up from the current directory, the way `git` finds
-`.git`. It is for people who want the setting to be **visible**: an ordinary
-file sitting next to the work it belongs to, which can be committed so a whole
-team shares one answer.
+Only the public cache has a built-in default. The restricted and staging roots
+have none on purpose: where licensed bytes land is a decision somebody has to
+make out loud, and staging is opt-in.
 
-Only the public cache has a layer 7. The restricted and staging roots have no
-built-in default on purpose — where licensed bytes land is a decision somebody
-has to make out loud, and staging is opt-in.
+## The settings file {#settings-file}
 
-## Scopes
+One file holds every setting. It is the file in the account:
 
-`--scope` on every `config set-*` / `unset-*` command:
-
-| Scope | File |
+| System | Settings file |
 |---|---|
-| `project` | `./ethos-data.yaml` (created in the current directory; updates the nearest existing one if there is one above) |
-| `user` (default) | the per-user config directory, e.g. `~/.config/ethos-data/config.yaml` |
-| `environment` | `<sys.prefix>/etc/ethos-data/config.yaml` |
-| `site` | the machine-wide config directory, e.g. `/etc/xdg/ethos-data/config.yaml` |
+| Linux | `~/.config/ethos-data/config.yaml`, or `$XDG_CONFIG_HOME/ethos-data/config.yaml` |
+| Windows | `%LOCALAPPDATA%\ethos-data\config.yaml` |
+| macOS | `~/Library/Application Support/ethos-data/config.yaml` |
 
-Exact locations are platform-dependent (via
-[platformdirs](https://platformdirs.readthedocs.io/)); `config show` prints the
-real paths.
+unless `ETHOS_DATA_CONFIG` names another file. That file then **replaces** the
+one in the account: nothing is merged, so a CI job or a test run reads none of
+the settings of the account it runs under. A file `ETHOS_DATA_CONFIG` names must
+exist; a setter creates it, and every other command stops and names the missing
+file.
+
+The `config` setters and unsetters write to the settings file in effect and
+create it if need be. Unsetting the last value leaves the file in place, empty.
+
+Earlier releases also read an `ethos-data.yaml` found by searching upward from
+the working directory, `<sys.prefix>/etc/ethos-data/config.yaml` and a
+machine-wide file. They are ignored now, and `config show` names each one it
+finds.
+
+On Windows the file and the default cache moved out of
+`%LOCALAPPDATA%\ethos-data\ethos-data\`. For one release, the file at the old
+location is still read while there is none at the new one, with a warning that
+names the new location, and the first setter writes it there. The old default
+cache is used while the new one does not exist, and `config show` says where to
+move it.
 
 ## Keys
-
-Written into a config file, or into `ethos-data.yaml` for the project scope.
 
 | Key | Set with | |
 |---|---|---|
@@ -95,22 +92,15 @@ Written into a config file, or into `ethos-data.yaml` for the project scope.
 | `restricted_cache` | `config set-restricted-cache` | licensed data; retrieval only reads it in place |
 | `staging_cache` | `config set-staging-cache` | work in progress that shadows the catalogue |
 | `skip_unavailable` | `config set-skip-unavailable` | `true` to carry on without data this machine cannot reach |
-| `dataset_roots` | `config set-root <dataset> <dir>` | a mapping of dataset name to directory. Roots from different scopes **combine** rather than clobbering each other |
+| `dataset_roots` | `config set-root <dataset> <dir>` | a mapping of dataset name to directory |
 | `catalog` | `config set-catalog` | the catalogue to use instead of a collections file's pin or the built-in public catalogue |
 | `publication_url` | `config set-publication-url` | fetch bytes from a different door than the catalogue declares |
 
-A minimal project file:
+A settings file for a shared machine:
 
-```yaml title="ethos-data.yaml"
-public_cache: /data/my-analysis/ethos-data
-```
-
-A fuller one:
-
-```yaml title="ethos-data.yaml"
+```yaml title="config.yaml"
 public_cache: /shared/ethos/cache
 restricted_cache: /shared/ethos/restricted
-skip_unavailable: false
 catalog: /shared/ethos/catalogue/datacatalog.json
 dataset_roots:
   submarine-cables: /benchtop/shared_data/SubmarineCables
@@ -120,16 +110,41 @@ dataset_roots:
 
 | Variable | Overrides |
 |---|---|
+| `ETHOS_DATA_CONFIG` | the settings file: read this one instead of the one in the account |
 | `ETHOS_DATA_DIR` | `public_cache` |
 | `ETHOS_RESTRICTED_DIR` | `restricted_cache` |
 | `ETHOS_STAGING_DIR` | `staging_cache` |
 | `ETHOS_DATA_CATALOG` | `catalog` |
 | `ETHOS_SKIP_UNAVAILABLE` | `skip_unavailable` |
 | `ETHOS_CATALOG_NO_CACHE` | if set, a fetched catalogue descriptor is never cached on disk |
-| `ETHOS_PUBLICATION_URL` | override the dataset download base URL |
+| `ETHOS_PUBLICATION_URL` | `publication_url` |
 
 `ETHOS_DATA_DIR` is named for the era when there was only one root. It is kept
 under that name because it is in scripts, job files and people's shell profiles.
+
+## Settings of a handle {#handle-settings}
+
+A handle reads every setting once, when it is built, and uses that snapshot for
+every later call. A script that changes directory or environment variables
+half-way keeps the catalogue and caches it began with.
+
+```python
+data = ethos_data.collections("collections.yaml")
+print(data.settings)
+```
+
+```text
+settings file      /home/me/.config/ethos-data/config.yaml  (your account)
+catalogue          https://.../datacatalog.json  (the pin in collections.yaml)
+catalogue version  v2026.09.2
+public cache       /home/me/.cache/ethos-data  (built-in default, the per-user cache directory)
+restricted cache   not set
+staging cache      not set
+```
+
+`data.catalog.settings` and `ethos_data.catalog().settings` are the same for a
+catalogue handle, and `settings.as_dict()` gives the values as plain data for a
+results file. `ethos_data.read_settings()` takes the snapshot without a handle.
 
 ## The three roots
 
@@ -160,7 +175,7 @@ The catalogue used by `ethos-data` and `ethos_data.catalog()` is the first of:
 
 1. `--catalog` on the command line, or the location passed in Python.
 2. `ETHOS_DATA_CATALOG`.
-3. The `catalog` setting in configuration.
+3. The `catalog` setting.
 4. The built-in public catalogue:
    `https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json`.
 
@@ -195,7 +210,7 @@ Prefix these with `ethos-data` or a package wrapper such as `<your-tool>-data`.
 
 | Command | Value |
 | --- | --- |
-| `config show` | Display shared configuration without network access. |
+| `config show` | Display the settings in effect without network access. |
 | `config set-public-cache DIR`, `set-cache DIR` | Public cache; the second spelling is an alias. |
 | `config set-restricted-cache DIR` | Authorised restricted installation. |
 | `config set-staging-cache DIR` | Shared development overlay. |
@@ -204,12 +219,11 @@ Prefix these with `ethos-data` or a package wrapper such as `<your-tool>-data`.
 | `config set-skip-unavailable true\|false` | Whether collection results may omit inaccessible inputs. |
 | `config set-publication-url URL` | Override the dataset download base URL. |
 
-Each setter accepts `--scope`, as described above. Remove a setting with the
-matching `unset-*` command in the same scope; `unset-root` takes the dataset
-name. There is no `unset-publication-url` command: remove that key from the
-configuration file shown by `config show` and clear `ETHOS_PUBLICATION_URL`
-if set. Unsetting configuration does not move or delete data.
+Every setter writes to the settings file in effect. Remove a setting with the
+matching `unset-*` command; `unset-root` takes the dataset name. Unsetting
+configuration does not move or delete data.
 
-`config show` reports shared settings, not a package's pin, package-specific
+`config show` reports the settings, not a package's pin, a package-specific
 environment override, or per-command options. `ethos-data ls` and a wrapper's
-`show` report the catalogue they actually selected.
+`show` report the catalogue they actually selected, and a handle's `settings`
+reports both.

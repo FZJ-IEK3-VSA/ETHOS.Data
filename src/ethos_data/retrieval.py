@@ -37,7 +37,7 @@ from .access import (
     unavailable,
 )
 from .catalogs import Catalog
-from .config import ENV_VAR, Roots, dataset_roots, resolve_public_cache
+from .config import ENV_VAR, Roots, resolve_public_cache
 from .errors import AccessError
 from .formats import keys as k
 from .model.resource import Resource
@@ -133,8 +133,8 @@ class DataFiles(dict):
 def cache_dir(explicit: str | Path | None = None) -> Path:
     """Root of the shared public cache.
 
-    Resolved from an explicit argument, then $ETHOS_DATA_DIR, then the user /
-    environment / site config files, then the per-user OS cache directory.
+    Resolved from an explicit argument, then $ETHOS_DATA_DIR, then the settings
+    file, then the per-user cache directory.
     See :mod:`ethos_data.config` for the full precedence and the reasoning.
     """
     return resolve_public_cache(explicit).value
@@ -152,7 +152,7 @@ def plan(
 ) -> dict:
     """Report what a fetch would do, without touching the network."""
     roots = Roots.coerce(roots)
-    locations = locate(catalog, resources, roots, dataset_roots(), skip_unavailable)
+    locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)
 
     present, missing, in_place = [], [], []
     by_origin: dict[str, list[Resource]] = {}
@@ -203,7 +203,7 @@ def download(
     roots = Roots.coerce(root)
     _warn_about_licensing(catalog, resources)
 
-    locations = locate(catalog, resources, roots, dataset_roots(), skip_unavailable)
+    locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)
 
     absent = unavailable(locations)
     if absent:

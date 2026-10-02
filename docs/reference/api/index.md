@@ -8,7 +8,7 @@ key. The rest is here for completeness.
 | Topic | Contents |
 |-------|----------|
 | [Catalogue and collections](catalog.md) | `Catalog`, `Dataset`, `Resource`, `Collections`, `load_catalog`, `load_collections`, `catalog_pin`; the errors `CatalogUnavailable`, `UnknownDataset`, `IncompleteCatalog`, `CollectionError`, `UnknownCollection` |
-| [Configuration and access](configuration.md) | cache roots, scopes, provenance, `Location`, `locate`, `AccessError` |
+| [Configuration and access](configuration.md) | the settings snapshot, cache roots, provenance, `Location`, `locate`, `AccessError` |
 | [Integrity and staging](integrity.md) | `verify`, `repair`, `Finding`, `materialize`, the staging root |
 | [Shared model](model.md) | `ethos_data.model` — digests, dataset names and families, resource records |
 | [Maintainer tooling](maintain.md) | `ethos_data.maintain` — building, publishing, uploading |

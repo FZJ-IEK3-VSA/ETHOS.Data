@@ -101,9 +101,10 @@ def create_lesson(destination: Path) -> None:
         "  licensed_input:\n    include:\n      - dataset: lesson-licensed\n",
         encoding="utf-8",
     )
-    # Give project-scoped lesson commands a local file to update.
-    (destination / "ethos-data.yaml").write_text(
-        "publication_url: http://127.0.0.1:8765/data\nskip_unavailable: false\n",
+    # The lesson's own settings, named in ETHOS_DATA_CONFIG, so the lessons
+    # neither read nor change the settings in the reader's account.
+    (destination / "lesson-settings.yaml").write_text(
+        "publication_url: http://127.0.0.1:8765/data\n",
         encoding="utf-8",
     )
     print(f"Created {destination}")

@@ -20,18 +20,22 @@ from .access import cache_entries
 from .bundles import export_bundle, load_bundle
 from .catalogs import Catalog, load_catalog
 from .config import (
+    CATALOG_ENV_VAR,
+    CATALOG_KEY,
+    CONFIG_ENV_VAR,
     DEFAULT_CATALOG,
     ENV_VAR,
     LEGACY_CACHE_KEY,
     PUBLIC_CACHE_KEY,
+    PUBLICATION_URL_KEY,
     RESTRICTED_CACHE_KEY,
     RESTRICTED_ENV_VAR,
-    SCOPES,
     SKIP_UNAVAILABLE_KEY,
     STAGING_CACHE_KEY,
     STAGING_ENV_VAR,
-    config_sources,
-    dataset_roots,
+    Resolved,
+    config_path,
+    read_settings,
     resolve_catalog,
     resolve_public_cache,
     resolve_restricted_cache,
@@ -43,9 +47,6 @@ from .config import (
     unset_dataset_root,
     unset_option,
 )
-from .maintain.cli import add_catalog_parser
-from .maintain.cli import dispatch as _catalog_dispatch
-from .retrieval import plan
 from .errors import (
     BundleError,
     CollectionError,
@@ -54,6 +55,9 @@ from .errors import (
     IncompleteCatalog,
     UnknownDataset,
 )
+from .maintain.cli import add_catalog_parser
+from .maintain.cli import dispatch as _catalog_dispatch
+from .retrieval import plan
 from .selection import Collections, load_collections, variant_name
 
 
@@ -455,9 +459,13 @@ def _add_config_commands(sub) -> None:
     config_parser = sub.add_parser(
         "config", help="show or change catalogue, cache, and access settings"
     )
+    config_parser.description = (
+        "Every setting lives in one file: the one $ETHOS_DATA_CONFIG names, else the "
+        "one in your account. The setters write to it, creating it if need be."
+    )
     config_sub = config_parser.add_subparsers(dest="config_command", required=True)
     config_sub.add_parser(
-        "show", help="show configured values and their origins; no network access"
+        "show", help="show the settings in effect and their origins; no network access"
     )
 
     for verb, key, blurb in (
@@ -480,18 +488,10 @@ def _add_config_commands(sub) -> None:
     ):
         setter = config_sub.add_parser(f"set-{verb}", help=f"set {blurb}")
         setter.add_argument("directory")
-        setter.add_argument(
-            "--scope",
-            choices=SCOPES,
-            default="user",
-            help="project = nearest project config; user (default) = this account; environment = this conda env "
-            "/ venv; site = whole machine",
-        )
         setter.set_defaults(option_key=key)
         unsetter = config_sub.add_parser(
             f"unset-{verb}", help="remove the setting again"
         )
-        unsetter.add_argument("--scope", choices=SCOPES, default="user")
         unsetter.set_defaults(option_key=key)
 
     skipper = config_sub.add_parser(
@@ -500,39 +500,32 @@ def _add_config_commands(sub) -> None:
         "not working on the institute cluster)",
     )
     skipper.add_argument("value", choices=("true", "false"))
-    skipper.add_argument("--scope", choices=SCOPES, default="user")
-    unskipper = config_sub.add_parser(
-        "unset-skip-unavailable", help="remove the setting again"
-    )
-    unskipper.add_argument("--scope", choices=SCOPES, default="user")
+    config_sub.add_parser("unset-skip-unavailable", help="remove the setting again")
 
     rooter = config_sub.add_parser(
         "set-root", help="escape hatch: use one dataset from a local directory"
     )
     rooter.add_argument("dataset")
     rooter.add_argument("directory")
-    rooter.add_argument("--scope", choices=SCOPES, default="user")
     unrooter = config_sub.add_parser(
         "unset-root", help="stop using a local directory for a dataset"
     )
     unrooter.add_argument("dataset")
-    unrooter.add_argument("--scope", choices=SCOPES, default="user")
     puburl = config_sub.add_parser(
         "set-publication-url",
         help="fetch bytes from a different door (e.g. the high-throughput one for CI)",
     )
     puburl.add_argument("url")
-    puburl.add_argument("--scope", choices=SCOPES, default="user")
+    config_sub.add_parser(
+        "unset-publication-url",
+        help="fetch bytes from the door the catalogue names again",
+    )
     cataloger = config_sub.add_parser(
         "set-catalog",
         help="set the shared catalogue override, including for package data commands",
     )
     cataloger.add_argument("location", help="a datacatalog.json path or URL")
-    cataloger.add_argument("--scope", choices=SCOPES, default="user")
-    uncataloger = config_sub.add_parser(
-        "unset-catalog", help="remove the setting again"
-    )
-    uncataloger.add_argument("--scope", choices=SCOPES, default="user")
+    config_sub.add_parser("unset-catalog", help="remove the setting again")
 
 
 def _add_cache_commands(sub) -> None:
@@ -1472,13 +1465,17 @@ CACHE_KEYS = {
 }
 
 
+def _nothing_set() -> str:
+    return f"nothing set in {config_path()}"
+
+
 def _config_command(args) -> int:
     command = args.config_command
 
     if command.startswith("set-") and getattr(args, "option_key", None) in CACHE_KEYS:
         key = args.option_key
         label, resolver = CACHE_KEYS[key]
-        path = set_option(key, str(Path(args.directory).expanduser()), scope=args.scope)
+        path = set_option(key, str(Path(args.directory).expanduser()))
         print(f"{key} written to {path}")
         print(f"resolved now: {resolver()}")
         return 0
@@ -1486,23 +1483,18 @@ def _config_command(args) -> int:
     if command.startswith("unset-") and getattr(args, "option_key", None) in CACHE_KEYS:
         key = args.option_key
         label, resolver = CACHE_KEYS[key]
-        path = unset_option(key, scope=args.scope)
-        removed = (
-            f"removed from {path}"
-            if path
-            else f"nothing set in the {args.scope} config"
-        )
-        print(removed)
+        path = unset_option(key)
+        print(f"removed from {path}" if path else _nothing_set())
         if key == PUBLIC_CACHE_KEY:
-            # The legacy name lives in the same files and would still win.
-            legacy = unset_option(LEGACY_CACHE_KEY, scope=args.scope)
+            # The older name lives in the same file and would still win.
+            legacy = unset_option(LEGACY_CACHE_KEY)
             if legacy:
                 print(f"also removed the older {LEGACY_CACHE_KEY} key from {legacy}")
         print(f"resolved now: {resolver() or '(not set)'}")
         return 0
 
     if command == "set-skip-unavailable":
-        path = set_option(SKIP_UNAVAILABLE_KEY, args.value == "true", scope=args.scope)
+        path = set_option(SKIP_UNAVAILABLE_KEY, args.value == "true")
         wanted, _ = resolve_skip_unavailable()
         print(f"{SKIP_UNAVAILABLE_KEY} written to {path}")
         if wanted:
@@ -1515,23 +1507,24 @@ def _config_command(args) -> int:
         return 0
 
     if command == "unset-skip-unavailable":
-        path = unset_option(SKIP_UNAVAILABLE_KEY, scope=args.scope)
-        print(
-            f"removed from {path}"
-            if path
-            else f"nothing set in the {args.scope} config"
-        )
+        path = unset_option(SKIP_UNAVAILABLE_KEY)
+        print(f"removed from {path}" if path else _nothing_set())
         return 0
 
     if command == "set-publication-url":
-        path = set_option("publication_url", args.url, scope=args.scope)
-        print(f"publication_url written to {path}")
+        path = set_option(PUBLICATION_URL_KEY, args.url)
+        print(f"{PUBLICATION_URL_KEY} written to {path}")
         print(f"bytes will now be fetched from {args.url}")
+        return 0
+
+    if command == "unset-publication-url":
+        path = unset_option(PUBLICATION_URL_KEY)
+        print(f"removed from {path}" if path else _nothing_set())
         return 0
 
     if command == "set-catalog":
         location = _resolve_catalog_location(args.location)
-        path = set_option("catalog", location, scope=args.scope)
+        path = set_option(CATALOG_KEY, location)
         print(f"catalog written to {path}")
         print(f"resolved now: {resolve_catalog()[0]}")
         print(
@@ -1541,16 +1534,12 @@ def _config_command(args) -> int:
         return 0
 
     if command == "unset-catalog":
-        path = unset_option("catalog", scope=args.scope)
-        print(
-            f"removed from {path}"
-            if path
-            else f"nothing set in the {args.scope} config"
-        )
+        path = unset_option(CATALOG_KEY)
+        print(f"removed from {path}" if path else _nothing_set())
         return 0
 
     if command == "set-root":
-        path = set_dataset_root(args.dataset, args.directory, scope=args.scope)
+        path = set_dataset_root(args.dataset, args.directory)
         print(f"dataset_roots[{args.dataset}] written to {path}")
         print(
             f"{args.dataset!r} will now be read from "
@@ -1559,11 +1548,11 @@ def _config_command(args) -> int:
         return 0
 
     if command == "unset-root":
-        path = unset_dataset_root(args.dataset, scope=args.scope)
+        path = unset_dataset_root(args.dataset)
         print(
             f"removed from {path}"
             if path
-            else f"no root set for {args.dataset!r} in the {args.scope} config"
+            else f"no root set for {args.dataset!r} in {config_path()}"
         )
         return 0
 
@@ -1640,100 +1629,83 @@ def _print_cache_top_level(root: Path) -> None:
 
 
 def _config_show() -> int:
-    public = resolve_public_cache()
-    restricted = resolve_restricted_cache()
-    staging = resolve_staging_cache()
+    """The settings in effect, where each came from, and whether each cache is there.
 
-    print("the two settings that matter:\n")
-    print(
-        f"  public cache      {public.value}{_reachability(public, created_on_demand=True)}"
-    )
-    print(f"                    from {public.source}")
-    if restricted:
-        print(f"  restricted cache  {restricted.value}{_reachability(restricted)}")
-        print(f"                    from {restricted.source}")
-    else:
-        skipping = resolve_skip_unavailable()[0]
-        consequence = (
-            "licensed datasets are left out of results and listed"
-            if skipping
-            else "licensed datasets will refuse to resolve"
-        )
-        print(f"  restricted cache  (not set -- {consequence})")
-        print(
-            "                    ethos-data config set-restricted-cache /path --scope environment"
-        )
-    if staging:
-        print(
-            f"\n  staging cache     {staging.value}   [ACTIVE -- shadows the catalogue]"
-            f"{_reachability(staging)}"
-        )
-        print(f"                    from {staging.source}")
+    The snapshot every handle takes, printed as a handle would print it, with
+    what only a person looking needs on top: whether each cache can be reached,
+    the dataset roots that are gone, the precedence, and one listing of the
+    public cache.
+    """
+    settings = read_settings()
+    roots = settings.roots
+    rows = [row for row in settings.rows() if row[0] != "dataset root"]
+    width = max(len(label) for label, _ in rows)
+    for label, value in rows:
+        marker = ""
+        if label == "public cache":
+            marker = _reachability(Resolved(roots.public, ""), created_on_demand=True)
+        elif label == "restricted cache" and roots.restricted:
+            marker = _reachability(Resolved(roots.restricted, ""))
+        elif label == "restricted cache":
+            skipping = resolve_skip_unavailable()[0]
+            marker = (
+                " -- licensed datasets are left out of results and listed"
+                if skipping
+                else " -- licensed datasets will refuse to resolve"
+            )
+        elif label == "staging cache" and roots.staging:
+            marker = "   [ACTIVE -- shadows the catalogue]" + _reachability(
+                Resolved(roots.staging, "")
+            )
+        print(f"{label:<{width}}  {value}{marker}")
+        if label == "catalogue" and settings.catalog is None:
+            print(f"{'':<{width}}  public catalogue: {DEFAULT_CATALOG}")
 
     skip, skip_source = resolve_skip_unavailable()
     if skip:
-        print("\n  unreachable data      left out and listed, not an error")
-        print(f"                        from {skip_source}")
-    elif not restricted:
-        print("\n  unreachable data      stops the command (the default)")
-        print(
-            "                        ethos-data config set-skip-unavailable true"
-            "    # if you are not on the cluster"
-        )
+        print(f"\nunreachable data  left out and listed, not an error  ({skip_source})")
+    elif not roots.restricted:
+        print("\nunreachable data  stops the command (the default)")
 
-    print("\nprecedence for each, first match wins:")
-    print("  1. explicit --root / root=      (public cache only)")
-    for label, variable in (
-        ("public", ENV_VAR),
-        ("restricted", RESTRICTED_ENV_VAR),
-        ("staging", STAGING_ENV_VAR),
-    ):
-        value = os.environ.get(variable)
-        print(f"  2. ${variable:<22} {value or '(unset)'}   [{label}]")
-    for index, (scope, path, exists) in enumerate(config_sources(), start=3):
-        marker = "exists" if exists else "not present"
-        print(f"  {index}. {scope + ' config':<24} {path}  [{marker}]")
-    print(
-        f"  {len(SCOPES) + 3}. built-in default          "
-        f"per-user OS cache directory (public only)"
-    )
-
-    roots = dataset_roots()
-    if roots:
+    if roots.datasets:
         print(
             "\nescape hatch -- datasets read from a per-dataset root (never downloaded):"
         )
-        for name, where in sorted(roots.items()):
+        for name, where in sorted(roots.datasets.items()):
             reason = _unreachable(Path(where))
             marker = f"   [MISSING -- {reason}]" if reason else ""
             print(f"  {name:<28} {where}{marker}")
 
-    catalog = resolve_catalog()
-    if catalog:
-        print(f"\ncatalogue: {catalog[0]}  (from {catalog[1]})")
-        print(
-            "  used instead of whatever the collections file pins for itself; "
-            "--catalog overrides it"
-        )
-    else:
-        print(
-            "\ncatalogue: the built-in public catalogue for ethos-data; "
-            "package data commands use their collections file's pin"
-        )
-        print(f"  {DEFAULT_CATALOG}")
+    print("\nprecedence for each setting, first match wins:")
+    print("  1. an explicit argument   --root / root=, --catalog / catalog=")
+    for variable in (
+        ENV_VAR,
+        RESTRICTED_ENV_VAR,
+        STAGING_ENV_VAR,
+        CATALOG_ENV_VAR,
+    ):
+        value = os.environ.get(variable)
+        print(f"  2. ${variable:<22} {value or '(unset)'}")
+    print(
+        f"  3. the settings file      {settings.file}"
+        f"  ({'from $' + CONFIG_ENV_VAR if os.environ.get(CONFIG_ENV_VAR) else 'your account'})"
+    )
+    print(
+        "  4. the built-in default   the per-user cache directory (public cache only)"
+    )
 
     # Last, because it is the one section that reads the cache itself. On a slow
     # or half-connected network share this is the part that takes time, and
     # everything above must already be on screen when it does.
-    reason = _unreachable(public.value)
+    reason = _unreachable(roots.public)
     if reason is None:
-        _print_cache_top_level(public.value)
+        _print_cache_top_level(roots.public)
     elif reason != "does not exist":
         print(f"\npublic cache contents: not listed -- {reason}")
 
     print("\nSet them with:")
-    print("  ethos-data config set-public-cache     /path --scope site")
-    print("  ethos-data config set-restricted-cache /path --scope site")
+    print("  ethos-data config set-public-cache     /path")
+    print("  ethos-data config set-restricted-cache /path")
     print(
         "  ethos-data config set-staging-cache    /path            # only while developing"
     )

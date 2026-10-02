@@ -6,8 +6,9 @@ rules are explained in
 and precedence are tabulated in [Configuration](../configuration.md).
 
 Every lookup returns a `Resolved` carrying both the value **and its
-provenance** — because "why is my data going there`" is the question people
-actually ask.
+provenance** — because "why is my data going there?" is the question people
+actually ask. `Settings` is every setting at once, read once: what a handle
+keeps as its `settings`.
 
 !!! warning "Gap: per-dataset roots and the `internal` class are to be removed"
     With [one settings file per
@@ -24,6 +25,8 @@ actually ask.
 ::: ethos_data.config
     options:
       members:
+        - Settings
+        - read_settings
         - Resolved
         - Roots
         - resolve_roots
@@ -41,9 +44,8 @@ actually ask.
         - set_option
         - unset_option
         - config_path
-        - writable_config_path
-        - config_sources
-        - find_project_config
+        - account_config_path
+        - ignored_config_files
         - load_config
       show_root_heading: false
       show_root_toc_entry: false

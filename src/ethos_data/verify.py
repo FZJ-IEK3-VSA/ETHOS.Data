@@ -25,7 +25,7 @@ from pathlib import Path
 
 from .access import ORIGIN_STAGING, RESTRICTED, Location, locate
 from .catalogs import Catalog
-from .config import Roots, dataset_roots
+from .config import Roots
 from .model import digest
 from .model.resource import Resource
 
@@ -110,7 +110,7 @@ def verify(
     which catches everything and reads every byte.
     """
     roots = Roots.coerce(roots)
-    locations = locate(catalog, resources, roots, dataset_roots(), skip_unavailable)
+    locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)
 
     findings: list[Finding] = []
     link_state: dict[str, tuple[Path, Path] | None] = {}
