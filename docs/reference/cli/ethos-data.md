@@ -114,6 +114,14 @@ choose and its version; and every file, `downloaded`, `already present` or
 `selftest passed` and exit `0`, or names the failed step and exits `1`.
 `--catalog` and `--root` apply as for every command.
 
+## `report [key]` {#report}
+
+Draft a problem report: run `selftest`, `config show` and, for a key,
+`fetch <key> --plan`, and print their output in the report template, with
+tokens, credentials in URLs, the home directory and the account name
+removed. `--no-selftest` leaves out the self-test's download. A package's
+data command has the same, with its collections.
+
 ## `verify <key>` {#verify}
 
 Check the files under a dataset, folder or file against the catalogue, as a

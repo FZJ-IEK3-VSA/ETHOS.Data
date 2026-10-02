@@ -23,6 +23,16 @@ that fixes it. The common ones:
 ## 2. Collect the facts
 
 ```bash
+<your-tool>-data report <collection>
+ethos-data report <key>
+```
+
+`report` runs the four checks below and prints their output in the report
+template of step 3, with tokens, credentials in URLs, your home directory and
+your account name removed. `--no-selftest` leaves out the self-test's small
+download. The checks one by one:
+
+```bash
 ethos-data selftest
 ethos-data config show
 <your-tool>-data show
@@ -59,7 +69,8 @@ only to complete a report.
 
 ## 3. Write the report {#report-a-problem}
 
-Copy and fill this template:
+`report` printed the template with the facts filled in; add what only you
+know. Without it, copy and fill this template:
 
 ```text
 Expected result:

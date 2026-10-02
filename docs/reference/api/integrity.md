@@ -104,6 +104,24 @@ record each file gets. The build inventories a `source_dir` with it.
       show_root_toc_entry: false
       heading_level: 3
 
+## Handoffs
+
+The proposal, the problem report, the answer and the notices, drafted from
+the templates in `ethos_data/formats/templates/handoffs/`.
+
+::: ethos_data.handoffs
+    options:
+      members:
+        - propose
+        - Proposal
+        - handoff
+        - issue_template
+        - scrub
+        - names
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
 ## Repository test-data bundles
 
 ::: ethos_data.bundles

@@ -123,7 +123,20 @@ and the [format reference](../../reference/schemas.md#datasetyaml).
 
 ## 4. Submit
 
-Open an issue, with the items below, at:
+Let the package's data command check the candidate and draft the proposal:
+
+```bash
+<your-tool>-data propose /projects/shared/candidates/my-dataset
+<your-tool>-data propose your_tool/data/test_data
+```
+
+It takes the directory holding the draft `dataset.yaml`, or a bundle. It
+checks the draft as the catalogue's build would and refuses one the build
+would refuse, inventories the bytes, warns when files are still writable, and
+prints the proposal with the items below filled in as far as the tools know
+them, the collections of your package that already name the dataset among
+them. Add what only you know, the validation you ran and how long the bytes
+stay, and open an issue with it at:
 
 - <https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data-catalog-internal>
   from a cluster installation, or for restricted data;

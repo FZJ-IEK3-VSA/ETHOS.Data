@@ -331,7 +331,9 @@ and `link --all` leave a withdrawn dataset out, and a family whose members are
 all withdrawn. Its description, inventory and status file stay in the
 checkout, and its cache entries and bytes where they are, until a major
 release is recorded after the removal. Removing a withdrawn dataset again does
-nothing.
+nothing. Each dataset withdrawn gets a removal notice drafted for the packages
+that read it: the reason, the last release that describes it, and its
+replacement.
 
 `--purge` is the second half, once a major [release](#release-version) is
 recorded after the removal in the dataset's status file:
@@ -397,6 +399,7 @@ ethos-data catalog release v1.3.0 --public ../ETHOS.Data-Catalogue --push --uplo
 | `public` | generate the public catalogue in its checkout, commit and tag it |
 | `push` | with `--push`: push both checkouts and the tag to `--remote` |
 | `store` | with `--upload`: put the public catalogue on the store under `<publication root>/catalogue/`, replacing the previous one, make it world-readable, and check that it is served |
+| `notices` | draft the release notice, the datasets added, revised, superseded and withdrawn, and the answer to every proposal the release accepts; printed, and written into `--notices DIR` |
 
 The version is `vMAJOR.MINOR.PATCH`. The first release is `v1.0.0`; every
 later one is the next patch, minor or major of the last release, at or above
@@ -424,6 +427,7 @@ interrupted.
 | `--push` | push both checkouts and the tag |
 | `--upload` | put the public catalogue on the store |
 | `--remote NAME` | the git remote to push to (default: `origin`) |
+| `--notices DIR` | also write the notice and the answers into this directory |
 | `--dry-run` | check and plan; write nothing |
 
 ## `update-checkout` {#update-checkout}
