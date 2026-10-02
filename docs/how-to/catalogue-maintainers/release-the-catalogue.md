@@ -9,6 +9,10 @@ run the release on the cluster computer, where its build input is readable.
 
 ## 1. Release {#release}
 
+Set the release in `catalog.yaml` first, `version: v2026.09.2`: the build
+writes it into the index, where packages compare it with the versions their
+collections files accept.
+
 ```bash
 ethos-data catalog release v1.2.0 --public ../ETHOS.Data-Catalogue --dry-run
 ethos-data catalog release v1.2.0 --public ../ETHOS.Data-Catalogue

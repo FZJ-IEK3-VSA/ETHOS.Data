@@ -90,6 +90,26 @@
         "user_facing": false
       }
     },
+    "version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The release this is, vYYYY.MM.N; the build writes it into the index.",
+      "pattern": "^v\\d{4}\\.\\d{2}\\.\\d+$",
+      "title": "Version",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
     "ethos:catalog_role": {
       "default": "source",
       "description": "Always source in a hand-written file; publish stamps published.",

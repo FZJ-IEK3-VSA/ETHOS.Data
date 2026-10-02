@@ -1,5 +1,55 @@
 {
   "$defs": {
+    "CatalogBounds": {
+      "additionalProperties": true,
+      "description": "The catalogue releases a package works with: one exactly, or a range.",
+      "properties": {
+        "min_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The oldest release the package was tested with.",
+          "pattern": "^v\\d{4}\\.\\d{2}\\.\\d+$",
+          "title": "Min Version"
+        },
+        "max_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Refuse anything newer.",
+          "pattern": "^v\\d{4}\\.\\d{2}\\.\\d+$",
+          "title": "Max Version"
+        },
+        "exact_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The one release the package resolves to.",
+          "pattern": "^v\\d{4}\\.\\d{2}\\.\\d+$",
+          "title": "Exact Version"
+        }
+      },
+      "title": "CatalogBounds",
+      "type": "object"
+    },
     "Collection": {
       "additionalProperties": true,
       "description": "One collection; written plainly, or twice under ``test:`` and ``full:``.",
@@ -146,6 +196,9 @@
     "catalog": {
       "anyOf": [
         {
+          "$ref": "#/$defs/CatalogBounds"
+        },
+        {
           "type": "string"
         },
         {
@@ -153,7 +206,7 @@
         }
       ],
       "default": null,
-      "description": "The catalogue location; a relative path is relative to this file.",
+      "description": "The catalogue releases the package works with; a path or URL, relative to this file, still pins one catalogue.",
       "title": "Catalog"
     },
     "collections": {

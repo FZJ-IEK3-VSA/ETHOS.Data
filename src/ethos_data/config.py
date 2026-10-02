@@ -87,6 +87,7 @@ __all__ = [
     "set_option",
     "unset_option",
     "unreachable",
+    "PUBLIC_RELEASE_URL",
 ]
 
 #: The public catalogue, used whenever nothing else names one -- so that public
@@ -94,6 +95,8 @@ __all__ = [
 #: that must resolve to the same bytes release after release pins a version in
 #: its own collections file instead.
 DEFAULT_CATALOG = "https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json"
+#: Where the public catalogue keeps one release: the tag of that release.
+PUBLIC_RELEASE_URL = "https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/{version}/datacatalog.json"
 #: Point every tool in one shell or job at another catalogue -- the internal one,
 #: say -- without editing a file. Wins over the settings file and over the
 #: version a collections file pins; an explicit ``catalog=`` / ``--catalog``

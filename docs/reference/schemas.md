@@ -81,7 +81,8 @@ Both variants of `onshore_wind` offer the handles `clc` (inherited from
 
 | Key | Type | |
 |---|---|---|
-| `catalog` | string | local path or `http(s)` URL to a `datacatalog.json`. A relative path is resolved against **this file**. Optional: uses a caller/config override or the built-in public catalogue. Pin a remote revision in the URL path; a legacy `@ref` suffix is stripped and does not select it. |
+| `catalog` | mapping | the catalogue releases the package works with: `min_version` and an optional `max_version`, or `exact_version`, each `vYYYY.MM.N`. A catalogue outside them is refused with both versions in the message; with no catalogue configured, the newest public release within them is read. Optional |
+| `catalog` | string | instead of the mapping: a local path or `http(s)` URL to a `datacatalog.json`, pinning one catalogue. A relative path is resolved against **this file**; a legacy `@ref` suffix is stripped and does not select a revision |
 | `collections` | mapping | collection name → definition |
 | `collections.<name>.title` | string | one line, shown by `ethos-data ls`. At the top level, also when the collection has variants |
 | `collections.<name>.include` | list | `{dataset, files}` entries |
@@ -593,6 +594,7 @@ description: >-
 ethos:publication_url: https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ethos-data
 ethos:contact: iek-3-data
 ethos:catalog_role: source
+version: v2026.09.2
 ```
 
 | Key | | |
@@ -601,6 +603,7 @@ ethos:catalog_role: source
 | `ethos:publication_url` | | root of the public data store. Every resource URL is `<publication_url>/<remote_prefix>/<resource path>`. Override per machine with `ethos-data config set-publication-url` |
 | `ethos:contact` | | team or username |
 | `ethos:catalog_role` | `source` \| `published` | always `source` in a hand-written file — `build` defaults it and **rejects** any other value. `ethos-data catalog publish` stamps `published` into the generated copy |
+| `version` | `vYYYY.MM.N` | the release this catalogue is, set before it is released; `build` refuses any other form and writes it into the index |
 
 ---
 
@@ -610,8 +613,11 @@ Never hand-edit these. `ethos-data catalog build --check` fails if any is stale.
 
 ### `datacatalog.json`
 
-The index: `catalog.yaml`'s keys plus a `datasets` array. Each entry carries
-everything that can be answered **without** loading an inventory:
+The index: `catalog.yaml`'s keys, its `version` among them, plus a `datasets`
+array. The published index also lists every public release in
+`ethos:releases`, the current one included, oldest first: `publish` adds the
+release it publishes to the ones the public catalogue already listed. Each
+entry carries everything that can be answered **without** loading an inventory:
 
 | Key | |
 |---|---|
