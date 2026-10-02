@@ -164,7 +164,7 @@ def test_without_a_catalogue_the_public_one_is_used(monkeypatch):
         asked.append(location)
         raise RuntimeError("no network in tests")
 
-    monkeypatch.setattr(ethos_data, "load_catalog", stop)
+    monkeypatch.setattr(ethos_data.catalogs, "load_catalog", stop)
     with pytest.raises(RuntimeError):
         ethos_data.catalog()
     assert asked == [config.DEFAULT_CATALOG]
@@ -363,7 +363,6 @@ def test_catalogue_listing_only_reads_the_index(world, monkeypatch, capsys):
 def test_ethos_data_ignores_collection_pins_and_uses_catalogue_precedence(
     world, shipped, monkeypatch, capsys
 ):
-    from ethos_data import cli
 
     root, cache, index = world
     other = root / "other.json"
@@ -374,7 +373,7 @@ def test_ethos_data_ignores_collection_pins_and_uses_catalogue_precedence(
     monkeypatch.setattr(
         config, "load_config", lambda: ({"collections": str(shipped)}, {})
     )
-    monkeypatch.setattr(cli, "DEFAULT_CATALOG", str(index))
+    monkeypatch.setattr(config, "DEFAULT_CATALOG", str(index))
     assert main(["fetch", "flat/one.csv"]) == 0
     assert capsys.readouterr().out.strip() == str(cache / "flat/one.csv")
     monkeypatch.setattr(
