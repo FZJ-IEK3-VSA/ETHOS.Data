@@ -66,6 +66,17 @@ from .config import (
     unset_dataset_root,
     unset_option,
 )
+from .errors import (
+    CatalogueRootError,
+    ConfigurationError,
+    DescriptorError,
+    EthosDataError,
+    MaintenanceError,
+    PublishError,
+    StagingError,
+    UnknownKey,
+    UploadError,
+)
 from .retrieval import DataFiles, NamedPaths, cache_dir, download, local_path, plan
 from .materialize import materialize
 from .linking import LinkError, link, unlink
@@ -80,6 +91,15 @@ from .staging import apply_staging, classify_staged, staged_only
 from .verify import Finding, repair, verify
 
 __all__ = [
+    "CatalogueRootError",
+    "ConfigurationError",
+    "DescriptorError",
+    "EthosDataError",
+    "MaintenanceError",
+    "PublishError",
+    "StagingError",
+    "UnknownKey",
+    "UploadError",
     "Bundle",
     "BundleError",
     "export_bundle",

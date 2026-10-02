@@ -294,7 +294,7 @@ settings and origins; `show` prints the actual catalogue chosen by this wrapper.
 `0` means success. `show` and `verify` return `1` for unresolved selections or
 failed checks, and bundle verification returns `1` for modified/missing files.
 Unknown collections/keys, inaccessible data and invalid collection or bundle
-definitions return `2` with an error message. Staging refusals return a nonzero
-status without changing the refused entry.
+definitions return `2` with an error message. Staging refusals return `2`
+without changing the refused entry.
 
 Direct access outside a package uses [`ethos-data ls` and `fetch`](ethos-data.md).

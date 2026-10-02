@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from ethos_data.maintain.manifest import expand_pattern, render_dataset
+from ethos_data.errors import DescriptorError
 
 CATALOG = "name: t\nethos:catalog_role: source\nethos:publication_url: https://example.invalid/x\n"
 
@@ -127,7 +128,7 @@ class TestExpandPattern:
         assert expand_pattern("*.tif") == ["*.tif"]
 
     def test_leading_slash_is_refused(self):
-        with pytest.raises(SystemExit, match="relative to source_dir"):
+        with pytest.raises(DescriptorError, match="relative to source_dir"):
             expand_pattern("/absolute.tif")
 
 
@@ -184,7 +185,7 @@ class TestGuardRails:
     """A silently smaller manifest is the failure mode worth spending errors on."""
 
     def test_include_matching_nothing_is_an_error_that_names_the_pattern(self):
-        with pytest.raises(SystemExit, match="typo_"):
+        with pytest.raises(DescriptorError, match="typo_"):
             inventory('ethos:include:\n  - "wind_speed_cog_*.tif"\n  - "typo_*.tif"\n')
 
     def test_exclude_matching_nothing_is_only_a_warning(self, capsys):
@@ -193,15 +194,15 @@ class TestGuardRails:
         assert "matches nothing" in capsys.readouterr().err
 
     def test_empty_list_is_refused_rather_than_ignored(self):
-        with pytest.raises(SystemExit, match="empty list"):
+        with pytest.raises(DescriptorError, match="empty list"):
             inventory("ethos:include: []\n")
 
     def test_wrong_type_is_refused(self):
-        with pytest.raises(SystemExit, match="must be a list"):
+        with pytest.raises(DescriptorError, match="must be a list"):
             inventory('ethos:include: "*.tif"\n')
 
     def test_filtering_everything_out_is_an_error(self):
-        with pytest.raises(SystemExit, match="filtered out every one"):
+        with pytest.raises(DescriptorError, match="filtered out every one"):
             inventory('ethos:exclude:\n  - "**"\n')
 
     def test_shapefile_companions_survive_an_include_of_just_the_shp(self):

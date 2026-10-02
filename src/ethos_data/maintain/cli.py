@@ -28,6 +28,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from ..errors import MaintenanceError
 from . import resolve_catalog_root
 
 SCRIPTS = Path(__file__).resolve().parent / "scripts"
@@ -211,4 +212,4 @@ def dispatch(args) -> int:
 
         return upload.run(root, args)
 
-    raise SystemExit(f"unknown catalog command: {args.catalog_command}")
+    raise MaintenanceError(f"unknown catalog command: {args.catalog_command}")

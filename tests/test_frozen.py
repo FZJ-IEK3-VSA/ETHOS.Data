@@ -19,6 +19,7 @@ import pytest
 import yaml
 
 from ethos_data.maintain.manifest import render_dataset, write_dataset
+from ethos_data.errors import DescriptorError
 
 RESTRICTED = {
     "ethos:access": "restricted",
@@ -132,7 +133,7 @@ def test_a_frozen_dataset_may_not_keep_a_source_dir(tmp_path):
 
     _rewrite(dataset_dir, ethos__frozen=True)
 
-    with pytest.raises(SystemExit, match="never rebuilt from local files"):
+    with pytest.raises(DescriptorError, match="never rebuilt from local files"):
         render_dataset(dataset_dir)
 
 
@@ -140,7 +141,7 @@ def test_freezing_something_never_built_is_refused(tmp_path):
     dataset_dir, _ = _dataset(tmp_path, RESTRICTED, {"a.tif": b"licensed bytes"})
     _rewrite(dataset_dir, source_dir=None, ethos__frozen=True)
 
-    with pytest.raises(SystemExit, match="no datapackage.json to freeze"):
+    with pytest.raises(DescriptorError, match="no datapackage.json to freeze"):
         render_dataset(dataset_dir)
 
 
@@ -150,7 +151,7 @@ def test_restricted_data_cannot_claim_it_was_uploaded(tmp_path):
     _build(dataset_dir)
     _rewrite(dataset_dir, source_dir=None, ethos__uploaded=True)
 
-    with pytest.raises(SystemExit, match="never uploaded"):
+    with pytest.raises(DescriptorError, match="never uploaded"):
         render_dataset(dataset_dir)
 
 
@@ -159,7 +160,7 @@ def test_the_refusal_names_the_key_that_is_right(tmp_path):
     _build(dataset_dir)
     _rewrite(dataset_dir, source_dir=None, ethos__uploaded=True)
 
-    with pytest.raises(SystemExit, match="ethos:frozen"):
+    with pytest.raises(DescriptorError, match="ethos:frozen"):
         render_dataset(dataset_dir)
 
 
@@ -194,5 +195,5 @@ def test_the_message_for_a_missing_source_dir_offers_both(tmp_path):
     dataset_dir, _ = _dataset(tmp_path, RESTRICTED, {"a.tif": b"licensed bytes"})
     _rewrite(dataset_dir, source_dir=None)
 
-    with pytest.raises(SystemExit, match="ethos:frozen"):
+    with pytest.raises(DescriptorError, match="ethos:frozen"):
         render_dataset(dataset_dir)

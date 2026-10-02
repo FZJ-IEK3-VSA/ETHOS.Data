@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from ethos_data.errors import DescriptorError
 from ethos_data.maintain.manifest import (
     apply_resource_licenses,
     render_dataset,
@@ -41,24 +42,24 @@ def test_downloaded_needs_no_author():
 
 
 def test_unknown_origin_is_rejected():
-    with pytest.raises(SystemExit, match="must be one of"):
+    with pytest.raises(DescriptorError, match="must be one of"):
         validate_provenance("d", {"ethos:origin": "invented"})
 
 
 @pytest.mark.parametrize("origin", ["created", "derived"])
 def test_authorship_claim_must_name_an_author(origin):
     """Claiming the data was made here without saying by whom is not a claim."""
-    with pytest.raises(SystemExit, match="has to say by whom"):
+    with pytest.raises(DescriptorError, match="has to say by whom"):
         validate_provenance("d", {"ethos:origin": origin})
 
 
 def test_derived_needs_sources_and_a_derivation():
     author = [{"title": "A Researcher", "roles": ["author"]}]
 
-    with pytest.raises(SystemExit, match="derived FROM"):
+    with pytest.raises(DescriptorError, match="derived FROM"):
         validate_provenance("d", {"ethos:origin": "derived", "contributors": author})
 
-    with pytest.raises(SystemExit, match="needs ethos:derivation"):
+    with pytest.raises(DescriptorError, match="needs ethos:derivation"):
         validate_provenance(
             "d",
             {
@@ -101,19 +102,19 @@ def test_created_needs_only_an_author():
 
 def test_v1_scalar_role_is_rejected_not_coerced():
     """Half-following two versions of the spec is worse than being told which."""
-    with pytest.raises(SystemExit, match="list in Data Package v2"):
+    with pytest.raises(DescriptorError, match="list in Data Package v2"):
         validate_provenance("d", {"contributors": [{"title": "X", "roles": "author"}]})
 
 
 def test_unknown_role_is_rejected():
-    with pytest.raises(SystemExit, match="unknown role"):
+    with pytest.raises(DescriptorError, match="unknown role"):
         validate_provenance(
             "d", {"contributors": [{"title": "X", "roles": ["archivist"]}]}
         )
 
 
 def test_contributor_needs_a_title():
-    with pytest.raises(SystemExit, match="needs a 'title'"):
+    with pytest.raises(DescriptorError, match="needs a 'title'"):
         validate_provenance("d", {"contributors": [{"roles": ["author"]}]})
 
 
@@ -133,17 +134,17 @@ def test_licenses_may_hold_several():
 
 def test_licence_needs_a_name_or_a_path():
     """A bare title reads as a licence and identifies nothing."""
-    with pytest.raises(SystemExit, match="neither 'name' nor 'path'"):
+    with pytest.raises(DescriptorError, match="neither 'name' nor 'path'"):
         validate_licenses("d", {"licenses": [{"title": "Some terms"}]})
 
 
 def test_licenses_must_be_a_list():
-    with pytest.raises(SystemExit, match="must be a list"):
+    with pytest.raises(DescriptorError, match="must be a list"):
         validate_licenses("d", {"licenses": {"name": "MIT"}})
 
 
 def test_applies_to_must_be_a_list_of_patterns():
-    with pytest.raises(SystemExit, match="list of glob patterns"):
+    with pytest.raises(DescriptorError, match="list of glob patterns"):
         validate_licenses(
             "d", {"licenses": [{"name": "MIT", "ethos:applies_to": "*.tif"}]}
         )
@@ -175,7 +176,7 @@ def test_applies_to_strips_itself_from_the_resource_copy():
 
 def test_applies_to_matching_nothing_is_an_error():
     """Silently licensing no files is how data ships under terms nobody applied."""
-    with pytest.raises(SystemExit, match="matches none of"):
+    with pytest.raises(DescriptorError, match="matches none of"):
         apply_resource_licenses(
             "d", [{"path": "a.nc"}], [{"name": "MIT", "ethos:applies_to": ["nope/**"]}]
         )

@@ -56,6 +56,8 @@ from pathlib import Path
 import platformdirs
 import yaml
 
+from .errors import ConfigurationError
+
 __all__ = [
     "SCOPES",
     "dataset_roots",
@@ -205,7 +207,9 @@ def config_path(scope: str = "user") -> Path:
         return Path(sys.prefix) / "etc" / APP / CONFIG_FILENAME
     if scope == "site":
         return Path(platformdirs.site_config_dir(APP)) / CONFIG_FILENAME
-    raise ValueError(f"unknown scope {scope!r}; expected one of {', '.join(SCOPES)}")
+    raise ConfigurationError(
+        f"unknown scope {scope!r}; expected one of {', '.join(SCOPES)}"
+    )
 
 
 def writable_config_path(scope: str = "user") -> Path:
@@ -267,9 +271,9 @@ def load_config() -> tuple[dict, dict[str, str]]:
         try:
             document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as error:
-            raise ValueError(f"{path} is not valid YAML: {error}") from None
+            raise ConfigurationError(f"{path} is not valid YAML: {error}") from None
         if not isinstance(document, dict):
-            raise ValueError(
+            raise ConfigurationError(
                 f"{path} must contain a YAML mapping, got {type(document).__name__}"
             )
         for key, value in document.items():
@@ -364,7 +368,7 @@ def resolve_skip_unavailable(explicit: bool | None = None) -> tuple[bool, str]:
             return True, f"${SKIP_UNAVAILABLE_ENV_VAR}"
         if lowered in _FALSY:
             return False, f"${SKIP_UNAVAILABLE_ENV_VAR}"
-        raise ValueError(
+        raise ConfigurationError(
             f"${SKIP_UNAVAILABLE_ENV_VAR}={from_env!r} is not a yes/no value; "
             f"use one of {', '.join(sorted(_TRUTHY | _FALSY))}"
         )
@@ -421,7 +425,9 @@ def dataset_roots() -> dict[str, str]:
     settings, _ = load_config()
     roots = settings.get("dataset_roots") or {}
     if not isinstance(roots, dict):
-        raise ValueError("dataset_roots must be a mapping of dataset name -> path")
+        raise ConfigurationError(
+            "dataset_roots must be a mapping of dataset name -> path"
+        )
     return {str(k): str(v) for k, v in roots.items()}
 
 

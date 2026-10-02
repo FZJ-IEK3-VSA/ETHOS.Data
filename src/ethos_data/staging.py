@@ -43,6 +43,7 @@ from pathlib import Path
 from .access import AccessError
 from .catalogs import Catalog, Dataset, Resource
 from .config import Roots, current_user, resolve_staging_cache
+from .errors import StagingError
 
 __all__ = [
     "NEW",
@@ -118,7 +119,7 @@ def staging_root(explicit: str | Path | None = None) -> Path | None:
 def _require_root(explicit: str | Path | None = None) -> Path:
     root = staging_root(explicit)
     if root is None:
-        raise SystemExit(
+        raise StagingError(
             "no staging root is configured.\n"
             "Pick a directory for work in progress and set it once:\n"
             "    ethos-data config set-staging-cache /path/to/ethos_data_staging"
@@ -185,11 +186,11 @@ def add(
     staging.mkdir(parents=True, exist_ok=True)
     source = Path(path).expanduser().resolve()
     if not source.is_dir():
-        raise SystemExit(f"not a directory: {source}")
+        raise StagingError(f"not a directory: {source}")
 
     entry = staging / name
     if entry.exists() or entry.is_symlink():
-        raise SystemExit(
+        raise StagingError(
             f"{name!r} is already staged at {entry}.\n"
             f"Remove it first with your package's data command: staging remove {name}"
         )
@@ -223,13 +224,13 @@ def remove(name: str, root: str | Path | None = None, force: bool = False) -> Pa
     staging = _require_root(root)
     entry = staging / name
     if not (entry.exists() or entry.is_symlink()):
-        raise SystemExit(f"{name!r} is not staged in {staging}")
+        raise StagingError(f"{name!r} is not staged in {staging}")
 
     if entry.is_symlink():
         entry.unlink()
     elif entry.is_dir():
         if not force:
-            raise SystemExit(
+            raise StagingError(
                 f"{entry} is a real directory, not a link -- removing it deletes the data.\n"
                 f"Use your package's data command: staging remove {name} --force"
             )

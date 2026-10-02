@@ -66,6 +66,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import yaml
 
+from ..errors import DescriptorError
 from ..catalogs import CATALOG_ROLES, ROLE_KEY, ROLE_SOURCE, ROOT_SHARD, shard_key
 from ..selection import path_matches
 from . import (
@@ -345,9 +346,9 @@ def expand_pattern(pattern: str) -> list[str]:
     """
     pattern = pattern.strip()
     if not pattern:
-        raise SystemExit(f"{INCLUDE_KEY}/{EXCLUDE_KEY}: empty pattern")
+        raise DescriptorError(f"{INCLUDE_KEY}/{EXCLUDE_KEY}: empty pattern")
     if pattern.startswith("/"):
-        raise SystemExit(
+        raise DescriptorError(
             f"{INCLUDE_KEY}/{EXCLUDE_KEY}: {pattern!r} starts with '/'. Patterns are "
             "relative to source_dir; drop the leading slash."
         )
@@ -364,16 +365,16 @@ def _patterns(name: str, meta: dict, key: str) -> list[str] | None:
     if raw is None:
         return None
     if isinstance(raw, str) or not isinstance(raw, list):
-        raise SystemExit(
+        raise DescriptorError(
             f"{name}: {key} must be a list of patterns, got {type(raw).__name__}"
         )
     if not raw:
-        raise SystemExit(
+        raise DescriptorError(
             f"{name}: {key} is an empty list, which would select nothing. "
             f"Remove the key instead -- absent means 'no filter'."
         )
     if not all(isinstance(entry, str) for entry in raw):
-        raise SystemExit(f"{name}: every entry in {key} must be a string")
+        raise DescriptorError(f"{name}: every entry in {key} must be a string")
     return raw
 
 
@@ -423,7 +424,7 @@ def select(name: str, root: Path, paths: list[Path], meta: dict) -> list[Path]:
         hits = matched_by(include)
         empty = [pattern for pattern, found in hits.items() if not found]
         if empty:
-            raise SystemExit(
+            raise DescriptorError(
                 f"{name}: {INCLUDE_KEY} pattern(s) match no file under {root}:\n"
                 + "".join(f"    {pattern}\n" for pattern in empty)
                 + "Fix the pattern, or drop it if the file is gone. An include list that\n"
@@ -481,7 +482,7 @@ def frozen_resources(name: str, dataset_dir: Path) -> list[dict]:
     """
     package_file = dataset_dir / "datapackage.json"
     if not package_file.is_file():
-        raise SystemExit(
+        raise DescriptorError(
             f"{name}: the inventory is declared final but there is no datapackage.json to "
             f"freeze. Build once with source_dir set, check the result, and only then set "
             f"{FROZEN_KEY}: true (or {UPLOADED_KEY}: true) and remove source_dir."
@@ -528,26 +529,26 @@ def validate_classification(name: str, meta: dict) -> tuple[str, str]:
     visibility = meta.setdefault("ethos:visibility", "public")
 
     if access not in ACCESS_CLASSES:
-        raise SystemExit(
+        raise DescriptorError(
             f"{name}: ethos:access must be one of {ACCESS_CLASSES}, got {access!r}"
         )
     if visibility not in VISIBILITIES:
-        raise SystemExit(
+        raise DescriptorError(
             f"{name}: ethos:visibility must be one of {VISIBILITIES}, got {visibility!r}"
         )
     if access == "public" and visibility == "hidden":
-        raise SystemExit(
+        raise DescriptorError(
             f"{name}: access=public with visibility=hidden makes no sense -- "
             "if the bytes are downloadable by anyone, list the dataset."
         )
     if visibility == "hidden" and "ethos:embargo" not in meta:
-        raise SystemExit(
+        raise DescriptorError(
             f"{name}: visibility=hidden needs an ethos:embargo block saying when and why "
             "it becomes public, otherwise it stays hidden by accident forever. "
             'Use `until: "unspecified"` only with an explicit reason.'
         )
     if access == "restricted" and meta.get("ethos:remote_prefix"):
-        raise SystemExit(
+        raise DescriptorError(
             f"{name}: restricted data must not declare ethos:remote_prefix -- "
             "it is never uploaded. Configure dataset_roots on each machine instead."
         )
@@ -556,7 +557,7 @@ def validate_classification(name: str, meta: dict) -> tuple[str, str]:
         # Restricted data never reaches dCache, so "dCache holds it now" would be
         # a false statement sitting in the catalogue -- and there is a key that
         # says the true half on its own.
-        raise SystemExit(
+        raise DescriptorError(
             f"{name}: restricted data is never uploaded, so {UPLOADED_KEY}: true cannot "
             f"be right. If its inventory is final -- the authorised installation is the "
             f"permanent copy and there is nothing local left to build from -- say that "
@@ -582,16 +583,18 @@ def validate_licenses(name: str, meta: dict) -> list[dict]:
     if licenses is None:
         return []
     if not isinstance(licenses, list):
-        raise SystemExit(
+        raise DescriptorError(
             f"{name}: {LICENSES_KEY} must be a list, even with one entry -- "
             "a dataset can be under several."
         )
     for index, entry in enumerate(licenses):
         where = f"{name}: {LICENSES_KEY}[{index}]"
         if not isinstance(entry, dict):
-            raise SystemExit(f"{where} must be a mapping with 'name' and/or 'path'.")
+            raise DescriptorError(
+                f"{where} must be a mapping with 'name' and/or 'path'."
+            )
         if not (entry.get("name") or entry.get("path")):
-            raise SystemExit(
+            raise DescriptorError(
                 f"{where} has neither 'name' nor 'path'. Give an Open Definition id "
                 "(name: CC-BY-4.0) or a URL to the terms (path: https://...); a bare "
                 "title names no licence. If the terms are not settled, drop the entry "
@@ -603,7 +606,7 @@ def validate_licenses(name: str, meta: dict) -> list[dict]:
         if not isinstance(patterns, list) or not all(
             isinstance(p, str) and p for p in patterns
         ):
-            raise SystemExit(
+            raise DescriptorError(
                 f"{where}: {APPLIES_TO_KEY} must be a list of glob patterns."
             )
     return licenses
@@ -627,7 +630,7 @@ def record_license_documents(
         document = entry.get(DOCUMENT_KEY)
         if document is None:
             if DOCUMENT_HASH_KEY in entry:
-                raise SystemExit(
+                raise DescriptorError(
                     f"{where} has {DOCUMENT_HASH_KEY} but no {DOCUMENT_KEY} to hash. "
                     "Archive the terms beside dataset.yaml and name the file, or drop "
                     "the hash."
@@ -642,13 +645,13 @@ def record_license_documents(
             or PureWindowsPath(document).drive
             or any(part in ("", ".", "..") for part in relative.parts)
         ):
-            raise SystemExit(
+            raise DescriptorError(
                 f"{where}: {DOCUMENT_KEY} must be a relative path inside the dataset "
                 f"directory, such as licenses/terms.txt; got {document!r}."
             )
         path = dataset_dir.joinpath(*relative.parts)
         if not path.is_file():
-            raise SystemExit(
+            raise DescriptorError(
                 f"{where} names {DOCUMENT_KEY} {document}, which is not a file at "
                 f"{path}. Archive the terms there, or drop {DOCUMENT_KEY}."
             )
@@ -656,14 +659,14 @@ def record_license_documents(
         pinned = entry.get(DOCUMENT_HASH_KEY)
         if pinned is not None:
             if not isinstance(pinned, str):
-                raise SystemExit(
+                raise DescriptorError(
                     f"{where}: {DOCUMENT_HASH_KEY} must be a hex digest in quotes; YAML "
                     f"read {pinned!r} as a number, which loses leading zeros. Quote it, "
                     f"or delete it and let the build record the digest."
                 )
             declared = pinned.strip().lower().removeprefix("sha256:")
             if declared != actual:
-                raise SystemExit(
+                raise DescriptorError(
                     f"{where}: {document} hashes to {actual}, but dataset.yaml pins "
                     f"{DOCUMENT_HASH_KEY}: {declared}. The archived text is not the one "
                     f"that hash was recorded for. If the file is right, delete "
@@ -710,7 +713,7 @@ def apply_resource_licenses(
                 resource.setdefault(LICENSES_KEY, []).append(published)
                 matched += 1
         if not matched:
-            raise SystemExit(
+            raise DescriptorError(
                 f"{name}: {LICENSES_KEY} entry "
                 f"{entry.get('name') or entry.get('path')!r} has {APPLIES_TO_KEY} "
                 f"{patterns}, which matches none of the {len(resources)} files in this "
@@ -749,33 +752,35 @@ def validate_provenance(name: str, meta: dict) -> str:
     """
     origin = meta.setdefault(ORIGIN_KEY, DEFAULT_ORIGIN)
     if origin not in ORIGINS:
-        raise SystemExit(
+        raise DescriptorError(
             f"{name}: {ORIGIN_KEY} must be one of {ORIGINS}, got {origin!r}"
         )
 
     contributors = meta.get(CONTRIBUTORS_KEY) or []
     if not isinstance(contributors, list):
-        raise SystemExit(f"{name}: {CONTRIBUTORS_KEY} must be a list of mappings.")
+        raise DescriptorError(f"{name}: {CONTRIBUTORS_KEY} must be a list of mappings.")
     for index, person in enumerate(contributors):
         where = f"{name}: {CONTRIBUTORS_KEY}[{index}]"
         if not isinstance(person, dict):
-            raise SystemExit(f"{where} must be a mapping with at least a 'title'.")
+            raise DescriptorError(f"{where} must be a mapping with at least a 'title'.")
         if not person.get("title"):
-            raise SystemExit(f"{where} needs a 'title' -- the person or group's name.")
+            raise DescriptorError(
+                f"{where} needs a 'title' -- the person or group's name."
+            )
         roles = person.get("roles", [])
         if isinstance(roles, str):
             # Data Package v1 spelled this `role`, singular and scalar. Reject
             # rather than coerce: a descriptor that half-follows two versions of
             # the spec is worse than one that is told which it is following.
-            raise SystemExit(
+            raise DescriptorError(
                 f"{where}: 'roles' is a list in Data Package v2 -- write "
                 f"roles: [{roles}], not roles: {roles}."
             )
         if not isinstance(roles, list):
-            raise SystemExit(f"{where}: 'roles' must be a list.")
+            raise DescriptorError(f"{where}: 'roles' must be a list.")
         for role in roles:
             if role not in CONTRIBUTOR_ROLES:
-                raise SystemExit(
+                raise DescriptorError(
                     f"{where}: unknown role {role!r}. Use one of {CONTRIBUTOR_ROLES}."
                 )
 
@@ -784,7 +789,7 @@ def validate_provenance(name: str, meta: dict) -> str:
 
     authors = [p for p in contributors if AUTHOR_ROLE in (p.get("roles") or [])]
     if not authors:
-        raise SystemExit(
+        raise DescriptorError(
             f"{name}: {ORIGIN_KEY} is {origin!r}, which claims this data was made here, "
             f"so it has to say by whom. Add a {CONTRIBUTORS_KEY} entry with "
             f"roles: [{AUTHOR_ROLE}]:\n"
@@ -796,13 +801,13 @@ def validate_provenance(name: str, meta: dict) -> str:
 
     if origin == "derived":
         if not meta.get("sources"):
-            raise SystemExit(
+            raise DescriptorError(
                 f"{name}: {ORIGIN_KEY}: derived needs 'sources' saying what it was "
                 "derived FROM. Derived data inherits obligations from its inputs; a "
                 "derivation with no named input cannot be checked against them."
             )
         if not meta.get(DERIVATION_KEY):
-            raise SystemExit(
+            raise DescriptorError(
                 f"{name}: {ORIGIN_KEY}: derived needs {DERIVATION_KEY} saying HOW -- the "
                 "method, parameters and inputs, in enough detail that somebody could "
                 "redo it. Without that, 'derived' says only that the numbers are not "
@@ -867,7 +872,7 @@ def render_dataset(
     # -- is a long way from the cause.
     declared = meta.get("name")
     if declared is not None and declared != name:
-        raise SystemExit(
+        raise DescriptorError(
             f"{name}: dataset.yaml says name: {declared!r}, but the directory it is in "
             f"makes it {name!r}. The directory decides; fix the name, or move the directory."
         )
@@ -901,14 +906,14 @@ def render_dataset(
                 "describes is the permanent one -- remove it."
             )
             declared = UPLOADED_KEY if uploaded else FROZEN_KEY
-            raise SystemExit(
+            raise DescriptorError(
                 f"{name}: declares {declared}: true and still has "
                 f"source_dir: {raw_source_dir!r}. {reason}"
             )
         resources = frozen_resources(name, dataset_dir)
     else:
         if raw_source_dir is None:
-            raise SystemExit(
+            raise DescriptorError(
                 f"{name}: source_dir is required, unless {UPLOADED_KEY}: true says the "
                 f"dataset was already uploaded, or {FROZEN_KEY}: true says its inventory "
                 "is final and there is nothing local left to build from."
@@ -923,14 +928,14 @@ def render_dataset(
         if not source_dir.is_absolute():
             source_dir = (dataset_dir / source_dir).resolve()
         if not source_dir.is_dir():
-            raise SystemExit(f"{name}: source_dir does not exist: {source_dir}")
+            raise DescriptorError(f"{name}: source_dir does not exist: {source_dir}")
 
         found = list(iter_data_files(source_dir))
         if not found:
-            raise SystemExit(f"{name}: no data files found under {source_dir}")
+            raise DescriptorError(f"{name}: no data files found under {source_dir}")
         selected = select(name, source_dir, found, meta)
         if not selected:
-            raise SystemExit(
+            raise DescriptorError(
                 f"{name}: {INCLUDE_KEY}/{EXCLUDE_KEY} filtered out every one of the "
                 f"{len(found)} files under {source_dir}"
             )
@@ -947,7 +952,7 @@ def render_dataset(
 
     depth = int(meta.get("ethos:shard_depth", 0) or 0)
     if depth < 0:
-        raise SystemExit(f"{name}: ethos:shard_depth must not be negative")
+        raise DescriptorError(f"{name}: ethos:shard_depth must not be negative")
 
     package = {
         "$schema": "https://datapackage.org/profiles/2.0/datapackage.json",
@@ -961,7 +966,7 @@ def render_dataset(
             # Every file sits at the dataset root, so sharding cannot split
             # anything -- and a lone _root shard is strictly worse than an
             # inline inventory: one extra fetch to learn what you already had.
-            raise SystemExit(
+            raise DescriptorError(
                 f"{name}: ethos:shard_depth is {depth}, but no file is nested "
                 f"{depth} director{'y' if depth == 1 else 'ies'} deep, so there is nothing "
                 "to shard. Drop ethos:shard_depth, or lower it."
@@ -1022,19 +1027,19 @@ def _render_namespace(
         EXCLUDE_KEY,
     ):
         if forbidden in meta:
-            raise SystemExit(
+            raise DescriptorError(
                 f"{name}: is a namespace -- it holds other datasets -- so it cannot also "
                 f"describe files of its own, and {forbidden} says it does. Move that key "
                 f"into one of its members, or move the members out."
             )
     if "ethos:access" in meta:
-        raise SystemExit(
+        raise DescriptorError(
             f"{name}: is a namespace and must not declare ethos:access. An access class says "
             "where bytes are read from, and a namespace has none -- its members each declare "
             "their own, which is the whole reason a family can be part public and part not."
         )
     if "licenses" in meta or meta.get("ethos:license_status"):
-        raise SystemExit(
+        raise DescriptorError(
             f"{name}: is a namespace and must not carry licensing. Its members each state "
             "their own -- a licence inherited without being read is how a dataset ends up "
             "published under terms nobody applied to it."
@@ -1131,11 +1136,11 @@ def catalog_meta(catalog_root: Path) -> dict:
     # a catalogue mislabelled `published` would make every tool refuse to touch it.
     role = meta.setdefault(ROLE_KEY, ROLE_SOURCE)
     if role not in CATALOG_ROLES:
-        raise SystemExit(
+        raise DescriptorError(
             f"catalog.yaml: {ROLE_KEY} must be one of {CATALOG_ROLES}, got {role!r}"
         )
     if role != ROLE_SOURCE:
-        raise SystemExit(
+        raise DescriptorError(
             f"catalog.yaml declares {ROLE_KEY}: {role!r}, but this is the catalogue being built "
             f"from dataset.yaml files, which makes it {ROLE_SOURCE!r}. The published copy gets "
             "its role set by `ethos-data catalog publish`; do not set it by hand."
@@ -1243,7 +1248,7 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
     rows: list[str] = []
     for dataset_dir in selected:
         if not (dataset_dir / "dataset.yaml").exists():
-            raise SystemExit(f"no dataset.yaml in {dataset_dir}")
+            raise DescriptorError(f"no dataset.yaml in {dataset_dir}")
         name = dataset_name_for(root, dataset_dir)
         namespace = is_namespace(dataset_dir)
         totals = None
