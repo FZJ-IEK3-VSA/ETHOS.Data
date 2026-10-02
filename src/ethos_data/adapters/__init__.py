@@ -50,6 +50,21 @@ class Store(Protocol):
         """
         ...
 
+    def sync(self, source: Path, destination: str, *, dry_run: bool) -> int:
+        """Make ``destination`` hold exactly the files under ``source``, ``.git`` aside.
+
+        Unlike :meth:`copy` it replaces what is there, for a folder of which
+        the store keeps the latest version only. Returns a process-style status.
+        """
+        ...
+
+    def purge(self, destination: str, *, dry_run: bool) -> int:
+        """Delete ``destination`` and everything under it; there is no trash.
+
+        Returns a process-style status: 0 when it is gone.
+        """
+        ...
+
     def chmod(self, path: str, mode: int, bearer: str) -> int:
         """Set ``mode`` on a store path; returns the HTTP status."""
         ...
@@ -81,10 +96,22 @@ class Downloader(Protocol):
 
 @runtime_checkable
 class Git(Protocol):
-    """A git checkout, as a release commits, tags and pushes it."""
+    """A git checkout, as a release commits, tags and pushes it and a server updates it."""
 
     def is_clean(self) -> bool:
         """Whether the working tree has no uncommitted changes."""
+        ...
+
+    def tag_names(self) -> list[str]:
+        """Every tag of the repository."""
+        ...
+
+    def fetch(self, remote: str) -> None:
+        """Fetch ``remote``'s branches and tags."""
+        ...
+
+    def fast_forward(self, ref: str) -> None:
+        """Move the checkout to ``ref``, refusing anything but a fast-forward."""
         ...
 
     def head(self) -> str:

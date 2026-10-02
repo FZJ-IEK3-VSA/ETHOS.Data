@@ -235,7 +235,7 @@ class TestRemove:
         assert source.publish(target)[0] == 0
         assert not (target / "datasets" / "gone").exists()
         assert "gone" not in (target / "datacatalog.json").read_text("utf-8")
-        assert "Publish and release the catalogue without them" in out
+        assert "Release the catalogue without them; then delete" in out
         assert source.build()[0] == 0
         assert [row["name"] for row in source.index()["datasets"]] == ["kept"]
 
@@ -323,7 +323,7 @@ class TestRemove:
 
         _, out, _ = source.catalog("status", "gone")
 
-        assert "withdrawn" in out and "release the catalogue without it" in out
+        assert "withdrawn" in out and "ethos-data catalog remove gone --purge" in out
 
 
 class TestCheckSource:

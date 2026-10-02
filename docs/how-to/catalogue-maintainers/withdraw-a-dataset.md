@@ -16,7 +16,7 @@ In the source checkout:
 ```bash
 ethos-data catalog remove <name> --reason "<why>" --dry-run
 ethos-data catalog remove <name> --reason "<why>"
-ethos-data catalog publish ../ETHOS.Data-Catalogue
+git commit -am "Remove <name>: <why>"
 ```
 
 `remove` records the dataset as withdrawn in its `status.yaml`, with the
@@ -25,42 +25,32 @@ member. From now on the build and `publish` leave it out. Its description,
 inventory and status file stay in the checkout until its bytes are gone.
 
 If only the public listing was wrong, keep the dataset and hide it instead:
-`ethos:visibility: hidden` with an embargo block that says why. Review both
-diffs, then [release](release-the-catalogue.md) the internal version and the
-public revision. Note why the dataset was removed and what replaces it in the
-commit and in the issue.
+`ethos:visibility: hidden` with an embargo block that says why. Note why the
+dataset was removed and what replaces it in the commit and in the issue.
 
-## 2. Remove the cache entries
+## 2. Release the catalogue without it
 
-```bash
-ethos-data --root /shared/ethos/public unlink <name>
-```
+[Release](release-the-catalogue.md) the internal and the public catalogue.
+Readers keep being served the dataset until then, so nothing of its bytes may
+go before.
 
-`unlink` removes a link and leaves its target alone. A materialized entry is a
-real directory the cache owns; `unlink` refuses it, so remove it by hand after
-checking that nothing else reads it:
+## 3. Purge its cache entries and bytes
 
 ```bash
-ls -ld /shared/ethos/public/<name>
-rm -r /shared/ethos/public/<name>
+ethos-data catalog remove <name> --purge --dry-run
+ethos-data catalog remove <name> --purge
 ```
 
-A restricted entry lives in the restricted cache; treat it the same way.
-
-## 3. Delete the bytes on dCache
-
-Only after the new catalogue is released. Find the exact remote prefix from
-the removed descriptor and check that no other dataset shares it:
-
-```bash
-rclone lsf -R HIFIS:ethos-data/<remote prefix>
-rclone purge HIFIS:ethos-data/<remote prefix> --dry-run
-rclone purge HIFIS:ethos-data/<remote prefix>
-```
-
-`purge` removes the folder and everything in it without a trash area. Never
-target the publication root to clean one dataset. See
-[Manage dCache folders](manage-dcache-folders.md).
+`--purge` refuses until a release since the removal is recorded in the
+dataset's `status.yaml`, and refuses a folder on dCache that another
+dataset's copy lies in or around. Then it unlinks every link the status file
+records and deletes every copy a cache owns, the restricted cache included,
+purges the dataset's folder on dCache, which has no trash area, and deletes
+the dataset's directory except its `status.yaml`. That file stays as a
+tombstone: it records what happened, and `catalog add` refuses to give the
+name to other bytes. Commit the deletion. A copy nobody recorded, an entry
+made by hand, is not found; check the caches for one, and see
+[Manage dCache folders](manage-dcache-folders.md) for the store.
 
 ## 4. Check and tell people
 
@@ -75,9 +65,3 @@ still describes it, and the replacement. Older pinned catalogue revisions
 still describe the dataset, and copies on users' machines remain; removal
 notifies nobody and corrects no earlier result.
 
-!!! warning "Gap: the cache entries and the bytes are removed by hand"
-    `catalog remove` takes the dataset out of the catalogue, but steps 2 and 3
-    are manual, and nothing checks that the release without the dataset is out
-    before the bytes go. A `catalog remove <dataset> --purge` that refuses
-    while a released catalogue still lists the dataset would encode the rule
-    above.

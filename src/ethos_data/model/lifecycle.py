@@ -89,6 +89,8 @@ STEPS: Mapping[str, Step] = {
              {BUILT: BUILT, AVAILABLE: AVAILABLE, FROZEN: FROZEN}),
         Step("remove", "ethos-data catalog remove", dict.fromkeys(_IN_CATALOGUE, WITHDRAWN)),
         Step("purge", "ethos-data catalog remove --purge", {WITHDRAWN: PURGED}),
+        # A release holds every step before it, whatever state they left.
+        Step("release", "ethos-data catalog release", {state: state for state in STATES}),
     )
 }  # fmt: skip
 
@@ -187,6 +189,6 @@ def next_step(
         return f"record its authoritative copy: ethos-data catalog record {dataset}"
     if state == WITHDRAWN:
         return (
-            "release the catalogue without it, then delete its cache entries and bytes"
+            f"ethos-data catalog remove {dataset} --purge, after a release without it"
         )
     return ""

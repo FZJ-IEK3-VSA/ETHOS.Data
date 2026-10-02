@@ -17,10 +17,9 @@ from pathlib import Path
 
 from .. import report
 from ..errors import UploadError
+from ..formats.catalogue import DCACHE_FRONTEND as FRONTEND
 
 __all__ = ["FRONTEND", "MODE_0755", "DcacheStore"]
-
-FRONTEND = "https://hifis-storage-web.desy.de/api/v1"
 MODE_0755 = 493  # dCache wants the mode as a decimal integer, not octal
 
 
@@ -104,6 +103,29 @@ class DcacheStore:
             return _run(command).returncode
         finally:
             listing.unlink(missing_ok=True)
+
+    def sync(self, source: Path, destination: str, *, dry_run: bool) -> int:
+        """``rclone sync``: the destination ends up holding what ``source`` holds."""
+        command = [
+            "rclone",
+            "sync",
+            str(source),
+            f"{self.remote}:{destination}",
+            "--checksum",
+            "--exclude",
+            ".git/**",
+            "--progress" if not dry_run else "--dry-run",
+        ]
+        report.info("  $ " + " ".join(command) + "\n")
+        return _run(command).returncode
+
+    def purge(self, destination: str, *, dry_run: bool) -> int:
+        """``rclone purge``: the folder and everything in it, with no trash area."""
+        command = ["rclone", "purge", f"{self.remote}:{destination}"]
+        if dry_run:
+            command.append("--dry-run")
+        report.info("  $ " + " ".join(command) + "\n")
+        return _run(command).returncode
 
     def chmod(self, path: str, mode: int, bearer: str) -> int:
         request = urllib.request.Request(

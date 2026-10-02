@@ -23,7 +23,7 @@ def uploading(tmp_path, store, monkeypatch):
     )
     assert catalogue.build()[0] == 0
     dcache = FakeStore(put=store.put)
-    monkeypatch.setattr(upload, "DcacheStore", lambda remote: dcache)
+    monkeypatch.setattr(upload, "DcacheStore", lambda remote, frontend: dcache)
     return catalogue, dcache
 
 
@@ -86,7 +86,7 @@ def test_a_dataset_without_a_prefix_goes_to_the_folder_named_after_it(
     catalogue.dataset("plain", {"a.csv": "1\n"})
     assert catalogue.build()[0] == 0
     dcache = FakeStore()
-    monkeypatch.setattr(upload, "DcacheStore", lambda remote: dcache)
+    monkeypatch.setattr(upload, "DcacheStore", lambda remote, frontend: dcache)
 
     code, _, err = catalogue.catalog("upload", "plain", "--dry-run")
 

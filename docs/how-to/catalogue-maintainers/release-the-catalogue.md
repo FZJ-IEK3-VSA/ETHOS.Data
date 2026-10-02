@@ -3,49 +3,61 @@
 Turn the reviewed source catalogue into a new release: the internal catalogue
 on the cluster computer, the public catalogue on GitHub and, for attribution,
 on dCache. You need a source checkout with every added dataset built and
-every upload verified. Today the steps are manual and the checks are
-commands; the intended state is a pipeline that does everything after the
-tag.
+committed, every upload verified, and a checkout of the public repository.
 
-## 1. Build, check, commit, tag
-
-Set the release in `catalog.yaml` first, `version: v2026.09.2`: the build
-writes it into the index, where packages compare it with the versions their
-collections files accept.
+## 1. Check and release
 
 ```bash
-ethos-data catalog build
-ethos-data catalog build --check
-git diff
-git commit -am "Add <datasets>"
-git tag v2026.09.2
-git push origin main v2026.09.2
+ethos-data catalog status --check
+ethos-data catalog release v2026.09.2 --public ../ETHOS.Data-Catalogue --dry-run
+ethos-data catalog release v2026.09.2 --public ../ETHOS.Data-Catalogue
 ```
 
-Expect `--check` to pass and the diff to contain only the datasets you added.
-Releases are numbered `vYYYY.MM.N`, `N` counting the releases within the
-month, and the tag names the release for the internal and the public
-catalogue alike.
+`release` checks before it writes anything: the version follows the last
+release, both checkouts are clean, every manifest is current, every public
+dataset the public catalogue lists has a verified upload recorded, and the
+public catalogue does not [leak](#leak-check). Then it writes the version into
+`catalog.yaml` and the index, where packages compare it with the versions
+their collections files accept, records the release in the status file of
+every dataset that changed since the last one, commits and tags the source
+checkout, and generates, commits and tags the public catalogue. Review both
+with `git show`, then finish the release:
+
+```bash
+ethos-data catalog release v2026.09.2 --public ../ETHOS.Data-Catalogue --push --upload
+```
+
+`--push` pushes both checkouts and the tag; `--upload` puts the public
+catalogue on dCache. A run with the same version does only what is left, so
+an interrupted release is finished by running it again. Releases are numbered
+`vYYYY.MM.N`, `N` counting the releases within the month, and the tag names
+the release for the internal and the public catalogue alike.
 
 ## 2. Update the internal catalogue {#internal}
 
 Cluster users read one checkout of the source catalogue on the cluster computer,
 see [Set up the shared machine](set-up-the-shared-machine.md). It
-holds one version, the latest release. Update it when no jobs are reading it
-and check it before announcing:
+holds one version, the latest release. Update it there, when no jobs are
+reading it, and check it before announcing:
 
 ```bash
-cd /shared/ethos/catalogue
-git pull --ff-only
-ethos-data catalog build --check
+ethos-data catalog --catalog-root /shared/ethos/catalogue update-checkout --dry-run
+ethos-data catalog --catalog-root /shared/ethos/catalogue update-checkout
 ethos-data --catalog /shared/ethos/catalogue/datacatalog.json ls
 ```
+
+`update-checkout` fetches, moves the checkout to the latest release tag by
+fast-forward only, refusing a checkout with local changes, and checks every
+manifest against its files; `--to` names an earlier release.
 
 Never rebuild inside the served checkout while jobs read it: an index from
 one revision paired with inventories from another is exactly what an
 `IncompleteCatalog` error reports.
 
-## 3. Generate the public catalogue {#public}
+## 3. The public catalogue {#public}
+
+`release` generates it with `publish`, which you can also run on its own to
+look at the result:
 
 ```bash
 ethos-data catalog publish ../ETHOS.Data-Catalogue
@@ -77,17 +89,14 @@ cd ../ETHOS.Data-Catalogue && git diff
 
 A hidden dataset must not be mentioned at all.
 
-### Commit, tag, push
+### Committed and tagged with the source
 
-```bash
-git commit -am "Release v2026.09.2: <what changed>"
-git tag v2026.09.2
-git push origin main v2026.09.2
-```
-
-Release the public catalogue only after every downloadable entry it adds has
-been [uploaded and verified](upload-a-dataset.md). Never move a released tag
-or change metadata behind an existing release.
+`release` commits the public checkout as `Release v2026.09.2` and tags it
+with the release, and `--push` pushes it. It refuses a public dataset whose
+upload is not recorded as verified, so the public catalogue never offers
+bytes nobody can download; [upload](upload-a-dataset.md) it first, or keep
+it hidden. Never move a released tag or change metadata behind an existing
+release.
 
 !!! danger "Never create the public repository by cloning the internal one"
     A public checkout that began as a copy of the source repository carries
@@ -105,10 +114,11 @@ or change metadata behind an existing release.
 ### Put the public catalogue beside the data on dCache
 
 Anyone who holds the published bytes should also hold their descriptors and
-licence documents, so the current public catalogue is uploaded next to the
-data under the publication root, `<publication root>/catalogue/`, replacing
-the previous one. Only the latest release lives there; the history stays on
-GitHub.
+licence documents, so `release --upload` puts the current public catalogue
+next to the data under the publication root, `<publication root>/catalogue/`,
+replacing the previous one, and makes it world-readable. Only the latest
+release lives there; the history stays on GitHub. The store it writes is the
+one `catalog.yaml` names under `ethos:store`, today's dCache by default.
 
 ## 4. Release an embargoed dataset {#embargo}
 
@@ -159,14 +169,12 @@ uploaded bytes are still served without transferring anything:
 ethos-data catalog upload <dataset> --verify-only --no-chmod
 ```
 
-The intended pipeline lives in the internal catalogue repository and runs on
-a tag: it generates the public catalogue, runs the leak check, commits, tags
-and pushes the public repository on GitHub, uploads the public catalogue to
-dCache, and updates the checkout on the cluster computer. A maintainer then
-only reviews and tags. Whether the internal Git host can push to GitHub and
-reach dCache from its runners, or whether the public half has to run on
-GitHub, is still to be established.
+`catalog release` is the release pipeline, and `catalog update-checkout`
+updates the checkout on the cluster computer, which a runner elsewhere cannot
+reach. The intended deployment runs the release in the internal catalogue
+repository's CI on a tag, so that a maintainer only reviews and tags.
 
-!!! warning "Gap: releases are manual"
-    Only the two check commands exist. No pipeline publishes, uploads the
-    catalogue to dCache or updates the cluster computer checkout.
+!!! warning "Gap: no CI runs the release"
+    A maintainer runs `catalog release` on their own machine. Whether the
+    internal Git host can push to GitHub and reach dCache from its runners, or
+    whether the public half has to run on GitHub, is still to be established.

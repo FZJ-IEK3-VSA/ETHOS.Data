@@ -40,6 +40,15 @@ class GitRepository:
     def is_clean(self) -> bool:
         return not self._git("status", "--porcelain")
 
+    def tag_names(self) -> list[str]:
+        return self._git("tag", "--list").split()
+
+    def fetch(self, remote: str) -> None:
+        self._git("fetch", "--tags", remote)
+
+    def fast_forward(self, ref: str) -> None:
+        self._git("merge", "--ff-only", ref)
+
     def head(self) -> str:
         return self._git("rev-parse", "HEAD")
 

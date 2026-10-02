@@ -28,11 +28,15 @@ class FakeStore:
     """
 
     put: Callable[[str, str, bytes], None] | None = None
-    #: The status ``copy`` returns, to rehearse a failed transfer.
+    #: Receives every purged destination, when given, to delete what ``put`` sent.
+    remove: Callable[[str], None] | None = None
+    #: The status ``copy``, ``sync`` and ``purge`` return, to rehearse a failure.
     copy_status: int = 0
     #: What ``locality`` answers.
     where: str = "ONLINE"
     copies: list[dict] = field(default_factory=list)
+    syncs: list[dict] = field(default_factory=list)
+    purges: list[str] = field(default_factory=list)
     chmods: list[tuple[str, int]] = field(default_factory=list)
     tokens: list[str] = field(default_factory=list)
 
@@ -61,6 +65,36 @@ class FakeStore:
         if not dry_run and self.copy_status == 0 and self.put is not None:
             for path in paths:
                 self.put(destination, path, (Path(source) / path).read_bytes())
+        return self.copy_status
+
+    def sync(self, source: Path, destination: str, *, dry_run: bool) -> int:
+        source = Path(source)
+        paths = sorted(
+            p.relative_to(source).as_posix()
+            for p in source.rglob("*")
+            if p.is_file() and ".git" not in p.relative_to(source).parts
+        )
+        self.syncs.append(
+            {
+                "source": source,
+                "destination": destination,
+                "paths": paths,
+                "dry_run": dry_run,
+            }
+        )
+        if not dry_run and self.copy_status == 0:
+            if self.remove is not None:
+                self.remove(destination)
+            if self.put is not None:
+                for path in paths:
+                    self.put(destination, path, (source / path).read_bytes())
+        return self.copy_status
+
+    def purge(self, destination: str, *, dry_run: bool) -> int:
+        if not dry_run and self.copy_status == 0:
+            self.purges.append(destination)
+            if self.remove is not None:
+                self.remove(destination)
         return self.copy_status
 
     def chmod(self, path: str, mode: int, bearer: str) -> int:
@@ -107,15 +141,31 @@ class FakeDownloader:
 
 @dataclass
 class FakeGit:
-    """A checkout that records its commits, tags and pushes."""
+    """A checkout that records its commits, tags, pushes, fetches and fast-forwards."""
 
     clean: bool = True
     commits: list[str] = field(default_factory=list)
     tags: list[tuple[str, str]] = field(default_factory=list)
     pushes: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
+    fetches: list[str] = field(default_factory=list)
+    forwards: list[str] = field(default_factory=list)
+    #: Tags the remote has, which ``fetch`` brings in.
+    remote_tags: list[str] = field(default_factory=list)
 
     def is_clean(self) -> bool:
         return self.clean
+
+    def tag_names(self) -> list[str]:
+        return [name for name, _ in self.tags]
+
+    def fetch(self, remote: str) -> None:
+        self.fetches.append(remote)
+        for name in self.remote_tags:
+            if name not in self.tag_names():
+                self.tags.append((name, ""))
+
+    def fast_forward(self, ref: str) -> None:
+        self.forwards.append(ref)
 
     def head(self) -> str:
         return f"commit-{len(self.commits)}"

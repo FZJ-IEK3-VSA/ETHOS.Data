@@ -37,7 +37,7 @@ def uploading(tmp_path, store, monkeypatch):
     catalogue.dataset("flat", {"a.csv": "1\n", "b.csv": "22\n"})
     assert catalogue.build()[0] == 0
     dcache = FakeStore(put=store.put)
-    monkeypatch.setattr(upload, "DcacheStore", lambda remote: dcache)
+    monkeypatch.setattr(upload, "DcacheStore", lambda remote, frontend: dcache)
     return catalogue, dcache
 
 
@@ -383,7 +383,7 @@ class TestUpload:
         catalogue.dataset("old", {"a.csv": "1\n"}, legacy=True)
         assert catalogue.build()[0] == 0
         monkeypatch.setattr(
-            upload, "DcacheStore", lambda remote: FakeStore(put=store.put)
+            upload, "DcacheStore", lambda remote, frontend: FakeStore(put=store.put)
         )
 
         code, _, err = catalogue.catalog("upload", "old")

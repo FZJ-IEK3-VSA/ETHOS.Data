@@ -55,7 +55,7 @@ class Event(_Record):
     by: str = Field("", description="The account that took the step.")
     step: str = Field(
         description="add, migrate, build, change, upload, verify, link, materialize, "
-        "record, check-source or remove."
+        "record, check-source, remove, purge or release."
     )
     previous: str | None = Field(
         None, alias="from", description="The state before, when the step changed it."
@@ -71,6 +71,9 @@ class Event(_Record):
     )
     source_dir: str | None = Field(
         None, description="The build input that freezing the dataset retired."
+    )
+    release: str | None = Field(
+        None, description="The catalogue release a release step made, vYYYY.MM.N."
     )
 
 

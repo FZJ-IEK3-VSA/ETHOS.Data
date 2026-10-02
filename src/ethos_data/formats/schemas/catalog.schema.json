@@ -1,4 +1,38 @@
 {
+  "$defs": {
+    "StoreSettings": {
+      "additionalProperties": false,
+      "description": "How the maintainer commands reach the publication store; today's dCache by default.",
+      "properties": {
+        "remote": {
+          "default": "HIFIS",
+          "description": "The rclone remote that reaches the store.",
+          "title": "Remote",
+          "type": "string"
+        },
+        "vo_path": {
+          "default": "Helmholtz/FZJ-ICE2",
+          "description": "The VO's path in the store's namespace.",
+          "title": "Vo Path",
+          "type": "string"
+        },
+        "oidc_profile": {
+          "default": "HIFIS",
+          "description": "The oidc-agent profile that issues the store's tokens.",
+          "title": "Oidc Profile",
+          "type": "string"
+        },
+        "frontend": {
+          "default": "https://hifis-storage-web.desy.de/api/v1",
+          "description": "The store's REST interface, for permissions and locality.",
+          "title": "Frontend",
+          "type": "string"
+        }
+      },
+      "title": "StoreSettings",
+      "type": "object"
+    }
+  },
   "additionalProperties": true,
   "description": "A source catalogue's name, contact and publication root.",
   "properties": {
@@ -123,6 +157,24 @@
         "inherited": false,
         "promoted": false,
         "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:store": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StoreSettings"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "How upload, release and purge reach the store; today's dCache by default.",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": false,
         "user_facing": false
       }
     }

@@ -151,6 +151,13 @@ class Intake:
     def _target(self, draft: Draft) -> None:
         target = draft.directory
         if not (target / DESCRIPTOR).is_file():
+            tombstone = dataset_status.read(target)
+            if tombstone is not None and tombstone.state == lifecycle.PURGED:
+                raise MaintenanceError(
+                    f"{draft.name} was a dataset of this catalogue and was purged. "
+                    "Published paths never change their meaning, so its name is not "
+                    "given to other bytes; choose another one."
+                )
             return
         status = dataset_status.read(target)
         same = (
