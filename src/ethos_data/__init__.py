@@ -88,6 +88,7 @@ from .selection import (
     UnknownCollection,
     load_collections,
 )
+from .selftest import EXAMPLE_COLLECTIONS, run_selftest
 from .staging import apply_staging, classify_staged, staged_only
 from .verify import Finding, repair, verify
 
@@ -114,6 +115,7 @@ __all__ = [
     "Collections",
     "CollectionsNotFound",
     "DEFAULT_CATALOG",
+    "EXAMPLE_COLLECTIONS",
     "Dataset",
     "AccessError",
     "DataFiles",
@@ -153,6 +155,7 @@ __all__ = [
     "resolve_public_cache",
     "resolve_restricted_cache",
     "resolve_roots",
+    "run_selftest",
     "resolve_staging_cache",
     "dataset_roots",
     "locate",
