@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import stat
 import sys
 from pathlib import Path
 
@@ -33,6 +32,7 @@ from .config import (
     STAGING_CACHE_KEY,
     STAGING_ENV_VAR,
     Resolved,
+    catalog_index,
     config_path,
     read_settings,
     resolve_catalog,
@@ -42,6 +42,7 @@ from .config import (
     resolve_staging_cache,
     set_dataset_root,
     set_option,
+    unreachable,
     unset_dataset_root,
     unset_option,
 )
@@ -49,7 +50,6 @@ from .errors import (
     BundleError,
     CatalogueRootError,
     CollectionError,
-    ConfigurationError,
     EthosDataError,
     IncompleteCatalog,
     UnknownDataset,
@@ -810,10 +810,9 @@ def _show_the_collections(loaded, roots) -> int:
         for variant in variants:
             label = name if variant is None else f"{name} [{variant}]"
             try:
-                resources = loaded.resolve(name, test=variant == "test")
                 # The same handle check a fetch runs, so `show` flags a
                 # `paths:` mistake before anybody tries to fetch it.
-                loaded._named_targets(name, variant == "test", resources)
+                resources = loaded.select(name, test=variant == "test")
             except (UnknownDataset, IncompleteCatalog, CollectionError) as error:
                 unresolved += 1
                 print(f"  {label:<28} {'[unresolvable]':>17}   {_first_line(error)}")
@@ -867,8 +866,7 @@ def _selection(args, loaded):
     it exactly where the Python API does -- before reporting anything, and
     before moving any data.
     """
-    resources = loaded.resolve(args.collection, test=args.test)
-    loaded._named_targets(args.collection, args.test, resources)
+    resources = loaded.select(args.collection, test=args.test)
     label = args.collection
     if loaded.variants(args.collection):
         label = f"{args.collection} [{variant_name(args.test)}]"
@@ -1381,35 +1379,6 @@ def _staging_command(args) -> int:
     return 0
 
 
-def _resolve_catalog_location(location: str) -> str:
-    """Validate a --set-catalog argument, so a typo fails now, not on the next
-    unrelated command with a stack trace three frames from the actual cause.
-
-    Also accepts a directory and fills in ``datacatalog.json`` -- the mistake
-    of pointing at the catalogue repo itself rather than its generated index
-    is common enough to just handle.
-    """
-    if location.startswith(("http://", "https://")):
-        return location
-    candidate = Path(location).expanduser()
-    if candidate.is_dir():
-        auto = candidate / "datacatalog.json"
-        if auto.is_file():
-            return str(auto)
-        raise ConfigurationError(
-            f"{candidate} is a directory with no datacatalog.json in it.\n"
-            "Point at the generated index file itself, e.g.:\n"
-            f"    ethos-data config set-catalog {auto}"
-        )
-    if not candidate.is_file():
-        raise ConfigurationError(
-            f"no such file: {candidate}\n"
-            "Expected the generated datacatalog.json inside a catalogue checkout "
-            "-- not catalog.yaml (that's hand-written metadata, not the loadable index)."
-        )
-    return str(candidate)
-
-
 #: How each cache setting is described when it is written or shown.
 CACHE_KEYS = {
     PUBLIC_CACHE_KEY: ("public cache", resolve_public_cache),
@@ -1458,7 +1427,7 @@ def _config_command(args) -> int:
         return 0
 
     if command == "set-catalog":
-        location = _resolve_catalog_location(args.location)
+        location = catalog_index(args.location)
         path = set_option(CATALOG_KEY, location)
         print(f"catalog written to {path}")
         print(f"resolved now: {resolve_catalog()[0]}")
@@ -1494,29 +1463,9 @@ def _config_command(args) -> int:
     return _config_show()
 
 
-def _unreachable(path: Path) -> str | None:
-    """Why ``path`` is not a usable directory, or None when it is one.
-
-    To ``Path.is_dir()`` a cache on a network drive that is not mounted looks
-    exactly like a cache nobody has created yet: both are ``False``. The person
-    reading ``config show`` needs the difference, so the reason is spelled out
-    -- a drive that is not connected, a path that does not exist, or whatever
-    the operating system said when it tried.
-    """
-    try:
-        info = os.stat(path)
-    except OSError as error:
-        if path.drive and not os.path.exists(path.anchor):
-            return f"drive {path.drive} is not connected"
-        if isinstance(error, FileNotFoundError):
-            return "does not exist"
-        return f"cannot be reached ({error.strerror or error})"
-    return None if stat.S_ISDIR(info.st_mode) else "is not a directory"
-
-
 def _reachability(resolved, *, created_on_demand: bool = False) -> str:
     """The ``[...]`` marker printed after a cache path; empty when all is well."""
-    reason = _unreachable(resolved.value)
+    reason = unreachable(resolved.value)
     if reason is None:
         return ""
     if created_on_demand and reason == "does not exist":
@@ -1596,7 +1545,7 @@ def _config_show() -> int:
             "\nescape hatch -- datasets read from a per-dataset root (never downloaded):"
         )
         for name, where in sorted(roots.datasets.items()):
-            reason = _unreachable(Path(where))
+            reason = unreachable(Path(where))
             marker = f"   [MISSING -- {reason}]" if reason else ""
             print(f"  {name:<28} {where}{marker}")
 
@@ -1624,7 +1573,7 @@ def _config_show() -> int:
     # Last, because it is the one section that reads the cache itself. On a slow
     # or half-connected network share this is the part that takes time, and
     # everything above must already be on screen when it does.
-    reason = _unreachable(roots.public)
+    reason = unreachable(roots.public)
     if reason is None:
         _print_cache_top_level(roots.public)
     elif reason != "does not exist":

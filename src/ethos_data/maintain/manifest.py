@@ -59,10 +59,10 @@ from __future__ import annotations
 import json
 import mimetypes
 import re
-import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
 
+from .. import report
 from ..catalogs import ROOT_SHARD, shard_key
 from ..errors import DescriptorError
 from ..formats import catalogue as catalogue_format
@@ -150,9 +150,8 @@ def save_hash_cache(dataset_dir: Path, cache: dict) -> None:
             json.dumps(cache), encoding="utf-8", newline="\n"
         )
     except OSError as error:
-        print(
-            f"warning: could not write {HASH_CACHE_NAME} in {dataset_dir}: {error}",
-            file=sys.stderr,
+        report.warning(
+            f"warning: could not write {HASH_CACHE_NAME} in {dataset_dir}: {error}"
         )
 
 
@@ -232,11 +231,10 @@ def iter_data_files(root: Path):
     """
     for path in sorted(root.rglob("*")):
         if path.is_symlink() and path.is_dir():
-            print(
+            report.warning(
                 f"warning: {path} is a symbolic link to a directory; its contents are "
                 f"NOT in the manifest. Point source_dir at the real tree, or replace "
-                f"the link with the files themselves.",
-                file=sys.stderr,
+                f"the link with the files themselves."
             )
             continue
         if not path.is_file():
@@ -344,10 +342,9 @@ def select(name: str, root: Path, paths: list[Path], meta: dict) -> list[Path]:
         hits = matched_by(exclude)
         for pattern, found in hits.items():
             if not found:
-                print(
+                report.warning(
                     f"warning: {name}: {k.EXCLUDE} pattern {pattern!r} matches nothing "
-                    f"under {root} -- already cleaned up, or a typo?",
-                    file=sys.stderr,
+                    f"under {root} -- already cleaned up, or a typo?"
                 )
         unwanted = set().union(*hits.values()) if hits else set()
         kept = {path for path in kept if relative[path] not in unwanted}
@@ -359,19 +356,17 @@ def select(name: str, root: Path, paths: list[Path], meta: dict) -> list[Path]:
         for extension in SHAPEFILE_SIDECAR_EXTS:
             companion = path.with_suffix(extension)
             if companion in relative and companion not in kept:
-                print(
+                report.warning(
                     f"note: {name}: keeping {relative[companion]} -- companion of "
-                    f"{relative[path]}, which a filter would otherwise have dropped",
-                    file=sys.stderr,
+                    f"{relative[path]}, which a filter would otherwise have dropped"
                 )
                 kept.add(companion)
 
     skipped = len(paths) - len(kept)
     if skipped:
-        print(
+        report.warning(
             f"  {name}: {len(kept)} of {len(paths)} files under {root} "
-            f"selected, {skipped} filtered out",
-            file=sys.stderr,
+            f"selected, {skipped} filtered out"
         )
     return [path for path in paths if path in kept]
 
@@ -517,12 +512,11 @@ def apply_resource_licenses(
         # licence -- described by nothing at all.
         shown = ", ".join(uncovered[:5])
         more = "" if len(uncovered) <= 5 else f", and {len(uncovered) - 5} more"
-        print(
+        report.warning(
             f"warning: {name}: every {k.LICENSES} entry is narrowed with "
             f"{k.APPLIES_TO}, so {len(uncovered)} file(s) are covered by no licence "
             f"at all: {shown}{more}. Add a licence without {k.APPLIES_TO} for the "
-            "rest, or widen one of the patterns.",
-            file=sys.stderr,
+            "rest, or widen one of the patterns."
         )
 
 
@@ -606,7 +600,7 @@ def render_dataset(
 
     _checked(name, dataset_format.check, meta)
     for warning in dataset_format.lint(meta):
-        print(f"warning: {name}: {warning}", file=sys.stderr)
+        report.warning(f"warning: {name}: {warning}")
     dataset_format.apply_defaults(meta)
     licenses = meta.get(k.LICENSES) or []
     record_license_documents(name, dataset_dir, licenses)
@@ -845,6 +839,7 @@ def _inherited_for(root: Path, dataset_dir: Path) -> dict:
     return inherited
 
 
+@report.reported
 def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
     catalog_meta(catalog_root)  # fail on a bad catalog.yaml before hashing anything
     root = datasets_dir(catalog_root)
@@ -917,7 +912,7 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
         )
 
     for row in sorted(rows):
-        print(row)
+        report.info(row)
 
     all_dirs = [p for p in iter_dataset_dirs(root) if (p / "datapackage.json").exists()]
     catalog_path = catalog_root / "datacatalog.json"
@@ -930,13 +925,13 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
         ):
             stale.append(catalog_path)
         if stale:
-            print("Out of date (re-run `ethos-data catalog build`):", file=sys.stderr)
+            report.warning("Out of date (re-run `ethos-data catalog build`):")
             for path in stale:
-                print(f"  {path.relative_to(catalog_root)}", file=sys.stderr)
+                report.warning(f"  {path.relative_to(catalog_root)}")
             return 1
-        print("All manifests up to date.")
+        report.info("All manifests up to date.")
         return 0
 
     catalog_path.write_text(catalog_text, encoding="utf-8", newline="\n")
-    print(f"  {'datacatalog.json':<22} {len(all_dirs):>5} datasets")
+    report.info(f"  {'datacatalog.json':<22} {len(all_dirs):>5} datasets")
     return 0

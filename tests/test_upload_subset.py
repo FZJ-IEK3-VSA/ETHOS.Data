@@ -11,7 +11,6 @@ Run with pytest, or directly:  python tests/test_upload_subset.py
 
 from __future__ import annotations
 
-import argparse
 import shutil
 import tempfile
 from pathlib import Path
@@ -19,10 +18,10 @@ from pathlib import Path
 import pytest
 import yaml
 
+from ethos_data.errors import UploadError
 from ethos_data.maintain import upload
 from ethos_data.maintain.manifest import render_dataset, write_dataset
 from ethos_data.maintain.manifest import run as build_run
-from ethos_data.errors import UploadError
 
 CATALOG = (
     "name: t\n"
@@ -61,22 +60,11 @@ def make_catalog(root: Path, datasets: dict[str, dict]) -> Path:
     return root
 
 
-def make_args(datasets: list[str], **overrides) -> argparse.Namespace:
-    args = argparse.Namespace(
-        datasets=datasets,
-        remote="HIFIS",
-        oidc_profile="HIFIS",
-        vo_path="Helmholtz/FZJ-ICE2",
-        root=None,
-        dry_run=True,
-        verify_only=False,
-        allow_internal=False,
-        no_chmod=False,
-        transfers=8,
-    )
-    for key, value in overrides.items():
-        setattr(args, key, value)
-    return args
+def make_args(
+    datasets: list[str], **overrides
+) -> tuple[list[str], upload.UploadOptions]:
+    """The datasets and the options ``upload.run`` takes; a dry run by default."""
+    return datasets, upload.UploadOptions(**{"dry_run": True, **overrides})
 
 
 @pytest.fixture
@@ -142,27 +130,27 @@ class TestSubsetIsCheckedBeforeAnythingUploads:
         make_catalog(workspace, {"a": {}, "b": {"ethos:access": "restricted"}})
 
         with pytest.raises(UploadError, match="restricted"):
-            upload.run(workspace, make_args(["a", "b"]))
+            upload.run(workspace, *make_args(["a", "b"]))
         assert no_rclone == [], "nothing may be uploaded once any dataset is ineligible"
 
     def test_a_mistyped_name_stops_the_run_the_same_way(self, workspace, no_rclone):
         make_catalog(workspace, {"a": {}})
         with pytest.raises(UploadError, match="no dataset called 'typo'"):
-            upload.run(workspace, make_args(["a", "typo"]))
+            upload.run(workspace, *make_args(["a", "typo"]))
         assert no_rclone == []
 
 
 class TestUploadingTheSubset:
     def test_each_named_dataset_gets_its_own_rclone_call(self, workspace, no_rclone):
         make_catalog(workspace, {"a": {}, "b": {}})
-        assert upload.run(workspace, make_args(["a", "b"])) == 0
+        assert upload.run(workspace, *make_args(["a", "b"])) == 0
 
         destinations = [command[3] for command in no_rclone]
         assert destinations == ["HIFIS:ice2-data-files/a", "HIFIS:ice2-data-files/b"]
 
     def test_the_order_asked_for_is_the_order_uploaded(self, workspace, no_rclone):
         make_catalog(workspace, {"a": {}, "b": {}})
-        upload.run(workspace, make_args(["b", "a"]))
+        upload.run(workspace, *make_args(["b", "a"]))
         assert [command[3] for command in no_rclone] == [
             "HIFIS:ice2-data-files/b",
             "HIFIS:ice2-data-files/a",
@@ -170,12 +158,12 @@ class TestUploadingTheSubset:
 
     def test_naming_a_dataset_twice_costs_one_upload(self, workspace, no_rclone):
         make_catalog(workspace, {"a": {}})
-        upload.run(workspace, make_args(["a", "a", str(workspace / "datasets" / "a")]))
+        upload.run(workspace, *make_args(["a", "a", str(workspace / "datasets" / "a")]))
         assert len(no_rclone) == 1
 
     def test_a_path_and_a_name_may_be_mixed_in_one_run(self, workspace, no_rclone):
         make_catalog(workspace, {"a": {}, "b": {}})
-        upload.run(workspace, make_args([str(workspace / "datasets" / "a"), "b"]))
+        upload.run(workspace, *make_args([str(workspace / "datasets" / "a"), "b"]))
         assert [command[3] for command in no_rclone] == [
             "HIFIS:ice2-data-files/a",
             "HIFIS:ice2-data-files/b",
@@ -192,7 +180,7 @@ class TestUploadingTheSubset:
             "run",
             lambda *a, **k: type("Result", (), {"returncode": 7})(),
         )
-        assert upload.run(workspace, make_args(["a"])) == 7
+        assert upload.run(workspace, *make_args(["a"])) == 7
 
     def test_a_failure_is_reported_per_dataset_and_fails_the_run(
         self, workspace, monkeypatch
@@ -205,7 +193,7 @@ class TestUploadingTheSubset:
         )
         # Aggregated to 1 across a subset: which dataset failed is in the summary,
         # and there is no single rclone exit code left to report.
-        assert upload.run(workspace, make_args(["a", "b"])) == 1
+        assert upload.run(workspace, *make_args(["a", "b"])) == 1
 
 
 if __name__ == "__main__":
@@ -245,7 +233,7 @@ class TestNamingAFamily:
         self, workspace, no_rclone
     ):
         make_family(workspace, {"b": {}, "a": {}})
-        assert upload.run(workspace, make_args(["fam"])) == 0
+        assert upload.run(workspace, *make_args(["fam"])) == 0
         destinations = [command[3] for command in no_rclone]
         assert destinations == [
             "HIFIS:ice2-data-files/fam/a",
@@ -256,7 +244,7 @@ class TestNamingAFamily:
         self, workspace, no_rclone
     ):
         make_family(workspace, {"a": {}, "b": {}})
-        upload.run(workspace, make_args(["fam/b", "fam"]))
+        upload.run(workspace, *make_args(["fam/b", "fam"]))
         assert [command[3] for command in no_rclone] == [
             "HIFIS:ice2-data-files/fam/b",
             "HIFIS:ice2-data-files/fam/a",
@@ -265,5 +253,5 @@ class TestNamingAFamily:
     def test_an_ineligible_member_stops_the_whole_family(self, workspace, no_rclone):
         make_family(workspace, {"a": {}, "b": {"ethos:access": "restricted"}})
         with pytest.raises(UploadError, match="restricted"):
-            upload.run(workspace, make_args(["fam"]))
+            upload.run(workspace, *make_args(["fam"]))
         assert no_rclone == []

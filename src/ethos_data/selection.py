@@ -369,6 +369,17 @@ class Collections:
 
     # -- Fetching ------------------------------------------------------------
 
+    def select(self, name: str, test: bool = False) -> list[Resource]:
+        """The resources a collection selects, its ``paths`` handles checked against them.
+
+        What every command resolves first: a handle naming a file the
+        collection does not include is a mistake in the collections file, and
+        is refused here, before anything is reported or moved.
+        """
+        resources = self.resolve(name, test=test)
+        self._named_targets(name, test, resources)
+        return resources
+
     def fetch(
         self,
         name: str,

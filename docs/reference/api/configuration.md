@@ -36,6 +36,8 @@ keeps as its `settings`.
         - account_config_path
         - ignored_config_files
         - load_config
+        - unreachable
+        - catalog_index
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3
