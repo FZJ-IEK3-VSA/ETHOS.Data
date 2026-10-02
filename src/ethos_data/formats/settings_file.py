@@ -26,8 +26,12 @@ class SettingsFile(BaseModel):
         "per access combination, none by default.",
     )
     staging_cache: str | None = Field(
-        None, description="Where work in progress lives; shadows the catalogue."
+        None,
+        description="Where work in progress lives, shadowing the catalogue; "
+        "`config set-staging-cache`.",
     )
     publication_url: str | None = Field(
-        None, description="Fetch bytes from another door of the published store."
+        None,
+        description="Fetch bytes from another door of the published store than the "
+        "catalogue declares; `config set-publication-url`.",
     )

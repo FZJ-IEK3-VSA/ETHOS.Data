@@ -3,7 +3,8 @@
 Three source files are hand-written. Each dataset's status file is written by
 the commands that change the dataset, and dataset descriptors, catalogue
 indexes and optional inventory shards are generated; none of these is edited
-by hand.
+by hand. Bundles, the staging registry and the record a materialised cache
+entry keeps are written by the tools as well.
 
 | File | Written by | Lives in |
 |---|---|---|
@@ -12,24 +13,50 @@ by hand.
 | [`catalog.yaml`](#catalogyaml) | a maintainer, once | the catalogue root |
 | [`status.yaml`](#statusyaml) | the `catalog` commands | `datasets/<name>/` in the source catalogue |
 | [`datapackage.json` / `datacatalog.json`](#generated-descriptors) | `ethos-data catalog build` | generated |
+| [`bundle.json`](#bundlejson) | `bundle create`, `update` and `export` | a bundle in the package's repository |
+| [`.ice2-staging.json`, `.ethos-data-materialized.json`](#records-beside-the-data) | `staging`, `materialize` | the staging root, a cache entry |
 
 Institute-specific keys use the `ethos:` prefix — the
 [Data Package](https://datapackage.org/) standard's extension mechanism.
 
-Every format is specified once, as a model in `ethos_data.formats`, and this
-page follows those models. JSON Schemas generated from them ship with the
-package, so an editor running the YAML language server completes and checks a
-file whose first line names one:
+Every format is specified once, as a model in `ethos_data.formats`. The key
+tables on this page are rendered from those models whenever the site is
+built, so they say what the code checks. JSON Schemas generated from the same
+models ship with the package, so an editor running the YAML language server
+completes and checks a file whose first line names one:
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data/main/src/ethos_data/formats/schemas/dataset.schema.json
 ```
+
+<!-- ethos-data: formats -->
 
 The files people write have templates beside the models, in
 `ethos_data/formats/templates/`: `dataset.yaml` for downloaded, derived,
 created and restricted data and a minimal one for staging, `catalog.yaml` and
 `collections.yaml`. The annotated `dataset.yaml` below is one of them. The
 settings file has no template: `ethos-data config set-*` writes it.
+
+### Reading the key tables
+
+- **Key:** `a.b` is the key `b` of the mapping `a`; `a[].b` the key `b` of
+  each entry of the list `a`; `a.<name>.b` the key `b` under any name the file
+  chooses. A part met a second time points at the first, as in "mapping, as
+  `copies[]`".
+- **Default:** what an absent key is read as. *required*: an entry without the
+  key is not valid.
+- **Description:** what the key holds. It ends in the tools' properties of
+  the key, where it has any:
+
+| Property | Means |
+|---|---|
+| *Never published.* | `publish` strips it from the public catalogue, and the leak check looks for it there |
+| *In the index row.* | `build` copies it into the dataset's row of `datacatalog.json`, so a reader answers it without the descriptor |
+| *Shown to users.* | printed by `--meta`, and by the error for a licensed dataset this machine cannot read |
+| *Inherited from the family.* | a member of a family takes it from the family's `dataset.yaml` when it does not set it |
+
+A key outside a table is kept as written: an unknown key passes through, and
+the build warns about an unknown `ethos:` key, which is usually a typo.
 
 ---
 
@@ -84,17 +111,52 @@ collections:
 Both variants of `onshore_wind` offer the handles `clc` (inherited from
 `landcover`), `era5`, `gwa_100m`, `gwa_50m` and `gwa_200m`.
 
-| Key | Type | |
-|---|---|---|
-| `catalog` | mapping | the release bounds: the catalogue releases the package works with, `min_version` and an optional `max_version`, or `exact_version`. Each is a release `vMAJOR.MINOR.PATCH`, such as `v1.2.0`, or a prefix, such as `v1` or `v1.3`: as `min_version` its first release, as `max_version` its last, as `exact_version` every one of them. A catalogue outside the bounds, or with no release, is refused with [`CatalogVersionError`][ethos_data.errors.CatalogVersionError], naming both. With no catalogue configured, a full `exact_version` reads that release's tag, and any other bounds read the newest public release they admit. Optional |
-| `collections` | mapping | collection name → definition |
-| `collections.<name>.title` | string | one line, shown by `ethos-data ls`. At the top level, also when the collection has variants |
-| `collections.<name>.include` | list | `{dataset, files}` entries |
-| `collections.<name>.include[].dataset` | string | a dataset name in the catalogue |
-| `collections.<name>.include[].files` | list of globs | omit, or use `["**"]`, for everything |
-| `collections.<name>.extends` | list of names | other collections in this file, composed transitively; a cycle is a `CollectionError` naming its chain. A `test=True` request passes down: a parent with variants contributes its `test` variant, a parent without is the same either way |
-| `collections.<name>.paths` | mapping | handle → catalogue key. A key is `<dataset>/<file>`, `<dataset>/<folder>`, `<dataset>` or a family name — what [`Catalog.path`][ethos_data.catalogs.Catalog.path] accepts. A file must be selected by the collection's `include`; a folder, dataset or family must have at least one selected file under it, and resolves to the directory holding the collection's files there. Handles are inherited through `extends`; the collection's own entry wins; two parents handing down the same handle with different keys is a `CollectionError` unless the collection defines that handle itself. Resolved by [`ethos_data.paths`][ethos_data.paths] and `<your-tool>-data fetch --paths`. Optional |
-| `collections.<name>.test`, `collections.<name>.full` | mapping | the collection's two variants — exactly these two names — each holding its own `extends`, `include` and `paths`. A collection with variants has no `extends`, `include` or `paths` at the top level; `title` stays there. `full` is what every request resolves unless `test=True` / `--test` is given; asking for a variant the collection does not define is a `CollectionError`. When both exist they must offer the same set of `paths` handles, or resolving the collection is a `CollectionError` listing the differences. A collection without variants resolves identically for both flags unless a collection it extends has variants — the flag propagates, so a plain `all` extending `onshore_wind` selects `onshore_wind`'s `full` variant by default and its `test` variant with `test=True`. Optional |
+<!-- ethos-data: table collections -->
+
+**`catalog`** — the release bounds: the catalogue releases the package works
+with, `min_version` and an optional `max_version`, or `exact_version`. Each is
+a release `vMAJOR.MINOR.PATCH`, such as `v1.2.0`, or a prefix, such as `v1` or
+`v1.3`: as `min_version` its first release, as `max_version` its last, as
+`exact_version` every one of them. A catalogue outside the bounds, or with no
+release, is refused with
+[`CatalogVersionError`][ethos_data.errors.CatalogVersionError], naming both.
+With no catalogue configured, a full `exact_version` reads that release's tag,
+and any other bounds read the newest public release they admit.
+
+**`collections.<name>.title`** — shown by `ethos-data ls`. It stays at the top
+level when the collection has variants.
+
+**`collections.<name>.extends`** — composed transitively; a cycle is a
+`CollectionError` naming its chain. A `test=True` request passes down: a
+parent with variants contributes its `test` variant, a parent without is the
+same either way.
+
+**`collections.<name>.include[].files`** — omit, or use `["**"]`, for
+everything.
+
+**`collections.<name>.paths`** — handle → catalogue key. A key is
+`<dataset>/<file>`, `<dataset>/<folder>`, `<dataset>` or a family name — what
+[`Catalog.path`][ethos_data.catalogs.Catalog.path] accepts. A file must be
+selected by the collection's `include`; a folder, dataset or family must have
+at least one selected file under it, and resolves to the directory holding the
+collection's files there. Handles are inherited through `extends`; the
+collection's own entry wins; two parents handing down the same handle with
+different keys is a `CollectionError` unless the collection defines that
+handle itself. Resolved by [`ethos_data.paths`][ethos_data.paths] and
+`<your-tool>-data fetch --paths`.
+
+**`collections.<name>.test`, `collections.<name>.full`** — the collection's two
+variants, exactly these two names, each holding its own `extends`, `include`
+and `paths`. A collection with variants has no `extends`, `include` or `paths`
+at the top level; `title` stays there. `full` is what every request resolves
+unless `test=True` / `--test` is given; asking for a variant the collection
+does not define is a `CollectionError`. When both exist they must offer the
+same set of `paths` handles, or resolving the collection is a
+`CollectionError` listing the differences. A collection without variants
+resolves identically for both flags unless a collection it extends has
+variants — the flag propagates, so a plain `all` extending `onshore_wind`
+selects `onshore_wind`'s `full` variant by default and its `test` variant with
+`test=True`.
 
 Glob semantics: `*` matches within one path segment, `**` matches any number of
 segments including zero. Shapefile companions are added automatically.
@@ -123,7 +185,7 @@ Only three things are mandatory. This draft builds:
 
 ```yaml
 name: my-dataset
-source_dir: /benchtop/shared_data/MyDataset
+source_dir: /projects/shared/candidates/my-dataset
 licenses:
   - name: CC-BY-4.0
     path: https://creativecommons.org/licenses/by/4.0/
@@ -157,6 +219,13 @@ Two conventions worth naming, because they recur:
 - **`default:` means the build writes the value in**, not that it is merely
   assumed. An omitted `ethos:access` becomes `public` in the generated
   `datapackage.json`, so a reader never has to know the defaulting rules.
+
+### Every key
+
+The rules that cross keys, such as derived data needing sources and a
+derivation, are in the sections after the table.
+
+<!-- ethos-data: table dataset -->
 
 ### Identity
 
@@ -311,8 +380,6 @@ It is deliberately per-dataset rather than inherited from `catalog.yaml`, becaus
 the useful answer is usually one person — whoever ran the download — and not the
 maintainer team. Fall back to the team only when no individual owns it. Like
 `ethos:retrieved`, no code reads it.
-
-
 
 **`ethos:origin`** — *string, one of `downloaded`, `derived`, `created`; default
 `downloaded`.* How this dataset came to exist.
@@ -573,6 +640,16 @@ compute which tile holds a point.
 **`ethos:additional_variables`** — *mapping of variable name to description.*
 Variables a file carries beyond the ones the dataset is about.
 
+### A family's `dataset.yaml` {#family}
+
+A directory whose `dataset.yaml` holds other datasets, a family, is described
+by a shorter file: a name and the keys its members inherit. It describes no
+files and no terms, so `source_dir`, `ethos:uploaded`, `ethos:shard_depth`,
+`ethos:include`, `ethos:exclude`, `ethos:access`, `licenses` and
+`ethos:license_status` are refused in it; each member declares its own.
+
+<!-- ethos-data: table namespace -->
+
 See [Add a dataset](../how-to/catalogue-maintainers/add-a-dataset.md).
 
 ---
@@ -599,14 +676,27 @@ ethos:store:                     # optional; these are the defaults
   frontend: https://hifis-storage-web.desy.de/api/v1
 ```
 
-| Key | | |
-|---|---|---|
-| `name`, `title`, `description` | | catalogue identity. Both catalogues share a `name` — the public one is a subset *view* of the same catalogue |
-| `ethos:publication_url` | | root of the public data store. Every resource URL is `<publication_url>/<remote_prefix>/<resource path>`. Override per machine with `ethos-data config set-publication-url` |
-| `ethos:contact` | | team or username |
-| `ethos:catalog_role` | `source` \| `published` | always `source` in a hand-written file — `build` defaults it and **rejects** any other value. `ethos-data catalog publish` stamps `published` into the generated copy |
-| `version` | `vMAJOR.MINOR.PATCH` | the release this catalogue is; [`ethos-data catalog release`](cli/catalog.md#release-version) writes it, and `build` refuses any other form and writes it into the index |
-| `ethos:store` | mapping | how `upload`, `release --upload` and `remove --purge` reach the publication store: the rclone `remote`, the VO's `vo_path`, the `oidc_profile` that issues tokens, and the REST `frontend`. Each defaults to the institute's dCache. Never published |
+<!-- ethos-data: table catalog -->
+
+**`name`, `title`, `description`** — the catalogue's identity. Both catalogues
+share a `name`: the public one is a subset *view* of the same catalogue.
+
+**`ethos:publication_url`** — every resource URL is
+`<publication_url>/<remote_prefix>/<resource path>`. Override it per machine
+with `ethos-data config set-publication-url`.
+
+**`ethos:catalog_role`** — always `source` in a hand-written file: `build`
+defaults it and **rejects** any other value. `ethos-data catalog publish`
+stamps `published` into the generated copy.
+
+**`version`** — the release this catalogue is, `vMAJOR.MINOR.PATCH`;
+[`ethos-data catalog release`](cli/catalog.md#release-version) writes it, and
+`build` refuses any other form and writes it into the index.
+
+**`ethos:store`** — how `upload`, `release --upload` and `remove --purge` reach
+the publication store: the rclone `remote`, the VO's `vo_path`, the
+`oidc_profile` that issues tokens, and the REST `frontend`. Each defaults to
+the institute's dCache, and none of them is published.
 
 ---
 
@@ -647,23 +737,30 @@ history:
     verified: '2026-10-02T09:30:01Z'
 ```
 
-| Key | | |
-|---|---|---|
-| `state` | one of the states below | where the dataset stands |
-| `source_dir` | path | the build input: required while the dataset is `draft`, `built` or `available`, gone once it is `frozen`. Relative to the dataset directory if relative |
-| `copies` | list | every place a command made the bytes available: `kind` (`uploaded`, `linked` or `materialized`), `location` (the dataset's folder on the store, or the cache entry), `target` for a link, and `verified`, when every file was last found there |
-| `authority` | a copy's `location` | the authoritative copy, once the dataset is frozen |
-| `revision` | number | which revision the inventory describes; absent for the first |
-| `history` | list | every step taken, oldest first: `at` (UTC), `by`, `step`, `from` when the step changed the state, `to`, and what the step read or made: `files` and `bytes`, the `copy`, a `note`, the `source_dir` a freeze retired, and the `release` a release step made |
+<!-- ethos-data: table status -->
 
-| State | Means | Reached by |
-|---|---|---|
-| `draft` | described, not built | `ethos-data catalog add`, or `catalog migrate` of a dataset with a `source_dir` |
-| `built` | inventory built from `source_dir`; a rebuild keeps the state | `ethos-data catalog build` |
-| `available` | bytes reachable for the access class: uploaded and verified, linked, or registered | `ethos-data catalog upload`; `ethos-data link` and `materialize` given `--catalog-root` |
-| `frozen` | inventory final, no build input left, authoritative copy recorded | `ethos-data catalog record` |
-| `withdrawn` | out of the catalogue; bytes not yet deleted | `ethos-data catalog remove`, see [Remove a dataset](../how-to/catalogue-maintainers/withdraw-a-dataset.md) |
-| `purged` | bytes deleted after a major release recorded after its removal; only the status file is left | `ethos-data catalog remove --purge` |
+`source_dir` is required while the dataset is `draft`, `built` or
+`available`, and gone once it is `frozen`; `authority` must be one of the
+recorded copies. The history records what each step read or made: `files` and
+`bytes` for a step that read the inventory, the `copy` for one that made or
+checked a copy, the `source_dir` a freeze retired, and the `release` a release
+step made.
+
+The states, rendered from `ethos_data.model.lifecycle`:
+
+<!-- ethos-data: states -->
+
+`ethos-data catalog add` writes a new dataset's first status file, as a
+draft. `catalog migrate` writes one for each dataset of a catalogue without
+status files, in the state its `dataset.yaml` implies: `draft` or `built`
+with a `source_dir`, `frozen` with `ethos:uploaded` or `ethos:frozen`. `link`
+and `materialize` record their copy only when given `--catalog-root`. See
+[Remove a dataset](../how-to/catalogue-maintainers/withdraw-a-dataset.md) for
+`withdrawn` and `purged`.
+
+Every step a command takes, and the states it is allowed in:
+
+<!-- ethos-data: steps -->
 
 Every command checks its step against the state first: a draft is built
 before it is uploaded or linked, a dataset is frozen only with a copy that
@@ -693,20 +790,20 @@ Never hand-edit these. `ethos-data catalog build --check` fails if any is stale.
 The index: `catalog.yaml`'s keys, its `version` among them, plus a `datasets`
 array. The published index also lists every public release in
 `ethos:releases`, the current one included, oldest first: `publish` adds the
-release it publishes to the ones the public catalogue already listed. Each
-entry carries everything that can be answered **without** loading an inventory:
+release it publishes to the ones the public catalogue already listed.
 
-| Key | |
-|---|---|
-| `name`, `title` | identity |
-| `version` | the publisher's release string, when the dataset declares one |
-| `path` | `datasets/<dir>/datapackage.json`, relative to the index |
-| `ethos:access`, `ethos:visibility` | classification |
-| `ethos:total_bytes`, `ethos:file_count` | size, without parsing the inventory |
-| `ethos:remote_prefix` | where the bytes are |
-| `ethos:license_status` | promoted so that warning about licensing is free |
-| `ethos:revision` | which revision of the dataset this release names, when not the first; a reader's cache entry for it is `<name>@<revision>` |
-| `ethos:supersedes`, `ethos:superseded_by` | a successor and what it replaces, when there is one |
+<!-- ethos-data: table datacatalog -->
+
+Each row of `datasets` carries everything that can be answered **without**
+loading an inventory. A dataset's row:
+
+<!-- ethos-data: table package:IndexRow -->
+
+A family's row names it and adds up its members; it has no access class,
+remote prefix or licence status, because it has no bytes for any of those to
+be about:
+
+<!-- ethos-data: table package:NamespaceRow -->
 
 Those promotions are what make laziness worth having: locating a file, or
 warning about a licence, would otherwise pull the whole inventory in.
@@ -714,19 +811,16 @@ warning about a licence, would otherwise pull the whole inventory in.
 ### `datapackage.json`
 
 A Data Package descriptor per dataset. Either a `resources` array, or — for a
-sharded dataset — an `ethos:shards` index.
+sharded dataset — an `ethos:shards` index. Besides the keys below it carries
+every published key of `dataset.yaml` as written there, `licenses`,
+`contributors`, `sources`, `ethos:origin` and `ethos:derivation` among them,
+with the defaults written in.
 
-| Key | |
-|---|---|
-| `resources[]` | `{name, path, bytes, hash, mediatype}` per file |
-| `resources[].hash` | `"sha256:…"` — the same `alg:hash` convention pooch reads, so the value passes straight through to the downloader. A bare digest, in either case, is read as the same SHA-256 |
-| `resources[].ethos:sidecars` | companion files that must travel with this one (shapefile `.dbf`, `.shx`, …) |
-| `resources[].licenses` | present only on files a narrowed licence matched — see below |
-| `resources[].ethos:revision` | the revision the file's bytes were published in, when not the first: the store serves it from `<remote_prefix>@<revision>/<path>` |
-| `ethos:revision`, `ethos:superseded_by` | the dataset's revision when not the first, and the datasets that supersede it |
-| `licenses`, `contributors`, `sources`, `ethos:origin`, `ethos:derivation` | passed through from `dataset.yaml` unchanged |
-| `ethos:total_bytes`, `ethos:file_count` | totals |
-| `ethos:shard_depth`, `ethos:shards` | present **instead of** `resources` when sharded |
+<!-- ethos-data: table datapackage -->
+
+`resources[].hash` uses the same `alg:hash` convention pooch reads, so the
+value passes straight through to the downloader. `resources[].ethos:revision`
+says the store serves the file from `<remote_prefix>@<revision>/<path>`.
 
 #### How a narrowed licence renders
 
@@ -763,9 +857,10 @@ build warns when every entry is narrowed and files are left over.
 
 ### `shards/<prefix>.json`
 
-One shard of a sharded inventory: a `resources` array plus `ethos:shard`,
-`ethos:file_count` and `ethos:total_bytes`. Files sitting at the dataset root,
-above any shard directory, land in `_root`.
+One shard of a sharded inventory. Files sitting at the dataset root, above any
+shard directory, land in `_root`.
+
+<!-- ethos-data: table shard -->
 
 Shard paths in the index are relative to the **dataset** directory, not the
 catalogue root.
@@ -776,3 +871,43 @@ follow the path the index records. The build still owns the old name: the next
 `manifests/`, and until then `--check` reports it as out of date.
 
 See [The catalogue format](../explanation/catalogue-format.md).
+
+---
+
+## `bundle.json`
+
+The manifest of a bundle, test data a package keeps in its repository. Two
+kinds share the file name and tell themselves apart by `format`.
+
+A **repository bundle** is the source of truth for one family of datasets:
+`bundle create` starts it and `bundle update` records each change, counting
+the versions a catalogue release publishes. The bytes are under
+`data/<family>/<member>/` and each member's description under
+`datasets/<family>/<member>/`, beside `bundle.json`.
+
+<!-- ethos-data: table repository-bundle -->
+
+An **exported bundle** is a copy of what the catalogue already publishes,
+written by `bundle export` with the collections it was exported for.
+
+<!-- ethos-data: table bundle -->
+
+See [Keep data in the repository](../how-to/package-maintainers/keep-data-in-the-repository.md).
+
+---
+
+## Records beside the data
+
+### `.ice2-staging.json`
+
+In the staging root: who staged each entry, and why. `staging add` writes an
+entry, `staging remove` deletes it.
+
+<!-- ethos-data: table staging -->
+
+### `.ethos-data-materialized.json`
+
+In a cache entry that `ethos-data materialize` turned from a link into a copy
+the cache owns: where the bytes came from, and whether every file was checked.
+
+<!-- ethos-data: table materialized -->
