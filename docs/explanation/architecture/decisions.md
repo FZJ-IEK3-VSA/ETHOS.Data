@@ -341,10 +341,14 @@ created and restricted data and a minimal one for staging, `catalog.yaml`,
 creates such a file starts from its template, every template is validated by
 a test, and the documentation includes the templates instead of copying them.
 
-Known keys are validated. Unknown keys pass through as they do today, because
-real descriptors carry keys the reference does not document yet, such as
-`ethos:provenance` and `ethos:tiling`; the build lists an unknown `ethos:` key
-as a warning, since it is usually a typo. Generated files stay byte-identical:
+Known keys are validated. The rules the build already enforces stay errors,
+with their messages. What the specifications add, a value of the wrong type or
+outside a closed vocabulary, is reported as a warning at first, so a catalogue
+that built before builds after; a later release can make the warnings errors.
+Unknown keys pass through as they do today, and the build lists an unknown
+`ethos:` key as a warning, since it is usually a typo. Keys the catalogue used
+before the reference named them, such as `ethos:provenance` and
+`ethos:tiling`, become part of the format. Generated files stay byte-identical:
 the specifications fix the order of keys, and the tests round-trip every
 generated fixture.
 

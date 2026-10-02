@@ -1,0 +1,47 @@
+{
+  "$defs": {
+    "StagingEntry": {
+      "additionalProperties": true,
+      "description": "Who staged a directory under a name, and why.",
+      "properties": {
+        "target": {
+          "description": "The directory the entry links to or was copied from.",
+          "title": "Target",
+          "type": "string"
+        },
+        "note": {
+          "default": "",
+          "title": "Note",
+          "type": "string"
+        },
+        "added": {
+          "default": "",
+          "title": "Added",
+          "type": "string"
+        },
+        "added_by": {
+          "default": "",
+          "title": "Added By",
+          "type": "string"
+        },
+        "copied": {
+          "default": false,
+          "title": "Copied",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "title": "StagingEntry",
+      "type": "object"
+    }
+  },
+  "additionalProperties": {
+    "$ref": "#/$defs/StagingEntry"
+  },
+  "description": "Who staged which directory, and why.",
+  "title": ".ice2-staging.json",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

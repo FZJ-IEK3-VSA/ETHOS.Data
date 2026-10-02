@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data/main/src/ethos_data/formats/schemas/collections.schema.json
+#
+# A package's one collections file: the catalogue data its workflows use,
+# grouped by task. It holds no paths, sizes or hashes, only references into
+# the catalogue. See "Write a collections file".
+collections:
+  ${collection}:
+    title: ${title}
+    include:
+      - dataset: ${dataset}

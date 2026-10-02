@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data/main/src/ethos_data/formats/schemas/dataset.schema.json
+#
+# A licensed dataset that may not be redistributed. It is never uploaded; a
+# user without a copy reads title, description, sources, licences,
+# attribution, restriction and contact in the error, so write them for them.
+name: ${name}
+title: ${title}
+description: What it contains and which release.
+source_dir: ${source_dir}
+ethos:access: restricted
+ethos:visibility: hidden
+ethos:restriction: >-
+  Licensed per user. Obtain a copy from the provider under its terms, or ask
+  the dataset custodian for access to the institute's copy.
+ethos:embargo:
+  until: "unspecified"
+  reason: Metadata publication has not been approved; review with the custodian.
+  becomes: restricted
+sources:
+  - title: The provider's product page
+    path: https://example.org/licensed-product
+licenses:
+  - title: The provider's terms of use
+    path: https://example.org/terms
+ethos:contact: ${contact}
