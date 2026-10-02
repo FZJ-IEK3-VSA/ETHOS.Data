@@ -67,8 +67,9 @@ pins, point `--catalog` at that pin, or use its collections handle's `.catalog`.
 ## `config`
 
 `ethos-data config show` prints the settings file it read, the catalogue and
-cache settings, their origins and one level of public-cache entries. It works
-offline and marks unreachable cache paths with the reason. It
+cache settings, their origins, one level of public-cache entries and the
+[places a file is read from](../configuration.md#lookup-order) in order. It
+works offline and marks unreachable cache paths with the reason. It
 reports the settings, not per-command overrides or a package's resolved
 catalogue pin.
 

@@ -36,6 +36,7 @@ from .bundles import Bundle, export_bundle, load_bundle
 from .catalogs import (
     Catalog,
     Dataset,
+    catalog_for,
     load_catalog,
 )
 from .config import (
@@ -64,6 +65,7 @@ from .errors import (
     IncompleteCatalog,
     LinkError,
     MaintenanceError,
+    NotFetched,
     PublishError,
     StagingError,
     UnknownCollection,
@@ -85,6 +87,7 @@ __all__ = [
     "DescriptorError",
     "EthosDataError",
     "MaintenanceError",
+    "NotFetched",
     "PublishError",
     "StagingError",
     "UnknownKey",
@@ -174,9 +177,12 @@ def collections(
     settings = read_settings(
         root=root, catalog=catalog if isinstance(catalog, str) else None
     )
-    chosen = catalog if isinstance(catalog, Catalog) else settings.catalog
     return load_collections(
-        path, catalog=chosen, roots=settings.roots, tool=tool, settings=settings
+        path,
+        catalog=catalog if isinstance(catalog, Catalog) else None,
+        roots=settings.roots,
+        tool=tool,
+        settings=settings,
     )
 
 
@@ -199,11 +205,7 @@ def catalog(
     if isinstance(location, Catalog):
         roots = location.settings.roots if root is None else location._roots(root)
         return location.overlaid(roots)
-    settings = read_settings(root=root, catalog=location)
-    chosen = settings.catalog or DEFAULT_CATALOG
-    source = settings.catalog_source or "built-in public catalogue"
-    loaded = load_catalog(chosen)
-    loaded._settings = settings.with_catalog(chosen, source, loaded.version)
+    loaded = catalog_for(read_settings(root=root, catalog=location))
     return loaded.overlaid(loaded.settings.roots)
 
 
@@ -267,6 +269,7 @@ def fetch(
     *,
     test: bool = False,
     skip_unavailable: bool | None = None,
+    fetch: bool = True,
 ) -> DataFiles:
     """Make a collection in the file ``collections`` available locally.
 
@@ -280,6 +283,7 @@ def fetch(
         test=test,
         progressbar=progressbar,
         skip_unavailable=skip_unavailable,
+        fetch=fetch,
     )
 
 
@@ -292,6 +296,7 @@ def paths(
     *,
     test: bool = False,
     skip_unavailable: bool | None = None,
+    fetch: bool = True,
 ) -> NamedPaths:
     """The inputs a collection names, as ``{handle: absolute Path}``, fetched.
 
@@ -303,6 +308,7 @@ def paths(
         test=test,
         progressbar=progressbar,
         skip_unavailable=skip_unavailable,
+        fetch=fetch,
     )
 
 

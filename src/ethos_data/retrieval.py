@@ -31,14 +31,16 @@ from pathlib import Path
 import pooch
 
 from .access import (
+    ORIGIN_CACHED,
     Location,
     check_missing,
+    linked_entry,
     locate,
     unavailable,
 )
 from .catalogs import Catalog
 from .config import ENV_VAR, Roots, read_settings
-from .errors import AccessError
+from .errors import AccessError, NotFetched
 from .formats import keys as k
 from .model.resource import Resource
 
@@ -192,6 +194,8 @@ def download(
     root: "Roots | str | Path | None" = None,
     progressbar: bool = True,
     skip_unavailable: bool | None = None,
+    *,
+    fetch: bool = True,
 ) -> DataFiles:
     """Make every resource available locally and return where each one is.
 
@@ -199,6 +203,11 @@ def download(
     cache or a staging entry -- are used where they lie and never copied; the
     rest are downloaded into the public cache, skipping anything already
     present and hash-verified.
+
+    With ``fetch=False`` nothing is downloaded and no store is contacted: a
+    copy already in the public cache is returned as it is, and a file that
+    would have to be downloaded raises :class:`~ethos_data.errors.NotFetched`,
+    naming the path it belongs at.
     """
     roots = catalog._roots(root)
     _warn_about_licensing(catalog, resources)
@@ -238,15 +247,20 @@ def download(
     for location in locations:
         if not location.available:
             continue
-        if location.in_place:
+        if location.in_place or (not fetch and location.origin == ORIGIN_CACHED):
             files[location.resource.key] = location.path
         else:
             to_download.setdefault(location.resource.dataset, []).append(location)
 
+    if not fetch and to_download:
+        raise NotFetched(
+            _not_fetched([loc for items in to_download.values() for loc in items])
+        )
+
     for dataset_name, items in sorted(to_download.items()):
         dataset = catalog.dataset(dataset_name)
         destination = roots.public / dataset_name
-        _refuse_to_write_through_a_link(destination)
+        _refuse_to_write_through_a_link(roots.public, dataset_name)
         base_url = catalog.base_url_for(dataset)
         puller = pooch.create(
             path=destination,
@@ -270,15 +284,32 @@ def download(
     )
 
 
-def _refuse_to_write_through_a_link(destination: Path) -> None:
+def _not_fetched(locations: list[Location]) -> str:
+    """Which files ``fetch=False`` found missing, and where each belongs."""
+    shown = locations[:8]
+    width = max(len(loc.resource.key) for loc in shown)
+    listing = "\n".join(
+        f"    {loc.resource.key:<{width}}  belongs at {loc.path}" for loc in shown
+    )
+    more = "" if len(locations) <= 8 else f"\n    ... and {len(locations) - 8} more"
+    return (
+        f"{len(locations)} file(s) are not on this machine, and fetch=False "
+        f"downloads nothing:\n{listing}{more}\n"
+        "The same call with fetch=True downloads them to those paths."
+    )
+
+
+def _refuse_to_write_through_a_link(root: Path, name: str) -> None:
     """Never let a download land in somebody else's directory.
 
-    ``locate`` already routes a symbolic-link entry to "in-place", so reaching
-    here with one means a bug or a race -- a link created between planning and
-    fetching. Either way the consequence would be writing into shared project
-    storage that this cache only borrows, so it is worth a second check.
+    ``locate`` already routes a linked entry, the dataset's own or its
+    family's, to "in-place", so reaching here with one means a bug or a race --
+    a link created between planning and fetching. Either way the consequence
+    would be writing into shared project storage that this cache only borrows,
+    so it is worth a second check.
     """
-    if destination.is_symlink():
+    destination = linked_entry(root, name)
+    if destination is not None:
         raise AccessError(
             f"{destination} is a symbolic link to {destination.resolve()}, so it is data "
             f"this machine already has and does not own. Refusing to download into it.\n"

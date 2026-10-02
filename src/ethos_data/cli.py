@@ -16,9 +16,9 @@ from pathlib import Path
 
 import yaml
 
-from .access import cache_entries
+from .access import cache_entries, chain_for
 from .bundles import export_bundle, load_bundle
-from .catalogs import Catalog, load_catalog
+from .catalogs import Catalog, catalog_for
 from .config import (
     CATALOG_ENV_VAR,
     CONFIG_ENV_VAR,
@@ -1150,15 +1150,8 @@ def _verify_command(args, loaded, roots) -> int:
 
 
 def _cache_catalog(settings):
-    """The snapshot's catalogue, with the public default as fallback."""
-    location = settings.catalog or DEFAULT_CATALOG
-    loaded = load_catalog(location)
-    loaded._settings = settings.with_catalog(
-        location,
-        settings.catalog_source or "built-in public catalogue",
-        loaded.version,
-    )
-    return loaded
+    """The catalogue for access by key, chosen as every handle chooses one."""
+    return catalog_for(settings)
 
 
 def _link_all_command(args, roots) -> int:
@@ -1667,6 +1660,9 @@ def _config_show() -> int:
     print(
         "  4. the built-in default   the per-user cache directory (public cache only)"
     )
+
+    print("\nwhere a file is read, first match wins:")
+    print(chain_for(roots))
 
     # Last, because it is the one section that reads the cache itself. On a slow
     # or half-connected network share this is the part that takes time, and

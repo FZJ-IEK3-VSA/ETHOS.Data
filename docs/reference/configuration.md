@@ -121,6 +121,24 @@ staging cache      not set
 catalogue handle, and `settings.as_dict()` gives the values as plain data for a
 results file. `ethos_data.read_settings()` takes the snapshot without a handle.
 
+## Where a file is read {#lookup-order}
+
+Each file is read from the first of these places that has it, and
+`config show` prints the list for this machine:
+
+1. a per-dataset root (`config set-root`), read in place;
+2. the staging root, never for restricted data, read in place without checksums;
+3. the restricted cache, for restricted data only, read in place;
+4. a link in the public cache, the dataset's own or its family's, read in place;
+5. a copy already in the public cache, of the size the catalogue records;
+6. a download from the publication root into the public cache, for public data only.
+
+A place that may not serve a file refuses, and the search stops there. A
+restricted dataset without a restricted cache is never read from a copy in the
+public cache, and internal data, which is not published, is never downloaded.
+With `fetch=False` nothing is downloaded: a file that only the last place could
+provide raises `NotFetched`, naming the path it belongs at.
+
 ## The three roots
 
 | Root | Holds | Written to |
@@ -146,16 +164,16 @@ read in place follows from whether its entry is a symbolic link. See
 
 ## Catalogue resolution
 
-The catalogue used by `ethos-data` and `ethos_data.catalog()` is the first of:
+Every handle and command chooses the catalogue the same way, the first of:
 
 1. `--catalog` on the command line, or the location passed in Python.
 2. `ETHOS_DATA_CATALOG`.
 3. The `catalog` setting.
-4. The built-in public catalogue:
+4. For a collections file, its `catalog:` pin.
+5. The built-in public catalogue:
    `https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json`.
 
-Package wrappers and collections handles also use the file's `catalog:` pin
-before the built-in fallback. A package-specific override, such as
+`ethos-data` reads no collections file, so it skips step 4. A package-specific override, such as
 `<YOUR_TOOL>_DATA_CATALOG` passed by the package through `catalog=`, ranks below the CLI's
 `--catalog` and above `ETHOS_DATA_CATALOG`. To compare a direct fetch with a
 package workflow, explicitly select the same catalogue.

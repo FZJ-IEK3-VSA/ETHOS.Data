@@ -453,6 +453,27 @@ class Settings:
     publication_url: str | None = None
     publication_url_source: str = ""
 
+    def choose_catalog(
+        self,
+        *,
+        explicit: str | None = None,
+        pin: str | None = None,
+        pin_source: str = "a collections file's pin",
+    ) -> tuple[str, str]:
+        """The catalogue to read, and why: one order for every handle and command.
+
+        An explicit location; then ``$ETHOS_DATA_CATALOG`` or the settings
+        file, as these settings read them; then a collections file's pin; then
+        the public catalogue, so that public data needs nothing configured.
+        """
+        if explicit:
+            return explicit, "explicit argument"
+        if self.catalog is not None:
+            return self.catalog, self.catalog_source
+        if pin is not None:
+            return pin, pin_source
+        return DEFAULT_CATALOG, "built-in public catalogue"
+
     def with_catalog(
         self, location: str, source: str, version: str | None = None
     ) -> Settings:

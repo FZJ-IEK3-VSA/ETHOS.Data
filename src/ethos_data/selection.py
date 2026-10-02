@@ -375,6 +375,7 @@ class Collections:
         root: Roots | str | Path | None = None,
         progressbar: bool = True,
         skip_unavailable: bool | None = None,
+        fetch: bool = True,
     ) -> DataFiles:
         """Make a collection available locally and return ``{key: Path}``.
 
@@ -392,6 +393,10 @@ class Collections:
         cannot reach: ``True`` leaves it out of the result (and out of
         ``.named``) with a warning, ``False`` raises, ``None`` takes the
         configured answer.
+
+        ``fetch=False`` downloads nothing and contacts no store: every file is
+        returned where it is on this machine, and one that is not raises
+        :class:`~ethos_data.errors.NotFetched`, naming the path it belongs at.
         """
         roots = self._roots(root)
         resources = self.resolve(name, test=test)
@@ -405,6 +410,7 @@ class Collections:
             root=roots,
             progressbar=progressbar,
             skip_unavailable=skip_unavailable,
+            fetch=fetch,
         )
         files.named = self._named_paths(targets, files, name)
         return files
@@ -417,6 +423,7 @@ class Collections:
         root: Roots | str | Path | None = None,
         progressbar: bool = True,
         skip_unavailable: bool | None = None,
+        fetch: bool = True,
     ) -> NamedPaths:
         """The inputs a collection names, as ``{handle: absolute Path}``, fetched.
 
@@ -437,6 +444,10 @@ class Collections:
         Under ``skip_unavailable`` a handle whose data this machine cannot
         reach is left out, with a warning naming it, exactly as the file is
         left out of :meth:`fetch`'s result.
+
+        ``fetch=False`` resolves the handles without downloading anything, and
+        raises :class:`~ethos_data.errors.NotFetched` for a file that is not on
+        this machine, naming the path the same call with ``fetch=True`` puts it.
         """
         files = self.fetch(
             name,
@@ -444,6 +455,7 @@ class Collections:
             root=root,
             progressbar=progressbar,
             skip_unavailable=skip_unavailable,
+            fetch=fetch,
         )
         if not files.named and not files.named.omitted:
             raise CollectionError(
@@ -654,19 +666,19 @@ def load_collections(
 ) -> Collections:
     """Load a collections file with the configured development overlay.
 
-    The catalogue is ``catalog`` if given, else the file's own ``catalog:`` pin,
-    else the built-in public catalogue (``ethos_data.config.DEFAULT_CATALOG``).
+    The catalogue is ``catalog`` if given, else ``$ETHOS_DATA_CATALOG`` or the
+    settings file's, else the file's own ``catalog:`` pin, else the built-in
+    public catalogue: :meth:`~ethos_data.config.Settings.choose_catalog`.
     Set ``include_staging=False`` for canonical metadata, for example when
     exporting test fixtures. ``roots`` selects the overlay explicitly; otherwise
     the configured roots apply. A supplied catalogue is not modified. ``tool``
     names the tool whose file this is, for messages and its command's name.
 
-    :func:`ethos_data.collections` is the same with the configured catalogue
-    override (``$ETHOS_DATA_CATALOG``, ``config set-catalog``) applied first,
-    which is what a tool wants. ``settings`` is the snapshot the handle keeps;
-    by default the settings are read here, once.
+    :func:`ethos_data.collections` is the same with ``root=`` and the settings
+    read for it. ``settings`` is the snapshot the handle keeps; by default the
+    settings are read here, once.
     """
-    from .config import DEFAULT_CATALOG, read_settings
+    from .config import read_settings
 
     path = Path(path).expanduser().resolve()
     document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -681,20 +693,11 @@ def load_collections(
             resolved._settings.catalog_source if resolved._settings else "passed in"
         )
     else:
-        pinned = catalog_pin(path, document)
-        if catalog:
-            location = str(catalog)
-            source = (
-                settings.catalog_source
-                if location == settings.catalog
-                else "explicit argument"
-            )
-        elif pinned is not None:
-            location, source = pinned, f"the pin in {path.name}"
-        else:
-            # No pin: the public catalogue, so a collections file that selects
-            # only public data works with nothing configured anywhere.
-            location, source = DEFAULT_CATALOG, "built-in public catalogue"
+        location, source = settings.choose_catalog(
+            explicit=str(catalog) if catalog else None,
+            pin=catalog_pin(path, document),
+            pin_source=f"the pin in {path.name}",
+        )
         resolved = load_catalog(location)
     settings = settings.with_catalog(resolved.location, source, resolved.version)
     if not isinstance(catalog, Catalog):
