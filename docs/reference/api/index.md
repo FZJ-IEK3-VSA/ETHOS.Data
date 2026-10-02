@@ -61,17 +61,11 @@ The module behind `fetch`. It is called `retrieval`, not `fetch`, so that it
 can never shadow the function above — the same reason `selection` is not called
 `collections`.
 
-`fetch()` and `paths()` take `skip_unavailable=`, forwarded to `download()`:
-under it, a `paths` handle whose data this machine cannot reach is left out
-of the result's `.named`, recorded in `NamedPaths.omitted` and named in a
-`UserWarning`, and asking the mapping for it raises a `KeyError` that says it
-was left out here rather than never defined.
-
-!!! warning "Gap: `skip_unavailable=` is to be removed"
-    With [every input is
-    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
-    the parameter and `NamedPaths.omitted` go, and unreachable data always
-    raises `AccessError`. To be implemented separately.
+Every input a collection names is required: `fetch()`, `paths()` and
+`download()` raise [`AccessError`][ethos_data.errors.AccessError] for licensed
+data this machine cannot read, before anything is downloaded, with the
+dataset's description and the commands that register a copy. `plan()` and
+`verify()` only describe, and report such data as not available here.
 
 ::: ethos_data.retrieval
     options:

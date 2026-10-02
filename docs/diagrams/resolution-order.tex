@@ -1,6 +1,6 @@
-% Where one resource is read from. Replaces the mermaid flowchart in
-% explanation/caches-and-access.md. Decision points are diamonds; the four
-% outcomes are colour-coded by whether anything is copied.
+% Where one resource is read from: the lookup chain, first match wins.
+% Decision points are diamonds; outcomes are colour-coded by whether anything
+% is copied, and the two refusals are what keep a file from falling through.
 \begin{tikzpicture}[
   node distance=6mm and 9mm,
   decision/.style={
@@ -20,46 +20,53 @@
 
 \node[artifact] (start) {a resource};
 
-\node[decision, below=of start] (cfg) {configured root\\for this dataset?};
+\node[decision, below=of start] (cfg) {per-dataset root\\for this dataset?};
 \node[decision, below=9mm of cfg] (restricted) {restricted?};
 \node[decision, below=9mm of restricted] (staged) {staging entry?};
-\node[decision, below=9mm of staged] (link) {cache entry\\is a symlink?};
+\node[decision, below=9mm of staged] (link) {its entry or its\\family's is a link?};
+\node[decision, below=9mm of link] (copy) {a copy of the\\recorded size?};
+\node[decision, below=9mm of copy] (public) {public data?};
 
 \draw[flow] (start) -- (cfg);
 
-% -- 1. the per-dataset escape hatch, most specific thing anybody can say
-\node[outcome, right=22mm of cfg] (o-cfg) {in place\\\textit{configured root}};
+% -- 1. the per-dataset escape hatch, the most specific thing anybody can say
+\node[outcome, right=22mm of cfg] (o-cfg) {in place\\\textit{per-dataset root}};
 \draw[yes] (cfg) -- node[lbl,above]{yes} (o-cfg);
 \draw[no]  (cfg) -- node[lbl,left]{no} (restricted);
 
-% -- 2/3. restricted branches off to its own root, or refuses
-\node[decision, left=16mm of restricted] (rcache) {restricted\\cache set?};
+% -- 2. restricted data is read from its own cache, or refused
+\node[decision, left=16mm of restricted] (rcache) {readable entry in\\the restricted cache?};
 \draw[yes] (restricted) -- node[lbl,above]{yes} (rcache);
 \draw[no]  (restricted) -- node[lbl,left]{no} (staged);
 
 \node[outcome, above=7mm of rcache] (o-restricted) {in place\\\textit{restricted cache}};
 \draw[yes] (rcache) -- node[lbl,right]{yes} (o-restricted);
 
-\node[decision, below=9mm of rcache] (skip) {skip-\\unavailable?};
-\draw[no] (rcache) -- node[lbl,right]{no} (skip);
+\node[stop, below=7mm of rcache] (o-stop) {\textbf{AccessError}\\describes the dataset\\and how to register a copy};
+\draw[no] (rcache) -- node[lbl,right]{no} (o-stop);
 
-\node[stop, below=7mm of skip] (o-skip) {left out, and listed\\\textit{unavailable}};
-\node[stop, left=7mm of skip] (o-stop) {\textbf{AccessError}\\says what to configure};
-\draw[yes] (skip) -- node[lbl,right]{yes} (o-skip);
-\draw[no]  (skip) -- node[lbl,above]{no} (o-stop);
-
-% -- 4. staging shadows the catalogue, but never for restricted data
+% -- 3. staging shadows the catalogue, but never for restricted data
 \node[outcome, right=22mm of staged] (o-staged) {in place \textit{staging}\\\textcolor{muted}{warns; no checksums}};
 \draw[yes] (staged) -- node[lbl,above]{yes} (o-staged);
 \draw[no]  (staged) -- node[lbl,left]{no} (link);
 
-% -- 5. the public cache: link means borrowed, real directory means ours
+% -- 4. the public cache: a link means borrowed, a real directory means ours
 \node[outcome, right=22mm of link] (o-link) {in place\\\textit{namespace link}};
-\node[download, below=8mm of link] (o-dl) {download\\\textit{into the public cache}};
 \draw[yes] (link) -- node[lbl,above]{yes} (o-link);
-\draw[no]  (link) -- node[lbl,left]{no} (o-dl);
+\draw[no]  (link) -- node[lbl,left]{no} (copy);
 
-\node[note, below=5mm of o-dl, text width=62mm]
-  {First match wins. Everything but the last outcome is read\\where it lies and never copied.};
+\node[outcome, right=22mm of copy] (o-copy) {the copy\\\textcolor{muted}{hash-checked when fetched}};
+\draw[yes] (copy) -- node[lbl,above]{yes} (o-copy);
+\draw[no]  (copy) -- node[lbl,left]{no} (public);
+
+% -- 5. only public data is downloaded; internal data is not published
+\node[download, right=22mm of public] (o-dl) {download\\\textit{into the public cache}};
+\draw[yes] (public) -- node[lbl,above]{yes} (o-dl);
+\node[stop, below=7mm of public] (o-internal) {\textbf{AccessError}\\internal data is not published};
+\draw[no] (public) -- node[lbl,left]{no} (o-internal);
+
+\node[note, below=5mm of o-internal, text width=92mm]
+  {First match wins. Everything but the download is read where it lies and never
+   copied. \texttt{fetch=False} raises instead of downloading.};
 
 \end{tikzpicture}

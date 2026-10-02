@@ -99,7 +99,7 @@
         }
       ],
       "default": null,
-      "description": "To be removed: every input is required.",
+      "description": "No longer read: every input is required.",
       "title": "Skip Unavailable"
     },
     "collections": {

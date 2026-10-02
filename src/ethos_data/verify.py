@@ -94,17 +94,17 @@ def verify(
     resources: list[Resource],
     roots: "Roots | str | Path | None" = None,
     deep: bool = False,
-    skip_unavailable: bool | None = None,
 ) -> list[Finding]:
     """Check every resource against the manifest. Never writes anything.
 
     Without ``deep`` this compares sizes, which catches truncation, replacement
     by a different file, and an empty placeholder -- the common failures -- for
     the cost of one ``stat`` per file. With ``deep`` it compares checksums,
-    which catches everything and reads every byte.
+    which catches everything and reads every byte. Licensed data this
+    machine cannot read is reported as ``unavailable here``, with the reason.
     """
     roots = Roots.coerce(roots)
-    locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)
+    locations = locate(catalog, resources, roots, describe=True)
 
     findings: list[Finding] = []
     link_state: dict[str, tuple[Path, Path] | None] = {}
@@ -115,7 +115,7 @@ def verify(
                 Finding(
                     location,
                     UNAVAILABLE,
-                    "no access to this dataset from this machine; nothing was checked",
+                    f"{location.reason}; nothing was checked",
                 )
             )
             continue

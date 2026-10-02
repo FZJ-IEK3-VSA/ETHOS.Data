@@ -6,7 +6,7 @@ CLI used by consuming packages. Replace `<tool>-data` below with the installed
 command, for example `<your-tool>-data`.
 
 ```text
-<tool>-data [--catalog LOCATION] [--root DIR] [--skip-unavailable] [--test] COMMAND ...
+<tool>-data [--catalog LOCATION] [--root DIR] [--test] COMMAND ...
 ```
 
 The package ships and selects its own collections file. There is no CLI option
@@ -19,16 +19,13 @@ to expose the wrapper.
 | --- | --- |
 | `--catalog LOCATION` | Override the catalogue for this invocation. |
 | `--root DIR` | Override the public cache for this invocation. |
-| `--skip-unavailable` | Omit data this machine cannot access, with a warning; omitted inputs have no returned path. |
 | `--test` | Select the collection's test variant; also accepted after collection subcommands. |
 | `-h`, `--help` | Show help without loading the catalogue. |
 
-!!! warning "Gap: `--skip-unavailable` is to be removed"
-    With [every input is
-    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
-    unreachable data always stops `fetch`, with an error that describes the
-    dataset; `fetch --plan` and `show` still list it as not available here.
-    To be implemented separately.
+Every input a collection names is required: licensed data this machine
+cannot read stops `fetch`, before anything is downloaded, with an error that
+describes the dataset and how to register a copy. `fetch --plan`, `show` and
+`verify` only describe, and list it as not available here.
 
 Place global options before the subcommand, except `--test`, which works in
 either position. A package may supply an environment override such as
@@ -138,8 +135,6 @@ resolved in place are used where they lie and never copied. A faulty `paths`
 handle is refused before any transfer (see [above](#show)). Progress messages
 label the variant:
 `onshore_wind [test]: fetching 6 of 6 files (42.3 MB) into /path/to/cache`.
-With `--skip-unavailable`, a collection none of whose files this machine can
-reach reports `nothing to fetch` rather than pretending something was present.
 
 `--plan` and `--paths` choose what to report about the transfer and cannot be
 combined.
@@ -157,7 +152,7 @@ already cached:     4 files      9.9 MB
 to download:        2 files     32.4 MB
     + reskit-test-data/era5/100m_u_component_of_wind.nc
     + reskit-test-data/era5/100m_v_component_of_wind.nc
-not available here:    4 files                  (licensed-example -- left out)
+not available here:    4 files                  (licensed-example -- a fetch stops here)
 ```
 
 Presence is checked by size, which is cheap; a real fetch verifies the hash and
@@ -179,10 +174,8 @@ loaded, so the catalogue is read once — then print its `paths` handles resolve
 to this machine: one `handle<TAB>absolute path` line per handle, tab-separated
 so a shell can read it back (`while IFS=$'\t' read handle path`). A folder
 handle prints the directory holding the collection's selected files under that
-key. With `--skip-unavailable`, a handle whose data this machine cannot reach is
-left out of the output and a warning names it — the same contract a plain fetch
-gives the files themselves; without the flag, unreachable data stops the command
-with an `AccessError` before anything is downloaded. A collection that declares
+key. Data this machine cannot reach stops the command with an `AccessError`
+before anything is downloaded. A collection that declares
 no `paths` exits `2`. The Python equivalent is
 [`Collections.paths`][ethos_data.selection.Collections.paths].
 
@@ -286,7 +279,7 @@ never overwrite fixtures or fall back to downloads.
 | `fetch DIRECTORY COLLECTION` | Check hashes and report local paths; no network or repair. |
 | `fetch --allow-modified` | Explicit development override for changed bytes; warns and retains original metadata. Missing files still fail. |
 
-Global cache, staging, and skip-unavailable settings do not redirect bundle reads.
+Global cache and staging settings do not redirect bundle reads.
 The package's collections file and `--catalog` select inputs for export only. Invalid bundle inputs exit 2.
 See [Keep data in the repository](../../how-to/package-maintainers/keep-data-in-the-repository.md).
 ## `config`

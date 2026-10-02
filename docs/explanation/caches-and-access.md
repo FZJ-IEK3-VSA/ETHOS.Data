@@ -54,8 +54,8 @@ working offline from a private copy; normal users never touch it.
 For one dataset, first match wins:
 
 <figure markdown="span">
-  ![How one resource is resolved: configured root, staging, restricted cache, then the public cache](../assets/diagrams/resolution-order-light.svg#only-light){ .diagram }
-  ![How one resource is resolved: configured root, staging, restricted cache, then the public cache](../assets/diagrams/resolution-order-dark.svg#only-dark){ .diagram }
+  ![How one resource is found: a per-dataset root, the restricted cache, staging, a link, a copy, then a download](../assets/diagrams/resolution-order-light.svg#only-light){ .diagram }
+  ![How one resource is found: a per-dataset root, the restricted cache, staging, a link, a copy, then a download](../assets/diagrams/resolution-order-dark.svg#only-dark){ .diagram }
 </figure>
 
 1. **`dataset_roots`** — the per-dataset escape hatch. It wins over everything,
@@ -89,12 +89,6 @@ meets it needs is what the dataset is and how to get it, so the error describes
 it from its catalogue entry — title and description, homepage and sources,
 licences and attribution, why it is restricted and how an entitled user obtains
 a copy — and closes with the commands that register a copy once they have one.
-
-!!! warning "Gap: unreachable datasets can still be left out"
-    The current release offers `--skip-unavailable`, which leaves an
-    unreachable dataset's key out of the result with a warning, and its
-    error prints only the `ethos:restriction` note. See [every input is
-    required](architecture/decisions.md#every-input-is-required-2026-10-02).
 
 ## Downloads never write through a link
 

@@ -186,7 +186,7 @@ class TestWhereAFileIsRead:
             "licensed", {"secret.tif": "s"}, access="restricted", where="store"
         )
         restricted = tmp_path / "restricted"
-        restricted.mkdir()
+        (restricted / "licensed").mkdir(parents=True)
         monkeypatch.setenv("ETHOS_RESTRICTED_DIR", str(restricted))
 
         with pytest.raises(ethos_data.AccessError, match="secret.tif"):

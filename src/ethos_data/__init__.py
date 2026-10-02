@@ -60,7 +60,6 @@ from .config import (
     resolve_public_cache,
     resolve_restricted_cache,
     resolve_roots,
-    resolve_skip_unavailable,
     resolve_staging_cache,
     set_dataset_root,
     set_option,
@@ -154,7 +153,6 @@ __all__ = [
     "resolve_public_cache",
     "resolve_restricted_cache",
     "resolve_roots",
-    "resolve_skip_unavailable",
     "resolve_staging_cache",
     "dataset_roots",
     "locate",
@@ -290,7 +288,6 @@ def fetch(
     progressbar: bool = True,
     *,
     test: bool = False,
-    skip_unavailable: bool | None = None,
     fetch: bool = True,
 ) -> DataFiles:
     """Make a collection in the file ``collections`` available locally.
@@ -304,7 +301,6 @@ def fetch(
         collection,
         test=test,
         progressbar=progressbar,
-        skip_unavailable=skip_unavailable,
         fetch=fetch,
     )
 
@@ -317,7 +313,6 @@ def paths(
     progressbar: bool = True,
     *,
     test: bool = False,
-    skip_unavailable: bool | None = None,
     fetch: bool = True,
 ) -> NamedPaths:
     """The inputs a collection names, as ``{handle: absolute Path}``, fetched.
@@ -329,7 +324,6 @@ def paths(
         collection,
         test=test,
         progressbar=progressbar,
-        skip_unavailable=skip_unavailable,
         fetch=fetch,
     )
 

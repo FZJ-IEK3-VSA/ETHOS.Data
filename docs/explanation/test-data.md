@@ -51,11 +51,6 @@ behind a handle is reachable here is a separate question. Every handle is
 required, so unreachable data stops the fetch, with an error that describes
 the dataset and how to obtain it.
 
-!!! warning "Gap: handles can still be left out"
-    Under `skip_unavailable` the current release leaves an unreachable
-    handle out of the mapping with a warning. See [every input is
-    required](architecture/decisions.md#every-input-is-required-2026-10-02).
-
 A test variant is not a bundle. A bundle is an offline copy of a selection,
 identified by resource keys and hashes, for tests that must run without the
 catalogue or dCache. A test variant is a live selection: it still needs the

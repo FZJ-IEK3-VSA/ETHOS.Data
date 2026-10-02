@@ -90,11 +90,6 @@ description in the error: title and description, `homepage` and `sources`,
 Write them for that person: say where a copy can be obtained and under which
 terms.
 
-!!! warning "Gap: the error prints only `ethos:restriction`"
-    The rest of the description is planned with [every input is
-    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
-    to be implemented separately.
-
 ## 2. Review it
 
 Settle every row before the file enters the catalogue:

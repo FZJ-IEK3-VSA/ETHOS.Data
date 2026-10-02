@@ -12,13 +12,6 @@ of each, and any settings file of an earlier release that it now ignores. A
 cache path this machine cannot reach, such as a network drive that is not
 connected, is marked `NOT REACHABLE` with the reason.
 
-!!! warning "Gap: `skip_unavailable` is to be removed"
-    With [every input is
-    required](../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
-    the `skip_unavailable` key, `config set-skip-unavailable`,
-    `unset-skip-unavailable` and `ETHOS_SKIP_UNAVAILABLE` go. To be
-    implemented separately.
-
 ## Precedence
 
 Each setting is the first of:
@@ -73,7 +66,6 @@ move it.
 | `cache_dir` | Legacy read fallback | Older spelling of `public_cache`; `config set-cache` now writes `public_cache`. |
 | `restricted_cache` | `config set-restricted-cache` | licensed data; retrieval only reads it in place |
 | `staging_cache` | `config set-staging-cache` | work in progress that shadows the catalogue |
-| `skip_unavailable` | `config set-skip-unavailable` | `true` to carry on without data this machine cannot reach |
 | `dataset_roots` | `config set-root <dataset> <dir>` | a mapping of dataset name to directory |
 | `catalog` | `config set-catalog` | the catalogue to use instead of a collections file's pin or the built-in public catalogue |
 | `publication_url` | `config set-publication-url` | fetch bytes from a different door than the catalogue declares |
@@ -97,9 +89,12 @@ dataset_roots:
 | `ETHOS_RESTRICTED_DIR` | `restricted_cache` |
 | `ETHOS_STAGING_DIR` | `staging_cache` |
 | `ETHOS_DATA_CATALOG` | `catalog` |
-| `ETHOS_SKIP_UNAVAILABLE` | `skip_unavailable` |
 | `ETHOS_CATALOG_NO_CACHE` | if set, a fetched catalogue descriptor is never cached on disk |
 | `ETHOS_PUBLICATION_URL` | `publication_url` |
+
+Every input a workflow names is required, so nothing leaves one out: a
+`skip_unavailable` key and `ETHOS_SKIP_UNAVAILABLE` from an earlier release
+are ignored, and `config show` names them.
 
 `ETHOS_DATA_DIR` is named for the era when there was only one root. It is kept
 under that name because it is in scripts, job files and people's shell profiles.
@@ -205,7 +200,6 @@ Prefix these with `ethos-data` or a package wrapper such as `<your-tool>-data`.
 | `config set-staging-cache DIR` | Shared development overlay. |
 | `config set-catalog LOCATION` | Catalogue index path or URL. |
 | `config set-root DATASET DIR` | One dataset's existing directory. |
-| `config set-skip-unavailable true\|false` | Whether collection results may omit inaccessible inputs. |
 | `config set-publication-url URL` | Override the dataset download base URL. |
 
 Every setter writes to the settings file in effect. Remove a setting with the

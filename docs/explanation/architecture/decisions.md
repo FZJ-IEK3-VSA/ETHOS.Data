@@ -19,7 +19,7 @@ the canonical account of the reasoning.
 | Name workflow inputs in the collection and pair test and full selections | Implemented | A collection's `paths:` maps handles to catalogue keys, so a workflow's caller asks for `era5` or `gwa_100m` and never learns a resource key; the handles are a compatibility contract between the package maintainer and the workflow. A `test:` and a `full:` variant must offer the same handles, checked when the collection is resolved, so code that ran on fixtures runs unchanged on the real inputs. Full is the default: a forgotten flag costs a visible download, not a silently wrong result. See [test data](../test-data.md#test-and-full-variants-of-a-collection). |
 | Give one link command two modes rather than two commands one planner | Implemented | `ethos-data catalog link-cache` and `ethos-data link --all` drove the same planner, so they could not disagree about the namespace they built, but which of them took an explicit root, which pruned, and what either would do with a restricted dataset had no settled answer. `link --all` is now the only catalogue-wide spelling and carries `--root` and `--prune`. See [one link command, two modes](#one-link-command-with-two-modes-2026-09-17). |
 | Read settings from one file per account | Implemented | A script finds its catalogue and caches the same way whichever folder it starts in and however ETHOS.Data was installed. The project, environment and machine-wide files and `--scope` go; `ETHOS_DATA_CONFIG` names a replacement file for CI and jobs. See [one settings file per account](#one-settings-file-per-account-2026-10-02). |
-| Treat every input as required, and describe a missing licensed dataset | Proposed | A workflow cannot run without one of its inputs, so `skip_unavailable` goes. The error for a licensed dataset this machine cannot read prints its description, provenance and licence and how to obtain a copy. See [every input is required](#every-input-is-required-2026-10-02). |
+| Treat every input as required, and describe a missing licensed dataset | Implemented | A workflow cannot run without one of its inputs, so `skip_unavailable` goes. The error for a licensed dataset this machine cannot read prints its description, provenance and licence and how to obtain a copy. See [every input is required](#every-input-is-required-2026-10-02). |
 | Ship a small public collections file for a self-test | Proposed | `ethos-data selftest` and `ethos_data.EXAMPLE_COLLECTIONS` check settings, catalogue, store and cache with a download of under 200 KB, without any package's collections. See [a self-test collection ships with the package](#a-self-test-collection-ships-with-the-package-2026-10-02). |
 | Specify every file format once | Proposed | One pydantic model per file drives validation, typed access, JSON Schemas, templates, the publish strip list, the index row and the reference tables, so a key and its default are written down once. See [every file format is specified once](#every-file-format-is-specified-once-2026-10-02). |
 | Record each dataset's state in a status file | Proposed | `datasets/<name>/status.yaml` holds the state, the build input and a history, and the commands check every transition. `source_dir`, `ethos:uploaded` and `ethos:frozen` leave `dataset.yaml`. See [datasets record their state](#datasets-record-their-state-in-a-status-file-2026-10-02). |
@@ -242,8 +242,8 @@ makes the self-test fail.
 
 ## Every input is required (2026-10-02)
 
-**Status: proposed.** To be implemented separately; the how-to guides already
-describe the result, with Gap boxes where the code differs.
+**Status: implemented.** The description is
+`ethos_data.formats.derived.reader_description`; `--meta` will print the same.
 
 A collection names the inputs of a workflow, and a licensed dataset among them
 cannot be downloaded. The current release offers a way past that:

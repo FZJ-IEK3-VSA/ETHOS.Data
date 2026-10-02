@@ -34,7 +34,7 @@ class SettingsFile(BaseModel):
         {}, description="Dataset name to a directory of your own, read in place."
     )
     skip_unavailable: bool | None = Field(
-        None, description="To be removed: every input is required."
+        None, description="No longer read: every input is required."
     )
     collections: str | None = Field(
         None, description="No longer read: a package ships its own collections file."
