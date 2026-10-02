@@ -7,8 +7,16 @@ link permissions are needed.
 With ETHOS.Data installed, run the
 [practice-file generator](../assets/examples/create-fetch-lesson.py) in a new
 directory, then work inside `first-fetch-lesson`. An existing first-fetch lesson
-directory also works. Use a shell without `ETHOS_RESTRICTED_DIR` or
-`ETHOS_SKIP_UNAVAILABLE` overrides so the lesson's project settings take effect.
+directory also works. Name the lesson's settings file, as in
+[Your first fetch](first-fetch.md#1-prepare-the-practice-files), so the
+setting this lesson makes goes into the lesson and not into your account:
+
+```bash
+export ETHOS_DATA_CONFIG="$PWD/lesson-settings.yaml"
+```
+
+Use a shell without `ETHOS_RESTRICTED_DIR` or `ETHOS_SKIP_UNAVAILABLE`, which
+would win over the lesson's settings.
 
 ## 1. Look for a hidden dataset
 
@@ -28,7 +36,8 @@ ethos-data --catalog internal-catalogue/datacatalog.json --root cache fetch less
 
 The listing contains `lesson-licensed/factor.csv`. Fetching still fails because
 the authorised installation has not been located. It does not try a download.
-If you already ran this lesson, unset the project restricted-cache setting first.
+If you already ran this lesson, run `ethos-data config unset-restricted-cache`
+first.
 
 ## 3. Locate the practice installation
 
@@ -41,7 +50,7 @@ python -c "from pathlib import Path; print(Path('restricted-installation').resol
 Replace `ABSOLUTE_PATH` below with that output:
 
 ```bash
-ethos-data config set-restricted-cache "ABSOLUTE_PATH" --scope project
+ethos-data config set-restricted-cache "ABSOLUTE_PATH"
 ethos-data config show
 ethos-data --catalog internal-catalogue/datacatalog.json --root cache fetch lesson-licensed/factor.csv
 ```
@@ -63,7 +72,8 @@ assert all(finding.status == "ok" for finding in findings)
 ## 4. End the exercise
 
 ```bash
-ethos-data config unset-restricted-cache --scope project
+ethos-data config unset-restricted-cache
+unset ETHOS_DATA_CONFIG
 ```
 
 The original CSV remains. The setting located files; it did not grant permissions

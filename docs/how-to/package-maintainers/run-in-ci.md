@@ -76,10 +76,9 @@ export ETHOS_DATA_CONFIG="$PWD/ci/ethos-data.yaml"
 ETHOS.Data then reads only that file and the environment variables; see
 [Use another settings file](../data-users/set-up-your-machine.md#another-settings-file).
 
-!!! warning "Gap: `selftest` and `ETHOS_DATA_CONFIG` are not implemented"
-    Both are planned and to be implemented separately. Until then, set an
-    environment variable for every setting the job depends on; they win over
-    every settings file.
+!!! warning "Gap: `selftest` is not implemented"
+    It is planned and to be implemented separately. Until then, the
+    `fetch --plan` step is the first that needs the catalogue.
 
 Key the cache on the hash of `collections.yaml` and any catalogue override. A
 restored cache reuses matching files; an empty runner downloads. For a

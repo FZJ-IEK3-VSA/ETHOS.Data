@@ -73,7 +73,7 @@ def test_a_settings_file_that_is_not_yaml_is_an_error_not_a_traceback(
 ):
     from ethos_data import config
 
-    settings = config.config_path("user")
+    settings = config.config_path()
     settings.parent.mkdir(parents=True, exist_ok=True)
     settings.write_bytes(b"public_cache: [unclosed\n")
 

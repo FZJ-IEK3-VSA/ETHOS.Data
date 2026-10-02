@@ -37,7 +37,7 @@ from __future__ import annotations
 import fnmatch
 import os
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -56,7 +56,7 @@ from .errors import CollectionError, CollectionsNotFound, UnknownCollection
 from .retrieval import DataFiles, NamedPaths
 
 if TYPE_CHECKING:
-    from .config import Roots
+    from .config import Roots, Settings
 
 __all__ = [
     "COLLECTIONS_FILENAME",
@@ -112,8 +112,26 @@ class Collections:
     #: default name of its command; None for a file named on its own.
     tool: str | None = None
     #: The cache roots the staging overlay was built for; None means the
-    #: configured ones, resolved when a call needs them.
+    #: ones in :attr:`settings`.
     roots: Roots | None = None
+    #: The settings this handle uses, read once when it was built.
+    _settings: Settings | None = field(default=None, repr=False)
+
+    @property
+    def settings(self) -> Settings:
+        """The settings file, the catalogue and its version, the caches, and their sources.
+
+        Read once, when the handle was built, and used by every later call, so
+        a script reads the same catalogue and caches from start to finish.
+        ``print(data.settings)`` reports them next to a script's results.
+        """
+        if self._settings is None:
+            from .config import read_settings
+
+            self._settings = read_settings().with_catalog(
+                self.catalog.location, "loaded directly", self.catalog.version
+            )
+        return self._settings
 
     def names(self) -> list[str]:
         return sorted(self.definitions)
@@ -479,9 +497,10 @@ class Collections:
     def _roots(self, root: Roots | str | Path | None) -> Roots:
         from .config import Roots
 
-        if root is not None:
-            return Roots.coerce(root)
-        return self.roots if self.roots is not None else Roots.coerce(None)
+        if isinstance(root, Roots):
+            return root
+        base = self.roots if self.roots is not None else self.settings.roots
+        return base if root is None else base.with_public(root)
 
     def _named_targets(
         self, name: str, test: bool, resources: list[Resource]
@@ -634,6 +653,7 @@ def load_collections(
     include_staging: bool = True,
     roots: Roots | None = None,
     tool: str | None = None,
+    settings: Settings | None = None,
 ) -> Collections:
     """Load a collections file with the configured development overlay.
 
@@ -646,22 +666,44 @@ def load_collections(
 
     :func:`ethos_data.collections` is the same with the configured catalogue
     override (``$ETHOS_DATA_CATALOG``, ``config set-catalog``) applied first,
-    which is what a tool wants.
+    which is what a tool wants. ``settings`` is the snapshot the handle keeps;
+    by default the settings are read here, once.
     """
+    from .config import DEFAULT_CATALOG, read_settings
+
     path = Path(path).expanduser().resolve()
     document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if settings is None:
+        settings = read_settings()
+    if roots is None:
+        roots = settings.roots
 
     if isinstance(catalog, Catalog):
         resolved = catalog
+        source = (
+            resolved._settings.catalog_source if resolved._settings else "passed in"
+        )
     else:
-        location = catalog or catalog_pin(path, document)
-        if location is None:
+        pinned = catalog_pin(path, document)
+        if catalog:
+            location = str(catalog)
+            source = (
+                settings.catalog_source
+                if location == settings.catalog
+                else "explicit argument"
+            )
+        elif pinned is not None:
+            location, source = pinned, f"the pin in {path.name}"
+        else:
             # No pin: the public catalogue, so a collections file that selects
             # only public data works with nothing configured anywhere.
-            from .config import DEFAULT_CATALOG
-
-            location = DEFAULT_CATALOG
-        resolved = load_catalog(str(location))
+            location, source = DEFAULT_CATALOG, "built-in public catalogue"
+        resolved = load_catalog(location)
+    settings = settings.with_catalog(resolved.location, source, resolved.version)
+    if not isinstance(catalog, Catalog):
+        # Loaded here, so it is this handle's: a catalogue passed in is not
+        # modified, and keeps the settings it already has.
+        resolved._settings = settings
 
     if include_staging:
         from .staging import with_staging
@@ -673,6 +715,7 @@ def load_collections(
         definitions=document.get("collections", {}),
         tool=tool,
         roots=roots,
+        _settings=settings,
     )
 
 
