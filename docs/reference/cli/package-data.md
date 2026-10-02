@@ -276,26 +276,33 @@ with an empty, `.` or `..` segment is refused.
 
 ## `bundle`
 
-A bundle is a repository copy of selected catalogue resources plus generated
-metadata. dCache remains authoritative. Bundle reads use only local files and
-never overwrite fixtures or fall back to downloads.
+A bundle is test data a package keeps in its repository: the files under
+`data/<dataset>/<path>`, their inventory in `bundle.json` and their
+descriptions under `datasets/<dataset>/`. A **repository bundle** is the source
+of truth for one family of datasets, versioned as it changes; an **exported
+bundle** is a copy of what the catalogue publishes, with the collections it was
+exported for. Bundle reads use only local files and never overwrite fixtures
+or fall back to downloads.
 
 ```bash
 <tool>-data bundle export tests/data-bundle test_suite --source-revision v1.0.0
 <tool>-data bundle verify tests/data-bundle test_suite
-<tool>-data bundle fetch tests/data-bundle test_suite
 <tool>-data bundle fetch tests/data-bundle test_suite --allow-modified
 ```
 
 | Command/option | Behaviour |
 |---|---|
+| `create DIRECTORY --family NAME` | Start a repository bundle from the files under `DIRECTORY/data/NAME/<member>/`: hash them, write `bundle.json` as version 1, not yet published, and draft a `dataset.yaml` for the family and each member. Refuses a bundle that exists. |
+| `update DIRECTORY` | Record what changed, is new, moved or is gone. A version a catalogue release holds is never changed: the first change after its release starts the next version. With nothing changed, record the release that holds the current version, asking the catalogue the package reads. |
 | `export TARGET COLLECTION...` | Export to a new directory; refuses an existing target. Canonical metadata is selected without staging; a collection with variants is exported in its `full` variant. |
 | `export --source-root DATASET=PATH` | Use an existing local source and verify it against catalogue hashes; repeat for several datasets. |
 | `export --source-revision REF` | Record the source commit/tag as provenance; this label does not change the catalogue URL or select a revision. |
-| `verify DIRECTORY COLLECTION` | Report hash/presence findings; exits 1 for modified or missing fixtures. |
-| `fetch DIRECTORY COLLECTION` | Check hashes and report local paths; no network or repair. |
+| `verify DIRECTORY [COLLECTION]` | Report hash/presence findings, of every file or of an exported bundle's collection; exits 1 for modified or missing fixtures. |
+| `fetch DIRECTORY [COLLECTION]` | Check hashes and report local paths; no network or repair. |
 | `fetch --allow-modified` | Explicit development override for changed bytes; warns and retains original metadata. Missing files still fail. |
 
+A package's handle lists its bundles with `bundles=`, and reads go to them
+first: see [Keep data in the repository](../../how-to/package-maintainers/keep-data-in-the-repository.md#use-a-bundle).
 Global cache and staging settings do not redirect bundle reads.
 The package's collections file and `--catalog` select inputs for export only. Invalid bundle inputs exit 2.
 See [Keep data in the repository](../../how-to/package-maintainers/keep-data-in-the-repository.md).

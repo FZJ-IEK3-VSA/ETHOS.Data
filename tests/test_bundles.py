@@ -1,4 +1,8 @@
-"""Offline fixture copies retain canonical identity through development edits."""
+"""Exported bundles: catalogue copies that keep their identity through development edits.
+
+Repository bundles, which the repository is the source of truth for, are
+tested in ``test_repository_bundles.py``.
+"""
 
 from __future__ import annotations
 
@@ -6,12 +10,12 @@ import hashlib
 import json
 import shutil
 import urllib.request
-from pathlib import Path
 
 import pooch
 import pytest
 import yaml
 
+from ethos_data.adapters.fakes import FakeDownloader
 from ethos_data.bundles import (
     ModifiedBundleWarning,
     export_bundle,
@@ -428,26 +432,17 @@ def test_remote_export_uses_authoritative_url_not_ambient_settings(
 ):
     monkeypatch.setenv("ETHOS_PUBLICATION_URL", "https://wrong.invalid/data")
     monkeypatch.setenv("ETHOS_STAGING_DIR", str(tmp_path / "staging"))
-    calls = []
-
-    def retrieve(*, url, known_hash, fname, path, progressbar):
-        calls.append(url)
-        resource_path = url.removeprefix(
-            "https://dcache.invalid/data/immutable/fixture/v1/"
-        )
-        payload = catalogue["payloads"][resource_path]
-        assert known_hash == digest(payload)
-        destination = Path(path) / fname
-        destination.write_bytes(payload)
-        return str(destination)
-
-    monkeypatch.setattr(pooch, "retrieve", retrieve)
-    bundle = export_bundle(catalogue["collections"], "shape", tmp_path / "bundle")
-    assert len(calls) == 2
-    assert all(
-        url.startswith("https://dcache.invalid/data/immutable/fixture/v1/")
-        for url in calls
+    base = "https://dcache.invalid/data/immutable/fixture/v1/"
+    downloader = FakeDownloader(
+        {base + path: payload for path, payload in catalogue["payloads"].items()}
     )
+
+    bundle = export_bundle(
+        catalogue["collections"], "shape", tmp_path / "bundle", downloader=downloader
+    )
+
+    assert len(downloader.fetched) == 2
+    assert all(url.startswith(base) for url in downloader.fetched)
     assert len(bundle.fetch("shape")) == 2
 
 

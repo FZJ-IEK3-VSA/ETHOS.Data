@@ -364,6 +364,7 @@ class Collections:
         """
         roots = self._roots(root)
         resources = self.resolve(name, test=test)
+        self._refuse_unpublished(resources)
         # Checked before anything is downloaded: a handle naming a file the
         # collection does not include is a mistake in collections.yaml, and the
         # maintainer should hear about it before a 40 GB transfer, not after.
@@ -649,6 +650,8 @@ def load_collections(
     roots: Roots | None = None,
     tool: str | None = None,
     settings: Settings | None = None,
+    bundles: Sequence = (),
+    download: bool | None = None,
 ) -> Collections:
     """Load a collections file with the configured development overlay.
 
@@ -665,8 +668,14 @@ def load_collections(
     :func:`ethos_data.collections` is the same with ``root=`` and the settings
     read for it. ``settings`` is the snapshot the handle keeps; by default the
     settings are read here, once.
+
+    ``bundles`` are the bundle directories the package ships: their datasets
+    are read from them first, before staging is laid over them, unless
+    ``download`` -- by default ``$ETHOS_DATA_DOWNLOAD`` -- asks for the
+    catalogue route.
     """
-    from .config import read_settings
+    from .bundles import Bundle, load_bundle, with_bundles
+    from .config import download_requested, read_settings
 
     path = Path(path).expanduser().resolve()
     bounds, definitions = _read(path)
@@ -693,6 +702,14 @@ def load_collections(
         # modified, and keeps the settings it already has.
         resolved._settings = settings
 
+    base = resolved
+    download = download_requested(download)
+    loaded = tuple(
+        bundle if isinstance(bundle, Bundle) else load_bundle(bundle)
+        for bundle in bundles
+    )
+    if loaded and not download:
+        resolved = with_bundles(resolved, loaded)
     if include_staging:
         from .staging import with_staging
 
@@ -704,6 +721,9 @@ def load_collections(
         tool=tool,
         roots=roots,
         _settings=settings,
+        bundles=loaded,
+        download=download,
+        base_catalog=base,
     )
 
 

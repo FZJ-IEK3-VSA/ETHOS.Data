@@ -85,6 +85,7 @@ catalog: /shared/ethos/catalogue/datacatalog.json
 | `ETHOS_DATA_CATALOG` | `catalog` |
 | `ETHOS_CATALOG_NO_CACHE` | if set, a fetched catalogue descriptor is never cached on disk |
 | `ETHOS_PUBLICATION_URL` | `publication_url` |
+| `ETHOS_DATA_DOWNLOAD` | a package's bundles: `1` reads the catalogue route instead, as `download=True` does |
 
 ## Settings of a handle {#handle-settings}
 

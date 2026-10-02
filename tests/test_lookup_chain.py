@@ -115,6 +115,7 @@ class TestTheOrder:
 
         assert [place.split(" ", 1)[0] for place in places] == [
             "staging",
+            "bundles",
             "restricted",
             "public",
             "a",

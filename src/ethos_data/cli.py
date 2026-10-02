@@ -100,6 +100,7 @@ def run_tool(
     catalog: str | None = None,
     argv: list[str] | None = None,
     loaded: Collections | None = None,
+    bundles: tuple | list = (),
 ) -> int:
     """A tool's own command: the collection commands bound to the file it ships.
 
@@ -428,12 +429,36 @@ def _add_bundle_commands(sub) -> None:
         "--source-revision",
         help="provenance label only; select the release with --catalog",
     )
+    creator = bundle_sub.add_parser(
+        "create",
+        help="start a bundle from files under DIR/data/<family>/<member>/",
+        description="Hash every file, write bundle.json as version 1, not yet "
+        "published, and draft a dataset.yaml for the family and each member.",
+    )
+    creator.add_argument("directory", help="the bundle directory in the repository")
+    creator.add_argument(
+        "--family", required=True, help="the family its datasets belong to"
+    )
+    updater = bundle_sub.add_parser(
+        "update",
+        help="record the changes to a bundle's files; its next version once published",
+        description="Re-inventory the files and record what changed, appeared, "
+        "moved or disappeared. A version a catalogue release holds is never "
+        "changed: the first change after it starts the next version. With nothing "
+        "changed, record the release that holds the current version, if there is one.",
+    )
+    updater.add_argument("directory", help="the bundle directory")
     for name in ("fetch", "verify"):
         reader = bundle_sub.add_parser(
             name, help="read or verify a bundle without network access"
         )
         reader.add_argument("directory")
-        reader.add_argument("collection")
+        reader.add_argument(
+            "collection",
+            nargs="?",
+            default=None,
+            help="an exported bundle's collection (default: every file)",
+        )
         if name == "fetch":
             reader.add_argument(
                 "--allow-modified",
@@ -658,11 +683,13 @@ class _ToolSource:
         tool: str | None,
         catalog: str | None,
         loaded: Collections | None = None,
+        bundles: tuple = (),
     ):
         self.file_path = Path(file)
         self.tool = tool
         self.catalog = catalog
         self._loaded = loaded
+        self.bundles = bundles
 
     def names(self) -> list[str]:
         """The collection names, read from the file alone -- for help text."""
@@ -714,6 +741,17 @@ def _bundle_command(args, source) -> int:
         )
         print(f"Bundle created at {args.target}: {', '.join(bundle.names())}")
         return 0
+    if args.bundle_command == "create":
+        bundle = create_bundle(args.directory, args.family)
+        files = len(bundle.resources)
+        print(
+            f"Bundle {bundle.family} version 1 created at {bundle.path}: "
+            f"{len(bundle.datasets)} dataset(s), {files} file(s).\n"
+            f"Fill in the drafts under {bundle.path / 'datasets'}, then commit."
+        )
+        return 0
+    if args.bundle_command == "update":
+        return _bundle_update(args, source)
     bundle = load_bundle(args.directory)
     if args.bundle_command == "verify":
         findings = bundle.verify(args.collection)
@@ -723,6 +761,55 @@ def _bundle_command(args, source) -> int:
     files = bundle.fetch(args.collection, allow_modified=args.allow_modified)
     for key, path in files.items():
         print(f"{key}: {path}")
+    return 0
+
+
+def _bundle_update(args, source) -> int:
+    """``bundle update``: what changed, and the version or release it recorded."""
+    try:
+        catalog = source.load(args, None).base_catalog
+    except EthosDataError as error:
+        catalog = None
+        print(f"note: the catalogue could not be read, so no release is recorded: "
+              f"{_first_line(error)}")  # fmt: skip
+    update = update_bundle(args.directory, catalog)
+    bundle = update.bundle
+    for label, found in (
+        ("changed", update.changed),
+        ("new", update.added),
+        ("gone", update.removed),
+    ):
+        for name, paths in found.items():
+            for path in paths:
+                print(f"  {label:<10} {name}/{path}")
+    for name, pairs in update.moved.items():
+        for old, new in pairs:
+            print(f"  {'moved':<10} {name}/{old} -> {new}")
+    for name in update.new_members:
+        print(
+            f"  {'new':<10} {name}, drafted {bundle.path / 'datasets' / name / 'dataset.yaml'}"
+        )
+    for name in update.gone_members:
+        print(f"  {'gone':<10} {name}")
+    if update.removed or update.gone_members:
+        print(
+            "\nA file that goes takes its key with it, and every collection that "
+            "names it breaks. If the layout changed, propose a successor: a new "
+            "dataset whose dataset.yaml says ethos:supersedes."
+        )
+    if update.changes:
+        started = bundle.version != update.previous_version
+        print(
+            f"\n{bundle.family} is version {bundle.version}"
+            + (", the next after the published one" if started else "")
+            + "; it is not in the catalogue yet."
+        )
+    elif update.released:
+        print(
+            f"{bundle.family} version {bundle.version} is in release {update.released}."
+        )
+    else:
+        print(f"{bundle.family} version {bundle.version}: nothing changed.")
     return 0
 
 

@@ -759,3 +759,24 @@ def read_settings(
         publication_url=url[0] if url else None,
         publication_url_source=url[1] if url else "",
     )
+
+
+#: Reads the catalogue route instead of a package's bundles, for one job.
+DOWNLOAD_ENV_VAR = "ETHOS_DATA_DOWNLOAD"
+
+
+def download_requested(explicit: bool | None = None) -> bool:
+    """Whether the catalogue route is asked for instead of the bundles.
+
+    ``explicit``, a handle's ``download=``, when given; else
+    ``$ETHOS_DATA_DOWNLOAD`` set to ``1``, ``true``, ``yes`` or ``on``.
+    """
+    if explicit is not None:
+        return explicit
+    return os.environ.get(DOWNLOAD_ENV_VAR, "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+

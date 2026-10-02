@@ -49,7 +49,7 @@ from pathlib import Path
 from . import report
 from .catalogs import Catalog, Dataset
 from .config import Roots
-from .errors import AccessError
+from .errors import AccessError, BundleError
 from .formats import keys as k
 from .model import names
 from .model.resource import Resource
@@ -86,6 +86,7 @@ ORIGIN_STAGING = "staging"
 ORIGIN_RESTRICTED = "restricted cache"
 ORIGIN_LINK = "namespace link"
 ORIGIN_CACHED = "public cache copy"
+ORIGIN_BUNDLE = "bundle"
 ORIGIN_DOWNLOAD = "download"
 
 
@@ -323,6 +324,42 @@ def restricted_states(caches: tuple[Path, ...], name: str) -> str:
 
 
 @dataclass
+class Bundled(Locator):
+    """3. A bundle the package ships: read in place, hash-checked, never passed by.
+
+    A bundled file that is missing or altered is refused, not downloaded: the
+    repository is the source of truth for what a bundle holds, and the
+    catalogue's copy may be another version. With ``describe`` it is reported
+    as not available instead.
+    """
+
+    describe_only: bool = False
+
+    def describe(self) -> str:
+        return "bundles the package ships, unless downloading is asked for"
+
+    def locate(self, catalog, dataset, resource):
+        bundle = catalog.bundle_of(dataset.name) if catalog.bundles else None
+        if bundle is None:
+            return None
+        from .bundles import checked_file, warn_if_unpublished
+
+        why = checked_file(bundle, resource)
+        if not why:
+            warn_if_unpublished(bundle)
+            return Location(
+                resource, bundle.file(resource.key), "in-place", ORIGIN_BUNDLE
+            )
+        if self.describe_only:
+            return Location(resource, None, UNAVAILABLE, ORIGIN_BUNDLE, why)
+        raise BundleError(
+            f"{resource.key} is in the bundle {bundle.path}, but {why}. A bundled "
+            "file is never a reason to download: restore it from the repository, "
+            "or record the change with `bundle update`."
+        )
+
+
+@dataclass
 class RestrictedCache(Locator):
     """2. Restricted data: read in place from a listed restricted cache, or refused.
 
@@ -528,6 +565,7 @@ def chain_for(roots: Roots, *, describe: bool = False) -> Chain:
     return Chain(
         (
             Staging(roots.staging),
+            Bundled(describe),
             RestrictedCache(roots.restricted, describe),
             PublicCache(roots.public),
             Download(roots.public, describe),

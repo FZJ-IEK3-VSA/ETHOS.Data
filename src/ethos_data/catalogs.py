@@ -178,6 +178,15 @@ class Catalog:
     staged: bool = False
     #: The settings this handle uses, read once; see :attr:`settings`.
     _settings: Settings | None = field(default=None, repr=False)
+    #: The bundles this view reads first; see :func:`ethos_data.bundles.with_bundles`.
+    bundles: tuple = ()
+
+    def bundle_of(self, name: str):
+        """The bundle that holds the dataset ``name``, if one does."""
+        for bundle in self.bundles:
+            if name in bundle.datasets:
+                return bundle
+        return None
 
     @property
     def settings(self) -> Settings:

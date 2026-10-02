@@ -121,11 +121,16 @@ record each file gets. The build inventories a `source_dir` with it.
 ::: ethos_data.bundles
     options:
       members:
+        - create_bundle
+        - update_bundle
         - export_bundle
         - load_bundle
+        - with_bundles
         - Bundle
+        - BundleUpdate
         - BundleFinding
         - ModifiedBundleWarning
+        - UnpublishedBundleWarning
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3
