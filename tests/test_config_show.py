@@ -15,7 +15,8 @@ from pathlib import Path
 import pytest
 
 from ethos_data import config
-from ethos_data.cli import _unreachable, main
+from ethos_data.cli import main
+from ethos_data.config import unreachable
 
 
 @pytest.fixture
@@ -165,6 +166,6 @@ class TestAnUnreachableCacheSaysWhy:
             if not Path(f"{letter}:/").exists()
         )
         assert (
-            _unreachable(Path(f"{free}/shared_data/public"))
+            unreachable(Path(f"{free}/shared_data/public"))
             == f"drive {free} is not connected"
         )
