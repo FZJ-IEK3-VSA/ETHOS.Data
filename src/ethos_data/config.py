@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import getpass
 import os
+import stat
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -76,6 +77,7 @@ __all__ = [
     "Settings",
     "account_config_path",
     "add_restricted_cache",
+    "catalog_index",
     "config_path",
     "current_user",
     "load_config",
@@ -84,6 +86,7 @@ __all__ = [
     "set_cache",
     "set_option",
     "unset_option",
+    "unreachable",
 ]
 
 #: The public catalogue, used whenever nothing else names one -- so that public
@@ -512,6 +515,58 @@ def current_user() -> str:
         return getpass.getuser()
     except (OSError, KeyError, ImportError):
         return ""
+
+
+# -- answers about paths, for whoever shows the settings -----------------------------
+
+
+def unreachable(path: Path) -> str | None:
+    """Why ``path`` is not a usable directory, or None when it is one.
+
+    To ``Path.is_dir()`` a cache on a network drive that is not mounted looks
+    exactly like a cache nobody has created yet: both are ``False``. The person
+    reading ``config show`` needs the difference, so the reason is spelled out
+    -- a drive that is not connected, a path that does not exist, or whatever
+    the operating system said when it tried.
+    """
+    try:
+        info = os.stat(path)
+    except OSError as error:
+        if path.drive and not os.path.exists(path.anchor):
+            return f"drive {path.drive} is not connected"
+        if isinstance(error, FileNotFoundError):
+            return "does not exist"
+        return f"cannot be reached ({error.strerror or error})"
+    return None if stat.S_ISDIR(info.st_mode) else "is not a directory"
+
+
+def catalog_index(location: str) -> str:
+    """A catalogue location fit to be set, so a typo fails now, not on the next
+    unrelated command with a stack trace three frames from the actual cause.
+
+    Also accepts a directory and fills in ``datacatalog.json`` -- the mistake
+    of pointing at the catalogue repo itself rather than its generated index
+    is common enough to just handle.
+    """
+    if location.startswith(("http://", "https://")):
+        return location
+    candidate = Path(location).expanduser()
+    if candidate.is_dir():
+        auto = candidate / "datacatalog.json"
+        if auto.is_file():
+            return str(auto)
+        raise ConfigurationError(
+            f"{candidate} is a directory with no datacatalog.json in it.\n"
+            "Point at the generated index file itself, e.g.:\n"
+            f"    ethos-data config set-catalog {auto}"
+        )
+    if not candidate.is_file():
+        raise ConfigurationError(
+            f"no such file: {candidate}\n"
+            "Expected the generated datacatalog.json inside a catalogue checkout "
+            "-- not catalog.yaml (that's hand-written metadata, not the loadable index)."
+        )
+    return str(candidate)
 
 
 # -- every setting at once ----------------------------------------------------------
