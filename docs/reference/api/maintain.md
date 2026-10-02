@@ -54,9 +54,6 @@ finds that checkout the same way the maintainer commands find theirs.
         - build_resource
         - split_into_shards
         - shard_path
-        - validate_classification
-        - validate_provenance
-        - validate_licenses
         - apply_resource_licenses
         - slugify
         - mediatype_of
@@ -74,6 +71,7 @@ finds that checkout the same way the maintainer commands find theirs.
         - render
         - public_datasets
         - strip
+        - leaks
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

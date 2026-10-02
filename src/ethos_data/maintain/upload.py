@@ -44,8 +44,10 @@ from typing import NamedTuple
 
 import yaml
 
-from ..catalogs import ROLE_PUBLISHED, license_settled
 from ..errors import UploadError
+from ..formats import keys as k
+from ..formats.derived import license_settled, remote_prefix_of
+from ..formats.keys import ROLE_PUBLISHED
 from . import (
     catalogue_role,
     dataset_name_for,
@@ -126,16 +128,18 @@ def preflight(
     allow_internal: bool,
     verify_only: bool,
 ) -> str:
-    access = package.get("ethos:access", "public")
-    prefix = package.get("ethos:remote_prefix")
+    access = package.get(k.ACCESS, k.PUBLIC)
+    # The documented default, and the folder the reader downloads from: the
+    # dataset's own name unless it declares a prefix.
+    prefix = remote_prefix_of(package)
 
-    if access == "restricted":
+    if access == k.RESTRICTED:
         raise UploadError(
             f"{name} is restricted and must never be uploaded.\n"
             "Restricted data stays where it is; users point at it with\n"
             f"    ethos-data config set-root {name} /path/to/{name}"
         )
-    if access == "internal" and not allow_internal:
+    if access == k.INTERNAL and not allow_internal:
         raise UploadError(
             f"{name} is internal (not published). Upload it only if the VO-only "
             "prefix is really where you want it, and pass --allow-internal.\n"
@@ -150,7 +154,7 @@ def preflight(
     # sends somebody off to fix the wrong thing. --verify-only is still allowed:
     # rechecking what is already published copies nothing.
     if not verify_only and not license_settled(package):
-        note = package.get("ethos:license_note", "")
+        note = package.get(k.LICENSE_NOTE, "")
         raise UploadError(
             f"{name} has unresolved licensing and is not uploaded. {note}\n".rstrip()
             + "\n"
@@ -158,11 +162,6 @@ def preflight(
             "`ethos:license_status: resolved` once somebody has read them -- and rebuild.\n"
             "Development against it does not need an upload; stage it instead:\n"
             f"    staging add {name} <directory>  (with your package's data command)"
-        )
-
-    if not prefix:
-        raise UploadError(
-            f"{name} declares no ethos:remote_prefix, so there is nowhere to put it."
         )
 
     if source_dir is None:
@@ -406,7 +405,7 @@ def upload_one(args, plan: Plan, base_url: str, root: str, bearer) -> int:
             print("\nDry run only; nothing was uploaded.")
             return 0
 
-    if not args.no_chmod and plan.package.get("ethos:access") == "public":
+    if not args.no_chmod and plan.package.get(k.ACCESS, k.PUBLIC) == k.PUBLIC:
         status = chmod(namespace_path, MODE_0755, bearer())
         print(f"\nchmod 0755 {namespace_path} -> HTTP {status}")
         if status not in (200, 204):

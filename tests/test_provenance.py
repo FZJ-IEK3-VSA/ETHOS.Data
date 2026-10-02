@@ -18,12 +18,19 @@ import pytest
 import yaml
 
 from ethos_data.errors import DescriptorError
-from ethos_data.maintain.manifest import (
-    apply_resource_licenses,
-    render_dataset,
-    validate_licenses,
-    validate_provenance,
-)
+from ethos_data.formats import dataset as spec
+from ethos_data.maintain.manifest import apply_resource_licenses, render_dataset
+
+
+def check(meta: dict) -> None:
+    """The build's rules for a descriptor; a source_dir satisfies the freeze rule."""
+    spec.check({"source_dir": ".", **meta})
+
+
+def origin_of(meta: dict) -> str:
+    """The origin a descriptor that passes the rules ends up with."""
+    check(meta)
+    return spec.apply_defaults(dict(meta))["ethos:origin"]
 
 
 # -- ethos:origin -----------------------------------------------------------
@@ -32,52 +39,50 @@ from ethos_data.maintain.manifest import (
 def test_origin_defaults_to_downloaded():
     """The common case, and the conservative one: claim no authorship."""
     meta = {}
-    assert validate_provenance("d", meta) == "downloaded"
-    assert meta["ethos:origin"] == "downloaded"
+    assert origin_of(meta) == "downloaded"
+    assert spec.apply_defaults(meta)["ethos:origin"] == "downloaded"
 
 
 def test_downloaded_needs_no_author():
     """Every dataset written before ethos:origin existed must keep building."""
-    assert validate_provenance("d", {"sources": [{"title": "up"}]}) == "downloaded"
+    assert origin_of({"sources": [{"title": "up"}]}) == "downloaded"
 
 
 def test_unknown_origin_is_rejected():
     with pytest.raises(DescriptorError, match="must be one of"):
-        validate_provenance("d", {"ethos:origin": "invented"})
+        check({"ethos:origin": "invented"})
 
 
 @pytest.mark.parametrize("origin", ["created", "derived"])
 def test_authorship_claim_must_name_an_author(origin):
     """Claiming the data was made here without saying by whom is not a claim."""
     with pytest.raises(DescriptorError, match="has to say by whom"):
-        validate_provenance("d", {"ethos:origin": origin})
+        check({"ethos:origin": origin})
 
 
 def test_derived_needs_sources_and_a_derivation():
     author = [{"title": "A Researcher", "roles": ["author"]}]
 
     with pytest.raises(DescriptorError, match="derived FROM"):
-        validate_provenance("d", {"ethos:origin": "derived", "contributors": author})
+        check({"ethos:origin": "derived", "contributors": author})
 
     with pytest.raises(DescriptorError, match="needs ethos:derivation"):
-        validate_provenance(
-            "d",
+        check(
             {
                 "ethos:origin": "derived",
                 "contributors": author,
                 "sources": [{"title": "upstream"}],
-            },
+            }
         )
 
     assert (
-        validate_provenance(
-            "d",
+        origin_of(
             {
                 "ethos:origin": "derived",
                 "contributors": author,
                 "sources": [{"title": "upstream"}],
                 "ethos:derivation": "gdalwarp to EPSG:3035, nearest neighbour.",
-            },
+            }
         )
         == "derived"
     )
@@ -86,12 +91,11 @@ def test_derived_needs_sources_and_a_derivation():
 def test_created_needs_only_an_author():
     """Created from scratch has no upstream to name -- that is the difference."""
     assert (
-        validate_provenance(
-            "d",
+        origin_of(
             {
                 "ethos:origin": "created",
                 "contributors": [{"title": "A Researcher", "roles": ["author"]}],
-            },
+            }
         )
         == "created"
     )
@@ -103,19 +107,17 @@ def test_created_needs_only_an_author():
 def test_v1_scalar_role_is_rejected_not_coerced():
     """Half-following two versions of the spec is worse than being told which."""
     with pytest.raises(DescriptorError, match="list in Data Package v2"):
-        validate_provenance("d", {"contributors": [{"title": "X", "roles": "author"}]})
+        check({"contributors": [{"title": "X", "roles": "author"}]})
 
 
 def test_unknown_role_is_rejected():
     with pytest.raises(DescriptorError, match="unknown role"):
-        validate_provenance(
-            "d", {"contributors": [{"title": "X", "roles": ["archivist"]}]}
-        )
+        check({"contributors": [{"title": "X", "roles": ["archivist"]}]})
 
 
 def test_contributor_needs_a_title():
     with pytest.raises(DescriptorError, match="needs a 'title'"):
-        validate_provenance("d", {"contributors": [{"roles": ["author"]}]})
+        check({"contributors": [{"roles": ["author"]}]})
 
 
 # -- licences --------------------------------------------------------------
@@ -129,25 +131,23 @@ def test_licenses_may_hold_several():
             "path": "https://creativecommons.org/publicdomain/zero/1.0/",
         },
     ]
-    assert validate_licenses("d", {"licenses": entries}) == entries
+    check({"licenses": entries})
 
 
 def test_licence_needs_a_name_or_a_path():
     """A bare title reads as a licence and identifies nothing."""
     with pytest.raises(DescriptorError, match="neither 'name' nor 'path'"):
-        validate_licenses("d", {"licenses": [{"title": "Some terms"}]})
+        check({"licenses": [{"title": "Some terms"}]})
 
 
 def test_licenses_must_be_a_list():
     with pytest.raises(DescriptorError, match="must be a list"):
-        validate_licenses("d", {"licenses": {"name": "MIT"}})
+        check({"licenses": {"name": "MIT"}})
 
 
 def test_applies_to_must_be_a_list_of_patterns():
     with pytest.raises(DescriptorError, match="list of glob patterns"):
-        validate_licenses(
-            "d", {"licenses": [{"name": "MIT", "ethos:applies_to": "*.tif"}]}
-        )
+        check({"licenses": [{"name": "MIT", "ethos:applies_to": "*.tif"}]})
 
 
 def test_narrowed_licence_lands_on_matching_resources_only():

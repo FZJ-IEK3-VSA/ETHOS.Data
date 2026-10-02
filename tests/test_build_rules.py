@@ -121,3 +121,25 @@ class TestStaleness:
         assert source.build()[0] == 0
 
         assert source.package("flat")["resources"] == inventory
+
+
+class TestWarnings:
+    def test_an_unknown_ethos_key_is_named_and_the_build_goes_on(self, source):
+        source.dataset("flat", {"a.csv": "1"}, ethos_acess="internal")
+
+        code, _, err = source.build()
+
+        assert code == 0
+        assert (
+            "warning: flat: ethos:acess is not a key of the dataset.yaml format" in err
+        )
+
+    def test_an_empty_descriptor_is_refused_with_its_reason(self, source):
+        directory = source.directory("empty")
+        directory.mkdir(parents=True)
+        (directory / "dataset.yaml").write_bytes(b"")
+
+        code, _, err = source.build()
+
+        assert code == 1
+        assert "empty: source_dir is required" in err
