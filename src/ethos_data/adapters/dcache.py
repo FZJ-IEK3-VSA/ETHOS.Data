@@ -19,10 +19,9 @@ from pathlib import Path
 
 from .. import report
 from ..errors import UploadError
+from ..formats.catalogue import DCACHE_FRONTEND as FRONTEND
 
 __all__ = ["FRONTEND", "MODE_0755", "DcacheStore"]
-
-FRONTEND = "https://hifis-storage-web.desy.de/api/v1"
 MODE_0755 = 493  # dCache wants the mode as a decimal integer, not octal
 
 

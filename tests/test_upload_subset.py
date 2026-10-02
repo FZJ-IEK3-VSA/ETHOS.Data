@@ -82,7 +82,7 @@ def workspace():
 def store(monkeypatch):
     """The publication store every upload in the test gets: a fake that records."""
     fake = FakeStore()
-    monkeypatch.setattr(upload, "DcacheStore", lambda remote: fake)
+    monkeypatch.setattr(upload, "DcacheStore", lambda remote, frontend: fake)
     return fake
 
 

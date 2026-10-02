@@ -42,6 +42,8 @@ class FakeStore:
     where: str = "ONLINE"
     objects: dict[str, bytes] = field(default_factory=dict)
     copies: list[dict] = field(default_factory=list)
+    syncs: list[dict] = field(default_factory=list)
+    purges: list[str] = field(default_factory=list)
     chmods: list[tuple[str, int]] = field(default_factory=list)
     reads: list[str] = field(default_factory=list)
     tokens: list[str] = field(default_factory=list)
@@ -130,15 +132,31 @@ class FakeDownloader:
 
 @dataclass
 class FakeGit:
-    """A checkout that records its commits, tags and pushes."""
+    """A checkout that records its commits, tags, pushes, fetches and fast-forwards."""
 
     clean: bool = True
     commits: list[str] = field(default_factory=list)
     tags: list[tuple[str, str]] = field(default_factory=list)
     pushes: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
+    fetches: list[str] = field(default_factory=list)
+    forwards: list[str] = field(default_factory=list)
+    #: Tags the remote has, which ``fetch`` brings in.
+    remote_tags: list[str] = field(default_factory=list)
 
     def is_clean(self) -> bool:
         return self.clean
+
+    def tag_names(self) -> list[str]:
+        return [name for name, _ in self.tags]
+
+    def fetch(self, remote: str) -> None:
+        self.fetches.append(remote)
+        for name in self.remote_tags:
+            if name not in self.tag_names():
+                self.tags.append((name, ""))
+
+    def fast_forward(self, ref: str) -> None:
+        self.forwards.append(ref)
 
     def head(self) -> str:
         return f"commit-{len(self.commits)}"

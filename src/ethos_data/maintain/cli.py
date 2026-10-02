@@ -1,9 +1,10 @@
 """The ``ethos-data catalog ...`` subcommands.
 
 The pipelines ``add``, ``build``, ``upload``, ``record``, ``remove``,
-``check-source`` and ``publish``, which plan every stage before any of them
-acts, so ``--dry-run`` prints the plan; ``status`` and ``migrate``, which show
-and write each dataset's ``status.yaml``; and ``check-store``.
+``check-source``, ``publish``, ``release`` and ``update-checkout``, which plan
+every stage before any of them acts, so ``--dry-run`` prints the plan;
+``status`` and ``migrate``, which show and write each dataset's
+``status.yaml``; and ``check-store``.
 
 The maintainer group owns source metadata and publication operations. Local
 configuration, staging, and cache management also write files, but remain at the
@@ -163,13 +164,20 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         "a family name such as reskit-test-data uploads every member beneath it",
     )
     uploader.add_argument(
-        "--remote", default="HIFIS", help="rclone remote name (default: HIFIS)"
+        "--remote",
+        default=None,
+        help="rclone remote name (default: catalog.yaml's ethos:store, else HIFIS)",
     )
     uploader.add_argument(
-        "--oidc-profile", default="HIFIS", help="oidc-agent profile (default: HIFIS)"
+        "--oidc-profile",
+        default=None,
+        help="oidc-agent profile (default: catalog.yaml's ethos:store, else HIFIS)",
     )
     uploader.add_argument(
-        "--vo-path", default="Helmholtz/FZJ-ICE2", help="namespace path of the VO"
+        "--vo-path",
+        default=None,
+        help="namespace path of the VO (default: catalog.yaml's ethos:store, "
+        "else Helmholtz/FZJ-ICE2)",
     )
     uploader.add_argument(
         "--root",
@@ -249,6 +257,12 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         "--reason", default="", help="why, for the record in status.yaml"
     )
     remover.add_argument(
+        "--purge",
+        action="store_true",
+        help="once a release without them is recorded: delete their cache entries, "
+        "their bytes on the store and their directories but status.yaml",
+    )
+    remover.add_argument(
         "--dry-run", action="store_true", help="check and plan; write nothing"
     )
 
@@ -270,6 +284,57 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     )
     checker.add_argument(
         "--dry-run", action="store_true", help="compare; record nothing"
+    )
+
+    releaser = catalog_sub.add_parser(
+        "release",
+        help="release the catalogue: stamp, commit, tag, generate the public one",
+        description="Check the catalogue, write the version into catalog.yaml and "
+        "the index, record the release in the status files, commit and tag the "
+        "source checkout, and generate, commit and tag the public catalogue. "
+        "--push and --upload reach past this machine; run it again with them to "
+        "finish a release made without.",
+    )
+    releaser.add_argument("version", help="the release, vYYYY.MM.N")
+    releaser.add_argument(
+        "--public",
+        required=True,
+        metavar="DIR",
+        help="the checkout of the public catalogue repository",
+    )
+    releaser.add_argument(
+        "--push", action="store_true", help="push both checkouts and the tag"
+    )
+    releaser.add_argument(
+        "--upload",
+        action="store_true",
+        help="put the public catalogue on the store, under <publication root>/catalogue/",
+    )
+    releaser.add_argument(
+        "--remote", default="origin", help="the git remote to push to (default: origin)"
+    )
+    releaser.add_argument(
+        "--dry-run", action="store_true", help="check and plan; write nothing"
+    )
+
+    updater = catalog_sub.add_parser(
+        "update-checkout",
+        help="move the checkout readers are served to a release, by fast-forward",
+        description="In the served checkout: fetch, fast-forward to the release, "
+        "and check every manifest against its files. Run it on the machine that "
+        "serves it, when no jobs read it.",
+    )
+    updater.add_argument(
+        "--to",
+        default=None,
+        metavar="VERSION",
+        help="the release (default: the latest)",
+    )
+    updater.add_argument(
+        "--remote", default="origin", help="the git remote to fetch (default: origin)"
+    )
+    updater.add_argument(
+        "--dry-run", action="store_true", help="plan; fetch and move nothing"
     )
 
     migrator = catalog_sub.add_parser(
@@ -372,8 +437,32 @@ def dispatch(args) -> int:
         from . import remove
 
         return _status(
-            remove.run(root, args.datasets, reason=args.reason, dry_run=args.dry_run)
+            remove.run(
+                root,
+                args.datasets,
+                reason=args.reason,
+                purge=args.purge,
+                dry_run=args.dry_run,
+            )
         )
+
+    if args.catalog_command == "release":
+        from . import release
+
+        return release.run(
+            root,
+            args.version,
+            args.public,
+            push=args.push,
+            upload=args.upload,
+            remote=args.remote,
+            dry_run=args.dry_run,
+        )
+
+    if args.catalog_command == "update-checkout":
+        from . import checkout
+
+        return checkout.run(root, to=args.to, remote=args.remote, dry_run=args.dry_run)
 
     if args.catalog_command == "check-source":
         from . import provenance

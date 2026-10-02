@@ -158,8 +158,10 @@ def render(catalog_root: Path, earlier: list[str] | None = None) -> dict[Path, s
     keeps listing beside the one being published: a package that bounds its
     catalogue version finds the newest public release within its bounds there.
     """
+    from ..formats.catalogue import STRIPPED as STRIP_FROM_INDEX
+
     catalog_meta = read_catalog_meta(catalog_root)
-    for key in STRIP_FROM_PACKAGE:
+    for key in (*STRIP_FROM_PACKAGE, *STRIP_FROM_INDEX):
         catalog_meta.pop(key, None)
     # Overwritten, not inherited: this copy is generated whatever the source says.
     # It is the only durable marker of that -- the public tree has no catalog.yaml,

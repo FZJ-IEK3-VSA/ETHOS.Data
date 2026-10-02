@@ -631,6 +631,8 @@ def build_catalog(
 ) -> dict:
     """The index of ``dataset_dirs``, from ``packages`` where given, else from disk."""
     meta = catalog_meta(catalog_root)
+    for key in catalogue_format.STRIPPED:
+        meta.pop(key, None)
     datasets_root = datasets_dir(catalog_root)
     datasets = []
     for dataset_dir in sorted(dataset_dirs):

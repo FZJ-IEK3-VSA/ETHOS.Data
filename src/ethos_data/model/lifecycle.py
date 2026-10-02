@@ -96,6 +96,8 @@ STEPS: Mapping[str, Step] = {
              {BUILT: BUILT, AVAILABLE: AVAILABLE, FROZEN: FROZEN}),
         Step("remove", "ethos-data catalog remove", dict.fromkeys(_IN_CATALOGUE, WITHDRAWN)),
         Step("purge", "ethos-data catalog remove --purge", {WITHDRAWN: PURGED}),
+        # A release holds every step before it, whatever state they left.
+        Step("release", "ethos-data catalog release", {state: state for state in STATES}),
     )
 }  # fmt: skip
 

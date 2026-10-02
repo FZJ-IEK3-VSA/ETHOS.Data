@@ -170,9 +170,9 @@ the command again finishes the batch.
 | `--verify-only` | | skip the transfer; the chmod runs unless `--no-chmod` is given too |
 | `--no-chmod` | | do not set `0755` on the dataset prefix |
 | `--transfers N` | `8` | parallel transfers |
-| `--remote NAME` | `HIFIS` | rclone remote name |
-| `--oidc-profile NAME` | `HIFIS` | oidc-agent profile |
-| `--vo-path PATH` | `Helmholtz/FZJ-ICE2` | namespace path of the VO |
+| `--remote NAME` | `catalog.yaml`'s `ethos:store`, else `HIFIS` | rclone remote name |
+| `--oidc-profile NAME` | `catalog.yaml`'s `ethos:store`, else `HIFIS` | oidc-agent profile |
+| `--vo-path PATH` | `catalog.yaml`'s `ethos:store`, else `Helmholtz/FZJ-ICE2` | namespace path of the VO |
 | `--root NAME` | last segment of `catalog.yaml`'s `ethos:publication_url` | publication root under the VO |
 
 A dataset may be named by directory name or by path — a path must point into
@@ -286,9 +286,22 @@ checkout, and its cache entries and bytes where they are, until a major
 release is recorded after the removal. Removing a withdrawn dataset again does
 nothing.
 
+`--purge` is the second half, once a [release](#release-version) since the
+removal is recorded in the dataset's status file:
+
+| Stage | |
+|---|---|
+| `check` | every dataset named is withdrawn, a release since says it is gone, and no other dataset's copy on the store lies in its folder or around it |
+| `cache` | unlink every link the status file records; delete every copy a cache owns |
+| `store` | purge the dataset's folder on the store, which has no trash area, and check that it is no longer served |
+| `tombstone` | delete the dataset's directory but its `status.yaml`, which records it `purged`, and a family left with no members; rebuild the index |
+
+The tombstone keeps the name: `catalog add` refuses to give it to other bytes.
+
 | Flag | |
 |---|---|
 | `--reason TEXT` | why, for the record in `status.yaml` |
+| `--purge` | delete the cache entries, bytes and directory of datasets a release dropped |
 | `--dry-run` | check and plan; write nothing |
 
 ## `check-source <dataset> <directory>` {#check-source}
@@ -316,6 +329,61 @@ datasets have no source and are refused.
 | `--dry-run` | compare; record nothing |
 
 Exit `1` if a file differs.
+
+## `release <version>` {#release-version}
+
+Make a release of the checked source catalogue, the internal and the public
+catalogue alike.
+
+```bash
+ethos-data catalog release v2026.10.1 --public ../ETHOS.Data-Catalogue --dry-run
+ethos-data catalog release v2026.10.1 --public ../ETHOS.Data-Catalogue
+ethos-data catalog release v2026.10.1 --public ../ETHOS.Data-Catalogue --push --upload
+```
+
+| Stage | |
+|---|---|
+| `check` | the version, `vYYYY.MM.N`, follows the catalogue's last release and has no tag; both checkouts are clean, and the public one is not a source catalogue; every manifest is current; every public dataset the public catalogue lists has a verified upload recorded; the public tree does not leak |
+| `stamp` | write `version:` into `catalog.yaml` and the index; add a `release` step to the history of every dataset with steps since its last release |
+| `commit` | commit the source checkout, `Release <version>`, and tag it |
+| `public` | generate the public catalogue in its checkout, commit and tag it |
+| `push` | with `--push`: push both checkouts and the tag to `--remote` |
+| `store` | with `--upload`: put the public catalogue on the store under `<publication root>/catalogue/`, replacing the previous one, make it world-readable, and check that it is served |
+
+Run again with the same version, it does only what is left: a stamp or a tag
+that is there is not made again. A release made without `--push` and
+`--upload` is finished by running it again with them, and so is one that was
+interrupted.
+
+| Flag | |
+|---|---|
+| `--public DIR` | the checkout of the public catalogue repository; required |
+| `--push` | push both checkouts and the tag |
+| `--upload` | put the public catalogue on the store |
+| `--remote NAME` | the git remote to push to (default: `origin`) |
+| `--dry-run` | check and plan; write nothing |
+
+## `update-checkout` {#update-checkout}
+
+Move the checkout readers are served, on the machine that serves it, to a
+release.
+
+```bash
+ethos-data catalog --catalog-root /shared/ethos/catalogue update-checkout --dry-run
+ethos-data catalog --catalog-root /shared/ethos/catalogue update-checkout
+```
+
+Three stages: `fetch` the remote's branches and tags, refusing a checkout
+with changes nobody committed; `advance` to the latest release tag, or to
+`--to`, by fast-forward only, checking that `catalog.yaml` then says that
+release; `check` every manifest against its files, writing nothing. Nothing is
+rebuilt in a served checkout.
+
+| Flag | |
+|---|---|
+| `--to VERSION` | the release to move to (default: the latest tag) |
+| `--remote NAME` | the git remote to fetch (default: `origin`) |
+| `--dry-run` | plan; fetch and move nothing |
 
 ## `migrate [datasets...]` {#migrate-datasets}
 

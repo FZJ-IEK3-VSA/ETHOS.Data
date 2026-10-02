@@ -48,6 +48,7 @@ again; a failed dataset does not stop the others.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 from dataclasses import dataclass, field
@@ -59,6 +60,7 @@ from ..adapters import Store
 from ..adapters.dcache import FRONTEND, MODE_0755, DcacheStore
 from ..errors import UploadError
 from ..formats import keys as k
+from ..formats.catalogue import store_of
 from ..formats.derived import license_settled, remote_prefix_of, resource_url
 from ..formats.keys import ROLE_PUBLISHED
 from ..formats.status_file import Copy, StatusFile
@@ -79,11 +81,15 @@ from .pipeline import Action, Pipeline
 
 @dataclass(frozen=True)
 class UploadOptions:
-    """The flags of ``ethos-data catalog upload``, with the command's defaults."""
+    """The flags of ``ethos-data catalog upload``, with the command's defaults.
 
-    remote: str = "HIFIS"
-    oidc_profile: str = "HIFIS"
-    vo_path: str = "Helmholtz/FZJ-ICE2"
+    ``remote``, ``oidc_profile`` and ``vo_path`` left None are taken from
+    ``catalog.yaml``'s ``ethos:store``, whose own defaults are today's dCache.
+    """
+
+    remote: str | None = None
+    oidc_profile: str | None = None
+    vo_path: str | None = None
     #: The publication root under the VO; None means the catalogue's own.
     root: str | None = None
     dry_run: bool = False

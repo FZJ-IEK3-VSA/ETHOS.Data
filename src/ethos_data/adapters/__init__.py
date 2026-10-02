@@ -93,10 +93,22 @@ class Downloader(Protocol):
 
 @runtime_checkable
 class Git(Protocol):
-    """A git checkout, as a release commits, tags and pushes it."""
+    """A git checkout, as a release commits, tags and pushes it and a server updates it."""
 
     def is_clean(self) -> bool:
         """Whether the working tree has no uncommitted changes."""
+        ...
+
+    def tag_names(self) -> list[str]:
+        """Every tag of the repository."""
+        ...
+
+    def fetch(self, remote: str) -> None:
+        """Fetch ``remote``'s branches and tags."""
+        ...
+
+    def fast_forward(self, ref: str) -> None:
+        """Move the checkout to ``ref``, refusing anything but a fast-forward."""
         ...
 
     def head(self) -> str:
