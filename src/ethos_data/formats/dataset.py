@@ -18,12 +18,12 @@ The messages carry no dataset name; the caller, which knows it, prefixes one.
 
 from __future__ import annotations
 
-from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ..errors import DescriptorError
+from ..model.names import relative
 from . import keys as k
 from .fields import field, keys, keys_with
 
@@ -514,15 +514,11 @@ def _document(where: str, entry: dict) -> str | None:
                 "the hash."
             )
         return None
-    relative = PurePosixPath(str(document))
-    if (
-        not isinstance(document, str)
-        or not document
-        or "\\" in document
-        or relative.is_absolute()
-        or PureWindowsPath(document).drive
-        or any(part in ("", ".", "..") for part in relative.parts)
-    ):
+    # The one rule for a path inside a dataset, checked as spelled: ``./terms.txt``
+    # or ``licenses//terms.txt`` would read one way here and another in a bundle.
+    try:
+        relative(document, k.DOCUMENT)
+    except ValueError:
         return (
             f"{where}: {k.DOCUMENT} must be a relative path inside the dataset "
             f"directory, such as licenses/terms.txt; got {document!r}."
@@ -580,7 +576,9 @@ def _freeze(meta: dict) -> str | None:
             f"declares {declared}: true and still has "
             f"source_dir: {source_dir!r}. {reason}"
         )
-    if not frozen and source_dir is None:
+    # Empty counts as absent: resolved against the dataset directory, an empty
+    # source_dir would build the dataset from its own descriptor files.
+    if not frozen and not source_dir:
         return (
             f"source_dir is required, unless {k.UPLOADED}: true says the "
             f"dataset was already uploaded, or {k.FROZEN}: true says its inventory "
