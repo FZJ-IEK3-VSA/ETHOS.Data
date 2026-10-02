@@ -1,0 +1,67 @@
+{
+  "additionalProperties": true,
+  "description": "Where a materialised cache entry was copied from.",
+  "properties": {
+    "dataset": {
+      "title": "Dataset",
+      "type": "string"
+    },
+    "materialized_from": {
+      "description": "The directory the bytes were copied from.",
+      "title": "Materialized From",
+      "type": "string"
+    },
+    "was_a_link_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The entry that was a link, or null when the copy created it.",
+      "title": "Was A Link At"
+    },
+    "catalog": {
+      "description": "The catalogue the copy was checked against.",
+      "title": "Catalog",
+      "type": "string"
+    },
+    "files": {
+      "title": "Files",
+      "type": "integer"
+    },
+    "bytes": {
+      "title": "Bytes",
+      "type": "integer"
+    },
+    "verified": {
+      "description": "Whether every copy was checked against its hash.",
+      "title": "Verified",
+      "type": "boolean"
+    },
+    "when": {
+      "title": "When",
+      "type": "string"
+    },
+    "by": {
+      "default": "",
+      "title": "By",
+      "type": "string"
+    }
+  },
+  "required": [
+    "dataset",
+    "materialized_from",
+    "catalog",
+    "files",
+    "bytes",
+    "verified",
+    "when"
+  ],
+  "title": ".ethos-data-materialized.json",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

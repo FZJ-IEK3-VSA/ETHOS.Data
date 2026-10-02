@@ -20,6 +20,10 @@ dependencies = [
   "pooch>=1.8.0",
   "pyyaml>=5.4",
   "platformdirs>=3.0",   # cross-platform config and cache locations
+  # The file-format specifications (ethos_data.formats) are pydantic models.
+  # Loaded only when a file is validated, so `--help` and plain reads do not
+  # pay for it.
+  "pydantic>=2",
 ]
 
 [project.optional-dependencies]

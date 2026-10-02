@@ -1,0 +1,258 @@
+{
+  "$defs": {
+    "ResourceRecord": {
+      "additionalProperties": true,
+      "description": "One file of a dataset's inventory.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "bytes": {
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "hash": {
+          "default": null,
+          "description": "\"sha256:<hex>\", the convention pooch reads.",
+          "title": "Hash",
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "mediatype": {
+          "default": "application/octet-stream",
+          "title": "Mediatype",
+          "type": "string"
+        },
+        "ethos:sidecars": {
+          "default": [],
+          "description": "Companion files that must travel with this one.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Ethos:Sidecars",
+          "type": "array",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "licenses": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Present only on files a narrowed licence matched.",
+          "title": "Licenses",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "bytes"
+      ],
+      "title": "ResourceRecord",
+      "type": "object"
+    },
+    "ShardEntry": {
+      "additionalProperties": true,
+      "description": "One shard of a sharded inventory, as the descriptor lists it.",
+      "properties": {
+        "prefix": {
+          "title": "Prefix",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "ethos:file_count": {
+          "default": 0,
+          "description": "",
+          "title": "Ethos:File Count",
+          "type": "integer",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "ethos:total_bytes": {
+          "default": 0,
+          "description": "",
+          "title": "Ethos:Total Bytes",
+          "type": "integer",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        }
+      },
+      "required": [
+        "prefix",
+        "path"
+      ],
+      "title": "ShardEntry",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "A dataset's generated descriptor and inventory.",
+  "properties": {
+    "$schema": {
+      "default": "https://datapackage.org/profiles/2.0/datapackage.json",
+      "description": "",
+      "title": "$Schema",
+      "type": "string",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Title"
+    },
+    "resources": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/ResourceRecord"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Resources"
+    },
+    "ethos:shard_depth": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "",
+      "title": "Ethos:Shard Depth",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:shards": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/ShardEntry"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "",
+      "title": "Ethos:Shards",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:namespace": {
+      "default": false,
+      "description": "",
+      "title": "Ethos:Namespace",
+      "type": "boolean",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:total_bytes": {
+      "default": 0,
+      "description": "",
+      "title": "Ethos:Total Bytes",
+      "type": "integer",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:file_count": {
+      "default": 0,
+      "description": "",
+      "title": "Ethos:File Count",
+      "type": "integer",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "datapackage.json",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -13,6 +13,20 @@ and optional inventory shards are generated and must never be edited by hand.
 Institute-specific keys use the `ethos:` prefix — the
 [Data Package](https://datapackage.org/) standard's extension mechanism.
 
+Every format is specified once, as a model in `ethos_data.formats`, and this
+page follows those models. JSON Schemas generated from them ship with the
+package, so an editor running the YAML language server completes and checks a
+file whose first line names one:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data/main/src/ethos_data/formats/schemas/dataset.schema.json
+```
+
+The files people write have templates beside the models, in
+`ethos_data/formats/templates/`: `dataset.yaml` for downloaded, derived,
+created and restricted data and a minimal one for staging, `catalog.yaml` and
+`collections.yaml`. The annotated `dataset.yaml` below is one of them.
+
 ---
 
 ## `collections.yaml`
@@ -125,83 +139,7 @@ Everything else is optional, defaulted, or required only in a specific
 situation. The full set, annotated:
 
 ```yaml
-#  required      the build fails without it
-#  default: x    omit it and you get x
-#  if ...        required only in that case
-#  repeatable    a list; add as many entries as you need
-#  (unmarked)    optional
-
-# ---- identity ----------------------------------------------------------
-name: my-dataset                              # required
-title: A short human-readable title
-description: >-
-  What this is, and what it is used for.
-homepage: https://example.org/the-product
-id: https://doi.org/10.5281/zenodo.1234567
-version: "2.0.7"                              # the publisher's own release string
-
-sources:                                      # repeatable
-  - title: Where the data originally came from
-    path: https://doi.org/10.5281/zenodo.1234567
-  - title: A second source, when it had more than one
-    path: https://example.org/methodology.pdf
-
-contributors:                                 # repeatable
-  - title: A Researcher                       # required within an entry
-    roles: [author]                           # repeatable; see below for the vocabulary
-    organization: Forschungszentrum Jülich, ICE-2
-    path: https://orcid.org/0000-0000-0000-0000
-    email: a.researcher@fz-juelich.de
-
-licenses:                                     # repeatable
-  - name: CC-BY-4.0                           # `name` and/or `path` -- at least one
-    path: https://creativecommons.org/licenses/by/4.0/
-    ethos:applies_to: ["originals/**"]         # repeatable; omit to cover every file
-  - name: CC0-1.0
-    path: https://creativecommons.org/publicdomain/zero/1.0/
-
-ethos:retrieved: "2026-09-01"
-ethos:contact: your-username
-ethos:attribution: >-
-  The statement anyone redistributing this data has to reproduce.
-ethos:coverage_note: >-
-  What this mirror does not hold, and why.
-ethos:upstream:                                # omit while upstream still serves it
-  status: withdrawn                           # available|superseded|withdrawn|on-request
-  checked: "2026-09-01"
-  note: >-
-    What happened, what was checked, and any route that remains.
-
-# ---- provenance --------------------------------------------------------
-ethos:origin: downloaded                       # default: downloaded | derived | created
-ethos:derivation: >-                           # if origin: derived
-  The method, parameters and inputs, in enough detail to redo it.
-
-# ---- where the bytes are -----------------------------------------------
-source_dir: /legacy/shared/MyDataset           # required, unless frozen below
-ethos:remote_prefix: my-dataset                # default: the value of `name`
-ethos:uploaded: false                          # dCache holds it; drop source_dir
-ethos:frozen: false                            # inventory final; drop source_dir
-
-# ---- classification ----------------------------------------------------
-ethos:access: public                           # default: public | internal | restricted
-ethos:visibility: public                       # default: public | hidden
-ethos:embargo:                                 # if visibility: hidden
-  until: "2027-01-01"
-  reason: Under peer review until publication.
-  becomes: public
-ethos:license_status: resolved                 # default: derived | resolved | unresolved | unknown
-ethos:license_note: >-
-  Internal working note on the licence. Stripped from the published catalogue.
-ethos:restriction: >-                          # if access: restricted
-  Why it is restricted, and how somebody entitled to it gets a copy.
-
-# ---- inventory control -------------------------------------------------
-ethos:include:                                 # repeatable
-  - "rasters/**"
-ethos:exclude:                                 # repeatable
-  - "**/*.tmp"
-ethos:shard_depth: 1
+--8<-- "src/ethos_data/formats/templates/dataset-full.yaml"
 ```
 
 Real descriptors use a fraction of this. Nothing above is filler, but a mirrored
@@ -386,6 +324,17 @@ authorship than is true is safe, claiming more is not.
 
 **`ethos:derivation`** — *string; required when `ethos:origin` is `derived`.* The
 method, parameters and inputs, in enough detail to redo it.
+
+**`ethos:input_datasets`** — *list of dataset names.* For data derived from
+datasets in this catalogue, their names, so the dependency can be followed
+without reading the derivation's prose.
+
+**`ethos:provenance`** — *string.* How this copy came to be, where `sources`
+and `ethos:retrieved` do not say it: restored from an archive, received on a
+disk, reassembled from parts.
+
+**`ethos:verified`** — *string, an ISO date, quoted.* When this copy was last
+checked against its source.
 
 **`contributors`** — *list of `{title, roles, organization, path, email}`.*
 Frictionless. Each entry needs a `title`; the rest are optional.
@@ -622,6 +571,15 @@ Patterns are matched against the path relative to `source_dir`, with the same
 matcher as a collection's `files:`. Two conveniences: a pattern with **no
 wildcard** means that path and everything under it; a **trailing slash** means the
 subtree only.
+
+### What the files hold
+
+**`ethos:tiling`** — *mapping.* For a dataset split into tiles, the scheme: its
+name, zoom, tile size and the pattern of the tile paths, so a reader can
+compute which tile holds a point.
+
+**`ethos:additional_variables`** — *mapping of variable name to description.*
+Variables a file carries beyond the ones the dataset is about.
 
 See [Add a dataset](../how-to/catalogue-maintainers/add-a-dataset.md).
 
