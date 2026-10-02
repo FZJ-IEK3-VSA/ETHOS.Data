@@ -9,10 +9,6 @@ import pytest
 from ethos_data import config, tool_main
 from ethos_data.bundles import ModifiedBundleWarning
 
-pytestmark = pytest.mark.legacy(
-    "bundles become repository-first: bundle.json gains a family, a version and per-member dataset.yaml files"
-)
-
 
 def test_cli_export_verify_development_override(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(config, "load_config", lambda: ({}, {}))

@@ -82,12 +82,17 @@ See [Check and repair the cache](../../how-to/data-users/verify-and-repair.md) a
 ::: ethos_data.bundles
     options:
       members:
+        - create_bundle
+        - update_bundle
         - export_bundle
         - load_bundle
+        - with_bundles
         - Bundle
+        - BundleUpdate
         - BundleFinding
         - BundleError
         - ModifiedBundleWarning
+        - UnpublishedBundleWarning
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

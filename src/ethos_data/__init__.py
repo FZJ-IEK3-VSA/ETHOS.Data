@@ -29,6 +29,7 @@ nothing is registered anywhere. See :func:`collections`.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from .access import AccessError, Location, locate
@@ -178,6 +179,8 @@ def collections(
     tool: str | None = None,
     catalog: str | Catalog | None = None,
     root: str | Path | None = None,
+    bundles: Sequence[str | Path] = (),
+    download: bool | None = None,
 ) -> Collections:
     """A handle on a collections file: what a tool's workflows need, by name.
 
@@ -196,6 +199,11 @@ def collections(
     knowing. ``root`` overrides the public cache directory. The file and the
     settings are read once, here: ``.settings`` reports what every later call
     uses, and ``.catalog`` is the catalogue it resolved to, for access by key.
+
+    ``bundles`` are the bundle directories the package ships in its
+    repository: what they hold is read from them first, hash-checked, and the
+    catalogue is asked only for the rest. ``download=True``, or
+    ``$ETHOS_DATA_DOWNLOAD=1``, reads everything the catalogue route instead.
     """
     settings = read_settings(
         root=root, catalog=catalog if isinstance(catalog, str) else None
@@ -206,6 +214,8 @@ def collections(
         roots=settings.roots,
         tool=tool,
         settings=settings,
+        bundles=bundles,
+        download=download,
     )
 
 
@@ -238,6 +248,7 @@ def tool_main(
     tool: str | None = None,
     prog: str | None = None,
     catalog: str | None = None,
+    bundles: Sequence[str | Path] = (),
     argv: list[str] | None = None,
 ) -> int:
     """The body of a tool's data command, bound to its shipped collections file.
@@ -260,11 +271,14 @@ def tool_main(
     (default ``<tool>-data``); ``catalog`` is the tool's own catalogue override,
     applied below ``--catalog`` and above ``$ETHOS_DATA_CATALOG``. The handle
     is built only for the commands that need one, so ``--help`` and ``config
-    show`` never load the catalogue.
+    show`` never load the catalogue. ``bundles`` are the package's bundle
+    directories, read first, as for :func:`collections`.
     """
     from .cli import run_tool
 
-    return run_tool(path, tool=tool, prog=prog, catalog=catalog, argv=argv)
+    return run_tool(
+        path, tool=tool, prog=prog, catalog=catalog, bundles=bundles, argv=argv
+    )
 
 
 def resolve(

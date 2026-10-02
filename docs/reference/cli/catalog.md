@@ -54,7 +54,31 @@ not build it: then only the build is left.
 | `--name NAME` | the dataset's name, for a draft that states none |
 | `--dry-run` | check and plan; write nothing |
 
-## `build [datasets...]`
+## `add-bundle <directory>` {#add-bundle}
+
+Bring the catalogue's family up to a package's repository bundle.
+
+```bash
+ethos-data catalog add-bundle /checkout/your_tool/data/test_data --dry-run
+ethos-data catalog add-bundle /checkout/your_tool/data/test_data
+```
+
+Compares the bundle with what the catalogue holds of its family and plans
+one step for each difference, each planned before any is taken: the family's
+description where it is new or changed; a member the catalogue lacks, added
+and built from the bundle's draft as [`add`](#add-source) does; a changed
+description, taken; a member not published yet whose files changed, rebuilt
+from the bundle; a published member whose files changed, made its next
+[revision](#build-datasets). The bundle's files are the build input. A
+published file the bundle no longer has is refused unless `--remove-missing`
+says it is meant; a member the bundle lacks is left as it is.
+
+| Flag | |
+|---|---|
+| `--remove-missing` | let published files the bundle no longer has go, keys and all |
+| `--dry-run` | compare and plan; write nothing |
+
+## `build [datasets...]` {#build-datasets}
 
 Regenerate `datapackage.json` (and `shards/*.json` for a sharded dataset)
 from each `dataset.yaml`, plus the catalogue-wide `datacatalog.json`.

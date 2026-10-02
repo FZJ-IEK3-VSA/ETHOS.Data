@@ -44,11 +44,6 @@ put the licence documents beside them, as for any
 directory. Keep every bundle small: Git hosts refuse files over 100 MiB, and
 every revision of a fixture stays in the history.
 
-!!! warning "Gap: `bundle create` does not exist"
-    A bundle can only be exported from data that is already in the
-    catalogue. Creating one from local files, with drafted descriptions and
-    a version, is the missing first step of this lifecycle.
-
 ## 2. Work with it, published or not {#use-a-bundle}
 
 List the bundle in the package's data module (see
@@ -76,13 +71,9 @@ the live CI job fails on a bundle version the catalogue does not hold, see
 [Run tests and examples in CI](run-in-ci.md).
 
 To force the catalogue route instead of the bundle, for example to test the
-download, pass `download=True` or set `ETHOS_DATA_DOWNLOAD=1`.
-
-!!! warning "Gap: bundle-first reads, the warning and the download switch are not in ETHOS.Data"
-    `ethos_data.collections` takes no `bundles=`, nothing warns about an
-    unpublished bundle version, and there is no `ETHOS_DATA_DOWNLOAD`. One
-    package implements bundle-first reads and a download switch for itself
-    today.
+download, pass `download=True` or set `ETHOS_DATA_DOWNLOAD=1`. That route
+refuses a bundle version no release holds yet: the catalogue would serve
+another version under the same keys.
 
 ## 3. Change it: extend, or copy {#update-data}
 
@@ -92,16 +83,22 @@ Edit the files as you edit anything in the repository, then re-inventory:
 <your-tool>-data bundle update your_tool/data/test_data
 ```
 
+`bundle update` lists every file that changed, is new, moved or is gone,
+and every member that is new or gone, and records them. A version no release
+holds yet takes the changes in; a version a release holds is never changed,
+so the first change after its release starts the next version, which waits
+for its own:
+
 | Change | What `bundle update` does |
 | --- | --- |
-| Files added, or a new member dataset | Records them in the current version. An extension does not change published files, so it needs no new version. |
-| The bytes of a published file changed under its path | Refused. Published paths never change: put the new bytes under a new path, a copy, and keep or drop the old file as the tests need. `bundle update` then starts the next bundle version. |
-| A file removed | Recorded; the file stays in the published versions on dCache. |
+| Files added, or a new member dataset | Records them, and drafts the new member's `dataset.yaml`. |
+| The bytes of a file changed under its path | Records them. The catalogue publishes the changed member as its next [revision](../catalogue-maintainers/publish-a-new-version.md#revision): the same keys, the new bytes beside the old ones. |
+| A file moved or removed | Records it, and warns: the key goes, and every collection that names it breaks. If the layout changed, propose a [successor](../catalogue-maintainers/publish-a-new-version.md#successor) instead, a new dataset that says `ethos:supersedes`. The file stays in the published versions on dCache. |
 
 Reproducing a bug with a temporarily edited fixture stays possible without
-a version: `load_bundle(DIR).fetch(collection, allow_modified=True)` in the
-affected test only, and `bundle verify` keeps reporting `modified` until the
-file is restored.
+a version: `load_bundle(DIR).fetch(allow_modified=True)` in the affected
+test only, and `bundle verify` keeps reporting `modified` until the file is
+restored or the change is recorded.
 
 ## 4. Have the catalogue updated from the bundle {#sync}
 
@@ -114,11 +111,15 @@ needs. The maintainer imports it:
 ethos-data catalog add-bundle /path/to/checkout/your_tool/data/test_data
 ```
 
-`add-bundle` compares the bundle with the version of the family the
-catalogue already holds and writes the difference as the bundle's version:
-new members and new files are added, changed files appear under their new
-paths, unchanged files keep the paths and remote objects they have. The
-maintainer builds, uploads what is new and [releases](../catalogue-maintainers/release-the-catalogue.md).
+`add-bundle` compares the bundle with what the catalogue holds of the
+family and brings the family up to it: new members are added and built from
+the bundle's drafts and files, changed descriptions are taken, a member not
+published yet is rebuilt, and a published member whose files changed becomes
+its next revision, its changed and new files published beside the old ones
+and its unchanged files keeping the objects they have. A file the bundle no
+longer has is refused for a published member, unless `--remove-missing` says
+it is meant. The maintainer then uploads what is new and
+[releases](../catalogue-maintainers/release-the-catalogue.md).
 Once the release is out, raise `catalog.min_version` in your collections
 file and run `bundle update` once more: it records the release in
 `bundle.json`, and the warning stops.
@@ -126,14 +127,6 @@ file and run `bundle update` once more: it records the release in
 A later change to the bundle goes the same way and becomes the next version.
 Older versions stay on dCache for the packages that still use them; the
 repository holds the current one.
-
-!!! warning "Gap: no bundle versions, no `bundle update`, no `catalog add-bundle`"
-    `bundle.json` carries no version and no published-release field,
-    `bundle export` refuses an existing target, and nothing on the
-    maintainer side imports a bundle into the catalogue or compares it with
-    the version already there. How a bundle version is encoded in dataset
-    names and resource paths, so that two versions can share a cache, is the
-    design question behind this feature.
 
 ## 5. Reuse test data from the catalogue in another tool
 

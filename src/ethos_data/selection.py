@@ -37,6 +37,7 @@ from __future__ import annotations
 import fnmatch
 import os
 import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -54,7 +55,12 @@ from .catalogs import (
     select_key,
     split_key,
 )
-from .errors import CollectionError, CollectionsNotFound, UnknownCollection
+from .errors import (
+    BundleError,
+    CollectionError,
+    CollectionsNotFound,
+    UnknownCollection,
+)
 from .model.versions import Bounds
 from .retrieval import DataFiles, NamedPaths
 
@@ -119,6 +125,58 @@ class Collections:
     roots: Roots | None = None
     #: The settings this handle uses, read once when it was built.
     _settings: Settings | None = field(default=None, repr=False)
+    #: The bundles the package ships, read before the catalogue unless
+    #: :attr:`download` is set.
+    bundles: tuple = ()
+    #: The catalogue route instead of the bundles: ``download=`` or
+    #: ``$ETHOS_DATA_DOWNLOAD``.
+    download: bool = False
+    #: The catalogue before the bundles and staging were laid over it.
+    base_catalog: Catalog | None = None
+
+    def _refuse_unpublished_rule(self, pattern: str) -> None:
+        """In the catalogue route, refuse a rule that reaches an unpublished bundle.
+
+        Checked before the catalogue is asked: it may not describe the dataset
+        at all yet, and "unknown dataset" would hide that the bundle has it.
+        """
+        if not self.download:
+            return
+        from .model import names as dataset_names
+
+        for bundle in self.bundles:
+            if bundle.published:
+                continue
+            for dataset in bundle.datasets:
+                if (
+                    dataset == pattern
+                    or dataset_names.within(dataset, pattern)
+                    or path_matches(dataset, pattern)
+                ):
+                    raise BundleError(
+                        f"{bundle.path} version {bundle.version} is not in the "
+                        "catalogue yet, so the catalogue route cannot read "
+                        f"{dataset}; propose it, or read the bundle without the "
+                        "download switch"
+                    )
+
+    def _refuse_unpublished(self, resources: list[Resource]) -> None:
+        """In the catalogue route, refuse a bundle version no release holds yet.
+
+        Its files are the repository's, and the catalogue serves another
+        version under the same keys, so a job downloading them would test
+        something else than it thinks.
+        """
+        if not self.download:
+            return
+        wanted = {resource.dataset for resource in resources}
+        for bundle in self.bundles:
+            if not bundle.published and wanted & set(bundle.datasets):
+                raise BundleError(
+                    f"{bundle.path} version {bundle.version} is not in the catalogue "
+                    "yet, so the catalogue route cannot read it; propose it, or read "
+                    "the bundle without the download switch"
+                )
 
     @property
     def settings(self) -> Settings:
@@ -348,6 +406,7 @@ class Collections:
                 selected[resource.key] = resource
 
         for rule in self._include_rules(name, definition):
+            self._refuse_unpublished_rule(rule["dataset"])
             # One rule may name a family or a glob, so it can reach several
             # datasets. `files:` patterns are matched against each one's own
             # resource paths -- a member's paths are relative to the member, not
@@ -423,6 +482,7 @@ class Collections:
         """
         roots = self._roots(root)
         resources = self.resolve(name, test=test)
+        self._refuse_unpublished(resources)
         # Checked before anything is downloaded: a handle naming a file the
         # collection does not include is a mistake in collections.yaml, and the
         # maintainer should hear about it before a 40 GB transfer, not after.
@@ -659,6 +719,8 @@ def load_collections(
     roots: Roots | None = None,
     tool: str | None = None,
     settings: Settings | None = None,
+    bundles: Sequence = (),
+    download: bool | None = None,
 ) -> Collections:
     """Load a collections file with the configured development overlay.
 
@@ -673,8 +735,14 @@ def load_collections(
     :func:`ethos_data.collections` is the same with ``root=`` and the settings
     read for it. ``settings`` is the snapshot the handle keeps; by default the
     settings are read here, once.
+
+    ``bundles`` are the bundle directories the package ships: their datasets
+    are read from them first, before staging is laid over them, unless
+    ``download`` -- by default ``$ETHOS_DATA_DOWNLOAD`` -- asks for the
+    catalogue route.
     """
-    from .config import read_settings
+    from .bundles import Bundle, load_bundle, with_bundles
+    from .config import download_requested, read_settings
 
     path = Path(path).expanduser().resolve()
     document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -709,6 +777,14 @@ def load_collections(
         # modified, and keeps the settings it already has.
         resolved._settings = settings
 
+    base = resolved
+    download = download_requested(download)
+    loaded = tuple(
+        bundle if isinstance(bundle, Bundle) else load_bundle(bundle)
+        for bundle in bundles
+    )
+    if loaded and not download:
+        resolved = with_bundles(resolved, loaded)
     if include_staging:
         from .staging import with_staging
 
@@ -720,6 +796,9 @@ def load_collections(
         tool=tool,
         roots=roots,
         _settings=settings,
+        bundles=loaded,
+        download=download,
+        base_catalog=base,
     )
 
 

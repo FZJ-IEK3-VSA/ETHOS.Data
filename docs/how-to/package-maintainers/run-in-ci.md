@@ -40,10 +40,6 @@ bundled file that is missing or altered is an error in both modes, not a
 reason to download, and the live job fails on a bundle version the catalogue
 does not hold yet.
 
-!!! warning "Gap: no shared download switch"
-    `ETHOS_DATA_DOWNLOAD` does not exist; one package has a variable of its
-    own for the purpose. See
-    [Keep data in the repository](keep-data-in-the-repository.md#use-a-bundle).
 
 ## 3. Download public data the repository does not hold
 

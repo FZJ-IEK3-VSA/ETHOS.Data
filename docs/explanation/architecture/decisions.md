@@ -23,9 +23,9 @@ the canonical account of the reasoning.
 | Ship a small public collections file for a self-test | Implemented | `ethos-data selftest` and `ethos_data.EXAMPLE_COLLECTIONS` check settings, catalogue, store and cache with a download of under 200 KB, without any package's collections. See [a self-test collection ships with the package](#a-self-test-collection-ships-with-the-package-2026-10-02). |
 | Specify every file format once | Proposed | One pydantic model per file drives validation, typed access, JSON Schemas, templates, the publish strip list, the index row and the reference tables, so a key and its default are written down once. See [every file format is specified once](#every-file-format-is-specified-once-2026-10-02). |
 | Record each dataset's state in a status file | Implemented | `datasets/<name>/status.yaml` holds the state, the build input and a history, and the commands check every transition. `source_dir`, `ethos:uploaded` and `ethos:frozen` leave `dataset.yaml`. See [datasets record their state](#datasets-record-their-state-in-a-status-file-2026-10-02). |
-| Find files through one lookup chain | Proposed | Root override, staging, bundles, restricted cache, public cache and download are one locator each, and each answers found, pass or refuse. See [one lookup chain](#one-lookup-chain-decides-where-a-file-is-read-2026-10-02). |
+| Find files through one lookup chain | Implemented | Root override, staging, bundles, restricted cache, public cache and download are one locator each, and each answers found, pass or refuse. See [one lookup chain](#one-lookup-chain-decides-where-a-file-is-read-2026-10-02). |
 | Run catalogue maintenance as pipelines | Implemented, except notices | Accepting, releasing and removing a dataset become commands whose stages plan before they act and record what they did; dCache, downloads, metadata and git sit behind ports. See [catalogue maintenance runs as pipelines](#catalogue-maintenance-runs-as-pipelines-2026-10-02). |
-| Version data as revisions or successors | Implemented, except bundles | A byte-level change becomes a revision of the same dataset under the same keys; a changed layout becomes a successor dataset. Published objects, rather than paths, never change. See [revisions and successors](#revisions-and-successors-2026-10-02). |
+| Version data as revisions or successors | Implemented | A byte-level change becomes a revision of the same dataset under the same keys; a changed layout becomes a successor dataset. Published objects, rather than paths, never change. See [revisions and successors](#revisions-and-successors-2026-10-02). |
 | Give the handoffs between roles templates | Proposed | Proposals, answers, problem reports and notices are filled in by `propose`, `report`, `catalog release` and `catalog remove` from templates beside the formats. See [handoffs have templates](#handoffs-between-roles-have-templates-2026-10-02). |
 | Separate the model, the services, the adapters and the presentation | Proposed | Library code raises typed errors and reports progress through a reporter; only the command line prints and chooses exit codes. See [four layers](#four-layers-2026-10-02). |
 
@@ -422,9 +422,9 @@ the status file.
 
 ## One lookup chain decides where a file is read (2026-10-02)
 
-**Status: implemented, except the bundle locator,** which arrives with
-repository-first bundles. The chain is `ethos_data.access.chain_for`, the
-catalogue resolver `Settings.choose_catalog`.
+**Status: implemented.** The chain is `ethos_data.access.chain_for`, the
+catalogue resolver `Settings.choose_catalog`, and a package's handle takes
+`bundles=` and `download=`.
 
 Where a file is read is decided by one long function, and package bundles are
 not part of it: a package that ships its test data has to implement
@@ -507,11 +507,11 @@ runner elsewhere cannot reach it.
 
 ## Revisions and successors (2026-10-02)
 
-**Status: implemented, except bundles.** `catalog build --revision` numbers a
-revision, upload and purge follow each file's revision folder, readers keep a
-revision in its own cache entry, and `ethos:supersedes` marks a successor.
-`bundle update`, which numbers a bundle's revision, comes with
-repository-first bundles.
+**Status: implemented.** `catalog build --revision` numbers a revision,
+`bundle update` a bundle's next version, which `catalog add-bundle` publishes
+as the changed members' next revisions; upload and purge follow each file's
+revision folder, readers keep a revision in its own cache entry, and
+`ethos:supersedes` marks a successor.
 
 Published paths never change, so changed bytes need new paths, which somebody
 has to choose by hand; [Keep data in the repository](../../how-to/package-maintainers/keep-data-in-the-repository.md#sync)

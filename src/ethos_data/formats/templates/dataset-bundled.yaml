@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data/main/src/ethos_data/formats/schemas/dataset.schema.json
+#
+# Drafted by `bundle create` for one member of a bundle. Say what the files
+# are, where they came from, their licence and their origin; put the licence
+# documents beside this file. See "Keep data in the repository" in the
+# ETHOS.Data documentation.
+name: ${name}
+source_dir: ${source_dir}
+description: ${description}

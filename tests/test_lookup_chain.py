@@ -131,6 +131,7 @@ class TestTheOrder:
         assert [place.split(" ", 1)[0] for place in places] == [
             "per-dataset",
             "staging",
+            "bundles",
             "restricted",
             "links",
             "copies",

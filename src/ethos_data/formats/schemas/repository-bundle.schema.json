@@ -1,0 +1,172 @@
+{
+  "$defs": {
+    "RepositoryDataset": {
+      "additionalProperties": true,
+      "description": "One member of a repository bundle: its files, as a catalogue inventory.",
+      "properties": {
+        "resources": {
+          "description": "Every file under data/<dataset>/, with its size and SHA-256.",
+          "items": {
+            "$ref": "#/$defs/ResourceRecord"
+          },
+          "title": "Resources",
+          "type": "array"
+        }
+      },
+      "required": [
+        "resources"
+      ],
+      "title": "RepositoryDataset",
+      "type": "object"
+    },
+    "ResourceRecord": {
+      "additionalProperties": true,
+      "description": "One file of a dataset's inventory.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "bytes": {
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "hash": {
+          "default": null,
+          "description": "\"sha256:<hex>\", the convention pooch reads.",
+          "title": "Hash",
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "mediatype": {
+          "default": "application/octet-stream",
+          "title": "Mediatype",
+          "type": "string"
+        },
+        "ethos:sidecars": {
+          "default": [],
+          "description": "Companion files that must travel with this one.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Ethos:Sidecars",
+          "type": "array",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "licenses": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Present only on files a narrowed licence matched.",
+          "title": "Licenses",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "ethos:revision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The revision the file's bytes were published in, when not the first.",
+          "title": "Ethos:Revision",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "bytes"
+      ],
+      "title": "ResourceRecord",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "A family of test data a repository holds, and its version.",
+  "properties": {
+    "format": {
+      "const": "ethos-data-bundle-v2",
+      "default": "ethos-data-bundle-v2",
+      "title": "Format",
+      "type": "string"
+    },
+    "family": {
+      "description": "The family the bundle's datasets belong to.",
+      "title": "Family",
+      "type": "string"
+    },
+    "version": {
+      "default": 1,
+      "description": "Counts the changes the catalogue publishes.",
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "release": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The catalogue release that publishes this version; null until one does.",
+      "title": "Release"
+    },
+    "datasets": {
+      "additionalProperties": {
+        "$ref": "#/$defs/RepositoryDataset"
+      },
+      "description": "Each member by its name, <family>/<member>.",
+      "title": "Datasets",
+      "type": "object"
+    }
+  },
+  "required": [
+    "family",
+    "datasets"
+  ],
+  "title": "bundle.json",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

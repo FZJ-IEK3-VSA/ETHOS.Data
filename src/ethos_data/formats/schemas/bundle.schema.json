@@ -55,7 +55,7 @@
     }
   },
   "additionalProperties": true,
-  "description": "A repository copy of catalogue data.",
+  "description": "A copy of catalogue data exported into a repository.",
   "properties": {
     "format": {
       "const": "ethos-data-bundle-v1",
