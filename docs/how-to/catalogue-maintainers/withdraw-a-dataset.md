@@ -60,8 +60,9 @@ ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json ls | grep 
 ```
 
 Expect `404` and no listing. Then tell the maintainers of every package that
-pinned the dataset: the removed name, the reason, the last revision that
-still describes it, and the replacement. Older pinned catalogue revisions
-still describe the dataset, and copies on users' machines remain; removal
-notifies nobody and corrects no earlier result.
+pinned the dataset: the removed name, the reason, the last release that still
+describes it, and the replacement. Step 1 printed that notice when it
+withdrew the dataset. Older pinned catalogue releases still describe the
+dataset, and copies on users' machines remain; removal notifies nobody by
+itself and corrects no earlier result.
 

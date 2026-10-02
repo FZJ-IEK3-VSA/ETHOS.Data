@@ -20,6 +20,8 @@ stages:
 ``store``   with ``--upload``: put the public catalogue beside the data on the
             store, under ``<publication root>/catalogue/``, replacing the
             one before; the store keeps the latest release only
+``notices`` draft the release notice and the answer to every proposal the
+            release accepts, printed and, with ``--notices DIR``, written there
 
 Run again with the same version, it does only what is left: a stamp or a tag
 that is there is not made again. A release made without ``--push`` and
@@ -63,6 +65,8 @@ class Release:
     push: bool = False
     upload: bool = False
     remote: str = "origin"
+    #: Where the notice and the answers are written, besides being printed.
+    notices: Path | None = None
     #: Stamped by an earlier run with the same version.
     stamped: bool = False
 
@@ -339,8 +343,95 @@ class Upload:
         ]
 
 
+def changes_in(
+    catalog_root: Path, version: str
+) -> tuple[dict[str, list[str]], list[str]]:
+    """What release ``version`` changed, by kind, and the datasets it accepted.
+
+    Read off the status files: every step between a dataset's release step for
+    ``version`` and the release step before it.
+    """
+    from . import read_descriptor
+
+    found: dict[str, list[str]] = {
+        "added": [],
+        "revised": [],
+        "successors": [],
+        "withdrawn": [],
+    }
+    accepted = []
+    for name, directory in dataset_status.datasets(catalog_root, [], tombstones=True):
+        status = dataset_status.read(directory)
+        if status is None:
+            continue
+        window, collecting = [], False
+        for entry in reversed(status.history):
+            if entry.step == "release":
+                if collecting:
+                    break
+                collecting = entry.release == version
+                continue
+            if collecting:
+                window.append(entry)
+        steps = {entry.step for entry in window}
+        meta = (
+            read_descriptor(directory) if (directory / "dataset.yaml").is_file() else {}
+        )
+        title = f": {meta[k.TITLE]}" if meta.get(k.TITLE) else ""
+        if "add" in steps:
+            accepted.append(name)
+            if meta.get(k.SUPERSEDES):
+                found["successors"].append(
+                    f"`{name}`{title}, superseding `{meta[k.SUPERSEDES]}`"
+                )
+            else:
+                found["added"].append(f"`{name}`{title}")
+        elif "revise" in steps:
+            found["revised"].append(f"`{name}`, revision {status.revision}")
+        if "remove" in steps:
+            reason = next((e.note for e in window if e.step == "remove" and e.note), "")
+            found["withdrawn"].append(f"`{name}`" + (f": {reason}" if reason else ""))
+    return found, sorted(accepted)
+
+
+class Notices:
+    name = "notices"
+
+    def plan(self, release: Release) -> list[Action]:
+        def draft() -> None:
+            from .. import handoffs
+
+            changes, accepted = changes_in(release.catalog_root, release.version)
+            drafts = {
+                f"release-{release.version}.md": handoffs.release_notice(
+                    release.version, changes
+                )
+            }
+            for name in accepted:
+                drafts[f"answer-{name.replace('/', '-')}.md"] = handoffs.answer(
+                    name, release.version
+                )
+            if release.notices is not None:
+                release.notices.mkdir(parents=True, exist_ok=True)
+                for file_name, text in drafts.items():
+                    (release.notices / file_name).write_text(
+                        text, encoding="utf-8", newline="\n"
+                    )
+            for text in drafts.values():
+                report.info("\n" + text.rstrip())
+
+        where = f", into {release.notices}" if release.notices is not None else ""
+        return [
+            Action(
+                f"draft the release notice and the answers to the proposals it "
+                f"accepts{where}",
+                draft,
+            )
+        ]
+
+
 PIPELINE: Pipeline[Release] = Pipeline(
-    "release", [Check(), Stamp(), Commit(), Public(), Push(), Upload()]
+    "release", [Check(), Stamp(), Commit(), Public(), Push(), Upload(), Notices()]
 )
 
 
@@ -354,6 +445,7 @@ def run(
     upload: bool = False,
     remote: str = "origin",
     dry_run: bool = False,
+    notices: str | Path | None = None,
     source_git: Git | None = None,
     public_git: Git | None = None,
     store: Store | None = None,
@@ -377,6 +469,7 @@ def run(
         push,
         upload,
         remote,
+        Path(notices).expanduser() if notices is not None else None,
     )
     PIPELINE.run(release, dry_run=dry_run)
     if not dry_run:

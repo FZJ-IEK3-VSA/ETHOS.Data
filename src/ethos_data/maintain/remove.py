@@ -67,6 +67,8 @@ class Removal:
     purging: list[tuple[str, Path, StatusFile]] = field(default_factory=list)
     settings: StoreSettings = field(default_factory=StoreSettings)
     publication_url: str = ""
+    #: The datasets this run withdrew, for their notices.
+    withdrawn: list[str] = field(default_factory=list)
 
 
 class Withdraw:
@@ -108,6 +110,7 @@ class Withdraw:
                 dataset=name,
                 note=removal.reason or None,
             )
+            removal.withdrawn.append(name)
 
         return withdraw
 
@@ -405,9 +408,36 @@ def run(
             "\nPurged. Commit the deletion; the status files that stay record it, "
             "and keep the names from being given to other bytes."
         )
-    else:
+        return 0
+    if removal.withdrawn:
         report.info(
             "\nRelease the catalogue without them; then delete their cache entries "
-            "and bytes with --purge."
+            "and bytes with --purge. Tell the packages that read them:"
         )
+        _notices(removal)
     return 0
+
+
+def _notices(removal: Removal) -> None:
+    """Draft the removal notice of every dataset withdrawn, for the packages that read it."""
+    from .. import handoffs
+
+    for name, directory in removal.datasets:
+        status = dataset_status.read(directory)
+        if name not in removal.withdrawn or status is None:
+            continue
+        reason = next(
+            (e.note for e in reversed(status.history) if e.step == "remove"), ""
+        )
+        package = directory / "datapackage.json"
+        replacement = (
+            json.loads(package.read_text("utf-8")).get(k.SUPERSEDED_BY, [])
+            if package.is_file()
+            else []
+        )
+        report.info(
+            "\n"
+            + handoffs.removal_notice(
+                name, reason or "", dataset_status.releases(status)[0], replacement
+            ).rstrip()
+        )

@@ -136,8 +136,12 @@ checksums stay unchanged; only readers of the new release see the dataset.
 
 ## 5. Tell the users
 
-Announce the release on the ICE-2 wiki and to the package maintainers whose
-datasets changed, so they can raise their minimum versions.
+`release` drafts the notice, the datasets the release adds, revises,
+supersedes and withdraws, and an answer to every proposal it accepted, and
+prints them; `--notices DIR` writes them into files as well. Announce the
+release on the ICE-2 wiki and to the package maintainers whose datasets
+changed, so they can raise their minimum versions, and post each answer in
+its proposal's issue.
 
 ## Automate it {#in-ci}
 
