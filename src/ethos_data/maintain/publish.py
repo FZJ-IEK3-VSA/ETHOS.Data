@@ -83,12 +83,18 @@ workflow that needs them fails with a useful message rather than a mystery.
 
 
 def public_datasets(catalog_root: Path) -> list[tuple[Path, dict]]:
-    """Every dataset whose catalogue entry may be published, with its descriptor."""
+    """Every dataset whose catalogue entry may be published, with its descriptor.
+
+    A withdrawn dataset is not one of them, though its descriptor stays on
+    disk until its bytes are gone.
+    """
+    from .manifest import left_out
+
     selected = []
     root = datasets_dir(catalog_root)
     for dataset_dir in iter_dataset_dirs(root):
         descriptor_path = dataset_dir / "datapackage.json"
-        if not descriptor_path.is_file():
+        if not descriptor_path.is_file() or left_out(dataset_dir):
             continue
         package = json.loads(descriptor_path.read_text(encoding="utf-8"))
         if package.get(k.VISIBILITY, k.PUBLIC) != k.PUBLIC:
@@ -103,8 +109,10 @@ def public_datasets(catalog_root: Path) -> list[tuple[Path, dict]]:
 
 
 def _has_public_member(namespace_dir: Path) -> bool:
+    from .status import withdrawn
+
     for member in iter_dataset_dirs(namespace_dir):
-        if member == namespace_dir:
+        if member == namespace_dir or withdrawn(member):
             continue
         descriptor = member / "datapackage.json"
         if not descriptor.is_file():

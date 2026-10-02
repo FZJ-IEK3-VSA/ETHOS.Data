@@ -1,9 +1,9 @@
 """The ``ethos-data catalog ...`` subcommands.
 
-``build``, ``publish``, ``upload`` and ``check-store``, and the three that keep
-each dataset's ``status.yaml``: ``status`` shows where every dataset stands,
-``record`` freezes one, and ``migrate`` writes the status files of a catalogue
-from the keys ``dataset.yaml`` held before.
+``build``, ``publish``, ``upload`` and ``check-store``; the maintainer
+pipelines ``add``, ``record``, ``remove`` and ``check-source``, which plan
+every stage before any of them acts; and ``status`` and ``migrate``, which
+show and write each dataset's ``status.yaml``.
 
 The maintainer group owns source metadata and publication operations. Local
 configuration, staging, and cache management also write files, but remain at the
@@ -91,6 +91,25 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     )
 
     catalog_sub = parser.add_subparsers(dest="catalog_command", required=True)
+
+    adder = catalog_sub.add_parser(
+        "add",
+        help="take a reviewed draft dataset.yaml into the catalogue and build it",
+        description="Check the draft as the build would, write datasets/<name>/ "
+        "with its description, licence documents and status.yaml, and build it. "
+        "source_dir goes into status.yaml; a relative one is relative to the draft.",
+    )
+    adder.add_argument(
+        "source", help="the draft dataset.yaml, or the directory that holds it"
+    )
+    adder.add_argument(
+        "--name",
+        default=None,
+        help="the dataset's name, for a draft that states none",
+    )
+    adder.add_argument(
+        "--dry-run", action="store_true", help="check and plan; write nothing"
+    )
 
     builder = catalog_sub.add_parser(
         "build",
@@ -213,6 +232,41 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         "--dry-run", action="store_true", help="check the copy; write nothing"
     )
 
+    remover = catalog_sub.add_parser(
+        "remove",
+        help="withdraw datasets: out of the index and the public catalogue",
+        description="Record each dataset as withdrawn -- a family stands for its "
+        "members -- and rebuild the index without them. Their description, status "
+        "file, cache entries and bytes stay until a release without them is out.",
+    )
+    remover.add_argument("datasets", nargs="+", help="dataset or family names")
+    remover.add_argument(
+        "--reason", default="", help="why, for the record in status.yaml"
+    )
+    remover.add_argument(
+        "--dry-run", action="store_true", help="check and plan; write nothing"
+    )
+
+    checker = catalog_sub.add_parser(
+        "check-source",
+        help="compare a fresh download from the source with the recorded inventory",
+        description="Hash every file under DIR the inventory lists, compare size and "
+        "SHA-256 with the recorded ones, and record the result in status.yaml. "
+        "Exit 1 if a file differs.",
+    )
+    checker.add_argument("dataset", help="a downloaded dataset")
+    checker.add_argument(
+        "directory", help="the folder holding the fresh download, laid out as recorded"
+    )
+    checker.add_argument(
+        "--note",
+        default="",
+        help="what was compared against, such as the source's release, for the record",
+    )
+    checker.add_argument(
+        "--dry-run", action="store_true", help="compare; record nothing"
+    )
+
     migrator = catalog_sub.add_parser(
         "migrate",
         help="move source_dir, ethos:uploaded and ethos:frozen into status.yaml",
@@ -281,5 +335,22 @@ def dispatch(args) -> int:
         from . import migrate
 
         return migrate.run(root, args.datasets, dry_run=args.dry_run)
+
+    if args.catalog_command == "add":
+        from . import accept
+
+        return accept.run(root, args.source, name=args.name, dry_run=args.dry_run)
+
+    if args.catalog_command == "remove":
+        from . import remove
+
+        return remove.run(root, args.datasets, reason=args.reason, dry_run=args.dry_run)
+
+    if args.catalog_command == "check-source":
+        from . import provenance
+
+        return provenance.run(
+            root, args.dataset, args.directory, note=args.note, dry_run=args.dry_run
+        )
 
     raise MaintenanceError(f"unknown catalog command: {args.catalog_command}")

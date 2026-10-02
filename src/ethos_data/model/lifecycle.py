@@ -85,6 +85,8 @@ STEPS: Mapping[str, Step] = {
         Step("materialize", "ethos-data materialize",
              {BUILT: AVAILABLE, AVAILABLE: AVAILABLE, FROZEN: FROZEN}),
         Step("record", "ethos-data catalog record", {AVAILABLE: FROZEN, FROZEN: FROZEN}),
+        Step("check-source", "ethos-data catalog check-source",
+             {BUILT: BUILT, AVAILABLE: AVAILABLE, FROZEN: FROZEN}),
         Step("remove", "ethos-data catalog remove", dict.fromkeys(_IN_CATALOGUE, WITHDRAWN)),
         Step("purge", "ethos-data catalog remove --purge", {WITHDRAWN: PURGED}),
     )
@@ -184,5 +186,7 @@ def next_step(
             return ""
         return f"record its authoritative copy: ethos-data catalog record {dataset}"
     if state == WITHDRAWN:
-        return f"ethos-data catalog remove {dataset} --purge, after the release that drops it"
+        return (
+            "release the catalogue without it, then delete its cache entries and bytes"
+        )
     return ""

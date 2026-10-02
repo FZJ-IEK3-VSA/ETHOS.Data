@@ -60,6 +60,7 @@ __all__ = [
     "read",
     "run",
     "take",
+    "withdrawn",
     "write",
 ]
 
@@ -209,6 +210,15 @@ def build_input(dataset_dir: Path, meta: Mapping, dataset: str) -> BuildInput:
         source_dir_of(dataset_dir, {k.SOURCE_DIR: status.source_dir}),
         status.state == lifecycle.FROZEN,
         status,
+    )
+
+
+def withdrawn(dataset_dir: Path) -> bool:
+    """Whether the dataset was taken out of the catalogue: withdrawn or purged."""
+    status = read(dataset_dir)
+    return status is not None and status.state in (
+        lifecycle.WITHDRAWN,
+        lifecycle.PURGED,
     )
 
 

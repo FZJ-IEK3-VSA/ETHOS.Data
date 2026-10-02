@@ -642,11 +642,11 @@ history:
 
 | State | Means | Reached by |
 |---|---|---|
-| `draft` | described, not built | `ethos-data catalog migrate` of a dataset with a `source_dir` |
+| `draft` | described, not built | `ethos-data catalog add`, or `catalog migrate` of a dataset with a `source_dir` |
 | `built` | inventory built from `source_dir`; a rebuild keeps the state | `ethos-data catalog build` |
 | `available` | bytes reachable for the access class: uploaded and verified, linked, or registered | `ethos-data catalog upload`; `ethos-data link` and `materialize` given `--catalog-root` |
 | `frozen` | inventory final, no build input left, authoritative copy recorded | `ethos-data catalog record` |
-| `withdrawn` | out of the catalogue; bytes not yet deleted | [removing the dataset](../how-to/catalogue-maintainers/withdraw-a-dataset.md) |
+| `withdrawn` | out of the catalogue; bytes not yet deleted | `ethos-data catalog remove`, see [Remove a dataset](../how-to/catalogue-maintainers/withdraw-a-dataset.md) |
 | `purged` | bytes deleted after the release that dropped the dataset | removing its bytes |
 
 Every command checks its step against the state first: a draft is built

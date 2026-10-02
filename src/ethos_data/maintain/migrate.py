@@ -49,7 +49,7 @@ from ..model import lifecycle
 from . import DESCRIPTOR, read_catalog_meta, read_descriptor
 from . import status as dataset_status
 
-__all__ = ["Outcome", "run", "without_keys"]
+__all__ = ["Outcome", "edited_text", "run", "without_keys"]
 
 
 @dataclass(frozen=True)
@@ -83,16 +83,21 @@ def without_keys(text: str, keys: Iterable[str]) -> str:
     return "".join(kept)
 
 
-def _edited(path: Path, keys: list[str]) -> tuple[bytes | None, str]:
-    """The file without ``keys``, or None and why it cannot be edited safely."""
-    raw = path.read_bytes().decode("utf-8")
+def edited_text(raw: str, keys: list[str]) -> str | None:
+    """``raw`` without ``keys``, read back and compared; None if it does not come out so."""
     edited = without_keys(raw, keys)
     expected = {
         key: value
         for key, value in (yaml.safe_load(raw) or {}).items()
         if key not in keys
     }
-    if (yaml.safe_load(edited) or {}) != expected:
+    return edited if (yaml.safe_load(edited) or {}) == expected else None
+
+
+def _edited(path: Path, keys: list[str]) -> tuple[bytes | None, str]:
+    """The file without ``keys``, or None and why it cannot be edited safely."""
+    edited = edited_text(path.read_bytes().decode("utf-8"), keys)
+    if edited is None:
         return None, (
             f"{', '.join(keys)} could not be removed from {DESCRIPTOR} line by line; "
             "delete them by hand once its status.yaml is written"

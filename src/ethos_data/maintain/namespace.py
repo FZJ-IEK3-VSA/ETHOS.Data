@@ -166,8 +166,16 @@ def plan(
             built_from = dataset_status.build_input(
                 datasets_dir(catalog_root) / name, meta, name
             )
-            if record and built_from.status is not None:
-                lifecycle.step("link", built_from.status.state, name)
+            state = built_from.status.state if built_from.status else None
+            if state in (lifecycle.WITHDRAWN, lifecycle.PURGED):
+                actions.append(
+                    Action(
+                        name, "skip", entry, detail="withdrawn: out of the catalogue"
+                    )
+                )
+                continue
+            if record and state is not None:
+                lifecycle.step("link", state, name)
         except MaintenanceError as error:
             first = error.message.splitlines()[0]
             actions.append(Action(name, "skip", entry, detail=first))
