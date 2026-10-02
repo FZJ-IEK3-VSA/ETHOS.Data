@@ -1,0 +1,149 @@
+% How the three roles' tasks act together. One oval per how-to guide, in the
+% order of the how-to index; blue arrows hand something to another role, teal
+% lines reach dCache.
+%
+% Lanes are columns and dCache is the band underneath. Data users and package
+% maintainers only download from it (solid teal, anonymous HTTPS); the
+% catalogue maintainer's tasks maintain it (dashed teal, authenticated). The
+% data-user tasks sit level with the catalogue-maintainer tasks they talk to,
+% so those arrows cross the package-maintainer lane where it has no task and
+% stay straight. Release, removal and a collection issue all end at the
+% collections file, so they share one rising line on the left of that lane.
+%
+% Coordinates are millimetres. `paper` is the page ground of each theme; the
+% one teal line that crosses blue ones is drawn over a strip of it, so the
+% crossing reads as a bridge rather than a junction.
+\ifnum\icetwodark=1 \definecolor{paper}{HTML}{1E2029}\else\definecolor{paper}{HTML}{FFFFFF}\fi
+\begin{tikzpicture}[
+  x=1mm, y=1mm,
+  task/.style={usecase, text width=28mm, minimum width=0mm, minimum height=9mm, inner sep=0.5mm},
+  wtask/.style={writecase, text width=28mm, minimum width=0mm, minimum height=9mm, inner sep=0.5mm},
+  role/.style={actor, text width=44mm, font=\sffamily\small\bfseries},
+  roleline/.style={note, text width=50mm},
+  lane/.style={draw=boundary, rounded corners=2mm},
+  sub/.style={boundarylabel},
+  handoff/.style={flow},
+  merge/.style={draw=brand},
+  both/.style={flow, <->},
+  feeds/.style={uses},
+  dl/.style={draw=accent, line width=0.9pt},
+  mt/.style={draw=accent, line width=0.9pt, dash pattern=on 3pt off 1.6pt},
+  lbl/.style={edgelabel},
+  tag/.style={text=muted, font=\sffamily\scriptsize, inner sep=1pt},
+  vtag/.style={tag, rotate=90},
+]
+
+% ---- lanes -------------------------------------------------------------------
+\draw[lane] (2,27) rectangle (54,-197);
+\draw[lane] (78,27) rectangle (130,-197);
+\draw[lane] (154,27) rectangle (206,-197);
+\node[role] at (28,20) {Data user};
+\node[roleline] at (28,13) {runs workflows, examples and tests};
+\node[role] at (104,20) {Package maintainer};
+\node[roleline] at (104,13) {wires data into a package};
+\node[role] at (180,20) {Catalogue maintainer};
+\node[roleline] at (180,13) {looks after catalogue, caches and dCache};
+
+% ---- data user ---------------------------------------------------------------
+\node[task] (d1) at (28,0)    {Set up your machine};
+\node[task] (d2) at (28,-147) {Use data in a script};
+\node[task] (d3) at (28,-161) {Check and repair the cache};
+\node[task] (d4) at (28,-175) {Report a problem};
+
+% ---- package maintainer ------------------------------------------------------
+\node[task] (p1) at (104,-7)   {Use ETHOS.Data in your package};
+\node[task] (p2) at (104,-21)  {Write a collections file};
+\node[task] (p3) at (104,-35)  {Stage development data};
+\node[task] (p4) at (104,-49)  {Propose a dataset};
+\node[task] (p5) at (104,-63)  {Keep data in the repository};
+\node[task] (p6) at (104,-189) {Run tests and examples in CI};
+
+% ---- catalogue maintainer ----------------------------------------------------
+\node[sub] at (180,7.2) {set up once};
+\node[task]  (c1)  at (180,0)    {Set up dCache access};
+\node[wtask] (c2)  at (180,-14)  {Set up the shared machine};
+\node[wtask] (c3)  at (180,-28)  {Bootstrap a catalogue};
+\node[sub] at (180,-38.5) {regular tasks};
+\node[wtask] (c4)  at (180,-49)  {Add a dataset};
+\node[task]  (c5)  at (180,-63)  {Verify provenance};
+\node[wtask] (c6)  at (180,-77)  {Upload a public dataset};
+\node[wtask] (c7)  at (180,-91)  {Link existing data into the cache};
+\node[wtask] (c8)  at (180,-105) {Materialize linked data};
+\node[wtask] (c9)  at (180,-119) {Add restricted data};
+\node[wtask] (c10) at (180,-133) {Remove a dataset};
+\node[wtask] (c11) at (180,-147) {Release the catalogue};
+\node[wtask] (c12) at (180,-161) {Manage dCache folders};
+\node[task]  (c13) at (180,-175) {Diagnose a report};
+
+% ---- dCache ------------------------------------------------------------------
+\coordinate (bandN) at (0,-204);
+\draw[draw=accent, fill=fillaccent, rounded corners=2mm] (-10,-204) rectangle (218,-222);
+\draw[draw=accent, dash pattern=on 2pt off 2pt] (154,-206) -- (154,-220);
+\node[font=\sffamily\footnotesize, text=ink] at (72,-209.2)
+  {\textbf{dCache}\enspace published bytes and the latest public catalogue};
+\node[note, text=ink] at (72,-216.2) {download: anonymous HTTPS from the publication root};
+\node[note, text=ink, align=center] at (186,-213) {maintenance: OIDC token,\\rclone / WebDAV, REST};
+
+% ---- routing columns ---------------------------------------------------------
+\coordinate (dub) at (-6,0);     % data users' download bus
+\coordinate (cmb) at (214,0);    % catalogue maintainer's maintenance bus
+\coordinate (x1)  at (60,0);     % package release, down to the data user
+\coordinate (bus) at (70,0);     % rising line into the collections file
+\coordinate (g2)  at (146,0);    % ICE-2 wiki, up and over
+
+% ---- handoffs between people -------------------------------------------------
+% A package release puts the collections file and the data command in users' hands.
+\draw[handoff] (p1.west) -| (x1 |- d2.15) -- (d2.15);
+\node[vtag, anchor=south] at (60,-80) {collections file + \texttt{<your-tool>-data}};
+
+% The shared machine's locations reach cluster users through the ICE-2 wiki.
+\draw[handoff] (c2.west) -- (c2.west -| g2) -- (g2 |- d1.15)
+  -- node[lbl, above, pos=0.41] {locations on the ICE-2 wiki} (d1.15);
+
+% The proposal and its answer.
+\draw[handoff] (p4.10) -- node[lbl, above] {proposal (issue)} (c4.170);
+\draw[handoff] (c4.-170) -- node[lbl, below] {name + release} (p4.-10);
+
+% Staging and a bundle both end in a proposal.
+\draw[feeds] (p3.200) to[out=200, in=160] (p4.160);
+\draw[feeds] (p5.160) to[out=160, in=200] (p4.200);
+
+% Release, removal and a collection issue end at the collections file.
+\draw[handoff] (d4.15) -- (bus |- d4.15) -- (bus |- p2.west) -- (p2.west);
+\node[vtag, anchor=north] at (70,-161) {collection issue};
+\draw[merge] (c10.west) -- node[lbl, above] {removal notice} (bus |- c10.west);
+\fill[brand] (bus |- c10.west) circle (0.75);
+\draw[handoff] (c11.195) -- node[lbl, above, pos=0.5] {release: raise \texttt{min\_version}} (d2.-15);
+\fill[brand] (bus |- c11.195) circle (0.75);
+\node[tag, anchor=south] at (56,-150.6) {cluster users};
+
+% A report and the maintainer's answer.
+\draw[both] (d4.-15) -- node[lbl, above, pos=0.45] {report and answer (issue)} (c13.195);
+
+% ---- dCache: downloads -------------------------------------------------------
+\draw[dl] (dub |- d1.west) -- (dub |- bandN);
+\draw[dl] (d1.west) -- node[lbl, above] {selftest} (d1.west -| dub);
+\draw[dl] (d2.west) -- node[lbl, above] {fetch} (d2.west -| dub);
+\draw[dl] (d3.west) -- node[lbl, above] {repair} (d3.west -| dub);
+\fill[accent] (d2.west -| dub) circle (0.75);
+\fill[accent] (d3.west -| dub) circle (0.75);
+% bundle export, bridged: blank the two blue lines where it passes, then draw it
+\foreach \x in {60,70} \fill[paper] (\x-0.8,-63.9) rectangle (\x+0.8,-62.1);
+\draw[dl] (p5.west) -- node[lbl, above, pos=0.62] {bundle export} (p5.west -| dub);
+\fill[accent] (p5.west -| dub) circle (0.75);
+\draw[dl] (p6.south) -- node[lbl, right] {live job} (p6.south |- bandN);
+
+% ---- dCache: maintenance -----------------------------------------------------
+\draw[mt] (cmb |- c1.east) -- (cmb |- bandN);
+\foreach \c/\t in {c1/token, c3/root, c6/upload, c10/purge, c11/catalogue, c12/folders, c13/verify}{
+  \draw[mt] (\c.east) -- node[lbl, above] {\t} (\c.east -| cmb);
+  \fill[accent] (\c.east -| cmb) circle (0.75);
+}
+
+% ---- legend ------------------------------------------------------------------
+\node[note, text width=210mm] at (104,-229)
+  {Blue arrows hand something to another role. Teal lines reach dCache: solid for
+   anonymous downloads, dashed for authenticated maintenance. Dashed ovals change the
+   catalogue or shared storage. One person often holds several roles.};
+
+\end{tikzpicture}
