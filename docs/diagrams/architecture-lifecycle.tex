@@ -1,14 +1,26 @@
-\begin{tikzpicture}[node distance=8mm]
-\node[artifact, text width=70mm] (describe) {Describe dataset in source YAML};
-\node[artifact, text width=70mm, below=of describe] (build) {Build descriptors and inventories};
-\node[artifact, text width=70mm, below=of build] (check) {Validate all selected upload datasets};
-\node[artifact, text width=70mm, below=of check] (upload) {For each dataset: transfer manifest files\\then verify remote access and size};
-\node[artifact, text width=70mm, below=of upload] (review) {Review results and readiness};
-\node[artifact, text width=70mm, below=of review] (publish) {Generate public catalogue checkout};
-\node[actor, text width=70mm, below=of publish] (release) {Review and release catalogue version};
-\foreach \a/\b in {describe/build,build/check,check/upload,upload/review,review/publish,publish/release}
-  \draw[flow] (\a) -- (\b);
-\node[note, right=8mm of check, text width=38mm, align=left] {Preflight failure:\\no transfers started.};
-\node[note, right=8mm of upload, text width=38mm, align=left] {Later failure:\\earlier transfers remain.\\No batch rollback.};
-\node[note, right=8mm of release, text width=38mm, align=left] {Release is a separate\\maintainer action.};
+% A dataset's lifecycle in its source catalogue, as model/lifecycle.py has it
+% and status.yaml records it. Steps that keep the state (a rebuild that finds
+% the same bytes, a second link, a recheck, a release step) are left out; the
+% steps table in File formats lists them.
+\begin{tikzpicture}
+\node[actor, minimum width=24mm] (draft) at (0,0) {draft};
+\node[actor, minimum width=24mm] (built) at (4.2,0) {built};
+\node[actor, minimum width=24mm] (available) at (9.2,0) {available};
+\node[actor, minimum width=24mm] (frozen) at (13.4,0) {frozen};
+\node[artifact, minimum width=24mm] (withdrawn) at (6.7,-3.6) {withdrawn};
+\node[artifact, minimum width=24mm] (purged) at (13.4,-3.6) {purged};
+\coordinate (start) at (-3.2,0);
+\fill[brand] (start) circle (1.2mm);
+\draw[flow] (start) -- node[edgelabel,above]{add} (draft);
+\draw[flow] (draft) -- node[edgelabel,above]{build} (built);
+\draw[flow] (built) -- node[edgelabel,above,align=center]{upload, link,\\materialize} (available);
+\draw[flow] (available) -- node[edgelabel,above]{record} (frozen);
+\draw[flow] (available.north) to[out=150, in=30] node[edgelabel,below]{change, revise} (built.north);
+\draw[flow] (frozen.north) to[out=160, in=20] node[edgelabel,above]{revise} (built.north west);
+\begin{scope}[on background layer]
+\node[boundarybox, inner sep=4mm, fit=(draft)(frozen), label={[boundarylabel, anchor=north west]south west:in the catalogue}] (in) {};
+\end{scope}
+\draw[flow] (in.south -| withdrawn) -- node[edgelabel,right]{remove} (withdrawn);
+\draw[flow] (withdrawn) -- node[edgelabel,above]{purge} node[edgelabel,below]{after a release without it} (purged);
+\node[note, text width=150mm] at (6.7,-5.4) {\texttt{ethos-data catalog} checks each step against the state in \texttt{status.yaml} and records it there. A rebuild that\\finds other bytes is a change; a new revision is built from new bytes. A release adds a step to every dataset that changed.};
 \end{tikzpicture}

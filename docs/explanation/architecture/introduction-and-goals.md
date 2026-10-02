@@ -9,8 +9,9 @@ with tests. A consuming package owns its collections and reads the resulting
 files; the catalogue describes the files and their provenance.
 
 Catalogue maintainers need to accept proposed datasets, generate inventories,
-upload and verify approved data, and release an appropriate public metadata view.
-Data bytes and metadata are separate publication outputs.
+upload and verify approved data, record where each dataset stands, release an
+appropriate public metadata view, and publish new versions of datasets or
+withdraw them. Data bytes and metadata are separate publication outputs.
 
 ## 1.2 Stakeholders
 
@@ -34,8 +35,9 @@ scenarios are in [section 10](quality-requirements.md).
 | 1 | Traceable, repeatable inputs | A workflow must identify its catalogue version and dataset resources; local experiments must remain distinguishable from published data |
 | 2 | Controlled access and publication | Licence, visibility, and filesystem restrictions must survive catalogue generation and retrieval |
 | 3 | Reuse and availability | Shared paths reduce duplicate downloads; small repository copies should keep required tests independent of dCache availability |
-| 4 | Safe maintenance and diagnosis | Invalid upload selections should fail early; failures must identify useful resources and locations |
+| 4 | Safe maintenance and diagnosis | Invalid upload selections should fail early; a step a dataset's state does not allow is refused; an interrupted command can be run again; failures must identify useful resources and locations |
 | 5 | Scalable metadata access | Large inventories should not be loaded to answer unrelated requests |
+| 6 | Changeable code | A key, its default and its checks are written once, and a module depends only on the layers below it, so a format or a workflow changes in one place |
 
 These priorities are a working ordering for this guide, to refine with measured
 workloads and maintainer experience. dCache remains authoritative for centrally

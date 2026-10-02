@@ -76,6 +76,11 @@ theme:
               icon: material/brightness-4
               name: Switch to light mode
 
+# The format reference is rendered from the specifications on every build;
+# see docs/hooks/formats.py and ethos_data.formats.reference.
+hooks:
+    - docs/hooks/formats.py
+
 plugins:
     - search
 
@@ -139,6 +144,7 @@ markdown_extensions:
 #   branding/   Logo proposal and renderer; exports go to assets/branding/
 #               once the logo is adopted (none exist yet).
 #   font/       Local font files and design references, used only for rendering.
+#   hooks/      Build hooks (see `hooks:` above), not pages.
 # The leading slash anchors to the docs root. Without it, gitignore semantics
 # match a directory of that name at ANY depth -- and `diagrams/` then also
 # excluded assets/diagrams/, i.e. the rendered SVGs the pages actually embed.
@@ -147,6 +153,7 @@ exclude_docs: |
   /diagrams/
   /branding/
   /font/
+  /hooks/
 
 # Compatibility pages retain previously shared architecture URLs.
 not_in_nav: |

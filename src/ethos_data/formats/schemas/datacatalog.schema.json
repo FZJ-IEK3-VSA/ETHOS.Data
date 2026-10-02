@@ -4,7 +4,7 @@
   "properties": {
     "$schema": {
       "default": "https://datapackage.org/profiles/2.0/datacatalog.json",
-      "description": "",
+      "description": "The Data Catalog profile.",
       "title": "$Schema",
       "type": "string",
       "x-ethos": {
@@ -15,8 +15,15 @@
       }
     },
     "name": {
+      "description": "From `catalog.yaml`, as are the keys below.",
       "title": "Name",
-      "type": "string"
+      "type": "string",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
     },
     "title": {
       "anyOf": [
@@ -28,7 +35,33 @@
         }
       ],
       "default": null,
-      "title": "Title"
+      "description": "A short human-readable title.",
+      "title": "Title",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "What the catalogue is for.",
+      "title": "Description",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
     },
     "ethos:publication_url": {
       "anyOf": [
@@ -40,8 +73,27 @@
         }
       ],
       "default": null,
-      "description": "",
+      "description": "Root of the public data store.",
       "title": "Ethos:Publication Url",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:contact": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Team or username.",
+      "title": "Ethos:Contact",
       "x-ethos": {
         "inherited": false,
         "promoted": false,
@@ -59,8 +111,54 @@
         }
       ],
       "default": null,
-      "description": "",
+      "description": "`source` in the source catalogue; `publish` writes `published`.",
+      "enum": [
+        "source",
+        "published"
+      ],
       "title": "Ethos:Catalog Role",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The release this index is.",
+      "pattern": "^v\\d{4}\\.\\d{2}\\.\\d+$",
+      "title": "Version",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:releases": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "In the published index: every public release, oldest first, this one included.",
+      "title": "Ethos:Releases",
       "x-ethos": {
         "inherited": false,
         "promoted": false,
@@ -70,12 +168,19 @@
     },
     "datasets": {
       "default": [],
+      "description": "One row per dataset and per family.",
       "items": {
         "additionalProperties": true,
         "type": "object"
       },
       "title": "Datasets",
-      "type": "array"
+      "type": "array",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
     }
   },
   "required": [

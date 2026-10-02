@@ -21,13 +21,13 @@ the canonical account of the reasoning.
 | Read settings from one file per account | Implemented | A script finds its catalogue and caches the same way whichever folder it starts in and however ETHOS.Data was installed. The project, environment and machine-wide files and `--scope` go; `ETHOS_DATA_CONFIG` names a replacement file for CI and jobs. See [one settings file per account](#one-settings-file-per-account-2026-10-02). |
 | Treat every input as required, and describe a missing licensed dataset | Implemented | A workflow cannot run without one of its inputs, so `skip_unavailable` goes. The error for a licensed dataset this machine cannot read prints its description, provenance and licence and how to obtain a copy. See [every input is required](#every-input-is-required-2026-10-02). |
 | Ship a small public collections file for a self-test | Implemented | `ethos-data selftest` and `ethos_data.EXAMPLE_COLLECTIONS` check settings, catalogue, store and cache with a download of under 200 KB, without any package's collections. See [a self-test collection ships with the package](#a-self-test-collection-ships-with-the-package-2026-10-02). |
-| Specify every file format once | Proposed | One pydantic model per file drives validation, typed access, JSON Schemas, templates, the publish strip list, the index row and the reference tables, so a key and its default are written down once. See [every file format is specified once](#every-file-format-is-specified-once-2026-10-02). |
+| Specify every file format once | Implemented | One pydantic model per file drives validation, typed access, JSON Schemas, templates, the publish strip list, the index row and the reference tables, so a key and its default are written down once. See [every file format is specified once](#every-file-format-is-specified-once-2026-10-02). |
 | Record each dataset's state in a status file | Implemented | `datasets/<name>/status.yaml` holds the state, the build input and a history, and the commands check every transition. `source_dir`, `ethos:uploaded` and `ethos:frozen` leave `dataset.yaml`. See [datasets record their state](#datasets-record-their-state-in-a-status-file-2026-10-02). |
 | Find files through one lookup chain | Implemented | Root override, staging, bundles, restricted cache, public cache and download are one locator each, and each answers found, pass or refuse. See [one lookup chain](#one-lookup-chain-decides-where-a-file-is-read-2026-10-02). |
 | Run catalogue maintenance as pipelines | Implemented | Accepting, releasing and removing a dataset become commands whose stages plan before they act and record what they did; dCache, downloads, metadata and git sit behind ports. See [catalogue maintenance runs as pipelines](#catalogue-maintenance-runs-as-pipelines-2026-10-02). |
 | Version data as revisions or successors | Implemented | A byte-level change becomes a revision of the same dataset under the same keys; a changed layout becomes a successor dataset. Published objects, rather than paths, never change. See [revisions and successors](#revisions-and-successors-2026-10-02). |
 | Give the handoffs between roles templates | Implemented | Proposals, answers, problem reports and notices are filled in by `propose`, `report`, `catalog release` and `catalog remove` from templates beside the formats. See [handoffs have templates](#handoffs-between-roles-have-templates-2026-10-02). |
-| Separate the model, the services, the adapters and the presentation | Proposed | Library code raises typed errors and reports progress through a reporter; only the command line prints and chooses exit codes. See [four layers](#four-layers-2026-10-02). |
+| Separate the model, the services, the adapters and the presentation | Implemented | Library code raises typed errors and reports progress through a reporter; only the command line prints and chooses exit codes. See [four layers](#four-layers-2026-10-02). |
 
 For a new decision that changes an architectural contract, add a dated record
 with context, considered alternatives, decision, consequences, and status. Link
@@ -299,8 +299,15 @@ reason, and because no workflow has an input it can do without.
 
 ## Every file format is specified once (2026-10-02)
 
-**Status: proposed.** Implemented by the refactoring pull requests; each one
-updates the guides it changes.
+**Status: implemented.** The specifications are `ethos_data.formats`, one model
+per file. The JSON Schemas are committed under `formats/schemas/`, and a test
+fails when one is stale. The key tables of [File formats](../../reference/schemas.md)
+and of the settings file are rendered from the models whenever the site is
+built (`ethos_data.formats.reference`, through `docs/hooks/formats.py`), as are
+the states and steps of the status file from the lifecycle; a test fails when a
+key has no description. The settings file has no template: `config set-*`
+writes it. What the specifications add beyond the build's rules is still
+reported as warnings.
 
 The formats are described in [File formats](../../reference/schemas.md) as
 prose and implemented as dictionary code that repeats every key and its
@@ -582,8 +589,14 @@ The same templates serve as issue templates in the catalogue repositories.
 
 **Status: implemented.** Typed errors, the reporter and the adapters are in:
 library code neither prints nor exits, and dCache, downloads and git sit
-behind ports with fakes. The command line is still one module, now of parsing,
-wiring and printing only.
+behind ports with fakes. From the bottom, the layers are the model, the
+adapters, the services and the presentation: the services take the ports and
+default to the real adapters, which import only the model. The services the
+table below names `settings` and `cache` are `config` and the cache commands
+of `linking` and `materialize`. `tests/test_layers.py` holds the import rule;
+its one exception is `Collections.main()`, which imports the command line when
+it is called. The command line is still one module, now of parsing, wiring and
+printing only.
 
 The reader imports the writer, library code prints and exits the process,
 and the command line is one module of 1,700 lines that also holds logic.

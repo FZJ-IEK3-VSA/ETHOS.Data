@@ -1,52 +1,62 @@
 # 7. Deployment View
 
 `ethos-data` runs as a Python library or CLI on the caller's machine. Metadata
-hosting and remote data storage are external services. The diagram describes the
-intended catalogue hosting arrangement and the local repository bundle workflow.
+hosting and remote data storage are external services. The diagram describes
+the catalogue hosting arrangement, the commands that move metadata between
+its places, and the repository bundle workflow.
 
 ## 7.1 Infrastructure overview
 
 <figure markdown="span">
-  ![Deployment nodes: cluster with reader, versioned internal metadata and shared data; JuGit for source metadata; GitHub for public metadata; workstation or CI with reader and local copies; dCache as authoritative published data storage.](../../assets/diagrams/architecture-deployment-light.svg#only-light){ .diagram }
-  ![Deployment nodes: cluster with reader, versioned internal metadata and shared data; JuGit for source metadata; GitHub for public metadata; workstation or CI with reader and local copies; dCache as authoritative published data storage.](../../assets/diagrams/architecture-deployment-dark.svg#only-dark){ .diagram }
+  ![Deployment nodes: the ICE-2 cluster computer with reader, maintainer tooling, the internal catalogue at a release and shared caches; JuGit for the internal source catalogue; GitHub for the public catalogue; workstation or CI with reader and repository bundles; dCache as authoritative published data storage that also holds the latest public catalogue. The arrows are the commands catalog release, update-checkout and upload.](../../assets/diagrams/architecture-deployment-light.svg#only-light){ .diagram }
+  ![Deployment nodes: the ICE-2 cluster computer with reader, maintainer tooling, the internal catalogue at a release and shared caches; JuGit for the internal source catalogue; GitHub for the public catalogue; workstation or CI with reader and repository bundles; dCache as authoritative published data storage that also holds the latest public catalogue. The arrows are the commands catalog release, update-checkout and upload.](../../assets/diagrams/architecture-deployment-dark.svg#only-dark){ .diagram }
 </figure>
 
 | Environment | Deployed blocks and metadata | Dataset bytes and access |
 |---|---|---|
-| Institute cluster | Consumer entry points and Data access in each user's environment; generated internal catalogue at a filesystem path | Shared files, public cache, and configured restricted roots; permissions still apply |
-| Maintainer environment | Maintainer entry points and Catalogue maintenance; source checkout synchronised through reviewed Git changes with JuGit | Local proposed sources; rclone and oidc-agent for uploads; dCache HTTP checks |
-| GitHub public catalogue | Reviewed public metadata view, pinned by consumers to a version or revision | Dataset URLs refer to dCache; hosting metadata does not move authority for bytes |
-| Personal workstation | Consuming package and reader; pinned remote catalogue or a local snapshot | Per-user download cache and configured existing copies |
-| Package repository and CI runner | Package, collections, and local bundle metadata snapshot for selected test resources | Small repository test copies; larger optional integration inputs may use dCache separately |
-| dCache and identity provider | External storage, access, and identity services | Authoritative centrally published dataset bytes, including test data |
+| ICE-2 cluster computer | Consumer entry points and Data access in each user's environment; the internal catalogue checkout at its latest release, at a filesystem path | Shared files, public cache, and configured restricted roots; permissions still apply |
+| Maintainer environment | Maintainer entry points and Catalogue maintenance; the source checkout in JuGit and the public checkout from GitHub; `catalog release` commits and tags both, and pushes them with `--push` | Local proposed sources; rclone and oidc-agent for uploads; dCache HTTP checks |
+| GitHub public catalogue | The released public metadata, one tag per release; packages name the releases they work with | Dataset URLs refer to dCache; hosting metadata does not move authority for bytes |
+| Personal workstation | Consuming package and reader; the newest public release the package accepts, or a local snapshot | Per-user download cache and configured existing copies |
+| Package repository and CI runner | Package, collections, and repository bundles, read first by the package's handle | Small repository test copies; larger optional integration inputs may use dCache separately |
+| dCache and identity provider | External storage, access, and identity services | Authoritative centrally published dataset bytes, including test data, and a copy of the latest public catalogue under `<publication root>/catalogue/` |
 
-## 7.2 Internal catalogue on the cluster
+## 7.2 Internal catalogue on the ICE-2 cluster computer
 
-Cluster users should point at the generated `datacatalog.json` on the filesystem;
-they do not need to fetch metadata through JuGit. JuGit supplies version control,
-review, and synchronisation for maintainers. Git synchronisation alone does not
-build metadata or determine which revision is ready for consumers.
+Cluster users point at the `datacatalog.json` of the internal catalogue
+checkout on the filesystem; they do not need to fetch metadata through
+JuGit. JuGit supplies version control, review, and synchronisation for
+maintainers: `catalog release --push` pushes a release and its tag there.
 
-A deployment process should build and validate a complete versioned snapshot,
-then activate its consumer-facing path. Retain revision-specific paths for
-reproducible runs. Avoid editing a live generated tree file by file: an index from
-one revision can otherwise be observed alongside descriptors from another.
-This activation process is an operational recommendation, not an automatic
-`ethos-data` command.
+The checkout readers are served is moved to a release on the machine that
+serves it, with `ethos-data catalog update-checkout`: it fetches the remote's
+branches and tags, moves the checkout to the newest release by fast-forward
+only, and checks every manifest against its files without writing. Nothing is
+rebuilt in a served checkout, so its index and inventories always come from
+the same release. The fast-forward changes files in place, so run it when no
+jobs are reading the checkout: a reader that lists the index during the update
+can find inventories of the other release. Serving each release from its own
+directory and switching a link to it would avoid that; it is an operational
+choice, not a command.
 
 ## 7.3 Public metadata distribution
 
-GitHub is a suitable intended home for the public metadata view. Consumers
-should use a pinned revision or a locally extracted versioned release snapshot;
-maintainers should keep the index, descriptors, shards, and licence files together.
-The current reader expects JSON files in their catalogue layout, so a compressed
-release asset must be extracted before pointing the reader at its local index.
-A release archive URL is not itself a catalogue index URL.
+GitHub is the home of the public metadata view. A release is a tag of the
+public checkout, made by `catalog release`, and a package names the releases
+it works with in its collections file; with no catalogue configured, the
+reader takes the newest public release within them. The current reader
+expects JSON files in their catalogue layout, so a compressed release asset
+must be extracted before pointing the reader at its local index. A release
+archive URL is not itself a catalogue index URL.
 
-Pinning and local reuse reduce repeated metadata traffic. Creating releases does
-not by itself add archive installation, cache refresh policy, or immunity to host
-limits to the reader. Keep metadata release and storage verification separate:
-files advertised in a release should be ready before consumers can select them.
+`catalog release --upload` also puts the public catalogue beside the data on
+the store, under `<publication root>/catalogue/`, replacing the previous one:
+the store keeps the latest release only. Pinning and local reuse reduce
+repeated metadata traffic. Releases do not by themselves add archive
+installation, cache refresh policy, or immunity to host limits to the reader.
+Keep metadata release and storage verification separate: the release's check
+stage refuses a public dataset without a verified upload, so files a release
+advertises are ready before consumers can select them.
 
 ## 7.4 Local copies, credentials, and offline use
 
@@ -61,13 +71,15 @@ local root is the documented option where the ordinary download interface cannot
 read internal data.
 
 Offline use requires both relevant metadata and selected dataset files locally.
-For required tests, repository copies reduce dCache traffic and provide inputs
-when dCache is unavailable. `Bundle.fetch(..., allow_modified=True)` lets a developer test edited fixtures
-without overwriting those edits or updating the authoritative copy. This workflow
-is described in
+For required tests, a repository bundle provides both, so tests run while
+dCache is unavailable: the package's handle reads bundled files first and
+never falls back to a download. A developer reproduces a bug against an edited
+fixture and records the change with `bundle update`; an exported bundle offers
+`Bundle.fetch(..., allow_modified=True)` instead. Neither updates the
+authoritative copy. This workflow is described in
 [Runtime View](runtime.md#64-repository-test-data).
 
-For the hosting procedure, see [Host versioned catalogues](../../how-to/catalogue-maintainers/release-the-catalogue.md).
+For the release procedure, see [Release the catalogue](../../how-to/catalogue-maintainers/release-the-catalogue.md).
 For repository fixtures, see [Keep data in the repository](../../how-to/package-maintainers/keep-data-in-the-repository.md).
 
 For setup, use [Installation](../../installation.md),

@@ -1,16 +1,21 @@
+% The arrows are commands a maintainer runs: `catalog release` commits, tags and
+% (with --push) pushes both checkouts and (with --upload) puts the public
+% catalogue on the store; `catalog update-checkout` advances the checkout on
+% the ICE-2 cluster computer to the latest release. Nothing synchronises by
+% itself. Spelled -{}-push because a bare `--` is set as an en dash.
 \begin{tikzpicture}
-\node[artifact, text width=47mm, minimum height=17mm] (jugit) at (0,0) {JuGit\\reviewed source metadata\\Git repository};
-\node[artifact, text width=47mm, minimum height=17mm] (github) at (8,0) {GitHub\\public metadata revisions\\and release snapshots};
-\node[actor, text width=47mm, minimum height=24mm] (cluster) at (0,-4) {Institute cluster\\reader + maintainer tooling\\versioned internal metadata\\shared local data};
-\node[actor, text width=47mm, minimum height=24mm] (client) at (8,-4) {Workstation / CI runner\\package + reader\\local catalogue snapshot\\cache / test copies};
-\node[store, text width=55mm, minimum height=22mm] (dcache) at (4,-9) {dCache\\authoritative published bytes\\including test datasets};
-\draw[flow] (cluster.north west) -- node[edgelabel,left]{reviewed Git sync} (jugit.south west);
-\draw[flow] (jugit.south east) -- (cluster.north east);
-\draw[flow] (cluster.east) -- ++(14mm,0) |- node[edgelabel,pos=.77,above]{generate + release metadata} (github.west);
-\draw[flow] (github) -- node[edgelabel,right]{pinned metadata} (client);
-\draw[flowaccent] (cluster.south) -- node[edgelabel,above,sloped]{approved upload} (dcache.north west);
+\node[artifact, text width=47mm, minimum height=17mm] (jugit) at (0,0) {JuGit\\internal source catalogue\\releases as tags};
+\node[artifact, text width=47mm, minimum height=17mm] (github) at (8,0) {GitHub\\public catalogue\\releases as tags};
+\node[actor, text width=47mm, minimum height=24mm] (cluster) at (0,-4) {ICE-2 cluster computer\\reader + maintainer tooling\\internal catalogue at a release\\shared caches};
+\node[actor, text width=47mm, minimum height=24mm] (client) at (8,-4) {Workstation / CI runner\\package + reader\\pinned public release\\cache / repository bundles};
+\node[store, text width=55mm, minimum height=22mm] (dcache) at (4,-9) {dCache\\authoritative published bytes,\\test datasets included,\\and the latest public catalogue};
+\draw[flow] (cluster.north west) -- node[edgelabel,left]{release -{}-push} (jugit.south west);
+\draw[flow] (jugit.south east) -- node[edgelabel,right]{update-checkout} (cluster.north east);
+\draw[flow] (cluster.east) -- ++(21mm,0) |- node[edgelabel,pos=.25,right,align=left]{release -{}-push:\\public catalogue} (github.west);
+\draw[flow] (github) -- node[edgelabel,right]{pinned release} (client);
+\draw[flowaccent] (cluster.south) -- node[edgelabel,above,sloped,pos=0.4]{upload, release -{}-upload} (dcache.north west);
 \draw[flowaccent] (dcache.north east) -- node[edgelabel,above,sloped]{download} (client.south);
-\node[note, text width=55mm, align=left] at (-2,-9) {Cluster users read the\\generated catalogue directly\\from a filesystem path.};
-\node[note, text width=55mm, align=left] at (10,-9) {Required tests should use\\local metadata + copies.\\Temporary divergence is explicit.};
-\node[note, text width=150mm] at (4,-11) {Intended deployment. Metadata hosting and data authority are separate.\\Repository copies reduce remote reads; arrows do not imply automatic synchronisation.};
+\node[note, text width=55mm, align=left] at (-2,-9) {Cluster users read the\\internal catalogue checkout\\from a filesystem path.};
+\node[note, text width=55mm, align=left] at (10,-9) {Required tests read the\\package's repository bundles\\first; changes are explicit.};
+\node[note, text width=150mm] at (4,-11) {Metadata hosting and data authority are separate.\\Arrows are commands a maintainer runs; nothing synchronises by itself.};
 \end{tikzpicture}

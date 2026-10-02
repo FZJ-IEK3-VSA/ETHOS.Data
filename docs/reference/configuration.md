@@ -60,15 +60,12 @@ move it.
 
 ## Keys
 
-| Key | Set with | |
-|---|---|---|
-| `public_cache` | `config set-public-cache` | public and internal data: read from, and downloaded into |
-| `cache_dir` | Legacy read fallback | Older spelling of `public_cache`; `config set-cache` now writes `public_cache`. |
-| `restricted_cache` | `config set-restricted-cache` | licensed data; retrieval only reads it in place |
-| `staging_cache` | `config set-staging-cache` | work in progress that shadows the catalogue |
-| `dataset_roots` | `config set-root <dataset> <dir>` | a mapping of dataset name to directory |
-| `catalog` | `config set-catalog` | the catalogue to use instead of a collections file's pin or the built-in public catalogue |
-| `publication_url` | `config set-publication-url` | fetch bytes from a different door than the catalogue declares |
+The keys of the settings file, rendered from its specification
+(`ethos_data.formats.settings_file`; see [File formats](schemas.md)). The
+description of each key names the `config` command that sets it.
+`config set-cache` writes `public_cache` as well.
+
+<!-- ethos-data: table settings -->
 
 A settings file for a shared machine:
 
@@ -77,7 +74,7 @@ public_cache: /shared/ethos/public
 restricted_cache: /shared/ethos/restricted
 catalog: /shared/ethos/catalogue/current/datacatalog.json
 dataset_roots:
-  submarine-cables: /benchtop/shared_data/SubmarineCables
+  submarine-cables: /shared/ethos/sources/submarine-cables
 ```
 
 ## Environment variables

@@ -96,7 +96,7 @@
         }
       ],
       "default": null,
-      "description": "Root of the public data store; a resource is <url>/<remote_prefix>/<path>.",
+      "description": "Root of the public data store: a resource is `<url>/<remote_prefix>/<path>`.",
       "title": "Ethos:Publication Url",
       "x-ethos": {
         "inherited": false,

@@ -15,6 +15,10 @@ Key concepts used across `ethos-data`.
 | **Variant** | One of the two selections a collection may define under `test:` and `full:`: a small selection that runs an example or a test in seconds, and the real inputs. Both must offer the same named paths. `full` is the default; `test=True` / `--test` selects the other. |
 | **Sidecar** | A companion file that must travel with another to be usable — a shapefile's `.dbf`, `.shx`, `.prj`, `.cpg`. Added automatically to any selection that picks the `.shp`. |
 | **Shard** | One slice of a large dataset's inventory, held in `shards/<prefix>.json` and keyed on a directory prefix, so a selection parses only the shards it can reach. |
+| **Revision** | A new version of a dataset's bytes under the same keys, published beside the old ones in `<remote_prefix>@<revision>/` and cached in `<dataset>@<revision>/`. A catalogue release names one revision of each dataset. |
+| **Successor** | A new dataset that replaces another whose layout changed, naming it in `ethos:supersedes`; the replaced one stays, shown as superseded. |
+| **Repository bundle** | Test data a package keeps in its repository — the files, their inventory and version in `bundle.json`, their descriptions — and is the source of truth for. The package's handle reads it first; the catalogue publishes its versions. |
+| **Exported bundle** | A copy of catalogue data exported into a repository for the collections it names, read without the network. |
 
 ## Where bytes live
 
@@ -53,6 +57,10 @@ Key concepts used across `ethos-data`.
 | **Repair** | Re-fetch whatever no longer matches. Cannot repair restricted, staged, or unreachable data. |
 | **Publish** | Regenerate the public catalogue from the source one, stripping everything internal. |
 | **Namespace** | Build the public cache as a directory of links to data already on this machine. |
+| **Release** | One version of the catalogue, `vYYYY.MM.N`, made by `ethos-data catalog release`: stamped, committed, tagged, and published. A package names the releases it works with. |
+| **Withdraw** | Take a dataset out of the catalogue, metadata first, with `catalog remove`. Its bytes stay until a release without it is out, when **purge** deletes them and only its status file is left. |
+| **Pipeline** | A maintainer command made of stages, each of which plans what it would do before any of them acts, so `--dry-run` shows the plan and a rerun does only what is left. |
+| **Handoff** | What one role hands another — a proposal, a problem report, an answer or a notice — drafted from a template by the command that knows the facts. |
 
 ## Configuration
 

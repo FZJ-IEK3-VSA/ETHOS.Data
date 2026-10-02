@@ -1,39 +1,41 @@
-% Level 2 of the maintainer side. The boundary is the `ethos-data catalog` group
-% and nothing else: `dispatch()` in maintain/cli.py routes build, publish, upload
-% and check-store, and has no branch that reaches the namespace builder. That
-% builder is drawn OUTSIDE the boundary, with the command that does reach it,
-% because a figure that keeps it inside is the one thing a reader would take from
-% this page that the code no longer supports -- and it contradicts the paragraph
-% printed beside it.
+% Level 2 of the maintainer side. The boundary is the `ethos-data catalog`
+% group: its commands are pipelines (maintain.pipeline) whose stages plan before
+% they act, built on the manifest builder, the uploader and the public-view
+% generator, recording every step in the dataset's status.yaml. The store and
+% git sit behind ports (adapters), so a test runs a release against fakes.
+%
+% The namespace builder stays OUTSIDE the boundary, with the command that
+% reaches it: `dispatch()` in maintain/cli.py has no branch to it; only
+% `ethos-data link --all` does. It still uses the maintainer helpers, which is
+% the one edge that crosses the boundary inwards.
 \begin{tikzpicture}
-\node[actor, text width=37mm, minimum height=15mm] (manifest) at (0,0) {Manifest builder};
-\node[actor, text width=37mm, minimum height=15mm] (upload) at (6,0) {Uploader};
-\node[actor, text width=37mm, minimum height=15mm] (publish) at (0,-3) {Public-view generator};
-\node[artifact, text width=97mm, minimum height=13mm] (helpers) at (3,-5.5) {Maintainer helpers\\catalogue roots / dataset layout / resource expansion};
-\node[artifact, text width=37mm, minimum height=15mm] (matching) at (-6,0) {Selection / Catalogue model\\shared rules};
-\node[artifact, text width=37mm, minimum height=15mm] (public) at (-6,-3) {Public catalogue\\filesystem output};
-\node[artifact, text width=37mm, minimum height=15mm] (remote) at (12,0) {rclone / oidc-agent\\dCache HTTP interfaces\\external};
-% Beside the boundary rather than inside it, and at the height of the commands it
-% is a peer of: it reads the same checkout and the same helpers, but it is
-% reached from the top-level `link`, never from `catalog`.
-\node[actor, text width=37mm, minimum height=15mm] (namespace) at (12,-3) {Namespace builder};
-% Spelled -{}-all because a bare `--` is read as an en-dash ligature here, which
-% renders a flag nobody can copy. Same reason as in usecases-maintainer.tex.
+\node[actor, text width=128mm, minimum height=15mm] (pipelines) at (4.6,0) {Maintenance pipelines\quad\texttt{maintain.pipeline}\\{\footnotesize\texttt{add}, \texttt{record}, \texttt{release}, \texttt{remove} and \texttt{-{}-purge}, \texttt{check-source}, \texttt{add-bundle}, \texttt{update-checkout}: every stage plans, then acts}};
+\node[artifact, text width=40mm, minimum height=14mm] (manifest) at (0,-2.7) {Manifest builder\\\texttt{maintain.manifest}};
+\node[artifact, text width=40mm, minimum height=14mm] (publish) at (4.6,-2.7) {Public-view generator\\\texttt{maintain.publish}};
+\node[artifact, text width=40mm, minimum height=14mm] (upload) at (9.2,-2.7) {Uploader\\\texttt{maintain.upload}};
+\node[artifact, text width=40mm, minimum height=14mm] (status) at (0,-5.3) {Status files\\\texttt{maintain.status}};
+\node[artifact, text width=84mm, minimum height=14mm] (helpers) at (6.9,-5.3) {Maintainer helpers\quad\texttt{maintain}\\catalogue roots / dataset layout / resource expansion};
+\node[artifact, text width=40mm, minimum height=30mm] (ports) at (15,-1.35) {Ports\quad\texttt{adapters}\\[1mm]Store: rclone, oidc-agent,\\dCache HTTP\\[1mm]Git: the checkouts};
+% Beside the boundary rather than inside it, and at the height of the
+% helpers it uses: it reads the same checkout, but `link`, never `catalog`,
+% reaches it. Spelled -{}-all because a bare `--` is read as an en-dash
+% ligature here, which renders a flag nobody can copy.
+\node[actor, text width=40mm, minimum height=14mm] (namespace) at (15,-5.3) {Namespace builder\\\texttt{maintain.namespace}};
 \node[cmd, above=2mm of namespace] (namespace-c) {ethos-data link -{}-all};
-\node[artifact, text width=37mm, minimum height=15mm] (links) at (12,-6) {Shared-cache links\\filesystem output};
-\draw[flow] (manifest) -- node[edgelabel,above]{matching / format} (matching);
-\draw[flow] (upload) -- node[edgelabel,above]{transfer / verify} (remote);
-\draw[flow] (publish) -- node[edgelabel,above]{generate} (public);
+\node[artifact, text width=40mm, minimum height=12mm] (links) at (15,-7.8) {Shared-cache links\\filesystem output};
+\draw[flow] (pipelines.south -| manifest) -- node[edgelabel,right]{build} (manifest);
+\draw[flow] (pipelines.south -| publish) -- node[edgelabel,right]{public} (publish);
+\draw[flow] (pipelines.south -| upload) -- node[edgelabel,right]{upload} (upload);
+\draw[flow] (pipelines.east) -- node[edgelabel,above]{store, git} (pipelines.east -| ports.west);
+\draw[flow] (upload.east) -- node[edgelabel,above]{transfer} (upload.east -| ports.west);
+\draw[flow] (pipelines.west) -- ++(-6mm,0) |- node[edgelabel,pos=0.25,left,align=right]{every\\step} (status.west);
+\draw[flow] (manifest.south east) -- (helpers.north west);
+\draw[flow] (publish.south) -- (publish.south |- helpers.north);
+\draw[flow] (upload.south) -- (upload.south |- helpers.north);
+\draw[flow] (namespace.west) -- node[edgelabel,above]{layout} (helpers.east);
 \draw[flow] (namespace) -- node[edgelabel,right]{plan / apply} (links);
-\draw[flow] (manifest.south) -- ++(0,-6mm) -- ++(22mm,0) -- (2.2,-4.78);
-\draw[flow] (publish) -- (0,-4.78);
-\draw[flow] (upload) -- (6,-4.78);
-% The one edge that crosses the boundary inwards: the builder outside it still
-% uses the catalogue-root and dataset-layout helpers, which is why those are a
-% block of their own rather than part of any one command.
-\draw[flow] (namespace.west) -- ++(-8mm,0) |- (helpers.east);
 \begin{scope}[on background layer]
-\node[boundarybox, fit=(manifest)(upload)(publish)(helpers), label={[boundarylabel]above:Catalogue maintenance -- level 2}] {};
+\node[boundarybox, fit=(pipelines)(manifest)(upload)(status)(helpers), label={[boundarylabel]above:Catalogue maintenance -- level 2}] {};
 \end{scope}
-\node[note, text width=140mm] at (3,-7.9) {\texttt{ethos-data catalog} reaches only the commands inside the boundary; the namespace builder is reached only by \texttt{ethos-data link -{}-all}.\\Source files and generated inventories are filesystem inputs shared across commands.};
+\node[note, text width=170mm] at (6.2,-8.9) {\texttt{ethos-data catalog} reaches only the commands inside the boundary; the namespace builder is reached only by \texttt{ethos-data link -{}-all}.\\The status file is the only record of where a dataset stands; release and removal notices are drafted by the handoffs.};
 \end{tikzpicture}

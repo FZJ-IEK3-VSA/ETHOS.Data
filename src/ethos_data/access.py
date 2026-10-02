@@ -19,8 +19,8 @@ one place, in this order:
   1. ``dataset_roots`` -- the per-dataset escape hatch, for a private copy
   2. the staging root -- work in progress, shadowing the catalogue during
      development.  Never applies to restricted data.
-  3. the package's bundles (planned: the repository is the source of truth for
-     its test data)
+  3. the bundles the package ships, for its test data: the repository is
+     the source of truth, so a bundled file is hash-checked and read in place
   4. the restricted cache, for restricted datasets: always in place, never
      downloaded, never written to
   5. a link in the public cache, the dataset's own or its family's: in place

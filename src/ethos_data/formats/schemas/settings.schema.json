@@ -12,7 +12,7 @@
         }
       ],
       "default": null,
-      "description": "The catalogue to read; replaces the public one and any pin.",
+      "description": "The catalogue to read instead of a collections file's pin or the public one; `config set-catalog`.",
       "title": "Catalog"
     },
     "public_cache": {
@@ -25,7 +25,7 @@
         }
       ],
       "default": null,
-      "description": "Where public and internal data is read and downloaded.",
+      "description": "Where public and internal data is read and downloaded; `config set-public-cache`.",
       "title": "Public Cache"
     },
     "cache_dir": {
@@ -38,7 +38,7 @@
         }
       ],
       "default": null,
-      "description": "The older name of public_cache; still read.",
+      "description": "The older name of `public_cache`; still read.",
       "title": "Cache Dir"
     },
     "restricted_cache": {
@@ -51,7 +51,7 @@
         }
       ],
       "default": null,
-      "description": "Where licensed data lives; read in place, never written.",
+      "description": "Where licensed data lives, read in place and never written by retrieval; `config set-restricted-cache`.",
       "title": "Restricted Cache"
     },
     "staging_cache": {
@@ -64,7 +64,7 @@
         }
       ],
       "default": null,
-      "description": "Where work in progress lives; shadows the catalogue.",
+      "description": "Where work in progress lives, shadowing the catalogue; `config set-staging-cache`.",
       "title": "Staging Cache"
     },
     "publication_url": {
@@ -77,7 +77,7 @@
         }
       ],
       "default": null,
-      "description": "Fetch bytes from another door of the published store.",
+      "description": "Fetch bytes from another door of the published store than the catalogue declares; `config set-publication-url`.",
       "title": "Publication Url"
     },
     "dataset_roots": {
@@ -85,7 +85,7 @@
         "type": "string"
       },
       "default": {},
-      "description": "Dataset name to a directory of your own, read in place.",
+      "description": "Dataset name to a directory of your own, read in place; `config set-root <dataset> <dir>`.",
       "title": "Dataset Roots",
       "type": "object"
     },
