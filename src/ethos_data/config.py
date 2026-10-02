@@ -57,6 +57,7 @@ import platformdirs
 import yaml
 
 from .errors import ConfigurationError
+from .formats import keys as k
 
 __all__ = [
     "SCOPES",
@@ -177,7 +178,7 @@ class Roots:
 
     def for_access(self, access: str) -> Path | None:
         """The root a dataset of this access class is read from."""
-        return self.restricted if access == "restricted" else self.public
+        return self.restricted if access == k.RESTRICTED else self.public
 
 
 def find_project_config(start: Path | None = None) -> Path | None:

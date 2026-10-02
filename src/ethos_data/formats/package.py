@@ -34,8 +34,8 @@ class ResourceRecord(_Generated):
     name: str
     path: str
     bytes: int
-    hash: str = field("hash", description='"sha256:<hex>", the convention pooch reads.')
-    mediatype: str = "application/octet-stream"
+    hash: str = field(k.HASH, description='"sha256:<hex>", the convention pooch reads.')
+    mediatype: str = k.DEFAULT_MEDIATYPE
     sidecars: list[str] = field(
         k.SIDECARS, [], description="Companion files that must travel with this one."
     )

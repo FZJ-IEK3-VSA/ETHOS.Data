@@ -62,10 +62,10 @@ from pathlib import Path
 
 from .access import entry_for
 from .catalogs import Catalog, Resource, UnknownDataset
-from .errors import AccessError
 from .config import Roots, current_user
+from .errors import AccessError
 from .linking import LinkError, source_dir_for
-from .verify import sha256_of, _expected_digest
+from .model import digest
 
 __all__ = ["MaterializeReport", "materialize", "plan_materialize", "PROVENANCE_FILE"]
 
@@ -415,12 +415,12 @@ def _verify_copy(path: Path, resource: Resource) -> str:
     size = path.stat().st_size
     if resource.bytes and size != resource.bytes:
         return f"expected {resource.bytes:,} bytes, copied {size:,}"
-    digest = _expected_digest(resource.hash or "")
-    if not digest:
+    wanted = digest.expected(resource.hash)
+    if wanted is None:
         return ""
-    found = sha256_of(path)
-    if found != digest:
+    found = digest.of_file(path)
+    if found != wanted:
         return (
-            f"checksum {found[:16]}... does not match the manifest's {digest[:16]}..."
+            f"checksum {found[:16]}... does not match the manifest's {wanted[:16]}..."
         )
     return ""

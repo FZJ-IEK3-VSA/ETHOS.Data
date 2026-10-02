@@ -30,13 +30,11 @@ import re
 import sys
 from pathlib import Path
 
-import yaml
-
 from ..errors import PublishError
 from ..formats import dataset as dataset_format
 from ..formats import keys as k
 from ..formats.derived import index_row
-from . import dataset_name_for, datasets_dir, iter_dataset_dirs
+from . import dataset_name_for, datasets_dir, iter_dataset_dirs, read_catalog_meta
 
 #: Maintainer-only, never in the public catalogue: the keys the dataset.yaml
 #: specification marks unpublished. ``ethos:embargo`` would leak that unpublished
@@ -127,9 +125,7 @@ def strip(package: dict) -> dict:
 
 def render(catalog_root: Path) -> dict[Path, str]:
     """Build the complete public tree in memory: {relative path -> str | bytes}."""
-    catalog_meta = yaml.safe_load(
-        (catalog_root / "catalog.yaml").read_text(encoding="utf-8")
-    )
+    catalog_meta = read_catalog_meta(catalog_root)
     for key in STRIP_FROM_PACKAGE:
         catalog_meta.pop(key, None)
     # Overwritten, not inherited: this copy is generated whatever the source says.

@@ -24,7 +24,7 @@ The catalogue-locating helpers below serve both entry points: `link --all` reads
 `source_dir` from the hand-written `dataset.yaml` of a source checkout, and it
 finds that checkout the same way the maintainer commands find theirs.
 
-## Locating a catalogue
+## Locating and reading a catalogue
 
 ::: ethos_data.maintain
     options:
@@ -33,6 +33,9 @@ finds that checkout the same way the maintainer commands find theirs.
         - resolve_catalog_root
         - catalogue_role
         - datasets_dir
+        - read_descriptor
+        - read_catalog_meta
+        - source_dir_of
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3
@@ -57,7 +60,6 @@ finds that checkout the same way the maintainer commands find theirs.
         - apply_resource_licenses
         - slugify
         - mediatype_of
-        - sha256_of
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

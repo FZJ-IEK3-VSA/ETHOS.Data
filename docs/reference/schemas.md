@@ -401,7 +401,10 @@ described by no licence at all.
 
 **`ethos:document`** — *path, relative to the dataset directory.* An archived copy
 of the licence itself, stored beside `dataset.yaml` (by convention in
-`licenses/`) and carried into the published catalogue verbatim.
+`licenses/`) and carried into the published catalogue verbatim. Spell it with
+forward slashes and without an empty, `.` or `..` segment, as in
+`licenses/terms.txt`: a resource path follows the same rule, and a bundle
+stores the document at exactly that path.
 
 **`ethos:document_sha256`** — *hex digest of that file; derived.* The build hashes the
 archived file and writes the digest into `datapackage.json`, exactly as it does for
@@ -622,7 +625,7 @@ sharded dataset — an `ethos:shards` index.
 | Key | |
 |---|---|
 | `resources[]` | `{name, path, bytes, hash, mediatype}` per file |
-| `resources[].hash` | `"sha256:…"` — the same `alg:hash` convention pooch reads, so the value passes straight through to the downloader |
+| `resources[].hash` | `"sha256:…"` — the same `alg:hash` convention pooch reads, so the value passes straight through to the downloader. A bare digest, in either case, is read as the same SHA-256 |
 | `resources[].ethos:sidecars` | companion files that must travel with this one (shapefile `.dbf`, `.shx`, …) |
 | `resources[].licenses` | present only on files a narrowed licence matched — see below |
 | `licenses`, `contributors`, `sources`, `ethos:origin`, `ethos:derivation` | passed through from `dataset.yaml` unchanged |

@@ -41,6 +41,7 @@ from .access import entry_for
 from .catalogs import LICENSE_RESOLVED, Catalog
 from .config import Roots
 from .errors import AccessError, CatalogueRootError, LinkError
+from .formats import keys as k
 
 __all__ = ["LinkError", "LinkReport", "link", "source_dir_for", "unlink"]
 
@@ -83,7 +84,12 @@ def source_dir_for(name: str, catalog_root: str | Path | None = None) -> Path:
     to be: nothing is pulled in until somebody asks for a path only a checkout
     can answer.
     """
-    from .maintain import datasets_dir, resolve_catalog_root
+    from .maintain import (
+        datasets_dir,
+        read_descriptor,
+        resolve_catalog_root,
+        source_dir_of,
+    )
 
     try:
         root = resolve_catalog_root(
@@ -94,23 +100,17 @@ def source_dir_for(name: str, catalog_root: str | Path | None = None) -> Path:
         # exit on a missing checkout. Here it is one way of answering a question,
         # so it becomes the same error every other failure in this module raises.
         raise LinkError(error.message) from None
-    descriptor = datasets_dir(root) / name / "dataset.yaml"
+    dataset_dir = datasets_dir(root) / name
+    descriptor = dataset_dir / "dataset.yaml"
     if not descriptor.is_file():
         raise LinkError(f"no dataset called {name!r} in {datasets_dir(root)}")
-
-    import yaml
-
-    meta = yaml.safe_load(descriptor.read_text(encoding="utf-8")) or {}
-    raw = meta.get("source_dir")
-    if not raw:
+    source = source_dir_of(dataset_dir, read_descriptor(dataset_dir))
+    if source is None:
         raise LinkError(
             f"{descriptor} has no source_dir, so there is nothing to link from.\n"
             "An uploaded dataset has none by design -- dCache holds it. Name the "
             f"directory instead:\n    ethos-data link {name} /path/to/{name}"
         )
-    source = Path(str(raw)).expanduser()
-    if not source.is_absolute():
-        source = (datasets_dir(root) / name / source).resolve()
     return source
 
 
@@ -162,7 +162,7 @@ def _require_settled_licence(catalog: Catalog, name: str) -> None:
     if catalog.dataset(name).license_status == LICENSE_RESOLVED:
         return
     try:
-        note = catalog.dataset(name).descriptor.get("ethos:license_note", "")
+        note = catalog.dataset(name).descriptor.get(k.LICENSE_NOTE, "")
     except Exception:
         # The status is promoted into the index precisely so that asking this
         # costs no fetch. The note is a nicety on top -- and it is stripped from

@@ -258,6 +258,12 @@ Removing a link preserves its source. Removing a copied entry requires
 `--force` and deletes that staged copy. Verification reports staged resources
 as `unverifiable`; restricted datasets are never shadowed.
 
+A family member is staged under its full name, such as
+`reskit-test-data/era5`, and shadows that member only. Its entry sits in a
+folder named after the family, which `remove` deletes once it is empty. A
+family and one of its members are never staged at the same time, and a name
+with an empty, `.` or `..` segment is refused.
+
 ## `bundle`
 
 A bundle is a repository copy of selected catalogue resources plus generated
