@@ -23,7 +23,7 @@ Use the reporter's catalogue, collection and cache settings, not yours.
 | Unknown dataset or unresolvable collection | Spelling, revision, a hidden dataset seen through the public catalogue, or a staging entry gone. |
 | Cluster catalogue unreadable | Filesystem permissions, or a checkout that was moved or is half-way through an update. |
 | Data read from an unexpected place | A dataset-root override, a staging entry or a cache link on the reporter's machine. `config show` and the plan name them. |
-| Download from an unexpected host | `ETHOS_PUBLICATION_URL` or `publication_url` in one of the configuration files `config show` lists. |
+| Download from an unexpected host | `ETHOS_PUBLICATION_URL`, or `publication_url` in the settings file `config show` names. |
 | Hash mismatch | Compare with the recorded inventory and keep the evidence before repairing. A linked copy was edited at its source; a downloaded copy was damaged; or the published object was replaced, which must never happen. |
 | Public view misses an accepted dataset | Visibility, the generated diff, whether the public revision was released, and which revision the package pins. |
 

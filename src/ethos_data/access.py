@@ -216,9 +216,9 @@ def locate(
     roots = Roots.coerce(roots)
     if skip_unavailable is None:
         skip_unavailable = resolve_skip_unavailable()[0]
-    configured = {
-        name: Path(path).expanduser() for name, path in (dataset_roots or {}).items()
-    }
+    if dataset_roots is None:
+        dataset_roots = roots.datasets
+    configured = {name: Path(path).expanduser() for name, path in dataset_roots.items()}
     located: list[Location] = []
     warned: set[str] = set()
 
@@ -282,8 +282,7 @@ def locate(
                 f"not yet uploaded, point at the copy on this machine:\n"
                 f"    ethos-data link {dataset.name} /path/to/{dataset.name}\n"
                 f"or, for this one dataset only:\n"
-                f"    ethos-data config set-root {dataset.name} /path/to/{dataset.name} "
-                f"--scope environment"
+                f"    ethos-data config set-root {dataset.name} /path/to/{dataset.name}"
             )
 
         located.append(

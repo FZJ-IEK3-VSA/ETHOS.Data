@@ -23,7 +23,7 @@ def test_the_public_cache_comes_from_the_first_place_that_names_it(
     run_cli(["config", "set-public-cache", str(tmp_path / "from-file")])
     from_file = ethos_data.resolve_public_cache()
     assert from_file.value == tmp_path / "from-file"
-    assert "config" in from_file.source
+    assert from_file.source.startswith("settings file")
 
     monkeypatch.setenv("ETHOS_DATA_DIR", str(tmp_path / "from-env"))
     assert ethos_data.resolve_public_cache().value == tmp_path / "from-env"

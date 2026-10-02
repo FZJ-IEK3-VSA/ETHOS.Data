@@ -20,8 +20,24 @@ metadata in `catalogue/` and synthetic bytes in `server/`. We will fetch into
 `cache/`. Its collections files are optional examples for the Python API;
 the direct CLI reads catalogue keys.
 
-Use a shell without `ETHOS_PUBLICATION_URL`, staging or dataset-root overrides
-from earlier practice. The project config points downloads to the local server.
+Name the lesson's settings file for this shell. It points downloads to the
+local server, and while it is named, ETHOS.Data reads it instead of the
+settings in your account and writes any setting into it:
+
+=== "Bash"
+
+    ```bash
+    export ETHOS_DATA_CONFIG="$PWD/lesson-settings.yaml"
+    ```
+
+=== "PowerShell"
+
+    ```powershell
+    $env:ETHOS_DATA_CONFIG = "$PWD/lesson-settings.yaml"
+    ```
+
+Use a shell without `ETHOS_PUBLICATION_URL` or `ETHOS_STAGING_DIR` from earlier
+practice.
 
 ## 2. Start the server
 
@@ -44,8 +60,8 @@ ethos-data --catalog catalogue/datacatalog.json ls lesson-stations
 
 The first listing contains `lesson-stations`; the second contains
 `lesson-stations/temperatures.csv` and its size. No data request should appear
-in the server terminal. `config show` reports shared settings; the explicit
-`--catalog` selects the lesson index for each invocation.
+in the server terminal. `config show` names the lesson's settings file; the
+explicit `--catalog` selects the lesson index for each invocation.
 
 ## 4. Fetch twice
 
@@ -125,6 +141,8 @@ The fetch replaces the damaged downloaded copy. Verification now reports `ok`
 and the calculation again prints `12.75`. Package wrappers also provide
 `verify --repair` for collection workflows.
 
-Stop the server with Ctrl+C. All practice files are inside `first-fetch-lesson`.
+Stop the server with Ctrl+C, and remove `ETHOS_DATA_CONFIG` from the shell
+(`unset ETHOS_DATA_CONFIG`, or `Remove-Item Env:ETHOS_DATA_CONFIG`) to return
+to your own settings. All practice files are inside `first-fetch-lesson`.
 Continue with [Set up your machine](../how-to/data-users/set-up-your-machine.md) or
 [Use data in a script](../how-to/data-users/use-data-in-a-script.md).

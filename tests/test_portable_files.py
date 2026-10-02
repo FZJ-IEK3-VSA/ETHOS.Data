@@ -207,18 +207,13 @@ class TestCommandLineOutput:
         cli._use_utf8_output()
 
 
-@pytest.mark.legacy(
-    "one settings file per account: there is no scope to choose a file by"
-)
 class TestConfiguration:
     def test_a_non_ascii_cache_path_can_be_written_and_read_back(
         self, tmp_path, monkeypatch
     ):
         """A Windows user called Jürgen has a home directory with a "ü" in it."""
         written = tmp_path / "config.yaml"
-        monkeypatch.setattr(
-            config, "writable_config_path", lambda scope="user": written
-        )
+        monkeypatch.setenv(config.CONFIG_ENV_VAR, str(written))
 
         value = str(tmp_path / f"caches-{UMLAUT}")
         config.set_option(config.PUBLIC_CACHE_KEY, value)
@@ -226,6 +221,7 @@ class TestConfiguration:
         raw = written.read_bytes()
         assert b"\r" not in raw
         assert yaml.safe_load(raw.decode("utf-8"))[config.PUBLIC_CACHE_KEY] == value
+        assert config.resolve_public_cache().value == Path(value)
 
 
 if __name__ == "__main__":

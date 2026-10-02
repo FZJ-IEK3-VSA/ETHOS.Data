@@ -55,7 +55,7 @@ Key concepts used across `ethos-data`.
 
 | Term | Meaning |
 |---|---|
-| **Scope** | Where a setting is written: `project` (an `ethos-data.yaml` found by walking up), `user`, `environment` (inside the conda env or venv), or `site` (machine-wide). Precedence runs in that order. Planned to be replaced by [one settings file per account](../how-to/data-users/set-up-your-machine.md#settings-file). |
+| **Settings file** | The one file the settings are read from and written to: the file `ETHOS_DATA_CONFIG` names, else the one in the account. See [Where the settings are stored](../how-to/data-users/set-up-your-machine.md#settings-file). |
 | **Provenance** | The record of *where* a resolved setting came from. Every lookup carries one, because "why is my data going there`" is the question people actually ask. |
 | **Pinned catalogue** | A catalogue URL naming an immutable version. Cached on disk forever. A URL naming `main`, `master`, `HEAD`, `latest`, `dev` or `develop` is recognised as moving and never cached. |
 

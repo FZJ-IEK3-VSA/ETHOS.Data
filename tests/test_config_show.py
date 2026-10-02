@@ -17,10 +17,6 @@ import pytest
 from ethos_data import config
 from ethos_data.cli import _unreachable, main
 
-pytestmark = pytest.mark.legacy(
-    "config show changes with one settings file per account and without skip_unavailable"
-)
-
 
 @pytest.fixture
 def public(monkeypatch, tmp_path) -> Path:
@@ -82,7 +78,7 @@ class TestTheListingIsOneDirectoryRead:
         public.mkdir()
         (public / "one").mkdir()
         out = show(capsys)
-        assert out.index("catalogue:") < out.index("public cache holds")
+        assert out.index("\ncatalogue ") < out.index("public cache holds")
 
     def test_links_are_listed_with_their_targets(self, public, tmp_path, capsys):
         public.mkdir()
@@ -106,7 +102,7 @@ class TestAnUnreachableCacheSaysWhy:
         out = show(capsys)
         assert "[not created yet -- the first download creates it]" in out
         assert "NOT REACHABLE" not in out
-        assert "catalogue:" in out
+        assert "\ncatalogue " in out
 
     def test_a_missing_restricted_cache_is_flagged(
         self, public, monkeypatch, tmp_path, capsys
@@ -136,7 +132,7 @@ class TestAnUnreachableCacheSaysWhy:
             "(The specified network name is no longer available)]"
         ) in out
         assert "public cache contents: not listed -- cannot be reached" in out
-        assert "catalogue:" in out
+        assert "\ncatalogue " in out
 
     def test_a_file_where_the_cache_should_be(self, public, capsys):
         public.write_text("not a directory")

@@ -36,19 +36,6 @@ The settings say where data lies on this machine. Which datasets a workflow
 needs, and which catalogue versions it accepts, come from the package's
 collections file.
 
-!!! warning "Gap: settings are read from four files"
-    The current release reads four files, first match wins: an
-    `ethos-data.yaml` found by searching upward from the working directory,
-    the file in your account, a file inside the Python environment
-    (`<sys.prefix>/etc/ethos-data/config.yaml`) and a machine-wide file. The
-    `config` commands take `--scope project|user|environment|site` to choose
-    among them, and `ETHOS_DATA_CONFIG` does not exist. On Windows the file
-    in your account is `%LOCALAPPDATA%\ethos-data\ethos-data\config.yaml`
-    and the default cache is `%LOCALAPPDATA%\ethos-data\ethos-data\Cache`.
-    The planned change, [one settings file per
-    account](../../explanation/architecture/decisions.md#one-settings-file-per-account-2026-10-02),
-    is to be implemented separately.
-
 ## Check what is in effect
 
 ```bash
@@ -168,9 +155,8 @@ same file the examples in [Use data in a script](use-data-in-a-script.md)
 work with.
 
 !!! warning "Gap: no self-test"
-    `ethos-data selftest`, `ethos_data.EXAMPLE_COLLECTIONS` and the
-    `settings` attribute do not exist, and the example collections file is
-    only in the documentation, as
+    `ethos-data selftest` and `ethos_data.EXAMPLE_COLLECTIONS` do not
+    exist, and the example collections file is only in the documentation, as
     [collections.yaml](../../assets/examples/collections.yaml). Until they
     are implemented, `ethos-data fetch
     reskit-test-data/placements/turbine_placements.csv` checks a single
@@ -202,11 +188,6 @@ file to one conda environment, store the variable in the environment with
 `conda env config vars set ETHOS_DATA_CONFIG=PATH` and activate the
 environment again. The file must exist; only `config set-*` creates it.
 Every other command stops and names the missing file.
-
-!!! warning "Gap: `ETHOS_DATA_CONFIG` is not implemented"
-    The variable is ignored. It is part of [one settings file per
-    account](../../explanation/architecture/decisions.md#one-settings-file-per-account-2026-10-02),
-    which is to be implemented separately.
 
 ## Override one shell or one run {#temporary-overrides}
 

@@ -66,28 +66,29 @@ pins, point `--catalog` at that pin, or use its collections handle's `.catalog`.
 
 ## `config`
 
-`ethos-data config show` prints configured catalogue and cache settings, their
-origins, local dataset overrides and one level of public-cache entries. It works
-offline and marks unreachable cache paths with the reason. It reports shared
-settings, not per-command overrides or a package's resolved catalogue pin.
+`ethos-data config show` prints the settings file it read, the catalogue and
+cache settings, their origins, local dataset overrides and one level of
+public-cache entries, and names any settings file of an earlier release that it
+ignores. It works offline and marks unreachable cache paths with the reason. It
+reports the settings, not per-command overrides or a package's resolved
+catalogue pin.
 
 Use `ethos-data ls` to see the catalogue selected for direct access, or
 `<your-tool>-data show` for a package's selected catalogue and collections.
 
-All setters/unsetters accept `--scope project|user|environment|site`, defaulting
-to `user`. Settings affect package wrappers too. The
+The setters and unsetters write to the settings file in effect, the file
+`ETHOS_DATA_CONFIG` names or else the one in your account, and a setter creates
+it if need be. `unset-publication-url` returns downloads to the door the
+catalogue names. Settings affect package wrappers too. The
 [configuration reference](../configuration.md) lists keys, commands, environment
-variables, scopes and precedence. For setup steps, see
+variables and precedence. For setup steps, see
 [Set up your machine](../../how-to/data-users/set-up-your-machine.md).
 
-!!! warning "Gap: `--scope` is to be removed and `selftest` added"
-    With [one settings file per
-    account](../../explanation/architecture/decisions.md#one-settings-file-per-account-2026-10-02),
-    the setters and unsetters write to the settings file in effect and lose
-    `--scope`. A new command, `ethos-data selftest`, fetches the small public
-    collection that ships with the package and reports each step; see
+!!! warning "Gap: `selftest` is to be added"
+    A new command, `ethos-data selftest`, fetches the small public collection
+    that ships with the package and reports each step; see
     [Check that a download works](../../how-to/data-users/set-up-your-machine.md#check-a-download).
-    Both are to be implemented separately.
+    It is to be implemented separately.
 
 ## `link [dataset] [directory]` {#link-dataset-directory}
 

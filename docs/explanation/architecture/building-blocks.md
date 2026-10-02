@@ -57,7 +57,7 @@ verification to inspect files without changing collection selection.
 | Local integrity tools (`verify`, `materialize`) | Report integrity findings, repair eligible managed files, or create independent local copies | Reuse resource metadata, access rules, and hashing; explicit operations distinct from ordinary fetch |
 | Repository bundles (`bundles`) | Export selected canonical public resources and metadata; load, hash-check, and use the local copy through `Bundle.fetch` | Uses Selection with staging disabled at export; local reads ignore ambient roots and network; explicit `allow_modified` preserves original hashes |
 | Catalogue model (`catalog`, shared block) | Load the index, descriptors, and shards lazily; represent dataset/resource metadata | Filesystem or HTTP(S) metadata sources |
-| Configuration (`config`, shared block) | Resolve roots, per-dataset settings, and configuration origins | Explicit options, environment, configuration files, and defaults |
+| Configuration (`config`, shared block) | Resolve roots, per-dataset settings, and configuration origins | Explicit options, environment, the one settings file, and defaults; a handle keeps a snapshot |
 
 Consumer entry points coordinate Selection followed by Retrieval; Selection
 does not call Retrieval. The [runtime request diagram](runtime.md#61-data-request)

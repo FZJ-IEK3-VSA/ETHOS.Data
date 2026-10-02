@@ -55,17 +55,6 @@ public and restricted caches, and where each value came from: an argument,
 an environment variable, the settings file or a built-in default. In a
 package, the same object is `your_tool.data.handle().settings`.
 
-!!! warning "Gap: the settings are not read once and cannot be printed"
-    There is no `settings` attribute. A handle fixes its catalogue when it is
-    built but looks up the caches again on every call, and the current
-    release also reads an `ethos-data.yaml` found by searching upward from
-    the working directory. The same script can therefore use different
-    caches depending on where it is started. Until this changes,
-    `ethos-data config show`, run in the script's environment and working
-    directory, reports the settings the script reads. The [planned
-    change](../../explanation/architecture/decisions.md#one-settings-file-per-account-2026-10-02)
-    is to be implemented separately.
-
 ## See what a fetch will download {#plan}
 
 Before fetching a collection you do not know, ask for its size and for what
