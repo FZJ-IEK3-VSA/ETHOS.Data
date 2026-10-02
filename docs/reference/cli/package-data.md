@@ -66,7 +66,7 @@ defines only one of the two refuses a request for the other. Messages label the
 variant, as in `onshore_wind [test]`. See
 [`collections.yaml`](../schemas.md#collectionsyaml).
 
-## `show [collection] [--test] [--files]` { #show }
+## `show [collection] [--test] [--files] [--meta]` { #show }
 
 Reads catalogue metadata and nothing else: no form of `show` downloads
 anything.
@@ -75,6 +75,7 @@ anything.
 <tool>-data show                         # every collection in the file
 <tool>-data show onshore_wind --test     # one collection
 <tool>-data show onshore_wind --files    # ... and every file it selects
+<tool>-data show onshore_wind --meta     # ... and every dataset's description
 ```
 
 Without a collection: every collection the file defines, with file count, total
@@ -250,6 +251,11 @@ with local official caches, not with the remote catalogue.
 Removing a link preserves its source. Removing a copied entry requires
 `--force` and deletes that staged copy. Verification reports staged resources
 as `unverifiable`; restricted datasets are never shadowed.
+
+`add` writes a minimal `dataset.yaml` into the directory, with the name, `source_dir: .`
+and the `--note` as its description, unless the directory has one already.
+It is the start of the dataset's [proposal](../../how-to/package-maintainers/propose-a-dataset.md);
+staging never reads it, and it is not one of the staged dataset's files.
 
 A family member is staged under its full name, such as
 `reskit-test-data/era5`, and shadows that member only. Its entry sits in a

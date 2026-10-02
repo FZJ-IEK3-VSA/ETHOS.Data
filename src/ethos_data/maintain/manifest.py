@@ -126,7 +126,9 @@ EXCLUDE_NAMES = {".git", ".datalad", ".gitattributes", ".gitignore", "__pycache_
 EXCLUDE_SUFFIXES = {".pyc"}
 # Matched against the path relative to the dataset root, so a data file that
 # happens to be called README.md deeper in the tree is still published.
-EXCLUDE_ROOT_GLOBS = ("README*", "LICENSE*", "CHANGELOG*")
+# A dataset.yaml at the top describes the data beside it -- `staging add`
+# writes one -- and is never one of its files.
+EXCLUDE_ROOT_GLOBS = ("README*", "LICENSE*", "CHANGELOG*", "dataset.yaml")
 
 
 def load_hash_cache(dataset_dir: Path) -> dict:

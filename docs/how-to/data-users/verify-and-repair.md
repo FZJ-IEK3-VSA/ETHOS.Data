@@ -41,8 +41,16 @@ every file as `ok`.
 ## Check a whole dataset fetched by key {#verify-complete-dataset}
 
 A package's `verify` checks only what its collections select. To check every
-file of a dataset, use the integrity API against the catalogue and caches in
-effect:
+file of a dataset, folder or file by its key:
+
+```bash
+ethos-data verify global-wind-atlas-v4 --deep
+ethos-data verify global-wind-atlas-v4 --deep --repair --dry-run
+```
+
+It takes the same `--deep`, `--repair`, `--dry-run` and `--quiet` as a
+package's `verify`. The same check from Python, against the catalogue and
+caches in effect:
 
 ```python
 import ethos_data
@@ -57,11 +65,5 @@ for finding in findings:
 
 Remove staging entries and per-dataset root overrides first; they would
 redirect the check away from the cache.
-
-!!! warning "Gap: `ethos-data` has no `verify`"
-    Files fetched by key with `ethos-data fetch` can be checked only through
-    the Python API above, or through a package collection that happens to
-    select them. An `ethos-data verify <key> [--deep] [--repair]` would close
-    the gap.
 
 If verification still fails after a repair, [report the problem](report-a-problem.md).

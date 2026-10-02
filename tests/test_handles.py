@@ -315,10 +315,9 @@ def test_ethos_data_rejects_collection_commands(world, tmp_path, monkeypatch, ca
         ["info", "wind"],
         ["plan", "wind"],
         ["paths", "wind"],
-        pytest.param(
-            ["verify"],
-            marks=pytest.mark.legacy("ethos-data gains verify <key>"),
-        ),
+        # ethos-data verifies a catalogue key; without one there is nothing
+        # to check, since it has no collections file to take a default from.
+        ["verify"],
         ["bundle", "--help"],
         ["staging", "--help"],
         ["path", "flat"],
