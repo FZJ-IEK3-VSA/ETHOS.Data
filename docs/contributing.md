@@ -87,14 +87,25 @@ See [Caches, classes and roots](explanation/caches-and-access.md).
 ## Changing the catalogue format
 
 `ethos:` keys are the format's extension points, and both halves have to move
-together:
+together. Every file format is specified once, in `ethos_data/formats/`:
 
-1. Emit it in `ethos_data/maintain/manifest.py`.
-2. Read it in `ethos_data/catalogs.py`.
-3. Decide whether `ethos_data/maintain/publish.py` should **strip** it from the
-   public catalogue (`source_dir`, `ethos:embargo` and `ethos:license_note` are
-   stripped; a leak of any of them is the failure that matters).
-4. Document it in [File formats](reference/schemas.md).
+1. Declare the key in the file's model (`formats/dataset.py` for
+   `dataset.yaml`), with its type, default and description, and say what the
+   tools do with it: `published=False` strips it from the public catalogue
+   (`source_dir`, `ethos:embargo` and `ethos:license_note` are stripped; a leak
+   of any of them is the failure that matters), `promoted=True` copies it into
+   the index row, `user_facing=True` prints it for a user without a copy,
+   `inherited=True` hands it from a family to its members. Name it in
+   `formats/keys.py` rather than as a string literal.
+2. A rule that crosses keys belongs in the same module's `check`, with a
+   message written for the person who has to fix the file.
+3. Add it to the template it belongs in, under `formats/templates/`; the
+   annotated `dataset-full.yaml` is the one [File formats](reference/schemas.md)
+   shows.
+4. Regenerate the JSON Schemas, which are committed: `python -m
+   ethos_data.formats`. A test fails while one is out of date.
+5. Emit it in `ethos_data/maintain/manifest.py` and read it in
+   `ethos_data/catalogs.py`, and describe it in [File formats](reference/schemas.md).
 
 Manifests are generated, never hand-edited. `ethos-data catalog build --check` fails
 if any is stale, which is what CI should run.

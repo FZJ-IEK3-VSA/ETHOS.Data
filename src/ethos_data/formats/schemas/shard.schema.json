@@ -1,0 +1,118 @@
+{
+  "$defs": {
+    "ResourceRecord": {
+      "additionalProperties": true,
+      "description": "One file of a dataset's inventory.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "bytes": {
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "hash": {
+          "default": null,
+          "description": "\"sha256:<hex>\", the convention pooch reads.",
+          "title": "Hash",
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "mediatype": {
+          "default": "application/octet-stream",
+          "title": "Mediatype",
+          "type": "string"
+        },
+        "ethos:sidecars": {
+          "default": [],
+          "description": "Companion files that must travel with this one.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Ethos:Sidecars",
+          "type": "array",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "licenses": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Present only on files a narrowed licence matched.",
+          "title": "Licenses",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "bytes"
+      ],
+      "title": "ResourceRecord",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "One shard of a sharded inventory.",
+  "properties": {
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "ethos:shard": {
+      "default": "",
+      "description": "",
+      "title": "Ethos:Shard",
+      "type": "string",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "resources": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ResourceRecord"
+      },
+      "title": "Resources",
+      "type": "array"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "shards/<prefix>.json",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

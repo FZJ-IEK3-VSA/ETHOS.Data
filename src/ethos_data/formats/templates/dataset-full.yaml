@@ -1,0 +1,93 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data/main/src/ethos_data/formats/schemas/dataset.schema.json
+#
+# Every key of dataset.yaml, annotated. File formats in the ETHOS.Data
+# documentation includes this file; edit it here.
+#
+#  required      the build fails without it
+#  default: x    omit it and you get x
+#  if ...        required only in that case
+#  repeatable    a list; add as many entries as you need
+#  (unmarked)    optional
+
+# ---- identity ----------------------------------------------------------
+name: my-dataset                              # required
+title: A short human-readable title
+description: >-
+  What this is, and what it is used for.
+homepage: https://example.org/the-product
+id: https://doi.org/10.5281/zenodo.1234567
+version: "2.0.7"                              # the publisher's own release string
+
+sources:                                      # repeatable
+  - title: Where the data originally came from
+    path: https://doi.org/10.5281/zenodo.1234567
+  - title: A second source, when it had more than one
+    path: https://example.org/methodology.pdf
+
+contributors:                                 # repeatable
+  - title: A Researcher                       # required within an entry
+    roles: [author]                           # repeatable; see below for the vocabulary
+    organization: Forschungszentrum Jülich, ICE-2
+    path: https://orcid.org/0000-0000-0000-0000
+    email: a.researcher@fz-juelich.de
+
+licenses:                                     # repeatable
+  - name: CC-BY-4.0                           # `name` and/or `path` -- at least one
+    path: https://creativecommons.org/licenses/by/4.0/
+    ethos:applies_to: ["originals/**"]         # repeatable; omit to cover every file
+  - name: CC0-1.0
+    path: https://creativecommons.org/publicdomain/zero/1.0/
+
+ethos:retrieved: "2026-09-01"
+ethos:contact: your-username
+ethos:attribution: >-
+  The statement anyone redistributing this data has to reproduce.
+ethos:coverage_note: >-
+  What this mirror does not hold, and why.
+ethos:upstream:                                # omit while upstream still serves it
+  status: withdrawn                           # available|superseded|withdrawn|on-request
+  checked: "2026-09-01"
+  note: >-
+    What happened, what was checked, and any route that remains.
+
+# ---- provenance --------------------------------------------------------
+ethos:origin: downloaded                       # default: downloaded | derived | created
+ethos:derivation: >-                           # if origin: derived
+  The method, parameters and inputs, in enough detail to redo it.
+ethos:input_datasets: [other-dataset]          # derived from catalogue data: those datasets
+ethos:provenance: >-
+  How this copy was obtained or restored, where sources and retrieval do not say.
+ethos:verified: "2026-09-10"                   # last checked against its source
+
+# ---- where the bytes are -----------------------------------------------
+source_dir: /legacy/shared/MyDataset           # required, unless frozen below
+ethos:remote_prefix: my-dataset                # default: the value of `name`
+ethos:uploaded: false                          # dCache holds it; drop source_dir
+ethos:frozen: false                            # inventory final; drop source_dir
+
+# ---- classification ----------------------------------------------------
+ethos:access: public                           # default: public | internal | restricted
+ethos:visibility: public                       # default: public | hidden
+ethos:embargo:                                 # if visibility: hidden
+  until: "2027-01-01"
+  reason: Under peer review until publication.
+  becomes: public
+ethos:license_status: resolved                 # default: derived | resolved | unresolved | unknown
+ethos:license_note: >-
+  Internal working note on the licence. Stripped from the published catalogue.
+ethos:restriction: >-                          # if access: restricted
+  Why it is restricted, and how somebody entitled to it gets a copy.
+
+# ---- inventory control -------------------------------------------------
+ethos:include:                                 # repeatable
+  - "rasters/**"
+ethos:exclude:                                 # repeatable
+  - "**/*.tmp"
+ethos:shard_depth: 1
+
+# ---- what the files hold -----------------------------------------------
+ethos:tiling:                                  # a dataset split into tiles: the scheme
+  scheme: web-mercator-xyz
+  zoom: 7
+ethos:additional_variables:                    # variable name -> description
+  blh: Planetary boundary-layer height [m]

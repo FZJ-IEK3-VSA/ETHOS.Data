@@ -1,0 +1,113 @@
+{
+  "additionalProperties": true,
+  "description": "A source catalogue's name, contact and publication root.",
+  "properties": {
+    "name": {
+      "default": null,
+      "description": "The catalogue's name; the public catalogue shares it.",
+      "title": "Name",
+      "type": "string",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "A short human-readable title.",
+      "title": "Title",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "What the catalogue is for.",
+      "title": "Description",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:publication_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Root of the public data store; a resource is <url>/<remote_prefix>/<path>.",
+      "title": "Ethos:Publication Url",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:contact": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Team or username.",
+      "title": "Ethos:Contact",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:catalog_role": {
+      "default": "source",
+      "description": "Always source in a hand-written file; publish stamps published.",
+      "enum": [
+        "source",
+        "published"
+      ],
+      "title": "Ethos:Catalog Role",
+      "type": "string",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    }
+  },
+  "title": "catalog.yaml",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
