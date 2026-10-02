@@ -50,7 +50,8 @@ class CatalogMeta(BaseModel):
     )
     publication_url: str | None = field(
         k.PUBLICATION_URL,
-        description="Root of the public data store; a resource is <url>/<remote_prefix>/<path>.",
+        description="Root of the public data store: a resource is "
+        "`<url>/<remote_prefix>/<path>`.",
     )
     contact: str | None = field(k.CONTACT, description="Team or username.")
     version: str | None = field(

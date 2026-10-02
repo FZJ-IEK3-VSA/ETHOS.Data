@@ -5,7 +5,7 @@
       "description": "One place the dataset's bytes can be read from, as a command put them there.",
       "properties": {
         "kind": {
-          "description": "uploaded to dCache, linked into a cache, or materialized there",
+          "description": "Uploaded to the store, linked into a cache, or materialized there.",
           "enum": [
             "uploaded",
             "linked",
@@ -69,7 +69,7 @@
           "type": "string"
         },
         "step": {
-          "description": "add, migrate, build, change, upload, verify, link, materialize, record, check-source, remove, purge or release.",
+          "description": "add, migrate, build, change, upload, verify, link, materialize, record, revise, check-source, remove, purge or release.",
           "title": "Step",
           "type": "string"
         },
@@ -101,6 +101,7 @@
             }
           ],
           "default": null,
+          "description": "Why, or what the step found.",
           "title": "Note"
         },
         "files": {
@@ -164,7 +165,7 @@
             }
           ],
           "default": null,
-          "description": "The catalogue release a release step made, vYYYY.MM.N.",
+          "description": "The catalogue release a release step made.",
           "title": "Release"
         }
       },

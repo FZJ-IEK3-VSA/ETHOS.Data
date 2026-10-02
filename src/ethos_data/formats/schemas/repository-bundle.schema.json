@@ -5,7 +5,7 @@
       "description": "One member of a repository bundle: its files, as a catalogue inventory.",
       "properties": {
         "resources": {
-          "description": "Every file under data/<dataset>/, with its size and SHA-256.",
+          "description": "Every file under `data/<dataset>/`, with its size and SHA-256.",
           "items": {
             "$ref": "#/$defs/ResourceRecord"
           },
@@ -24,20 +24,41 @@
       "description": "One file of a dataset's inventory.",
       "properties": {
         "name": {
+          "description": "Unique within the dataset; derived from the path.",
           "title": "Name",
-          "type": "string"
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         },
         "path": {
+          "description": "Relative to the dataset's folder, with `/`.",
           "title": "Path",
-          "type": "string"
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         },
         "bytes": {
+          "description": "The file's size.",
           "title": "Bytes",
-          "type": "integer"
+          "type": "integer",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         },
         "hash": {
           "default": null,
-          "description": "\"sha256:<hex>\", the convention pooch reads.",
+          "description": "`sha256:<hex>`, the convention pooch reads; a bare digest is read the same.",
           "title": "Hash",
           "type": "string",
           "x-ethos": {
@@ -49,8 +70,15 @@
         },
         "mediatype": {
           "default": "application/octet-stream",
+          "description": "The file's media type.",
           "title": "Mediatype",
-          "type": "string"
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         },
         "ethos:sidecars": {
           "default": [],
@@ -125,6 +153,7 @@
     "format": {
       "const": "ethos-data-bundle-v2",
       "default": "ethos-data-bundle-v2",
+      "description": "A repository bundle.",
       "title": "Format",
       "type": "string"
     },
@@ -157,7 +186,7 @@
       "additionalProperties": {
         "$ref": "#/$defs/RepositoryDataset"
       },
-      "description": "Each member by its name, <family>/<member>.",
+      "description": "Each member by its name, `<family>/<member>`.",
       "title": "Datasets",
       "type": "object"
     }

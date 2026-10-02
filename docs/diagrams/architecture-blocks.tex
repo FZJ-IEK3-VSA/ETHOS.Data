@@ -1,16 +1,43 @@
+% Level 1: the four layers of the four-layer decision, bottom to top model,
+% adapters, services, presentation. Each layer imports only from the layers
+% below it (tests/test_layers.py holds the rule and its one exception); the
+% typed errors and the reporter are shared by every layer, so they are a note
+% rather than a box with an arrow from everything.
 \begin{tikzpicture}
-\node[artifact, text width=48mm, minimum height=14mm] (consumer) at (0,0) {Data entry points\\API / wrappers / key CLI};
-\node[artifact, text width=48mm, minimum height=14mm] (maintainer) at (7,0) {Maintenance entry points\\catalogue / cache commands};
-\node[actor, text width=48mm, minimum height=16mm] (access) at (0,-2.5) {Data access};
-\node[actor, text width=48mm, minimum height=16mm] (maintenance) at (7,-2.5) {Catalogue maintenance};
-\node[artifact, text width=118mm, minimum height=16mm] (shared) at (3.5,-5) {Catalogue and configuration\\\texttt{catalog / config}};
-\draw[flow] (consumer) -- node[edgelabel,right]{resolve / fetch / inspect} (access);
-\draw[flow] (maintainer) -- node[edgelabel,right]{build / upload / publish} (maintenance);
-\draw[flow] (maintenance) -- node[edgelabel,above]{matching} (access);
-\draw[flow] (access) -- node[edgelabel,right]{resources / roots} (0,-4.12);
-\draw[flow] (maintenance) -- node[edgelabel,left]{format constants} (7,-4.12);
+% -- presentation --------------------------------------------------------
+\node[artifact, text width=48mm, minimum height=13mm] (facade) at (0,0) {Package facade\\\texttt{collections / catalog / tool\_main}};
+\node[artifact, text width=48mm, minimum height=13mm] (cli) at (5.6,0) {Command line\\\texttt{ethos-data}, \texttt{<tool>-data}};
+\node[artifact, text width=48mm, minimum height=13mm] (catcli) at (11.2,0) {Catalogue commands\\\texttt{ethos-data catalog}};
+% -- services ------------------------------------------------------------
+\node[actor, text width=48mm, minimum height=17mm] (access) at (0,-3.4) {Data access\\{\footnotesize selection, lookup chain, retrieval,}\\{\footnotesize bundles, staging, verify, link}};
+\node[actor, text width=48mm, minimum height=17mm] (handoffs) at (5.6,-3.4) {Handoffs\\{\footnotesize proposals, problem reports,}\\{\footnotesize release and removal notices}};
+\node[actor, text width=48mm, minimum height=17mm] (maintenance) at (11.2,-3.4) {Catalogue maintenance\\{\footnotesize pipelines: add, record, release,}\\{\footnotesize remove; build, upload, publish}};
+\node[artifact, text width=84mm, minimum height=12mm] (shared) at (5.6,-5.7) {Catalogue and configuration\quad\texttt{catalogs / config}\\lazy metadata, the settings snapshot};
+% -- adapters ------------------------------------------------------------
+\node[artifact, text width=160mm, minimum height=12mm] (adapters) at (5.6,-8.3) {Ports with real adapters and fakes\quad\texttt{adapters}\\Store: dCache through rclone\quad Downloader: Pooch\quad Git: git};
+% -- model ---------------------------------------------------------------
+\node[artifact, text width=76mm, minimum height=14mm] (formats) at (1.6,-11.2) {Formats\quad\texttt{formats}\\specifications, JSON Schemas, templates, reference};
+\node[artifact, text width=76mm, minimum height=14mm] (model) at (9.6,-11.2) {Model\quad\texttt{model}\\digests, names, releases, lifecycle, resources};
+% -- dependencies --------------------------------------------------------
+\draw[flow] (facade) -- (access);
+\draw[flow] (cli.south west) -- (access.north east);
+\draw[flow] (cli) -- (handoffs);
+\draw[flow] (catcli) -- (maintenance);
+\draw[flow] (handoffs.east) -- (maintenance.west);
+\draw[flow] (access.south east) ++(-6mm,0) coordinate (a) -- (a |- shared.north);
+\draw[flow] (maintenance.south west) ++(6mm,0) coordinate (m) -- (m |- shared.north);
+\draw[flow] (access.south) -- node[edgelabel,right,pos=0.6]{downloads} (adapters.north -| access);
+\draw[flow] (maintenance.south) -- node[edgelabel,left,pos=0.6]{store, git} (adapters.north -| maintenance);
+\draw[flow] (adapters.south -| formats) -- (formats.north);
+\draw[flow] (adapters.south -| model) -- (model.north);
+\draw[flow] (access.west) -- ++(-9mm,0) |- node[edgelabel,pos=0.25,left,align=right]{keys,\\rules} (formats.west);
+\draw[flow] (maintenance.east) -- ++(9mm,0) |- node[edgelabel,pos=0.25,right,align=left]{lifecycle,\\specifications} (model.east);
+% -- layers --------------------------------------------------------------
 \begin{scope}[on background layer]
-\node[boundarybox, fit=(consumer)(maintainer)(shared), label={[boundarylabel]above:ethos-data package -- level 1}] {};
+\node[boundarybox, inner sep=4mm, fit=(facade)(catcli), label={[boundarylabel, anchor=south west]north west:Presentation}] {};
+\node[boundarybox, inner sep=4mm, fit=(access)(maintenance)(shared), label={[boundarylabel, anchor=south west]north west:Services}] {};
+\node[boundarybox, inner sep=4mm, fit=(adapters), label={[boundarylabel, anchor=south west]north west:Adapters}] {};
+\node[boundarybox, inner sep=4mm, fit=(formats)(model), label={[boundarylabel, anchor=south west]north west:Model}] {};
 \end{scope}
-\node[note, text width=118mm] at (3.5,-6.9) {Arrows point to required components or interfaces.\\The diagram shows code dependencies, not a publication sequence.};
+\node[note, text width=160mm] at (5.6,-13.1) {Each layer imports only from the layers below it. The typed errors (\texttt{errors}) and the reporter (\texttt{report}) are shared by all four:\\library code raises and reports; only the presentation prints and chooses an exit status. Arrows point to what a block depends on.};
 \end{tikzpicture}

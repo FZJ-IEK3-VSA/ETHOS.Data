@@ -1,8 +1,9 @@
 """The ``ethos-data catalog ...`` subcommands.
 
 ``build``, ``publish``, ``upload`` and ``check-store``; the maintainer
-pipelines ``add``, ``record``, ``remove``, ``check-source``, ``release`` and
-``update-checkout``, which plan every stage before any of them acts; and
+pipelines ``add``, ``add-bundle``, ``record``, ``remove``, ``check-source``,
+``release`` and ``update-checkout``, which plan every stage before any of them
+acts; and
 ``status`` and ``migrate``, which show and write each dataset's
 ``status.yaml``.
 

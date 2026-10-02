@@ -5,12 +5,21 @@
       "description": "One entry of ``contributors``; Data Package v2, so ``roles`` is a list.",
       "properties": {
         "title": {
+          "description": "The person's or the group's name.",
           "title": "Title",
           "type": "string"
         },
         "roles": {
           "default": [],
+          "description": "What they did; a list, as in Data Package v2.",
           "items": {
+            "enum": [
+              "author",
+              "contributor",
+              "maintainer",
+              "publisher",
+              "wrangler"
+            ],
             "type": "string"
           },
           "title": "Roles",
@@ -26,6 +35,7 @@
             }
           ],
           "default": null,
+          "description": "Where they work.",
           "title": "Organization"
         },
         "path": {
@@ -38,6 +48,7 @@
             }
           ],
           "default": null,
+          "description": "A page about them, such as an ORCID.",
           "title": "Path"
         },
         "email": {
@@ -50,6 +61,7 @@
             }
           ],
           "default": null,
+          "description": "How to reach them.",
           "title": "Email"
         }
       },
@@ -64,6 +76,7 @@
       "description": "Why a hidden dataset is hidden, and until when.",
       "properties": {
         "until": {
+          "description": "The date it becomes visible, quoted, or \"unspecified\" with a reason.",
           "title": "Until",
           "type": "string"
         },
@@ -77,6 +90,7 @@
             }
           ],
           "default": null,
+          "description": "Why it is hidden.",
           "title": "Reason"
         },
         "becomes": {
@@ -89,6 +103,7 @@
             }
           ],
           "default": null,
+          "description": "Its visibility after that date.",
           "title": "Becomes"
         }
       },
@@ -112,6 +127,7 @@
             }
           ],
           "default": null,
+          "description": "An Open Definition id, such as `CC-BY-4.0`; or give `path`.",
           "title": "Name"
         },
         "path": {
@@ -124,6 +140,7 @@
             }
           ],
           "default": null,
+          "description": "The terms' URL; or give `name`.",
           "title": "Path"
         },
         "title": {
@@ -136,6 +153,7 @@
             }
           ],
           "default": null,
+          "description": "The licence's name, for terms that have no Open Definition id.",
           "title": "Title"
         },
         "ethos:applies_to": {
@@ -216,6 +234,7 @@
             }
           ],
           "default": null,
+          "description": "What the source is called.",
           "title": "Title"
         },
         "path": {
@@ -228,6 +247,7 @@
             }
           ],
           "default": null,
+          "description": "Where it is, a URL.",
           "title": "Path"
         }
       },
@@ -267,6 +287,7 @@
             }
           ],
           "default": null,
+          "description": "When somebody last verified this, quoted.",
           "title": "Checked"
         },
         "note": {
@@ -279,6 +300,7 @@
             }
           ],
           "default": null,
+          "description": "What was checked, and any route to the data that remains.",
           "title": "Note"
         }
       },

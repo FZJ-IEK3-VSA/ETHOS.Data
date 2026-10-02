@@ -1,15 +1,49 @@
 # Shared model
 
-`ethos_data.model` holds the rules every reader of a catalogue shares, each
-written once: the digest of a file and how a catalogue spells one, dataset
-names and the families they form, and the record a descriptor keeps for each
-file. The catalogue, a bundle, a staging root and the build all go through it,
-so a hash, a sidecar or a family member means the same to each of them. It
-reads no settings, makes no network request and prints nothing; its one input
-is hashing a file it is handed.
+The model layer: `ethos_data.formats`, the specification of every file
+format, and `ethos_data.model`, the rules every reader of a catalogue shares,
+each written once: the digest of a file and how a catalogue spells one,
+dataset names and the families they form, catalogue releases, a dataset's
+lifecycle, and the record a descriptor keeps for each file. The catalogue, a
+bundle, a staging root and the build all go through it, so a hash, a sidecar
+or a family member means the same to each of them. It reads no settings,
+makes no network request and prints nothing; its one input is hashing a file
+it is handed.
 
 [`Resource`][ethos_data.catalogs.Resource], the file these records describe,
 is documented with the [catalogue](catalog.md).
+
+## Formats
+
+One specification per file, as a pydantic model; the JSON Schemas, the
+templates and the tables of [File formats](../schemas.md) are made from them.
+
+::: ethos_data.formats.registry
+    options:
+      members:
+        - FORMATS
+        - Format
+        - schema
+        - template
+        - placeholders
+        - write_schemas
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+The reference tables, rendered when the documentation is built:
+
+::: ethos_data.formats.reference
+    options:
+      members:
+        - table
+        - formats
+        - states
+        - steps
+        - render
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
 
 ## Digests
 

@@ -37,8 +37,12 @@ class BundleSource(BaseModel):
         description="The catalogue location the bundle was exported from."
     )
     revision: str | None = Field(None, description="The pinned revision, as given.")
-    catalog_version: str | None = None
-    catalog_descriptor_sha256: str | None = None
+    catalog_version: str | None = Field(
+        None, description="The release of that catalogue."
+    )
+    catalog_descriptor_sha256: str | None = Field(
+        None, description="The digest of the index the bundle was exported from."
+    )
 
 
 class BundleManifest(BaseModel):
@@ -46,8 +50,10 @@ class BundleManifest(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    format: Literal["ethos-data-bundle-v1"] = BUNDLE_FORMAT
-    source: BundleSource
+    format: Literal["ethos-data-bundle-v1"] = Field(
+        BUNDLE_FORMAT, description="An exported bundle."
+    )
+    source: BundleSource = Field(description="Where the bundled data came from.")
     datasets: dict[str, dict] = Field(
         description="Dataset name to its descriptor, resources included."
     )
@@ -62,7 +68,7 @@ class RepositoryDataset(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     resources: list[ResourceRecord] = Field(
-        description="Every file under data/<dataset>/, with its size and SHA-256."
+        description="Every file under `data/<dataset>/`, with its size and SHA-256."
     )
 
 
@@ -71,7 +77,9 @@ class RepositoryBundle(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    format: Literal["ethos-data-bundle-v2"] = REPOSITORY_FORMAT
+    format: Literal["ethos-data-bundle-v2"] = Field(
+        REPOSITORY_FORMAT, description="A repository bundle."
+    )
     family: str = Field(description="The family the bundle's datasets belong to.")
     version: int = Field(
         1, ge=1, description="Counts the changes the catalogue publishes."
@@ -81,5 +89,5 @@ class RepositoryBundle(BaseModel):
         description="The catalogue release that publishes this version; null until one does.",
     )
     datasets: dict[str, RepositoryDataset] = Field(
-        description="Each member by its name, <family>/<member>."
+        description="Each member by its name, `<family>/<member>`."
     )

@@ -32,6 +32,7 @@
             }
           ],
           "default": null,
+          "description": "The release of that catalogue.",
           "title": "Catalog Version"
         },
         "catalog_descriptor_sha256": {
@@ -44,6 +45,7 @@
             }
           ],
           "default": null,
+          "description": "The digest of the index the bundle was exported from.",
           "title": "Catalog Descriptor Sha256"
         }
       },
@@ -60,6 +62,7 @@
     "format": {
       "const": "ethos-data-bundle-v1",
       "default": "ethos-data-bundle-v1",
+      "description": "An exported bundle.",
       "title": "Format",
       "type": "string"
     },

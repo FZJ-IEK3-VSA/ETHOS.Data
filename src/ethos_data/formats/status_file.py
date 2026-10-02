@@ -34,7 +34,7 @@ class Copy(_Record):
     """One place the dataset's bytes can be read from, as a command put them there."""
 
     kind: str = Field(
-        description="uploaded to dCache, linked into a cache, or materialized there",
+        description="Uploaded to the store, linked into a cache, or materialized there.",
         json_schema_extra={"enum": list(k.COPY_KINDS)},
     )
     location: str = Field(
@@ -55,13 +55,13 @@ class Event(_Record):
     by: str = Field("", description="The account that took the step.")
     step: str = Field(
         description="add, migrate, build, change, upload, verify, link, materialize, "
-        "record, check-source, remove, purge or release."
+        "record, revise, check-source, remove, purge or release."
     )
     previous: str | None = Field(
         None, alias="from", description="The state before, when the step changed it."
     )
     state: str = Field(alias="to", description="The state after.")
-    note: str | None = None
+    note: str | None = Field(None, description="Why, or what the step found.")
     files: int | None = Field(
         None, description="The inventory's file count, for a step that read it."
     )
@@ -73,7 +73,7 @@ class Event(_Record):
         None, description="The build input that freezing the dataset retired."
     )
     release: str | None = Field(
-        None, description="The catalogue release a release step made, vYYYY.MM.N."
+        None, description="The catalogue release a release step made."
     )
 
 

@@ -3,6 +3,7 @@
   "description": "Where a materialised cache entry was copied from.",
   "properties": {
     "dataset": {
+      "description": "The dataset the entry holds.",
       "title": "Dataset",
       "type": "string"
     },
@@ -30,10 +31,12 @@
       "type": "string"
     },
     "files": {
+      "description": "How many files were copied.",
       "title": "Files",
       "type": "integer"
     },
     "bytes": {
+      "description": "Their size together.",
       "title": "Bytes",
       "type": "integer"
     },
@@ -43,11 +46,13 @@
       "type": "boolean"
     },
     "when": {
+      "description": "When, in local time with its UTC offset.",
       "title": "When",
       "type": "string"
     },
     "by": {
       "default": "",
+      "description": "The account that made the copy.",
       "title": "By",
       "type": "string"
     }
