@@ -20,13 +20,13 @@ be any of those on any given day.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
 from .access import ORIGIN_STAGING, RESTRICTED, Location, locate
 from .catalogs import Catalog, Resource
 from .config import Roots, dataset_roots
+from .model import digest
 
 __all__ = ["Finding", "verify", "repair", "summarise", "STATUSES", "OK", "UNAVAILABLE"]
 
@@ -41,8 +41,6 @@ UNVERIFIABLE = "unverifiable"
 
 #: Ordered worst-first, which is the order a report should print them in.
 STATUSES = (DANGLING, HASH, SIZE, MISSING, UNREADABLE, UNAVAILABLE, UNVERIFIABLE, OK)
-
-CHUNK = 8 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -70,26 +68,6 @@ class Finding:
     def __str__(self) -> str:
         line = f"{self.status:<14} {self.resource.key}"
         return f"{line}\n                 {self.detail}" if self.detail else line
-
-
-def sha256_of(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(CHUNK), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def _expected_digest(recorded: str) -> str:
-    """The bare hex digest from a Frictionless ``hash`` field.
-
-    Written as "sha256:<hex>" by our manifest builder, but the spec permits a
-    bare digest, and a catalogue built by another tool may use one.
-    """
-    if ":" in recorded:
-        algorithm, _, digest = recorded.partition(":")
-        return digest if algorithm.lower() == "sha256" else ""
-    return recorded
 
 
 def _broken_link(roots: Roots, dataset: str, origin: str) -> tuple[Path, Path] | None:
@@ -175,8 +153,8 @@ def _check_one(location: Location, deep: bool) -> Finding:
             location, SIZE, f"{path}: expected {expected:,} bytes, found {actual:,}"
         )
 
-    digest = _expected_digest(location.resource.hash or "")
-    if not digest:
+    wanted = digest.expected(location.resource.hash)
+    if wanted is None:
         # Staged data, or a catalogue that records a digest we cannot check.
         return Finding(
             location,
@@ -187,12 +165,12 @@ def _check_one(location: Location, deep: bool) -> Finding:
         return Finding(location, OK)
 
     try:
-        found = sha256_of(path)
+        found = digest.of_file(path)
     except OSError as error:
         return Finding(location, UNREADABLE, f"{path}: {error}")
-    if found != digest:
+    if found != wanted:
         return Finding(
-            location, HASH, f"{path}: expected {digest[:16]}..., found {found[:16]}..."
+            location, HASH, f"{path}: expected {wanted[:16]}..., found {found[:16]}..."
         )
     return Finding(location, OK)
 

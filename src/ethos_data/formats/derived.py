@@ -47,6 +47,16 @@ def remote_prefix_of(package: dict) -> str:
     return package.get(k.REMOTE_PREFIX) or package[k.NAME]
 
 
+def resource_url(publication_url: str, remote_prefix: str, path: str = "") -> str:
+    """Where the published store serves a file: ``<publication_url>/<remote_prefix>/<path>``.
+
+    Without ``path``, the dataset's folder, with its trailing slash. The one
+    spelling of the rule, for the reader that downloads a file, the bundle
+    export that copies it and the upload that reads it back.
+    """
+    return f"{publication_url.rstrip('/')}/{remote_prefix}/{path}"
+
+
 def index_row(package: dict, path: str) -> dict[str, Any]:
     """The row ``datacatalog.json`` carries for this descriptor, ``path`` relative to it.
 

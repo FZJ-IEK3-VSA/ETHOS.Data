@@ -56,6 +56,8 @@ DOCUMENT_SHA256 = "ethos:document_sha256"
 
 SCHEMA = "$schema"
 PATH = "path"
+#: Of one entry in ``ethos:shards``: the directory prefix it holds.
+PREFIX = "prefix"
 RESOURCES = "resources"
 SHARDS = "ethos:shards"
 SHARD = "ethos:shard"
@@ -63,8 +65,18 @@ TOTAL_BYTES = "ethos:total_bytes"
 FILE_COUNT = "ethos:file_count"
 NAMESPACE = "ethos:namespace"
 SIDECARS = "ethos:sidecars"
+
+# Inside one ``resources`` record.
+BYTES = "bytes"
+HASH = "hash"
+MEDIATYPE = "mediatype"
+#: What a record that names no media type is read as.
+DEFAULT_MEDIATYPE = "application/octet-stream"
 #: Set on the descriptor staging synthesises; never in a real catalogue.
 STAGED = "ethos:staged"
+#: The access class staging gives a dataset the catalogue does not describe;
+#: never in a real catalogue either.
+STAGING = "staging"
 
 # -- catalog.yaml and datacatalog.json -------------------------------------------
 

@@ -44,6 +44,7 @@ from .catalogs import Catalog, Dataset, Resource
 from .config import Roots, current_user, resolve_staging_cache
 from .errors import AccessError, StagingError
 from .formats import keys as k
+from .model import names
 
 __all__ = [
     "NEW",
@@ -67,7 +68,7 @@ INDEX_FILE = k.STAGING_REGISTRY_FILE
 EXCLUDE_NAMES = {".git", ".datalad", "__pycache__", ".ipynb_checkpoints", INDEX_FILE}
 EXCLUDE_SUFFIXES = {".pyc", ".part", ".tmp"}
 
-STAGING_ACCESS = "staging"
+STAGING_ACCESS = k.STAGING
 
 
 #: A staged dataset the official caches know nothing about -- it exists only
@@ -131,6 +132,15 @@ def _index_path(root: Path) -> Path:
     return root / INDEX_FILE
 
 
+def _entry(staging: Path, name: str) -> Path:
+    """Where a staged dataset's entry sits: at its name, a member's in its family's folder."""
+    try:
+        names.relative(name, "dataset name")
+    except ValueError as error:
+        raise StagingError(str(error)) from None
+    return staging / name
+
+
 def _read_index(root: Path) -> dict:
     """The staging registry, read through its specification."""
     path = _index_path(root)
@@ -192,13 +202,31 @@ def add(
     if not source.is_dir():
         raise StagingError(f"not a directory: {source}")
 
-    entry = staging / name
+    entry = _entry(staging, name)
+    # A member and its family cannot both be staged: one entry would sit
+    # inside the other, and a member's link would land in the directory the
+    # family's entry points at.
+    clash = next(
+        (
+            staged
+            for staged in staged_names(staging)
+            if staged != name
+            and (names.within(name, staged) or names.within(staged, name))
+        ),
+        None,
+    )
+    if clash is not None:
+        raise StagingError(
+            f"cannot stage {name!r} while {clash!r} is staged: one entry would sit "
+            f"inside the other. Remove {clash!r} first."
+        )
     if entry.exists() or entry.is_symlink():
         raise StagingError(
             f"{name!r} is already staged at {entry}.\n"
             f"Remove it first with your package's data command: staging remove {name}"
         )
 
+    entry.parent.mkdir(parents=True, exist_ok=True)
     if copy:
         import shutil
 
@@ -226,8 +254,8 @@ def remove(name: str, root: str | Path | None = None, force: bool = False) -> Pa
     it needs ``force`` said out loud.
     """
     staging = _require_root(root)
-    entry = staging / name
-    if not (entry.exists() or entry.is_symlink()):
+    entry = _entry(staging, name)
+    if not (entry.exists() or entry.is_symlink()) or name not in staged_names(staging):
         raise StagingError(f"{name!r} is not staged in {staging}")
 
     if entry.is_symlink():
@@ -241,6 +269,13 @@ def remove(name: str, root: str | Path | None = None, force: bool = False) -> Pa
         import shutil
 
         shutil.rmtree(entry)
+
+    # The folders staging made to hold a member's entry, once nothing is in them.
+    for family in reversed(names.ancestors(name)):
+        folder = staging / family
+        if folder.is_symlink() or not folder.is_dir() or any(folder.iterdir()):
+            break
+        folder.rmdir()
 
     index = _read_index(staging)
     index.pop(name, None)
@@ -341,14 +376,35 @@ def staged_only(
 
 
 def staged_names(root: str | Path | None = None) -> list[str]:
+    """Every staged dataset's name, a family member's included.
+
+    A member's entry sits where its name says, ``family/member`` at
+    ``<staging>/family/member``, inside a folder that holds nothing but entries.
+    The index says which folders those are: the families of the names it
+    records. Every other link or directory is an entry, and what is inside it
+    belongs to the dataset, so the walk never descends into one.
+    """
     staging = staging_root(root)
     if staging is None or not staging.is_dir():
         return []
-    return sorted(
-        p.name
-        for p in staging.iterdir()
-        if p.name != INDEX_FILE and (p.is_dir() or p.is_symlink())
-    )
+    families = {
+        family for name in _read_index(staging) for family in names.ancestors(name)
+    }
+    found: list[str] = []
+
+    def walk(folder: Path, prefix: str) -> None:
+        for child in sorted(folder.iterdir()):
+            name = prefix + child.name
+            if child.is_symlink():
+                found.append(name)
+            elif child.is_dir():
+                if name in families:
+                    walk(child, name + "/")
+                else:
+                    found.append(name)
+
+    walk(staging, "")
+    return sorted(found)
 
 
 def synthesize(name: str, directory: Path, access: str = STAGING_ACCESS) -> Dataset:
@@ -374,15 +430,15 @@ def synthesize(name: str, directory: Path, access: str = STAGING_ACCESS) -> Data
             path=relative,
             bytes=size,
             hash="",
-            mediatype="application/octet-stream",
+            mediatype=k.DEFAULT_MEDIATYPE,
         )
 
     entry = {
-        "name": name,
-        "ethos:access": access,
-        "ethos:visibility": "hidden",
-        "ethos:file_count": len(resources),
-        "ethos:total_bytes": total,
+        k.NAME: name,
+        k.ACCESS: access,
+        k.VISIBILITY: k.HIDDEN,
+        k.FILE_COUNT: len(resources),
+        k.TOTAL_BYTES: total,
     }
     dataset = Dataset(
         name=name, title=f"{name} (staged, not in the catalogue)", entry=entry
@@ -390,10 +446,10 @@ def synthesize(name: str, directory: Path, access: str = STAGING_ACCESS) -> Data
     # Setting the descriptor is what makes load() a no-op: there is no
     # datapackage.json to fetch, and asking for one must not reach the network.
     dataset._descriptor = {
-        "name": name,
-        "ethos:staged": True,
-        "ethos:access": access,
-        "resources": [],
+        k.NAME: name,
+        k.STAGED: True,
+        k.ACCESS: access,
+        k.RESOURCES: [],
     }
     dataset._resources = resources
     return dataset
@@ -420,7 +476,7 @@ def apply_staging(
     for name in staged_names(roots.staging):
         directory = roots.staging / name
         known = catalog.datasets.get(name)
-        if known is not None and known.access == "restricted":
+        if known is not None and known.access == k.RESTRICTED:
             # Always warned about, whatever ``warn`` says. Somebody has put a
             # directory named after a licensed dataset into a development
             # overlay; that it was ignored is exactly the thing they must be

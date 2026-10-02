@@ -56,7 +56,6 @@ Spec: https://datapackage.org/standard/data-package/
 
 from __future__ import annotations
 
-import hashlib
 import json
 import mimetypes
 import re
@@ -64,14 +63,13 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
 
-import yaml
-
 from ..catalogs import ROOT_SHARD, shard_key
 from ..errors import DescriptorError
 from ..formats import catalogue as catalogue_format
 from ..formats import dataset as dataset_format
 from ..formats import keys as k
 from ..formats.derived import index_row
+from ..model.digest import matches, of_file, recorded
 from ..selection import path_matches
 from . import (
     LEGACY_SHARD_DIR,
@@ -80,7 +78,10 @@ from . import (
     datasets_dir,
     is_namespace,
     iter_dataset_dirs,
+    read_catalog_meta,
+    read_descriptor,
     resources_of,
+    source_dir_of,
 )
 
 # Scientific formats that ``mimetypes`` does not know about.
@@ -126,14 +127,6 @@ EXCLUDE_SUFFIXES = {".pyc"}
 # Matched against the path relative to the dataset root, so a data file that
 # happens to be called README.md deeper in the tree is still published.
 EXCLUDE_ROOT_GLOBS = ("README*", "LICENSE*", "CHANGELOG*")
-
-
-def sha256_of(path: Path, chunk: int = 8 * 1024 * 1024) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(chunk), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def load_hash_cache(dataset_dir: Path) -> dict:
@@ -196,13 +189,13 @@ def resolve_hashes(
 
     if misses:
         with ThreadPoolExecutor(max_workers=min(HASH_WORKERS, len(misses))) as pool:
-            for path, digest in zip(misses, pool.map(sha256_of, misses)):
-                digests[path] = digest
+            for path, found in zip(misses, pool.map(of_file, misses)):
+                digests[path] = found
                 stat = stats[path]
                 cache[relative[path]] = {
                     "size": stat.st_size,
                     "mtime_ns": stat.st_mtime_ns,
-                    "hash": digest,
+                    "hash": found,
                 }
 
     return {path: (stats[path].st_size, digests[path]) for path in paths}
@@ -412,12 +405,14 @@ def frozen_resources(name: str, dataset_dir: Path) -> list[dict]:
 
 def build_resource(path: Path, root: Path, size: int, digest: str) -> dict:
     relative = path.relative_to(root).as_posix()
+    # The record ethos_data.model.resource reads back into a Resource, key for
+    # key and in this order; a test holds the two together.
     resource = {
-        "name": slugify(relative),
-        "path": relative,
-        "bytes": size,
-        "hash": f"sha256:{digest}",
-        "mediatype": mediatype_of(path),
+        k.NAME: slugify(relative),
+        k.PATH: relative,
+        k.BYTES: size,
+        k.HASH: recorded(digest),
+        k.MEDIATYPE: mediatype_of(path),
     }
     if path.suffix.lower() == ".shp":
         sidecars = [
@@ -428,7 +423,7 @@ def build_resource(path: Path, root: Path, size: int, digest: str) -> dict:
         if sidecars:
             # Custom property -- the spec permits these, and the resolver uses it
             # to pull companion files in automatically.
-            resource["ethos:sidecars"] = sidecars
+            resource[k.SIDECARS] = sidecars
     return resource
 
 
@@ -458,18 +453,16 @@ def record_license_documents(
                 f"{where} names {k.DOCUMENT} {document}, which is not a file at "
                 f"{path}. Archive the terms there, or drop {k.DOCUMENT}."
             )
-        actual = sha256_of(path)
+        actual = of_file(path)
         pinned = entry.get(k.DOCUMENT_SHA256)
-        if pinned is not None:
-            declared = pinned.strip().lower().removeprefix("sha256:")
-            if declared != actual:
-                raise DescriptorError(
-                    f"{where}: {document} hashes to {actual}, but dataset.yaml pins "
-                    f"{k.DOCUMENT_SHA256}: {declared}. The archived text is not the one "
-                    f"that hash was recorded for. If the file is right, delete "
-                    f"{k.DOCUMENT_SHA256} and rebuild -- the build records the digest "
-                    "itself. If the hash is right, restore the file."
-                )
+        if pinned is not None and not matches(pinned, actual):
+            raise DescriptorError(
+                f"{where}: {document} hashes to {actual}, but dataset.yaml pins "
+                f"{k.DOCUMENT_SHA256}: {pinned}. The archived text is not the one "
+                f"that hash was recorded for. If the file is right, delete "
+                f"{k.DOCUMENT_SHA256} and rebuild -- the build records the digest "
+                "itself. If the hash is right, restore the file."
+            )
         entry[k.DOCUMENT_SHA256] = actual
 
 
@@ -589,9 +582,7 @@ def render_dataset(
     ``formats.dataset.INHERITED``.
     """
     name = name or dataset_dir.name
-    meta = (
-        yaml.safe_load((dataset_dir / "dataset.yaml").read_text(encoding="utf-8")) or {}
-    )
+    meta = read_descriptor(dataset_dir)
 
     # The name is derived from where the file sits, not trusted from inside it.
     # A dataset.yaml that disagrees with its own location is a rename half-done,
@@ -623,20 +614,12 @@ def render_dataset(
     # Uploading implies freezing; freezing does not imply uploading.
     uploaded = bool(meta.pop(k.UPLOADED, False))
     frozen = bool(meta.pop(k.FROZEN, False)) or uploaded
-    raw_source_dir = meta.pop(k.SOURCE_DIR, None)
+    source_dir = source_dir_of(dataset_dir, meta)
+    meta.pop(k.SOURCE_DIR, None)
 
     if frozen:
         resources = frozen_resources(name, dataset_dir)
     else:
-        source_dir = Path(raw_source_dir).expanduser()
-        # Only a *relative* source_dir is resolved, and only to make it absolute.
-        # An absolute one is used exactly as written, symbolic links and all: when
-        # it names the curated namespace (/fast/central/shared_data/...), that is
-        # the path worth recording, because it is the one that stays correct when
-        # the storage behind it moves. Resolving it here would silently write the
-        # transient physical location into the manifest instead.
-        if not source_dir.is_absolute():
-            source_dir = (dataset_dir / source_dir).resolve()
         if not source_dir.is_dir():
             raise DescriptorError(f"{name}: source_dir does not exist: {source_dir}")
 
@@ -812,7 +795,7 @@ def catalog_meta(catalog_root: Path) -> dict:
     find and expensive to find late: checksumming a multi-terabyte dataset only
     to reject the file that names the catalogue wastes the whole run.
     """
-    meta = yaml.safe_load((catalog_root / "catalog.yaml").read_text(encoding="utf-8"))
+    meta = read_catalog_meta(catalog_root)
 
     # A catalogue you can run `build` in is by definition a source one: it has
     # the dataset.yaml files this reads. Default rather than demand it, so an
@@ -854,9 +837,7 @@ def _inherited_for(root: Path, dataset_dir: Path) -> dict:
             chain.append(current)
         current = current.parent
     for parent in reversed(chain):
-        meta = (
-            yaml.safe_load((parent / "dataset.yaml").read_text(encoding="utf-8")) or {}
-        )
+        meta = read_descriptor(parent)
         for key in dataset_format.INHERITED:
             if key in meta:
                 inherited[key] = meta[key]

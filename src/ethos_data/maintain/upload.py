@@ -42,11 +42,9 @@ import urllib.request
 from pathlib import Path
 from typing import NamedTuple
 
-import yaml
-
 from ..errors import UploadError
 from ..formats import keys as k
-from ..formats.derived import license_settled, remote_prefix_of
+from ..formats.derived import license_settled, remote_prefix_of, resource_url
 from ..formats.keys import ROLE_PUBLISHED
 from . import (
     catalogue_role,
@@ -54,7 +52,10 @@ from . import (
     datasets_dir,
     is_namespace,
     iter_dataset_dirs,
+    read_catalog_meta,
+    read_descriptor,
     resources_of,
+    source_dir_of,
 )
 
 FRONTEND = "https://hifis-storage-web.desy.de/api/v1"
@@ -104,21 +105,11 @@ def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path | None
             f"{dataset_name!r} has no datapackage.json yet. Run:\n"
             f"    ethos-data catalog build {dataset_name}"
         )
-    meta = yaml.safe_load(meta_file.read_text(encoding="utf-8"))
+    meta = read_descriptor(dataset_dir)
     package = json.loads(package_file.read_text(encoding="utf-8"))
-    raw_source_dir = meta.get("source_dir")
-    # A dataset marked ethos:uploaded: true has none -- dCache is already the
+    # None for a dataset marked ethos:uploaded: true -- dCache is already the
     # source of truth, and there is nothing local left to read bytes from.
-    if raw_source_dir is None:
-        return meta, package, None, dataset_dir
-    source_dir = Path(raw_source_dir).expanduser()
-    # Resolve exactly as the manifest builder does -- relative to the dataset
-    # directory, not the current one. Otherwise a relative source_dir means two
-    # different things depending on where you happened to run the tool from, and
-    # the upload silently takes its bytes from somewhere the manifest never saw.
-    if not source_dir.is_absolute():
-        source_dir = (dataset_dir / source_dir).resolve()
-    return meta, package, source_dir, dataset_dir
+    return meta, package, source_dir_of(dataset_dir, meta), dataset_dir
 
 
 def preflight(
@@ -179,10 +170,13 @@ def preflight(
 def remote_manifest_check(
     resources: list[dict], base_url: str
 ) -> tuple[list, list, list]:
-    """HEAD every resource anonymously. Returns (ok, missing, wrong_size)."""
+    """HEAD every resource anonymously. Returns (ok, missing, wrong_size).
+
+    ``base_url`` is the dataset's folder on the published store.
+    """
     ok, missing, wrong = [], [], []
     for resource in resources:
-        url = f"{base_url}/{resource['path']}"
+        url = f"{base_url.rstrip('/')}/{resource[k.PATH]}"
         request = urllib.request.Request(url, method="HEAD")
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
@@ -324,7 +318,7 @@ def upload_one(args, plan: Plan, base_url: str, root: str, bearer) -> int:
     """Upload and verify a single dataset. Returns a process-style exit code."""
     namespace_path = f"{args.vo_path}/{root}/{plan.prefix}"
     destination = f"{args.remote}:{root}/{plan.prefix}"
-    dataset_url = f"{base_url}/{plan.prefix}"
+    dataset_url = resource_url(base_url, plan.prefix)
 
     print(
         f"dataset      {plan.name}  ({plan.package['ethos:file_count']} files, "
@@ -448,10 +442,8 @@ def upload_one(args, plan: Plan, base_url: str, root: str, bearer) -> int:
 
 
 def run(catalog_root: Path, args) -> int:
-    catalog_meta = yaml.safe_load(
-        (catalog_root / "catalog.yaml").read_text(encoding="utf-8")
-    )
-    base_url = catalog_meta["ethos:publication_url"].rstrip("/")
+    catalog_meta = read_catalog_meta(catalog_root)
+    base_url = catalog_meta[k.PUBLICATION_URL].rstrip("/")
 
     # The upload destination and the URL we verify afterwards have to name the
     # same folder, so derive the default from the catalogue rather than repeating
