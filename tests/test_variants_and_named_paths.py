@@ -834,6 +834,9 @@ class TestValidationBeforeDownload:
         ethos_data.paths("onshore_wind", define(ONSHORE), progressbar=False, test=True)
         assert download_spy == [TEST_KEYS]
 
+    @pytest.mark.legacy(
+        "every input is required: skip_unavailable goes and the error describes the dataset"
+    )
     def test_unreachable_data_is_an_access_error_unless_the_caller_said_to_skip_it(
         self, define, monkeypatch
     ):
@@ -865,6 +868,9 @@ class TestValidationBeforeDownload:
                 "with_licensed", file, progressbar=False
             ).named.omitted == ["secret"]
 
+    @pytest.mark.legacy(
+        "every input is required: skip_unavailable goes and the error describes the dataset"
+    )
     def test_under_skip_unavailable_an_unreachable_handle_is_left_out_and_named(
         self, world, define
     ):
@@ -912,6 +918,9 @@ class TestValidationBeforeDownload:
             inputs["nope"]
         assert inputs.get("secret") is None
 
+    @pytest.mark.legacy(
+        "every input is required: skip_unavailable goes and the error describes the dataset"
+    )
     def test_paths_is_empty_not_an_error_when_every_handle_was_left_out(self, define):
         """ "Declares no named paths" is about the file. A collection whose one
         handle is unreachable *here* declared it fine; the caller who chose to
@@ -1460,6 +1469,9 @@ class TestCommandLine:
         assert re.search(r"^  onshore_wind \[test\]\s+6 files", out, re.MULTILINE)
         assert re.search(r"^  onshore_wind \[full\]\s+7 files", out, re.MULTILINE)
 
+    @pytest.mark.legacy(
+        "every input is required: skip_unavailable goes and the error describes the dataset"
+    )
     def test_paths_under_skip_unavailable_prints_only_the_handles_this_machine_can_honour(
         self, world, define, capsys
     ):
@@ -1578,6 +1590,9 @@ class TestCommandLine:
         # A command without the flag ignores it rather than rejecting it.
         assert tool_main(str(file), prog="example-data", argv=["--test", "show"]) == 0
 
+    @pytest.mark.legacy(
+        "collections files bound the catalogue version; the location comes from the settings"
+    )
     def test_the_collection_commands_read_the_catalogue_the_file_pins(
         self, world, define, other_catalog, monkeypatch, capsys
     ):
@@ -1760,6 +1775,9 @@ class TestCatalogUnavailable:
             assert "Traceback" not in captured.err
 
 
+@pytest.mark.legacy(
+    "collections files bound the catalogue version; the location comes from the settings"
+)
 class TestCatalogPin:
     """``catalog_pin``: the one reading of a file's ``catalog:`` key, shared by fetch, path and ls."""
 
@@ -1884,6 +1902,9 @@ class TestSecondReviewRound:
         assert "at the top level and also the variant(s)" in message
         assert "cannot be compared" not in message
 
+    @pytest.mark.legacy(
+        "every input is required: skip_unavailable goes and the error describes the dataset"
+    )
     def test_a_fetch_with_nothing_reachable_says_so(self, define, capsys):
         """ "all 0 available files already present" described a collection none
         of which is on this machine; the sentence now says what happened."""

@@ -70,3 +70,11 @@ packages = ["src/ethos_data"]
 # local fonts, diagram sources. Source and tests are what a rebuild needs, and
 # the licence, which has to travel with any copy of the source.
 include = ["/src", "/tests", "/LICENSE"]
+
+[tool.pytest.ini_options]
+# A test marked legacy pins behaviour that a decision record replaces. It keeps
+# running until the pull request that changes the behaviour rewrites it, so the
+# marker says where the test is going rather than switching it off.
+markers = [
+    "legacy(reason): pins behaviour a decision record replaces; rewritten when it changes",
+]
