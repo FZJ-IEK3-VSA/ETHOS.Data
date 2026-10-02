@@ -22,7 +22,7 @@ the canonical account of the reasoning.
 | Treat every input as required, and describe a missing licensed dataset | Implemented | A workflow cannot run without one of its inputs, so `skip_unavailable` goes. The error for a licensed dataset this machine cannot read prints its description, provenance and licence and how to obtain a copy. See [every input is required](#every-input-is-required-2026-10-02). |
 | Ship a small public collections file for a self-test | Implemented | `ethos-data selftest` and `ethos_data.EXAMPLE_COLLECTIONS` check settings, catalogue, store and cache with a download of under 200 KB, without any package's collections. See [a self-test collection ships with the package](#a-self-test-collection-ships-with-the-package-2026-10-02). |
 | Specify every file format once | Proposed | One pydantic model per file drives validation, typed access, JSON Schemas, templates, the publish strip list, the index row and the reference tables, so a key and its default are written down once. See [every file format is specified once](#every-file-format-is-specified-once-2026-10-02). |
-| Record each dataset's state in a status file | Implemented, except removal and releases | `datasets/<name>/status.yaml` holds the state, the build input and a history, and the commands check every transition. `source_dir`, `ethos:uploaded` and `ethos:frozen` leave `dataset.yaml`. See [datasets record their state](#datasets-record-their-state-in-a-status-file-2026-10-02). |
+| Record each dataset's state in a status file | Implemented, except purging and releases | `datasets/<name>/status.yaml` holds the state, the build input and a history, and the commands check every transition. `source_dir`, `ethos:uploaded` and `ethos:frozen` leave `dataset.yaml`. See [datasets record their state](#datasets-record-their-state-in-a-status-file-2026-10-02). |
 | Find files through one lookup chain | Proposed | Root override, staging, bundles, restricted cache, public cache and download are one locator each, and each answers found, pass or refuse. See [one lookup chain](#one-lookup-chain-decides-where-a-file-is-read-2026-10-02). |
 | Run catalogue maintenance as pipelines | In progress | Accepting, releasing and removing a dataset become commands whose stages plan before they act and record what they did; dCache, downloads, metadata and git sit behind ports. See [catalogue maintenance runs as pipelines](#catalogue-maintenance-runs-as-pipelines-2026-10-02). |
 | Version data as revisions or successors | Proposed | A byte-level change becomes a revision of the same dataset under the same keys; a changed layout becomes a successor dataset. Published objects, rather than paths, never change. See [revisions and successors](#revisions-and-successors-2026-10-02). |
@@ -368,12 +368,12 @@ need typed access.
 
 ## Datasets record their state in a status file (2026-10-02)
 
-**Status: implemented, except removal and releases.** `status.yaml`, the
-checked transitions, `catalog status`, `catalog migrate` and `catalog record`
-are in, and the build, `catalog upload`, and `ethos-data link` and
-`materialize` given `--catalog-root` record their steps. The `withdrawn` and
-`purged` states are reached once removal is a pipeline, and the history names
-the release of each change once releases are.
+**Status: implemented, except purging and releases.** `status.yaml`, the
+checked transitions, `catalog status`, `catalog migrate`, `catalog add`,
+`catalog record` and `catalog remove` are in, and the build, `catalog
+upload`, and `ethos-data link` and `materialize` given `--catalog-root`
+record their steps. The `purged` state is reached once purging is a command,
+and the history names the release of each change once releases are.
 
 A dataset's progress through the catalogue is implicit in its
 `dataset.yaml`: whether `source_dir` is there, and `ethos:uploaded` and
@@ -470,10 +470,11 @@ options of the chain rather than package code.
 
 ## Catalogue maintenance runs as pipelines (2026-10-02)
 
-**Status: in progress.** Freezing is in: `catalog record` checks the copy,
-retires the build input and records the step. dCache, downloads and git sit
-behind ports with fakes. Accepting, releasing, removing and checking
-provenance follow.
+**Status: in progress.** Accepting (`catalog add`), freezing (`catalog
+record`), withdrawing (`catalog remove`) and checking provenance (`catalog
+check-source`) run as pipelines, and dCache, downloads and git sit behind
+ports with fakes. Releasing, and purging a removed dataset's cache entries
+and bytes, follow.
 
 Adding, releasing and removing a dataset are sequences of commands and hand
 edits in the guides, and their order is the maintainer's to remember: bytes

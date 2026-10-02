@@ -34,7 +34,7 @@ ethos:contact: Dataset maintainer
 `source_dir` is the directory you can read the bytes from; a relative path is
 relative to the dataset's directory in the catalogue. It is the draft's build
 input: once the dataset is in the catalogue, its `status.yaml` keeps it
-([step 3](#3-copy-it-into-the-catalogue-and-build)). For created or derived
+([step 3](#add-it)). For created or derived
 data, add `contributors` with an `author`, and for derived data `sources` and
 `ethos:derivation`. Every key is in the
 [format reference](../../reference/schemas.md#datasetyaml).
@@ -105,21 +105,21 @@ Settle every row before the file enters the catalogue:
 | Which files | The selection covers the files the workflows need, their sidecars, and nothing unrelated. |
 | Does it work | The proposer ran the affected workflow or tests against the staged or bundled candidate. |
 
-## 3. Copy it into the catalogue and build
+## 3. Add it to the catalogue {#add-it}
 
 ```bash
-mkdir -p datasets/my-dataset
-cp /projects/shared/candidates/my-dataset/dataset.yaml datasets/my-dataset/
-ethos-data catalog migrate my-dataset
-ethos-data catalog build my-dataset
+ethos-data catalog add /projects/shared/candidates/my-dataset --dry-run
+ethos-data catalog add /projects/shared/candidates/my-dataset
 ethos-data catalog build my-dataset --check
 git diff -- datasets/my-dataset datacatalog.json
 ```
 
-`catalog migrate` moves `source_dir` out of the copied description into the
-dataset's [`status.yaml`](../../reference/schemas.md#statusyaml), which the
-commands keep from now on: it records the dataset as a draft, the build makes
-it built, and every later step is checked against the state and recorded.
+`catalog add` takes the draft, the `dataset.yaml` or the directory holding it.
+It checks the draft as the build would, writes `datasets/my-dataset/` with the
+description and its licence documents, and builds it. `source_dir` goes into
+the dataset's [`status.yaml`](../../reference/schemas.md#statusyaml), which
+the commands keep from now on; a relative one is relative to the draft. Every
+later step is checked against the dataset's state and recorded there, and
 `ethos-data catalog status my-dataset` shows where the dataset stands and what
 it needs next.
 

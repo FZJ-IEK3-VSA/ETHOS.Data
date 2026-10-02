@@ -1,0 +1,95 @@
+"""Catalogue maintenance as pipelines: every stage plans before any of them acts.
+
+    pipeline = Pipeline("add", [Intake(), Place(), Build()])
+    pipeline.run(context)                 # plan every stage, then carry them out
+    pipeline.run(context, dry_run=True)   # the plans alone
+
+A stage looks at the catalogue and returns its plan: the actions it would
+take, each a line to show and the work to do. Planning may read anything --
+hash files, ask the store -- and writes nothing, so a dry run is the plan, and
+a refusal, a dataset in the wrong state or a draft the build would reject,
+comes before anything is touched. The pipeline asks every stage for its plan
+first and only then carries the plans out, in order, checking each action's
+result as it goes.
+
+A stage records what it did in the datasets' status files, and plans nothing
+for work that is done already, so a pipeline run again after an interruption
+does only what is left.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from typing import Generic, Protocol, TypeVar
+
+from .. import report
+from ..errors import MaintenanceError
+
+__all__ = ["Action", "Pipeline", "Stage"]
+
+Context = TypeVar("Context")
+
+
+@dataclass(frozen=True)
+class Action:
+    """One thing a stage will do: the line that says so, and how to do it."""
+
+    text: str
+    perform: Callable[[], None]
+    #: Checks the result once performed: what is wrong, or "".
+    check: Callable[[], str] | None = None
+
+
+class Stage(Protocol[Context]):
+    """A step of a pipeline: a name, and the actions it plans for a context.
+
+    ``plan`` raises :class:`~ethos_data.errors.MaintenanceError` when the stage
+    cannot go ahead, and may set what later stages need on the context.
+    """
+
+    name: str
+
+    def plan(self, context: Context) -> list[Action]: ...
+
+
+@dataclass(frozen=True)
+class Pipeline(Generic[Context]):
+    """Stages planned together and carried out in order."""
+
+    name: str
+    stages: Sequence[Stage[Context]]
+
+    def plan(self, context: Context) -> list[tuple[str, list[Action]]]:
+        """Every stage's plan, in order; nothing is written."""
+        return [(stage.name, stage.plan(context)) for stage in self.stages]
+
+    def run(self, context: Context, *, dry_run: bool = False) -> int:
+        """Plan every stage, report the plan and, unless ``dry_run``, carry it out.
+
+        Returns the number of actions the plan holds. Raises
+        :class:`~ethos_data.errors.MaintenanceError` when a stage refuses, or
+        when an action's check finds its result wrong; the actions before it
+        stay done, and the status files say how far the pipeline got.
+        """
+        planned = self.plan(context)
+        actions = sum(len(stage_actions) for _, stage_actions in planned)
+        for stage, stage_actions in planned:
+            for action in stage_actions:
+                report.info(f"  {stage:<12} {action.text}")
+        if dry_run:
+            report.info(
+                f"\n{actions} action(s) planned. Nothing was written."
+                if actions
+                else "\nnothing to do."
+            )
+            return actions
+        for stage, stage_actions in planned:
+            for action in stage_actions:
+                action.perform()
+                problem = action.check() if action.check is not None else ""
+                if problem:
+                    raise MaintenanceError(f"{self.name}, {stage}: {problem}")
+        if not actions:
+            report.info("\nnothing to do.")
+        return actions

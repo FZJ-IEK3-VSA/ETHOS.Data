@@ -69,7 +69,7 @@
           "type": "string"
         },
         "step": {
-          "description": "migrate, build, change, upload, verify, link, materialize or record.",
+          "description": "add, migrate, build, change, upload, verify, link, materialize, record, check-source or remove.",
           "title": "Step",
           "type": "string"
         },

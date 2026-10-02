@@ -9,15 +9,20 @@ new paths, see [Licensing and immutability](../../explanation/licensing.md).
 The order is the reverse of publishing: **metadata first, bytes second**.
 A catalogue that points at deleted bytes breaks every reader half-way.
 
-## 1. Remove the catalogue entry
+## 1. Withdraw it from the catalogue
 
-In the source checkout, delete the dataset's directory and rebuild:
+In the source checkout:
 
 ```bash
-git rm -r datasets/<name>
-ethos-data catalog build
+ethos-data catalog remove <name> --reason "<why>" --dry-run
+ethos-data catalog remove <name> --reason "<why>"
 ethos-data catalog publish ../ETHOS.Data-Catalogue
 ```
+
+`remove` records the dataset as withdrawn in its `status.yaml`, with the
+reason, and rebuilds the index without it; a family name withdraws every
+member. From now on the build and `publish` leave it out. Its description,
+inventory and status file stay in the checkout until its bytes are gone.
 
 If only the public listing was wrong, keep the dataset and hide it instead:
 `ethos:visibility: hidden` with an embargo block that says why. Review both
@@ -70,8 +75,9 @@ still describes it, and the replacement. Older pinned catalogue revisions
 still describe the dataset, and copies on users' machines remain; removal
 notifies nobody and corrects no earlier result.
 
-!!! warning "Gap: removal is four manual steps"
-    No command removes a dataset from the catalogue, the caches and dCache
-    together, and nothing checks the order. A `catalog remove <dataset>` that
-    refuses to delete bytes while a released catalogue still lists them would
-    encode the rule above.
+!!! warning "Gap: the cache entries and the bytes are removed by hand"
+    `catalog remove` takes the dataset out of the catalogue, but steps 2 and 3
+    are manual, and nothing checks that the release without the dataset is out
+    before the bytes go. A `catalog remove <dataset> --purge` that refuses
+    while a released catalogue still lists the dataset would encode the rule
+    above.

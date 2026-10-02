@@ -31,7 +31,8 @@ until ``ethos-data catalog migrate`` moves them.
 The build records in the status file what it changed: a draft's first build,
 and an inventory that differs from the one before, which returns a dataset
 whose bytes were made available to built, because what was checked is no
-longer what the inventory describes.
+longer what the inventory describes. A withdrawn dataset is not built and not
+in the index, and nor is a family whose members are all withdrawn.
 
 Provenance and licensing are checked here rather than left to a reviewer's eye.
 ``ethos:origin`` says whether the data was downloaded, derived or created, and an
@@ -864,6 +865,40 @@ def catalog_meta(catalog_root: Path) -> dict:
     return meta
 
 
+def left_out(dataset_dir: Path) -> bool:
+    """Whether the build leaves this dataset out of the catalogue.
+
+    A dataset that was withdrawn, and a family whose members, every one of
+    them, were withdrawn: it would be a name pointing at nothing.
+    """
+    if not is_namespace(dataset_dir):
+        return dataset_status.withdrawn(dataset_dir)
+    members = [
+        member
+        for member in iter_dataset_dirs(dataset_dir)
+        if member != dataset_dir and not is_namespace(member)
+    ]
+    return bool(members) and all(dataset_status.withdrawn(m) for m in members)
+
+
+def index_text(catalog_root: Path) -> str:
+    """The ``datacatalog.json`` the descriptors on disk make, without those left out."""
+    root = datasets_dir(catalog_root)
+    listed = [
+        directory
+        for directory in iter_dataset_dirs(root)
+        if (directory / "datapackage.json").exists() and not left_out(directory)
+    ]
+    return dumps(build_catalog(catalog_root, listed))
+
+
+def write_index(catalog_root: Path) -> Path:
+    """Write ``datacatalog.json`` from the descriptors on disk; returns its path."""
+    path = catalog_root / "datacatalog.json"
+    path.write_text(index_text(catalog_root), encoding="utf-8", newline="\n")
+    return path
+
+
 def build_catalog(catalog_root: Path, dataset_dirs: list[Path]) -> dict:
     meta = catalog_meta(catalog_root)
     datasets_root = datasets_dir(catalog_root)
@@ -922,6 +957,9 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
             raise DescriptorError(f"no dataset.yaml in {dataset_dir}")
         name = dataset_name_for(root, dataset_dir)
         namespace = is_namespace(dataset_dir)
+        if left_out(dataset_dir):
+            rows.append(f"  {name:<34} withdrawn, left out of the index")
+            continue
         if not namespace and not dataset_status.path_of(dataset_dir).is_file():
             unmigrated.append(name)
         totals = None
@@ -931,7 +969,7 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
             # namespace by name must still report the family's real size.
             total_bytes = file_count = 0
             for member in iter_dataset_dirs(dataset_dir):
-                if member == dataset_dir:
+                if member == dataset_dir or dataset_status.withdrawn(member):
                     continue
                 package = rendered.get(member)
                 if package is None:
@@ -992,9 +1030,8 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
             "`ethos-data catalog migrate` moves it across."
         )
 
-    all_dirs = [p for p in iter_dataset_dirs(root) if (p / "datapackage.json").exists()]
     catalog_path = catalog_root / "datacatalog.json"
-    catalog_text = dumps(build_catalog(catalog_root, all_dirs))
+    catalog_text = index_text(catalog_root)
 
     if check:
         if (
@@ -1011,5 +1048,6 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
         return 0
 
     catalog_path.write_text(catalog_text, encoding="utf-8", newline="\n")
-    report.info(f"  {'datacatalog.json':<22} {len(all_dirs):>5} datasets")
+    listed = len(json.loads(catalog_text)[k.DATASETS])
+    report.info(f"  {'datacatalog.json':<22} {listed:>5} datasets")
     return 0

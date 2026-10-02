@@ -11,16 +11,22 @@ would be recorded as correct. Freezing the dataset keeps the inventory as it
 was built and retires ``source_dir``, so the recorded hashes stay an
 independent witness to the copy.
 
-The copy is checked, file by file, before the dataset is frozen: an upload
-anonymously over HTTP, a cache entry on this machine. Which copy, when there
-are several: the upload, else the copy a cache owns, else, for restricted
-data, the registered installation. A link to public or internal data borrows
-the build input and is the authoritative copy only when named with ``--copy``.
+Two stages:
+
+``check``   choose the copy and check it, file by file: an upload anonymously
+            over HTTP, a cache entry on this machine
+``freeze``  record it as the authoritative copy and retire ``source_dir``
+
+Which copy, when there are several: the upload, else the copy a cache owns,
+else, for restricted data, the registered installation. A link to public or
+internal data borrows the build input and is the authoritative copy only when
+named with ``--copy``.
 """
 
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from .. import report
@@ -30,8 +36,9 @@ from ..formats.status_file import Copy, StatusFile
 from ..model import lifecycle
 from . import is_namespace, read_descriptor, resources_of
 from . import status as dataset_status
+from .pipeline import Action, Pipeline
 
-__all__ = ["choose", "run"]
+__all__ = ["PIPELINE", "Freeze", "choose", "run"]
 
 
 def _same(location: str, other: str) -> bool:
@@ -77,66 +84,96 @@ def choose(dataset: str, status: StatusFile, access: str, named: str | None) -> 
     return candidates[0]
 
 
+@dataclass
+class Freeze:
+    """The dataset ``record`` freezes, and the copy it is frozen with."""
+
+    catalog_root: Path
+    dataset: str
+    named: str | None = None
+    name: str = ""
+    directory: Path | None = None
+    status: StatusFile | None = None
+    chosen: Copy | None = None
+
+
+class Check:
+    name = "check"
+
+    def plan(self, freeze: Freeze) -> list[Action]:
+        from .upload import resolve_name
+
+        name = resolve_name(freeze.catalog_root, freeze.dataset)
+        directory = dataset_status.dataset_dir_in(freeze.catalog_root, name)
+        if is_namespace(directory):
+            raise MaintenanceError(
+                f"{name} is a family and has no bytes of its own; record each member."
+            )
+        status = dataset_status.read(directory)
+        if status is None:
+            raise MaintenanceError(
+                f"{name} has no {dataset_status.STATUS} yet, so there is nothing to "
+                f"record the freeze in. Write one from its dataset.yaml with\n"
+                f"    ethos-data catalog migrate {name}"
+            )
+        lifecycle.step("record", status.state, name)
+        access = read_descriptor(directory).get(k.ACCESS, k.PUBLIC)
+        chosen = choose(name, status, access, freeze.named)
+        package = json.loads((directory / "datapackage.json").read_text("utf-8"))
+        finding = dataset_status.check_copy(chosen, resources_of(package, directory))
+        report.info(f"  {self.name:<12} {finding}")
+        if not finding.ok:
+            raise MaintenanceError(
+                f"{name}: the copy does not hold the inventory as built, so it "
+                "cannot be the authoritative one. Find out why before freezing it."
+            )
+        freeze.name, freeze.directory = name, directory
+        freeze.status, freeze.chosen = status, chosen
+        return []
+
+
+class Retire:
+    name = "freeze"
+
+    def plan(self, freeze: Freeze) -> list[Action]:
+        status, chosen = freeze.status, freeze.chosen
+        if status.state == lifecycle.FROZEN and status.authority == chosen.location:
+            report.info(
+                f"  {freeze.name} is frozen already, with this copy as its "
+                "authoritative one."
+            )
+            return []
+        retired = status.source_dir
+        text = f"freeze {freeze.name}: {chosen.location} becomes its authoritative copy"
+        if retired:
+            text += f", and its source_dir {retired} is retired"
+
+        def perform() -> None:
+            dataset_status.take(
+                freeze.directory,
+                status,
+                "record",
+                dataset=freeze.name,
+                copy=chosen.model_copy(update={"verified": dataset_status.now()}),
+                source_dir=retired,
+                changes={"source_dir": None, "authority": chosen.location},
+            )
+
+        return [Action(text, perform)]
+
+
+PIPELINE: Pipeline[Freeze] = Pipeline("record", [Check(), Retire()])
+
+
 @report.reported
 def run(
     catalog_root: Path, dataset: str, *, copy: str | None = None, dry_run: bool = False
 ) -> int:
     """Freeze ``dataset`` with its authoritative copy checked; returns 0, or raises."""
-    from .upload import resolve_name
-
-    name = resolve_name(catalog_root, dataset)
-    directory = dataset_status.dataset_dir_in(catalog_root, name)
-    if is_namespace(directory):
-        raise MaintenanceError(
-            f"{name} is a family and has no bytes of its own; record each member."
-        )
-    status = dataset_status.read(directory)
-    if status is None:
-        raise MaintenanceError(
-            f"{name} has no {dataset_status.STATUS} yet, so there is nothing to "
-            f"record the freeze in. Write one from its dataset.yaml with\n"
-            f"    ethos-data catalog migrate {name}"
-        )
-    lifecycle.step("record", status.state, name)
-    access = read_descriptor(directory).get(k.ACCESS, k.PUBLIC)
-    chosen = choose(name, status, access, copy)
-
-    package = json.loads((directory / "datapackage.json").read_text(encoding="utf-8"))
-    finding = dataset_status.check_copy(chosen, resources_of(package, directory))
-    report.info(f"  {finding}")
-    if not finding.ok:
-        raise MaintenanceError(
-            f"{name}: the copy does not hold the inventory as built, so it cannot "
-            "be the authoritative one. Find out why before freezing the dataset."
-        )
-    if status.state == lifecycle.FROZEN and status.authority == chosen.location:
+    freeze = Freeze(catalog_root, dataset, copy)
+    if PIPELINE.run(freeze, dry_run=dry_run) and not dry_run:
         report.info(
-            f"\n{name} is frozen already, with this copy as its authoritative one."
-        )
-        return 0
-    retired = status.source_dir
-    if dry_run:
-        report.info(
-            f"\nwould freeze {name}: {chosen.location} becomes its authoritative copy"
-            + (f" and its source_dir {retired} is retired." if retired else ".")
-            + " Nothing was written."
-        )
-        return 0
-    dataset_status.take(
-        directory,
-        status,
-        "record",
-        dataset=name,
-        copy=chosen.model_copy(update={"verified": dataset_status.now()}),
-        source_dir=retired,
-        changes={"source_dir": None, "authority": chosen.location},
-    )
-    report.info(
-        f"\nrecorded     {name} is frozen; its authoritative copy is {chosen.location}"
-    )
-    if retired:
-        report.info(
-            f"             its source_dir {retired} is not read again; a rebuild "
-            "keeps the inventory as it is"
+            f"\nrecorded     {freeze.name} is frozen; a rebuild keeps its inventory "
+            "as it is"
         )
     return 0
