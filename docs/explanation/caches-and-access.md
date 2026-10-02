@@ -76,14 +76,18 @@ explanation** rather than doing something surprising.
 
 Having no restricted cache is a legitimate, permanent state — most people, most
 of the time, are not on the institute cluster and have no right to the licensed
-bytes. That is not a misconfiguration to be corrected, so the refusal offers a
-choice rather than reporting an error only: configure the cache, or set
-`--skip-unavailable` and have unreachable datasets left out of the result and
-listed.
+bytes. But a workflow cannot produce its result without one of its inputs, so
+there is no optional dataset: the refusal is an error. What the person who
+meets it needs is what the dataset is and how to get it, so the error describes
+it from its catalogue entry — title and description, homepage and sources,
+licences and attribution, why it is restricted and how an entitled user obtains
+a copy — and closes with the commands that register a copy once they have one.
 
-The listing matters. When a dataset is skipped, its key is simply **absent**
-from the returned mapping — because a missing key is something a caller can
-notice, whereas a `Path` to a file that is not there is not.
+!!! warning "Gap: unreachable datasets can still be left out"
+    The current release offers `--skip-unavailable`, which leaves an
+    unreachable dataset's key out of the result with a warning, and its
+    error prints only the `ethos:restriction` note. See [every input is
+    required](architecture/decisions.md#every-input-is-required-2026-10-02).
 
 ## Downloads never write through a link
 
@@ -107,7 +111,7 @@ same bytes either way.
 | one dataset whose files are already here | `ethos-data link <dataset> <directory>` |
 | a private copy, or one dataset in an odd place | `ethos-data config set-root` |
 | licensed data you have access to | `ethos-data config set-restricted-cache` |
-| licensed data you do not have | `--skip-unavailable` |
+| licensed data you do not have | a copy obtained under its terms, as the error describes, then `ethos-data link <dataset> <directory>` |
 | data that is not catalogued yet | the [staging root](../how-to/package-maintainers/stage-development-data.md#stage-development-data) |
 | a link that is about to break | `ethos-data materialize` |
 

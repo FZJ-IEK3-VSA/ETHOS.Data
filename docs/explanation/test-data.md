@@ -47,10 +47,14 @@ machine that has the full data, long after the example passed — so the reader
 refuses the collection instead.
 
 The guarantee is about the definition, not about this machine. Whether the data
-behind a handle is reachable here is the separate question `skip_unavailable`
-answers: without it, unreachable data stops the fetch; with it, the handle is
-left out of the mapping and named in a warning, so a workflow that treats an
-input as optional has to look for its handle rather than assume it.
+behind a handle is reachable here is a separate question. Every handle is
+required, so unreachable data stops the fetch, with an error that describes
+the dataset and how to obtain it.
+
+!!! warning "Gap: handles can still be left out"
+    Under `skip_unavailable` the current release leaves an unreachable
+    handle out of the mapping with a warning. See [every input is
+    required](architecture/decisions.md#every-input-is-required-2026-10-02).
 
 A test variant is not a bundle. A bundle is an offline copy of a selection,
 identified by resource keys and hashes, for tests that must run without the

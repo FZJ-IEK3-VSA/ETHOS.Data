@@ -70,30 +70,20 @@ def paths(
     *,
     test: bool = False,
     fetch: bool = True,
-    skip_unavailable: bool | None = None,
     progressbar: bool = True,
 ) -> NamedPaths:
     """The inputs of a workflow as {handle: Path}; see ethos_data.Collections.paths."""
-    return handle().paths(
-        collection,
-        test=test,
-        fetch=fetch,
-        skip_unavailable=skip_unavailable,
-        progressbar=progressbar,
-    )
+    return handle().paths(collection, test=test, fetch=fetch, progressbar=progressbar)
 
 
 def fetch(
     collection: str,
     *,
     test: bool = False,
-    skip_unavailable: bool | None = None,
     progressbar: bool = True,
 ) -> DataFiles:
     """Every file a collection selects, as {key: Path}."""
-    return handle().fetch(
-        collection, test=test, skip_unavailable=skip_unavailable, progressbar=progressbar
-    )
+    return handle().fetch(collection, test=test, progressbar=progressbar)
 
 
 def catalog_path(key: str, *, fetch: bool = True, progressbar: bool = False) -> Path:

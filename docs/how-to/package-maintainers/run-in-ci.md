@@ -22,8 +22,8 @@ pytest -m data_network           # live: catalogue and downloads
 ```
 
 Block network access in the required job so an accidental dependency fails
-there; the marker alone does not block anything. A missing required input
-must fail, never be skipped.
+there; the marker alone does not block anything. A missing input must fail,
+never be skipped.
 
 ## 2. Choose the source of bundled data {#download-switch}
 
@@ -55,18 +55,37 @@ facility:
 
 ```bash
 export ETHOS_DATA_DIR="$PWD/.cache/ethos-data"
+ethos-data selftest
 <your-tool>-data fetch test_suite_public --plan
 <your-tool>-data fetch test_suite_public
 <your-tool>-data verify test_suite_public --deep
 pytest -m data_network
 ```
 
+The [self-test](../data-users/set-up-your-machine.md#check-a-download) comes
+first: it downloads under 200 KB and fails with the step that broke when the
+runner cannot reach the catalogue or the store, before a large fetch starts.
+A runner may also carry a settings file in its account, as a self-hosted
+runner on the cluster computer does. To keep the job independent of it, name
+a file the repository holds:
+
+```bash
+export ETHOS_DATA_CONFIG="$PWD/ci/ethos-data.yaml"
+```
+
+ETHOS.Data then reads only that file and the environment variables; see
+[Use another settings file](../data-users/set-up-your-machine.md#another-settings-file).
+
+!!! warning "Gap: `selftest` and `ETHOS_DATA_CONFIG` are not implemented"
+    Both are planned and to be implemented separately. Until then, set an
+    environment variable for every setting the job depends on; they win over
+    every settings file.
+
 Key the cache on the hash of `collections.yaml` and any catalogue override. A
 restored cache reuses matching files; an empty runner downloads. For a
 collection with `test:` and `full:` variants, the fast job fetches the test
 variant, `fetch my_workflow --test`, and only a deliberate integration job
-fetches the full data. Never use `--skip-unavailable` to make a required test
-pass with a missing input.
+fetches the full data.
 
 ## 4. Record the inputs
 

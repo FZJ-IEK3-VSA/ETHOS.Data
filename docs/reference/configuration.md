@@ -11,6 +11,23 @@ which prints the resolved values, the provenance of each, and every file
 consulted along the way. A cache path this machine cannot reach, such as a
 network drive that is not connected, is marked `NOT REACHABLE` with the reason.
 
+!!! warning "Gap: one settings file per account is planned"
+    This page describes the current release. The planned change replaces
+    layers 3 to 6 below with one settings file: the file `ETHOS_DATA_CONFIG`
+    names, else the file in the user's account. It removes `--scope`, moves
+    the Windows file to `%LOCALAPPDATA%\ethos-data\config.yaml`, and gives
+    every handle a `settings` snapshot, read once per process. See
+    [Where the settings are stored](../how-to/data-users/set-up-your-machine.md#settings-file)
+    and the [decision record](../explanation/architecture/decisions.md#one-settings-file-per-account-2026-10-02).
+    It is to be implemented separately; this page is rewritten with it.
+
+!!! warning "Gap: `skip_unavailable` is to be removed"
+    With [every input is
+    required](../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
+    the `skip_unavailable` key, `config set-skip-unavailable`,
+    `unset-skip-unavailable` and `ETHOS_SKIP_UNAVAILABLE` go. To be
+    implemented separately.
+
 ## Precedence
 
 First match wins:

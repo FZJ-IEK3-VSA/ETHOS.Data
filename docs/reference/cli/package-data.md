@@ -23,6 +23,13 @@ to expose the wrapper.
 | `--test` | Select the collection's test variant; also accepted after collection subcommands. |
 | `-h`, `--help` | Show help without loading the catalogue. |
 
+!!! warning "Gap: `--skip-unavailable` is to be removed"
+    With [every input is
+    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
+    unreachable data always stops `fetch`, with an error that describes the
+    dataset; `fetch --plan` and `show` still list it as not available here.
+    To be implemented separately.
+
 Place global options before the subcommand, except `--test`, which works in
 either position. A package may supply an environment override such as
 `<YOUR_TOOL>_DATA_CATALOG`; it ranks below `--catalog` and above shared settings.

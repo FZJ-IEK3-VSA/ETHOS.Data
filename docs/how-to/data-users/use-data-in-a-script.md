@@ -37,6 +37,35 @@ in the package, a shared cache link or a restricted installation, is returned
 where it is and never copied. Call it right before the workflow; no shell
 command has to run first.
 
+## Know which catalogue and caches a script uses {#settings}
+
+A script needs no setup code. It reads the
+[settings file](set-up-your-machine.md#settings-file) of the account it runs
+under, whichever folder it is started from and however ETHOS.Data was
+installed. The handle reads the settings once, when the script first uses
+it, so every later call in the script uses the same catalogue and caches.
+Print them next to your results:
+
+```python
+print(data.settings)
+```
+
+The output names the settings file, the catalogue and its version, the
+public and restricted caches, and where each value came from: an argument,
+an environment variable, the settings file or a built-in default. In a
+package, the same object is `your_tool.data.handle().settings`.
+
+!!! warning "Gap: the settings are not read once and cannot be printed"
+    There is no `settings` attribute. A handle fixes its catalogue when it is
+    built but looks up the caches again on every call, and the current
+    release also reads an `ethos-data.yaml` found by searching upward from
+    the working directory. The same script can therefore use different
+    caches depending on where it is started. Until this changes,
+    `ethos-data config show`, run in the script's environment and working
+    directory, reports the settings the script reads. The [planned
+    change](../../explanation/architecture/decisions.md#one-settings-file-per-account-2026-10-02)
+    is to be implemented separately.
+
 ## See what a fetch will download {#plan}
 
 Before fetching a collection you do not know, ask for its size and for what
@@ -96,21 +125,34 @@ Because both variants offer the same handles, the workflow call does not
 change when `test=True` is dropped. On the command line the flag is `--test`.
 The example file defines no variants.
 
-## Carry on without licensed data {#skip-unavailable}
+## When a licensed input is missing {#licensed-input}
 
-A collection may name a restricted dataset you have no copy of. By default the
-call stops with an error that names the dataset and what to configure. If the
-workflow can run without it:
+Every input a collection names is required. A collection may name a
+restricted dataset that this machine has no copy of, or one you may not read.
+The call then stops before anything is downloaded, with an error that
+describes the dataset from its catalogue entry:
 
-```python
-inputs = data.paths("my_workflow", skip_unavailable=True)
-if "gadm_level1" not in inputs:
-    ...
-```
+- its title, description and version;
+- where it came from: its homepage and sources;
+- its licences and the attribution they require;
+- why it is restricted and how somebody entitled to it obtains a copy;
+- whom to ask about it.
 
-A skipped handle is absent from the mapping and named in a warning; test for
-the key before using it. The command-line form is `--skip-unavailable`, and a
-permanent preference is `ethos-data config set-skip-unavailable true`.
+Each item appears as far as the catalogue records it; it is the same
+information as [`--meta`](#metadata) prints. The error closes with the commands
+that register a copy you have, which
+[Set up your machine](set-up-your-machine.md#public-installation-users)
+explains. A workflow cannot run without one of its inputs, so no option leaves
+one out.
+
+!!! warning "Gap: the error does not describe the dataset, and inputs can be left out"
+    The error names the dataset and prints its `ethos:restriction` note
+    only. `skip_unavailable=True`, `--skip-unavailable`,
+    `config set-skip-unavailable true` and `ETHOS_SKIP_UNAVAILABLE` still
+    drop an unreachable handle from the mapping with a warning, and the
+    error suggests them. The planned change, [every input is
+    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
+    is to be implemented separately.
 
 ## Try catalogue data that is not in a collection yet {#by-key}
 
@@ -160,8 +202,10 @@ descriptor is `data.catalog.dataset("reskit-test-data/gebco").descriptor`.
 ## Check the result
 
 Open the returned path with the reader the workflow uses. If a path is
-unexpected, `ethos-data config show` explains which catalogue and caches were
-used. To check files on disk against the catalogue, follow
+unexpected, `print(data.settings)` or `ethos-data config show` explains which
+catalogue and caches were used. If nothing can be fetched at all, run the
+[self-test](set-up-your-machine.md#check-a-download) to separate the machine
+from the collection. To check files on disk against the catalogue, follow
 [Check and repair the cache](verify-and-repair.md). An unknown key, an
 unreadable catalogue or an unavailable input exits with an error instead of a
 path; [Report a problem](report-a-problem.md) says what to collect.

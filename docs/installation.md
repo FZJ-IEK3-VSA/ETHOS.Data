@@ -92,10 +92,24 @@ The one-time credential setup is in
 ethos-data config show
 ```
 
-This prints the cache directories in use, **why** each was chosen, and every
-config file that was consulted along the way. It needs no catalogue and no
-network, so it is the fastest way to confirm the install works — and the first
-thing to run when data turns up somewhere unexpected.
+This prints the settings file it read, the cache directories in use, and
+**why** each was chosen. It needs no catalogue and no network, so it is the
+fastest way to confirm the install works — and the first thing to run when
+data turns up somewhere unexpected.
+
+```bash
+ethos-data selftest
+```
+
+This fetches a few public test files, under 200 KB in total, from the
+catalogue in effect and checks them, so it confirms that downloads work on
+this machine. See
+[Check that a download works](how-to/data-users/set-up-your-machine.md#check-a-download).
+
+!!! warning "Gap: `selftest` is not implemented"
+    Until it is, `ethos-data fetch
+    reskit-test-data/placements/turbine_placements.csv` checks a single
+    download.
 
 ```bash
 python -c "import ethos_data; print(ethos_data.__version__)"
@@ -107,6 +121,9 @@ Nothing more is required for public data: the cache defaults to your OS's
 per-user cache directory (`~/.cache/ethos-data` on Linux). If you want it
 somewhere with room — a project filesystem, a scratch volume — see
 [Point the cache somewhere](how-to/data-users/set-up-your-machine.md#public-installation-users).
+Any setting you make is stored in one file in your account, the same for a
+conda environment, a virtual environment or a plain pip install; see
+[Where the settings are stored](how-to/data-users/set-up-your-machine.md#settings-file).
 
 ## Development install
 

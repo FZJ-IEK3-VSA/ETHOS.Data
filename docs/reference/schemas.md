@@ -579,6 +579,15 @@ licence forbids the mirror, and what they should do — buy a seat, ask a named
 colleague, point at an existing copy. A note that only says "restricted" tells
 them nothing they did not just learn from the line above it.
 
+!!! warning "Gap: the error is to print the whole description"
+    With [every input is
+    required](../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
+    the error also prints `title`, `description`, `version`, `homepage`,
+    `sources`, `licenses`, `ethos:attribution`, `ethos:upstream` and
+    `ethos:contact`, wherever a restricted dataset cannot be read on this
+    machine, not only when no restricted cache is configured. It no longer
+    offers `--skip-unavailable`. To be implemented separately.
+
 ### Inventory control
 
 **`ethos:include`** — *list of globs.* Only these files are the dataset. A pattern
