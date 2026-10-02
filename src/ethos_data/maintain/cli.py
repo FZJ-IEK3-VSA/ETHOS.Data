@@ -350,6 +350,12 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         "--remote", default="origin", help="the git remote to push to (default: origin)"
     )
     releaser.add_argument(
+        "--notices",
+        default=None,
+        metavar="DIR",
+        help="also write the release notice and the answers into DIR",
+    )
+    releaser.add_argument(
         "--dry-run", action="store_true", help="check and plan; write nothing"
     )
 
@@ -498,6 +504,7 @@ def dispatch(args) -> int:
             upload=args.upload,
             remote=args.remote,
             dry_run=args.dry_run,
+            notices=args.notices,
         )
 
     if args.catalog_command == "update-checkout":

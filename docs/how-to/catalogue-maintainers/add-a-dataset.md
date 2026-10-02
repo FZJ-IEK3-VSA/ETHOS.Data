@@ -172,7 +172,8 @@ record` freezes the dataset with the copy the cache owns.
 consumers only after this step; a successful build alone publishes nothing.
 
 Then tell the proposer the accepted dataset name and the release that holds
-it. Ask them to raise their `catalog.min_version`, remove staging entries and
-root overrides, run `bundle update` so their bundle records the release,
-and run their workflow against the released catalogue. Keep the proposal, the review findings, the upload report
+it: the release drafts that answer for every dataset it adds. It asks them to
+raise their `catalog.min_version`, remove staging entries and root
+overrides, run `bundle update` so their bundle records the release, and run
+their workflow against the released catalogue. Keep the proposal, the review findings, the upload report
 and the release identifiers together in the issue.

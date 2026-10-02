@@ -140,6 +140,8 @@ ethos-data catalog publish ../public-catalogue
 
 ```title="Output"
 Published to …/catalogue-lesson/public-catalogue
+  + .github/ISSUE_TEMPLATE/propose-a-dataset.md
+  + .github/ISSUE_TEMPLATE/report-a-problem.md
   + .gitignore
   + README.md
   + datacatalog.json

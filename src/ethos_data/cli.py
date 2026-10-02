@@ -9,6 +9,8 @@ such as <tool>-data, built with ethos_data.tool_main.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import os
 import sys
 from pathlib import Path
@@ -265,6 +267,32 @@ def _build_tool_parser(prog: str, source: _ToolSource) -> argparse.ArgumentParse
     _add_bundle_commands(sub)
     _add_config_commands(sub)
     _add_staging_commands(sub)
+    proposer = sub.add_parser(
+        "propose",
+        help="check a candidate dataset or bundle and print its proposal",
+        description="Check a draft dataset.yaml, or a repository bundle, as the "
+        "catalogue's build would, inventory the bytes, warn about files still "
+        "writable, and print the proposal to submit.",
+    )
+    proposer.add_argument(
+        "directory", help="the draft's dataset.yaml or its directory, or a bundle"
+    )
+    reporter = sub.add_parser(
+        "report",
+        help="draft a problem report: versions, the self-test, the settings, a plan",
+        description="Run the self-test, show the settings and the package's "
+        "collections and, for a collection, what a fetch would do, and print them "
+        "in the report template, with tokens and personal paths removed.",
+    )
+    reporter.add_argument(
+        "collection", nargs="?", default=None, help="the collection that fails"
+    )
+    reporter.add_argument(
+        "--test", action="store_true", help="the collection's test variant"
+    )
+    reporter.add_argument(
+        "--no-selftest", action="store_true", help="leave out the self-test's download"
+    )
     parser.set_defaults(prog=prog)
     return parser
 
@@ -452,6 +480,19 @@ def _add_key_commands(sub) -> None:
         description="Fetch the small public collections ETHOS.Data ships, under 200 KB, "
         "and check every file against the catalogue. Give an empty --root to force a "
         "download where the files are already cached.",
+    )
+    reporter = sub.add_parser(
+        "report",
+        help="draft a problem report: versions, the self-test, the settings, a plan",
+        description="Run the self-test, show the settings and, for a key, what a "
+        "fetch would do, and print them in the report template, with tokens, "
+        "credentials, the home directory and the account name removed.",
+    )
+    reporter.add_argument(
+        "key", nargs="?", default=None, help="the catalogue key that fails"
+    )
+    reporter.add_argument(
+        "--no-selftest", action="store_true", help="leave out the self-test's download"
     )
 
 
@@ -872,6 +913,106 @@ def _bundle_update(args, source) -> int:
     return 0
 
 
+def _captured(run, argv: list[str]) -> str:
+    """What one of the commands prints, both streams, for a report."""
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
+        try:
+            run(argv)
+        except EthosDataError as error:
+            print(f"error: {error.message}")
+        except SystemExit as stop:
+            if stop.code not in (0, None):
+                print(f"exited with {stop.code}")
+    return buffer.getvalue().rstrip() or "(nothing)"
+
+
+def _globals(args) -> list[str]:
+    found = []
+    for flag, value in (("--catalog", args.catalog), ("--root", args.root)):
+        if value:
+            found += [flag, value]
+    return found
+
+
+def _print_report(selftest: str, settings: str, package: str, plan: str) -> int:
+    import platform
+
+    from . import __version__
+    from .handoffs import handoff, scrub
+
+    print(
+        scrub(
+            handoff(
+                "report",
+                versions=f"ETHOS.Data {__version__}, Python {platform.python_version()}, "
+                f"{platform.platform()}",
+                selftest=selftest,
+                settings=settings,
+                package=package,
+                plan=plan,
+            )
+        )
+    )
+    return 0
+
+
+def _report_command(args) -> int:
+    """``ethos-data report``: the facts a maintainer needs, in the report template."""
+    common = _globals(args)
+    selftest = (
+        "(left out)" if args.no_selftest else _captured(_main, [*common, "selftest"])
+    )
+    plan = (
+        _captured(_main, [*common, "fetch", args.key, "--plan"])
+        if args.key
+        else "(no key named)"
+    )
+    return _print_report(
+        selftest,
+        _captured(_main, [*common, "config", "show"]),
+        "(no package)",
+        plan,
+    )
+
+
+def _tool_report_command(args, source) -> int:
+    """``<tool>-data report``: the same, with the package's collections and plan."""
+    common = _globals(args)
+
+    def tool(argv: list[str]) -> int:
+        return _dispatch(_build_tool_parser(args.prog, source).parse_args(argv), source)
+
+    selftest = (
+        "(left out)" if args.no_selftest else _captured(_main, [*common, "selftest"])
+    )
+    plan = "(no collection named)"
+    if args.collection:
+        flags = ["--test"] if args.test or args.test_global else []
+        plan = _captured(tool, [*common, "fetch", args.collection, "--plan", *flags])
+    return _print_report(
+        selftest,
+        _captured(tool, [*common, "config", "show"]),
+        _captured(tool, [*common, "show"]),
+        plan,
+    )
+
+
+def _propose_command(args, source) -> int:
+    """``<tool>-data propose DIR``: check the candidate, print the proposal."""
+    from .handoffs import propose
+
+    try:
+        loaded = source.load(args, None)
+    except EthosDataError:
+        loaded = None
+    proposal = propose(args.directory, loaded)
+    for finding in proposal.findings:
+        print(f"warning: {finding}", file=sys.stderr, flush=True)
+    print(proposal.text)
+    return 0
+
+
 def _main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if args.command == "config":
@@ -880,6 +1021,8 @@ def _main(argv: list[str] | None = None) -> int:
         return _catalog_dispatch(args)
     if args.command == "selftest":
         return _selftest_command(args)
+    if args.command == "report":
+        return _report_command(args)
 
     roots = resolve_roots(args.root)
     if args.command == "materialize":
@@ -899,6 +1042,11 @@ def _dispatch(args, source) -> int:
     """Run a package command against its shipped collections file."""
     if args.command == "bundle":
         return _bundle_command(args, source)
+    if args.command == "propose":
+        return _propose_command(args, source)
+    if args.command == "report":
+        args.test = bool(getattr(args, "test", False))
+        return _tool_report_command(args, source)
     if args.command == "config":
         return _config_command(args)
     if args.command == "staging":
