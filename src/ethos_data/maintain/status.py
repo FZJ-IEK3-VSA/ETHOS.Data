@@ -106,6 +106,8 @@ def _document(status: StatusFile) -> dict:
     document = status.model_dump(by_alias=True, exclude_none=True)
     if not document.get(k.COPIES):
         document.pop(k.COPIES, None)
+    if document.get("revision") == 1:
+        document.pop("revision")
     return document
 
 
@@ -381,7 +383,9 @@ def check_copy(copy: Copy, resources: list[dict], store: Store) -> Finding:
     return Finding(True, f"{where}: all {len(resources)} files there")
 
 
-def _inventory(catalog_root: Path, dataset_dir: Path, dataset: str) -> Finding:
+def _inventory(
+    catalog_root: Path, dataset_dir: Path, dataset: str, superseded: Mapping
+) -> Finding:
     from . import manifest
 
     try:
@@ -390,6 +394,7 @@ def _inventory(catalog_root: Path, dataset_dir: Path, dataset: str) -> Finding:
             check=True,
             name=dataset,
             inherited=manifest.inherited_for(datasets_dir(catalog_root), dataset_dir),
+            superseded_by=superseded.get(dataset),
         )
     except MaintenanceError as error:
         return Finding(False, f"the build refuses it: {error.message}")
@@ -407,12 +412,18 @@ def evidence(
     dataset: str,
     status: StatusFile,
     store: Store,
+    superseded: Mapping | None = None,
 ) -> list[Finding]:
     """What a dataset's record claims, compared with what is there.
 
     The descriptor a build would write, the build input a draft needs, and
-    every recorded copy, file by file.
+    every recorded copy, file by file. ``superseded`` is the catalogue's
+    successors by dataset, read for each call that does not pass it.
     """
+    if superseded is None:
+        from . import manifest
+
+        superseded = manifest.superseded_by_map(catalog_root)
     meta = read_descriptor(dataset_dir)
     if status.state == lifecycle.DRAFT:
         try:
@@ -425,7 +436,7 @@ def evidence(
     if status.state in (lifecycle.WITHDRAWN, lifecycle.PURGED):
         return []
 
-    findings = [_inventory(catalog_root, dataset_dir, dataset)]
+    findings = [_inventory(catalog_root, dataset_dir, dataset, superseded)]
     if not (dataset_dir / "datapackage.json").is_file():
         return findings
     resources = inventory_of(dataset, dataset_dir).records()
@@ -533,6 +544,11 @@ def run(
         store = DcacheStore()
     result = StatusResult()
     rows = datasets(catalog_root, names, tombstones=not names)
+    superseded: Mapping = {}
+    if check:
+        from . import manifest
+
+        superseded = manifest.superseded_by_map(catalog_root)
     width = max([len(name) for name, _ in rows] + [7])
     report.info(
         f"  {'dataset':<{width}}  {'state':<10} {'access':<11} {'release':<16} next"
@@ -571,7 +587,9 @@ def run(
             f"{hint or '-'}"
         )
         if check and described:
-            found = evidence(catalog_root, dataset_dir, name, status, store)
+            found = evidence(
+                catalog_root, dataset_dir, name, status, store, superseded
+            )
             result.findings[name] = found
             for finding in found:
                 report.info(f"  {'':<{width}}    {finding}")

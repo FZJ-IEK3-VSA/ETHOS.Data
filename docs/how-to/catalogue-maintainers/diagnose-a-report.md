@@ -44,7 +44,7 @@ ethos-data catalog publish ../ETHOS.Data-Catalogue --check
 | Candidate `source_dir` missing | Restore access to the reviewed source; do not substitute another copy. |
 | Inventory stale before upload | Inspect the changed files and filters, rebuild, review the diff. |
 | An include pattern matches nothing | Fix the pattern or the source path; never accept an empty inventory. |
-| Uploaded or frozen inventory needs changed bytes | A deliberate new version at new paths; rebuilding preserves the recorded hashes. |
+| Uploaded or frozen inventory needs changed bytes | A deliberate [revision](publish-a-new-version.md#revision); a plain rebuild refuses the new bytes and keeps the recorded hashes. |
 | Public generation differs | Review visibility and stripped fields, regenerate the public checkout, release it. |
 | Command refuses a published checkout | Point `catalog --catalog-root` at the source checkout, the one with `catalog.yaml`. |
 

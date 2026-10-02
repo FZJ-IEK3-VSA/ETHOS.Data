@@ -41,6 +41,7 @@ dataset or bundle may hold.
         - ancestors
         - within
         - nested
+        - entry
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

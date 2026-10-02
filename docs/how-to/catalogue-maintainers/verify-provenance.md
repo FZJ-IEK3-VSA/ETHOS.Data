@@ -76,6 +76,6 @@ request on JuGit.
 
 | Finding | Meaning | Do |
 | --- | --- | --- |
-| The source moved on to a new version | The catalogued dataset is a snapshot of the old one. | Keep it, record the source version in `description`, and add the new version as a new dataset or under new paths. Published paths never change. |
-| Our copy differs from the same source version | Our bytes are wrong or the source was corrected in place. | Treat it as a data error: [remove](withdraw-a-dataset.md) or replace under new paths, and tell the packages that use it. |
+| The source moved on to a new version | The catalogued dataset is a snapshot of the old one. | Keep it, record the source version in `description`, and add the new version as a [revision or a successor](publish-a-new-version.md). Published objects never change. |
+| Our copy differs from the same source version | Our bytes are wrong or the source was corrected in place. | Treat it as a data error: [remove](withdraw-a-dataset.md) it or make a [revision](publish-a-new-version.md#revision), and tell the packages that use it. |
 | The source is gone | The dataset can no longer be verified externally. | Record that in `description`; the catalogue's hashes become the only reference. |

@@ -35,7 +35,7 @@ from .errors import (
     UnknownKey,
 )
 from .formats import keys
-from .formats.derived import resource_url
+from .formats.derived import object_folder, resource_url
 from .model import names
 from .model.inventory import Inventory
 from .model.patterns import path_matches
@@ -124,6 +124,26 @@ class Dataset:
     @property
     def remote_prefix(self) -> str:
         return self.entry[keys.REMOTE_PREFIX]
+
+    @property
+    def revision(self) -> int:
+        """Which revision of the dataset this catalogue names; 1 for the first."""
+        return int(self.entry.get(keys.REVISION, 1))
+
+    @property
+    def entry_name(self) -> str:
+        """Where this revision lies in a cache: the name, or ``<name>@<revision>``."""
+        return names.entry(self.name, self.revision)
+
+    @property
+    def supersedes(self) -> str | None:
+        """The dataset this one replaces, with another layout and other keys."""
+        return self.entry.get(keys.SUPERSEDES)
+
+    @property
+    def superseded_by(self) -> list[str]:
+        """The datasets that replace this one; empty while none does."""
+        return list(self.entry.get(keys.SUPERSEDED_BY) or [])
 
     @property
     def license_status(self) -> str:
@@ -262,16 +282,20 @@ class Catalog:
         except KeyError:
             raise UnknownDataset(not_found(name)) from None
 
-    def base_url_for(self, dataset: Dataset) -> str:
-        """Root under which this dataset's resource paths resolve.
+    def base_url_for(self, dataset: Dataset, revision: int = 1) -> str:
+        """The folder under which the files of one revision of this dataset resolve.
 
         Single point of URL construction, so a per-dataset override (a mirror)
-        only has to be honoured here.
+        only has to be honoured here. A file is served from the folder of the
+        revision its bytes were published in, ``revision`` here.
         """
-        return resource_url(self.publication_url, dataset.remote_prefix)
+        return resource_url(
+            self.publication_url, object_folder(dataset.remote_prefix, revision)
+        )
 
     def url_for(self, resource: Resource) -> str:
-        return self.base_url_for(self.dataset(resource.dataset)) + resource.path
+        dataset = self.dataset(resource.dataset)
+        return self.base_url_for(dataset, resource.revision) + resource.path
 
     # -- Access by key -----------------------------------------------------
     #

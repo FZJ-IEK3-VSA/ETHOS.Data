@@ -181,7 +181,9 @@ def verify(
             )
             continue
         if name not in link_state:
-            link_state[name] = _broken_link(roots, name, location.origin)
+            link_state[name] = _broken_link(
+                roots, name, location.origin, catalog.dataset(name).entry_name
+            )
         broken = link_state[name]
         if broken is not None:
             findings.append(Finding(location, DANGLING, broken))

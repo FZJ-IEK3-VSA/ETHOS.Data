@@ -975,7 +975,10 @@ def _ls_command(args, catalog: Catalog) -> int:
     if args.key is None:
         print(f"catalogue: {catalog.location}\n")
         for name, dataset in sorted(catalog.datasets.items()):
-            print(f"  {name:<40} {dataset.access:<12} {dataset.title}")
+            line = f"  {name:<40} {dataset.access:<12} {dataset.title}"
+            if dataset.superseded_by:
+                line += f"  (superseded by {', '.join(dataset.superseded_by)})"
+            print(line)
         return 0
     resources = catalog.resources(args.key)
     if args.meta:

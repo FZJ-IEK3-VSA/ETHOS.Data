@@ -41,7 +41,8 @@ ethos-data ls reskit-test-data/gebco --meta
 ```
 
 Without a key, list dataset names, access classes and titles from the catalogue
-index without loading each dataset's inventory. With a dataset, family, folder
+index without loading each dataset's inventory, and `(superseded by <name>)`
+after a dataset a successor replaces. With a dataset, family, folder
 or file key, list matching resource keys and sizes. A file includes its sidecars.
 No data bytes are fetched; remote metadata can require network access.
 With `--meta`, print instead the description of each dataset under the key:

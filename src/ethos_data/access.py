@@ -434,7 +434,7 @@ class PublicCache(Locator):
         linked = self._linked.get(dataset.name)
         if linked is None:
             linked = self._linked[dataset.name] = (
-                linked_entry(self.root, dataset.name) is not None
+                linked_entry(self.root, dataset.entry_name) is not None
             )
         target = self.root / dataset.name / resource.path
         if linked:
@@ -476,7 +476,7 @@ class Download(Locator):
                 f"not yet uploaded, point at the copy on this machine:\n"
                 f"    ethos-data link {dataset.name} /path/to/{dataset.name}"
             )
-        target = self.root / dataset.name / resource.path
+        target = self.root / dataset.entry_name / resource.path
         return Location(resource, target, "download", ORIGIN_DOWNLOAD)
 
 

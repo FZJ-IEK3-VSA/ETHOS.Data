@@ -44,6 +44,7 @@ from ..config import Roots
 from ..errors import ConfigurationError, MaintenanceError, UploadError
 from ..formats import keys as k
 from ..formats.catalogue import StoreSettings, store_of
+from ..formats.derived import object_folder, object_url
 from ..formats.status_file import StatusFile
 from ..model import lifecycle
 from ..model.versions import FIRST, MAJOR, Version
@@ -301,30 +302,43 @@ class StoreBytes:
                         f"{name}: its copy at {copy.location} is not under the "
                         f"publication root {root_url or '(none in catalog.yaml)'}"
                     )
-                destination = f"{published_root}/{folder[len(root_url) + 1 :]}"
-                if not removal.store.exists(destination):
-                    report.info(
-                        f"  {self.name:<12} {destination} holds nothing any more"
+                first = f"{published_root}/{folder[len(root_url) + 1 :]}"
+                # The folder of every revision the dataset had: an earlier
+                # release may name any of them.
+                for revision in range(1, status.revision + 1):
+                    destination = object_folder(first, revision)
+                    if not removal.store.exists(destination):
+                        report.info(
+                            f"  {self.name:<12} {destination} holds nothing any more"
+                        )
+                        continue
+                    actions.append(
+                        Action(
+                            f"purge {removal.settings.remote}:{destination} on the "
+                            "store",
+                            lambda destination=destination: removal.store.purge(
+                                destination
+                            ),
+                            self._gone(removal, name, directory, folder, revision),
+                        )
                     )
-                    continue
-                actions.append(
-                    Action(
-                        f"purge {removal.settings.remote}:{destination} on the store",
-                        lambda destination=destination: removal.store.purge(
-                            destination
-                        ),
-                        self._gone(removal, name, directory, folder),
-                    )
-                )
         return actions
 
     @staticmethod
-    def _gone(removal: Removal, name: str, directory: Path, folder: str):
+    def _gone(
+        removal: Removal, name: str, directory: Path, folder: str, revision: int
+    ):
+        """Whether one revision's folder is served after its purge, by a file it held."""
+
         def gone() -> str:
-            records = inventory_of(name, directory).records()
-            if not records:
+            held = [
+                record
+                for record in inventory_of(name, directory).records()
+                if int(record.get(k.REVISION, 1)) == revision
+            ]
+            if not held:
                 return ""
-            url = f"{folder}/{records[0][k.PATH]}"
+            url = object_url(folder, held[0])
             try:
                 removal.store.served(url)
             except UploadError:

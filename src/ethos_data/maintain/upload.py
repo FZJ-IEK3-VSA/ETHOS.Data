@@ -61,7 +61,13 @@ from ..adapters.dcache import FRONTEND, MODE_0755, DcacheStore
 from ..errors import UploadError
 from ..formats import keys as k
 from ..formats.catalogue import store_of
-from ..formats.derived import license_settled, remote_prefix_of, resource_url
+from ..formats.derived import (
+    license_settled,
+    object_folder,
+    object_url,
+    remote_prefix_of,
+    resource_url,
+)
 from ..formats.keys import ROLE_PUBLISHED
 from ..formats.status_file import Copy, StatusFile
 from ..model import lifecycle
@@ -177,7 +183,7 @@ def read_back(
     """
     ok, unreadable, wrong = [], [], []
     for resource in resources:
-        url = f"{base_url.rstrip('/')}/{resource[k.PATH]}"
+        url = object_url(base_url, resource)
         try:
             size = store.served(url)
         except UploadError as error:

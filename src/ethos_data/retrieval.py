@@ -22,6 +22,8 @@ ever create real directories, and never write through a link.
 
 from __future__ import annotations
 
+import os
+import shutil
 from pathlib import Path
 
 from . import report
@@ -39,6 +41,7 @@ from .catalogs import Catalog
 from .config import Roots
 from .errors import AccessError, NotFetched
 from .formats import keys as k
+from .model import digest, names
 from .model.resource import Resource
 
 __all__ = [
@@ -115,6 +118,56 @@ class DataFiles(dict):
                 f"{suffix!r} is ambiguous, matches: {', '.join(sorted(matches))}"
             )
         return self[matches[0]]
+
+
+def _seeded(
+    public: Path, dataset, items: list[Location], files: DataFiles
+) -> list[Location]:
+    """The files still to download once those an earlier revision holds are copied.
+
+    A later revision keeps most files of the one before, and its cache entry
+    is a directory of its own, so a file unchanged since an earlier revision
+    is taken from that revision's entry, hard-linked where the filesystem
+    allows and copied where not, rather than downloaded again. Only a file of
+    the recorded size and hash is taken.
+    """
+    if dataset.revision <= 1:
+        return items
+    earlier = [
+        public / names.entry(dataset.name, revision)
+        for revision in range(dataset.revision - 1, 0, -1)
+    ]
+    remaining = []
+    for location in items:
+        target, resource = location.path, location.resource
+        source = next(
+            (
+                entry / resource.path
+                for entry in earlier
+                if _holds(entry / resource.path, resource)
+            ),
+            None,
+        )
+        if source is None or target.exists():
+            remaining.append(location)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(source, target)
+        except OSError:
+            shutil.copy2(source, target)
+        files[resource.key] = target
+    return remaining
+
+
+def _holds(path: Path, resource: Resource) -> bool:
+    """Whether ``path`` is the file ``resource`` describes, by size and hash."""
+    try:
+        if path.is_symlink() or path.stat().st_size != resource.bytes:
+            return False
+    except OSError:
+        return False
+    return digest.matches(resource.hash, digest.of_file(path))
 
 
 def plan(
@@ -228,16 +281,22 @@ def download(
 
     for dataset_name, items in sorted(to_download.items()):
         dataset = catalog.dataset(dataset_name)
-        destination = roots.public / dataset_name
-        _refuse_to_write_through_a_link(roots.public, dataset_name)
-        fetched = downloader.fetch(
-            catalog.base_url_for(dataset),
-            destination,
-            {loc.resource.path: loc.resource.hash for loc in items},
-            progressbar=progressbar,
-        )
+        destination = roots.public / dataset.entry_name
+        _refuse_to_write_through_a_link(roots.public, dataset.entry_name)
+        items = _seeded(roots.public, dataset, items, files)
+        # Each file from the folder of the revision its bytes were published in.
+        by_revision: dict[int, list[Location]] = {}
         for location in items:
-            files[location.resource.key] = fetched[location.resource.path]
+            by_revision.setdefault(location.resource.revision, []).append(location)
+        for revision, group in sorted(by_revision.items()):
+            fetched = downloader.fetch(
+                catalog.base_url_for(dataset, revision),
+                destination,
+                {loc.resource.path: loc.resource.hash for loc in group},
+                progressbar=progressbar,
+            )
+            for location in group:
+                files[location.resource.key] = fetched[location.resource.path]
 
     # In catalogue order, not download order.
     return DataFiles((loc.resource.key, files[loc.resource.key]) for loc in locations)

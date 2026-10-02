@@ -70,6 +70,25 @@
             "published": true,
             "user_facing": false
           }
+        },
+        "ethos:revision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The revision the file's bytes were published in, when not the first.",
+          "title": "Ethos:Revision",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         }
       },
       "required": [

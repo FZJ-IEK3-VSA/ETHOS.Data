@@ -471,6 +471,15 @@ published catalogue.
 
 How it renders — see [below](#datapackagejson).
 
+### Later versions
+
+**`ethos:supersedes`** — *string; promoted.* The dataset this one replaces: a
+new version with another layout and other keys, see
+[Publish a new version](../how-to/catalogue-maintainers/publish-a-new-version.md#successor).
+It must name another dataset of the catalogue, or one that was purged. The
+build writes `ethos:superseded_by`, the list of datasets that name it, into
+the replaced dataset's descriptor and index row.
+
 ### The draft's files and the store folder
 
 **`source_dir`** — *string (path); in a draft.* Where the files are **on
@@ -644,6 +653,7 @@ history:
 | `source_dir` | path | the build input: required while the dataset is `draft`, `built` or `available`, gone once it is `frozen`. Relative to the dataset directory if relative |
 | `copies` | list | every place a command made the bytes available: `kind` (`uploaded`, `linked` or `materialized`), `location` (the dataset's folder on the store, or the cache entry), `target` for a link, and `verified`, when every file was last found there |
 | `authority` | a copy's `location` | the authoritative copy, once the dataset is frozen |
+| `revision` | number | which revision the inventory describes; absent for the first |
 | `history` | list | every step taken, oldest first: `at` (UTC), `by`, `step`, `from` when the step changed the state, `to`, and what the step read or made: `files` and `bytes`, the `copy`, a `note`, the `source_dir` a freeze retired, and the `release` a release step made |
 
 | State | Means | Reached by |
@@ -695,6 +705,8 @@ entry carries everything that can be answered **without** loading an inventory:
 | `ethos:total_bytes`, `ethos:file_count` | size, without parsing the inventory |
 | `ethos:remote_prefix` | where the bytes are |
 | `ethos:license_status` | promoted so that warning about licensing is free |
+| `ethos:revision` | which revision of the dataset this release names, when not the first; a reader's cache entry for it is `<name>@<revision>` |
+| `ethos:supersedes`, `ethos:superseded_by` | a successor and what it replaces, when there is one |
 
 Those promotions are what make laziness worth having: locating a file, or
 warning about a licence, would otherwise pull the whole inventory in.
@@ -710,6 +722,8 @@ sharded dataset — an `ethos:shards` index.
 | `resources[].hash` | `"sha256:…"` — the same `alg:hash` convention pooch reads, so the value passes straight through to the downloader. A bare digest, in either case, is read as the same SHA-256 |
 | `resources[].ethos:sidecars` | companion files that must travel with this one (shapefile `.dbf`, `.shx`, …) |
 | `resources[].licenses` | present only on files a narrowed licence matched — see below |
+| `resources[].ethos:revision` | the revision the file's bytes were published in, when not the first: the store serves it from `<remote_prefix>@<revision>/<path>` |
+| `ethos:revision`, `ethos:superseded_by` | the dataset's revision when not the first, and the datasets that supersede it |
 | `licenses`, `contributors`, `sources`, `ethos:origin`, `ethos:derivation` | passed through from `dataset.yaml` unchanged |
 | `ethos:total_bytes`, `ethos:file_count` | totals |
 | `ethos:shard_depth`, `ethos:shards` | present **instead of** `resources` when sharded |

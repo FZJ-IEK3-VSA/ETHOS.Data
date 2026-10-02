@@ -41,8 +41,9 @@ run consumer `verify --deep`. A verified upload is recorded in the dataset's
 `status.yaml`: the dataset is `available`, with its copy on dCache.
 
 The command refuses restricted data, which never has a copy on dCache, and
-unresolved licensing. If `--immutable` reports a conflict, assign new
-published paths; do not delete and overwrite a released object.
+unresolved licensing. If `--immutable` reports a conflict, a published file
+changed: make the change a [revision](publish-a-new-version.md#revision); do
+not delete and overwrite a released object.
 
 ## 3. Recheck without transferring or changing permissions
 

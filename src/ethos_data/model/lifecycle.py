@@ -92,6 +92,8 @@ STEPS: Mapping[str, Step] = {
         Step("materialize", "ethos-data materialize",
              {BUILT: AVAILABLE, AVAILABLE: AVAILABLE, FROZEN: FROZEN}),
         Step("record", "ethos-data catalog record", {AVAILABLE: FROZEN, FROZEN: FROZEN}),
+        # A new revision: new bytes, built and not yet published.
+        Step("revise", "ethos-data catalog build --revision", {AVAILABLE: BUILT, FROZEN: BUILT}),
         Step("check-source", "ethos-data catalog check-source",
              {BUILT: BUILT, AVAILABLE: AVAILABLE, FROZEN: FROZEN}),
         Step("remove", "ethos-data catalog remove", dict.fromkeys(_IN_CATALOGUE, WITHDRAWN)),
