@@ -24,6 +24,36 @@ A catalogue is identified by its hand-written `catalog.yaml`. The generated
 must never be mistaken for a source one. Running these inside a published
 catalogue gets an explicit refusal naming the source catalogue to use instead.
 
+## `add <source>` {#add-source}
+
+Take a reviewed draft into the catalogue and build it.
+
+```bash
+ethos-data catalog add /projects/shared/candidates/my-dataset --dry-run
+ethos-data catalog add /projects/shared/candidates/my-dataset
+ethos-data catalog add drafts/dataset.yaml --name my-dataset
+```
+
+`<source>` is the draft `dataset.yaml`, or the directory holding it. Three
+stages, each planned before any acts, so `--dry-run` shows the whole plan and
+a refusal comes before anything is written:
+
+| Stage | |
+|---|---|
+| `intake` | read the draft and check it as the build would: a name, a `source_dir` that is a directory, licence documents that exist; a draft that says `ethos:uploaded` or `ethos:frozen` is refused |
+| `place` | write `datasets/<name>/dataset.yaml`, the draft line by line without `source_dir`; copy its licence documents beside it; write its `status.yaml`: a draft built from `source_dir` |
+| `build` | build it, which makes it `built` |
+
+A relative `source_dir` is relative to the draft, and is recorded as the
+absolute path it names, symbolic links left as they are. A dataset already in
+the catalogue is refused, unless an earlier run placed this same draft and did
+not build it: then only the build is left.
+
+| Flag | |
+|---|---|
+| `--name NAME` | the dataset's name, for a draft that states none |
+| `--dry-run` | check and plan; write nothing |
+
 ## `build [datasets...]`
 
 Regenerate `datapackage.json` (and `shards/*.json` for a sharded dataset)
@@ -229,6 +259,54 @@ another recorded copy.
 |---|---|
 | `--copy LOCATION` | the recorded copy to make authoritative |
 | `--dry-run` | check the copy; write nothing |
+
+## `remove <datasets...>` {#remove-datasets}
+
+Take datasets out of the catalogue, metadata first.
+
+```bash
+ethos-data catalog remove old-dataset --reason "accepted by mistake" --dry-run
+ethos-data catalog remove old-dataset --reason "accepted by mistake"
+```
+
+Two stages: `withdraw` records every dataset named as `withdrawn`, with the
+reason, and a family name stands for its members; `index` rebuilds the index,
+and the families above them, without them. From then on the build, `publish`
+and `link --all` leave a withdrawn dataset out, and a family whose members are
+all withdrawn. Its description, inventory and status file stay in the
+checkout, and its cache entries and bytes where they are, until a release
+without it is out. Removing a withdrawn dataset again does nothing.
+
+| Flag | |
+|---|---|
+| `--reason TEXT` | why, for the record in `status.yaml` |
+| `--dry-run` | check and plan; write nothing |
+
+## `check-source <dataset> <directory>` {#check-source}
+
+Compare a fresh download from a downloaded dataset's source with its
+recorded inventory, and record the result.
+
+```bash
+ethos-data catalog check-source global-wind-atlas-v4 /validation/gwa-v4 --dry-run
+ethos-data catalog check-source global-wind-atlas-v4 /validation/gwa-v4 \
+    --note "against the 2026-09 release on the provider's site"
+```
+
+Two stages: `compare` hashes every file under `<directory>` whose path the
+inventory lists and compares its size and SHA-256 with the recorded ones;
+`record` adds the result to the dataset's `status.yaml`, as a `check-source`
+step: how many of the inventory's files were compared, how many match and
+differ, and the note. A file the inventory does not list is named and not
+compared, and a folder with nothing to compare is refused. Created and derived
+datasets have no source and are refused.
+
+| Flag | |
+|---|---|
+| `--note TEXT` | what was compared against, such as the source's release |
+| `--dry-run` | compare; record nothing |
+
+Exit `1` if a file differs.
 
 ## `migrate [datasets...]` {#migrate-datasets}
 

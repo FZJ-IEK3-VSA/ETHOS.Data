@@ -53,7 +53,8 @@ class Event(_Record):
     at: str = Field(description="When, in UTC.")
     by: str = Field("", description="The account that took the step.")
     step: str = Field(
-        description="migrate, build, change, upload, verify, link, materialize or record."
+        description="add, migrate, build, change, upload, verify, link, materialize, "
+        "record, check-source or remove."
     )
     previous: str | None = Field(
         None, alias="from", description="The state before, when the step changed it."

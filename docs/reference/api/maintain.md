@@ -27,7 +27,7 @@ checkout the same way the maintainer commands find theirs.
 ## Reporting
 
 Every entry point below that runs a command (`manifest.run`, `publish.run`,
-`upload.run`, `status.run`, `freeze.run`, `migrate.run`, the namespace
+`upload.run`, `status.run`, `migrate.run`, the pipelines' `run`, the namespace
 builder's `run`) takes a `reporter=` keyword and sends its progress and
 warnings there. Without one, progress goes to standard output and warnings are
 Python warnings. Each returns a result whose `ok` says whether the command
@@ -117,22 +117,65 @@ here, and every step a command takes checked against the
       show_root_toc_entry: false
       heading_level: 3
 
-::: ethos_data.maintain.freeze
-    options:
-      members:
-        - run
-        - RecordResult
-        - choose
-      show_root_heading: false
-      show_root_toc_entry: false
-      heading_level: 3
-
 ::: ethos_data.maintain.migrate
     options:
       members:
         - run
         - MigrateResult
         - Outcome
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+## Pipelines
+
+Adding, freezing, removing and checking a dataset are pipelines: every stage
+plans before any acts, so a refusal comes before the first write and a dry
+run is the plan.
+
+::: ethos_data.maintain.pipeline
+    options:
+      members:
+        - Pipeline
+        - Stage
+        - Action
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.accept
+    options:
+      members:
+        - run
+        - Draft
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.freeze
+    options:
+      members:
+        - run
+        - choose
+        - Freeze
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.remove
+    options:
+      members:
+        - run
+        - Removal
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.provenance
+    options:
+      members:
+        - run
+        - Check
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

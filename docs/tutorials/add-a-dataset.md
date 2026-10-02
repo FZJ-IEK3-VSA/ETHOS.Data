@@ -17,7 +17,7 @@ Allow about 30 minutes. The paths in this exercise are local practice paths.
 ```bash
 mkdir catalogue-lesson
 cd catalogue-lesson
-mkdir -p source-catalogue/datasets/station-temperatures public-catalogue incoming/station-temperatures
+mkdir -p source-catalogue/datasets public-catalogue incoming/station-temperatures
 printf 'station,value\nA,12.5\nB,13.0\n' > incoming/station-temperatures/temperatures.csv
 printf 'downloaded 2026-09-11\n' > incoming/station-temperatures/download.log
 ```
@@ -40,13 +40,14 @@ this lesson.
 
 ## 2. Describe the dataset
 
-Create `source-catalogue/datasets/station-temperatures/dataset.yaml`:
+A proposal brings a draft `dataset.yaml`. Write this one beside the data, as
+`incoming/station-temperatures/dataset.yaml`:
 
 ```yaml
 name: station-temperatures
 title: Synthetic station temperatures
 description: Two invented observations, used to practise catalogue maintenance.
-source_dir: ../../../incoming/station-temperatures
+source_dir: .
 ethos:access: public
 ethos:visibility: public
 ethos:remote_prefix: station-temperatures-v1
@@ -61,30 +62,31 @@ licenses:
     path: https://creativecommons.org/publicdomain/zero/1.0/
 ```
 
-`source_dir` points at the files on this machine, relative to the dataset's own
-directory. It is what the inventory is built from, and it is never published.
+`source_dir` points at the files on this machine, relative to the draft:
+`.` is the directory the draft is in. It is what the inventory is built from,
+and it is never published.
 `ethos:exclude` leaves the download log out of the dataset without moving or
 deleting it. `ethos:origin: created` says that you made this data, which is why
 an author is named.
 
-## 3. Build the inventory
-
-In a catalogue, the commands keep `source_dir` in a file of their own beside
-the description, the dataset's `status.yaml`. Move it there, then build:
+## 3. Add it to the catalogue
 
 ```bash
 cd source-catalogue
-ethos-data catalog migrate station-temperatures
-ethos-data catalog build station-temperatures
+ethos-data catalog add ../incoming/station-temperatures
 ```
 
 ```title="Output (abridged)"
-  migrated       station-temperatures             draft      source_dir moved out of dataset.yaml
-…
+  place        write datasets/station-temperatures/dataset.yaml, without source_dir
+  place        write datasets/station-temperatures/status.yaml: draft, built from …/catalogue-lesson/incoming/station-temperatures
+  build        build station-temperatures
   station-temperatures: 1 of 2 files under …/catalogue-lesson/incoming/station-temperatures selected, 1 filtered out
   station-temperatures                   1 files     0.000 GB  public/public
   datacatalog.json           1 datasets
 ```
+
+`add` checked the draft, copied it into the catalogue without `source_dir`,
+and built the inventory. The draft itself is not one of the dataset's files.
 
 The log was filtered out. Open `datasets/station-temperatures/datapackage.json`:
 its one resource records the path, size and SHA-256 hash of `temperatures.csv`.
@@ -267,8 +269,8 @@ than `used in place`. `incoming/station-temperatures` is still there;
 
 | You ran | It did |
 |---|---|
-| `ethos-data catalog migrate` | moved `source_dir` into the dataset's `status.yaml` |
-| `ethos-data catalog build` | inventoried `source_dir`, left out the excluded log, hashed the rest |
+| `ethos-data catalog add` | took the draft into the catalogue, with `source_dir` in its `status.yaml`, and built it |
+| `ethos-data catalog build` | rebuilt the inventory after the data changed |
 | `ethos-data catalog status` | listed the dataset's state and its next step |
 | `ethos-data catalog build --check` | compared the inventory with the files, and wrote nothing |
 | `ethos-data catalog publish` | generated the public view without maintainer-only fields |

@@ -303,14 +303,19 @@ class TestTheBuild:
         assert "old: its dataset.yaml states source_dir" in err
         assert "ethos-data catalog migrate old" in err
 
-    def test_a_withdrawn_dataset_is_not_built(self, source):
+    def test_a_withdrawn_dataset_is_left_out_of_the_build(self, source):
         source.dataset("flat", {"a.csv": "1"})
+        source.dataset("kept", {"a.csv": "1"})
         (source.directory("flat") / "status.yaml").write_text("state: withdrawn\n")
 
-        code, _, err = source.build()
+        code, out, _ = source.build()
 
-        assert code == 1
-        assert "flat is withdrawn" in err
+        assert code == 0
+        assert (
+            "flat                               withdrawn, left out of the index" in out
+        )
+        assert [row["name"] for row in source.index()["datasets"]] == ["kept"]
+        assert not (source.directory("flat") / "datapackage.json").exists()
 
     def test_a_status_file_is_never_published(self, source, tmp_path):
         source.dataset("flat", {"a.csv": "1"})
@@ -498,7 +503,8 @@ class TestRecord:
         code, out, _ = catalogue.catalog("record", "flat", "--dry-run")
 
         assert code == 0
-        assert "ok    uploaded" in out and "would freeze flat" in out
+        assert "ok    uploaded" in out and "freeze flat:" in out
+        assert "Nothing was written." in out
         assert catalogue.status("flat") == before
 
     def test_a_built_dataset_has_no_copy_to_freeze_with(self, uploading):
