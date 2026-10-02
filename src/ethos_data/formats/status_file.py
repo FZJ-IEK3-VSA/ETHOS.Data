@@ -90,6 +90,12 @@ class StatusFile(_Record):
         alias=k.SOURCE_DIR,
         description="The build input: the directory the build reads, relative to the dataset directory if relative.",
     )
+    revision: int = Field(
+        1,
+        alias="revision",
+        description="Which revision of the dataset the inventory describes; 1 for the first.",
+        ge=1,
+    )
     authority: str | None = Field(
         None,
         alias=k.AUTHORITY,

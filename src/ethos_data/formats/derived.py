@@ -114,6 +114,24 @@ def reader_description(package: Mapping, *, classes: bool = False) -> list[str]:
     return lines
 
 
+def object_folder(remote_prefix: str, revision: int = 1) -> str:
+    """The store's folder for the files published in one revision of a dataset.
+
+    ``<remote_prefix>`` for the first revision and ``<remote_prefix>@<revision>``
+    for a later one: published objects never change, so a file whose bytes
+    changed in a revision is published beside the old ones, not over them.
+    """
+    return remote_prefix if revision <= 1 else f"{remote_prefix}@{revision}"
+
+
+def object_url(dataset_url: str, record: Mapping) -> str:
+    """Where the store serves one resource record, ``dataset_url`` its first folder."""
+    revision = int(record.get(k.REVISION, 1))
+    base = dataset_url.rstrip("/")
+    folder = base if revision <= 1 else f"{base}@{revision}"
+    return f"{folder}/{record[k.PATH]}"
+
+
 def resource_url(publication_url: str, remote_prefix: str, path: str = "") -> str:
     """Where the published store serves a file: ``<publication_url>/<remote_prefix>/<path>``.
 
@@ -152,4 +170,9 @@ def index_row(package: dict, path: str) -> dict[str, Any]:
         k.FILE_COUNT: package[k.FILE_COUNT],
         k.REMOTE_PREFIX: remote_prefix_of(package),
         k.LICENSE_STATUS: license_status_of(package),
+        **{
+            key: package[key]
+            for key in (k.REVISION, k.SUPERSEDES, k.SUPERSEDED_BY)
+            if package.get(key)
+        },
     }

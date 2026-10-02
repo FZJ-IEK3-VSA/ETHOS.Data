@@ -42,6 +42,7 @@ from ..adapters import Store
 from ..errors import MaintenanceError
 from ..formats import keys as k
 from ..formats.catalogue import StoreSettings, store_of
+from ..formats.derived import object_folder
 from ..formats.status_file import StatusFile
 from ..model import lifecycle
 from . import dataset_name_for, datasets_dir, is_namespace, read_catalog_meta
@@ -253,14 +254,18 @@ class StoreBytes:
                         f"{name}: its copy at {copy.location} is not under the "
                         f"publication root {root_url or '(none in catalog.yaml)'}"
                     )
-                destination = f"{published_root}/{folder[len(root_url) + 1 :]}"
-                actions.append(
-                    Action(
-                        f"purge {removal.settings.remote}:{destination} on the store",
-                        self._purge(removal, destination),
-                        self._gone(directory, folder),
+                first = f"{published_root}/{folder[len(root_url) + 1 :]}"
+                # The folder of every revision the dataset had: an earlier
+                # release may name any of them.
+                for revision in range(1, status.revision + 1):
+                    destination = object_folder(first, revision)
+                    actions.append(
+                        Action(
+                            f"purge {removal.settings.remote}:{destination} on the store",
+                            self._purge(removal, destination),
+                            self._gone(directory, folder) if revision == 1 else None,
+                        )
                     )
-                )
         return actions
 
     @staticmethod

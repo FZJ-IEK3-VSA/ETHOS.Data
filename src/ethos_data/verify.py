@@ -70,19 +70,22 @@ class Finding:
         return f"{line}\n                 {self.detail}" if self.detail else line
 
 
-def _broken_link(roots: Roots, dataset: str, origin: str) -> tuple[Path, Path] | None:
+def _broken_link(
+    roots: Roots, dataset: str, origin: str, entry: str | None = None
+) -> tuple[Path, Path] | None:
     """The dataset's entry if it is a symbolic link pointing nowhere.
 
     Checked once per dataset rather than once per file: a dataset with 170,000
     resources behind a dangling link should cost one ``stat``, not 170,000.
     """
     candidates = []
+    entry = entry or dataset
     if origin == ORIGIN_STAGING and roots.staging is not None:
         candidates.append(roots.staging / dataset)
     else:
-        candidates.append(roots.public / dataset)
+        candidates.append(roots.public / entry)
         if roots.restricted is not None:
-            candidates.append(roots.restricted / dataset)
+            candidates.append(roots.restricted / entry)
     for entry in candidates:
         if entry.is_symlink() and not entry.exists():
             return entry, entry.readlink()
@@ -121,7 +124,9 @@ def verify(
             continue
         name = location.resource.dataset
         if name not in link_state:
-            link_state[name] = _broken_link(roots, name, location.origin)
+            link_state[name] = _broken_link(
+                roots, name, location.origin, catalog.dataset(name).entry_name
+            )
         broken = link_state[name]
         if broken is not None:
             findings.append(

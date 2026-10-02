@@ -14,7 +14,7 @@ of its datasets, and the maintainer imports it as a new bundle version.
 | Situation | Propose |
 | --- | --- |
 | Data the catalogue does not have | A new dataset with its own name |
-| A changed version of a catalogued dataset, for example test data for a changed function | A new dataset name or versioned resource paths. Published paths never change, so changed bytes need new paths; unchanged files keep theirs and are not downloaded again. |
+| A changed version of a catalogued dataset, for example test data for a changed function | A revision, under the same keys, when the layout stays; a successor, a new dataset whose `dataset.yaml` says `ethos:supersedes`, when it changes. Unchanged files of a revision are not downloaded again. See [Publish a new version](../catalogue-maintainers/publish-a-new-version.md). |
 | More files for an existing dataset, unchanged otherwise | An addition to the existing dataset |
 | A tiny synthetic fixture your package owns | Nothing: keep it in the package |
 

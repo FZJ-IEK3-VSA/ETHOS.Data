@@ -42,6 +42,10 @@ class ResourceRecord(_Generated):
     licenses: list[dict] | None = field(
         k.LICENSES, description="Present only on files a narrowed licence matched."
     )
+    revision: int | None = field(
+        k.REVISION,
+        description="The revision the file's bytes were published in, when not the first.",
+    )
 
 
 class ShardEntry(_Generated):
@@ -73,6 +77,14 @@ class PackageDescriptor(_Generated):
     namespace: bool = field(k.NAMESPACE, False)
     total_bytes: int = field(k.TOTAL_BYTES, 0)
     file_count: int = field(k.FILE_COUNT, 0)
+    revision: int | None = field(
+        k.REVISION,
+        description="Which revision of the dataset this is, when not the first.",
+    )
+    superseded_by: list[str] | None = field(
+        k.SUPERSEDED_BY,
+        description="The datasets whose ethos:supersedes names this one.",
+    )
 
 
 class IndexRow(_Generated):
@@ -88,6 +100,9 @@ class IndexRow(_Generated):
     file_count: int = field(k.FILE_COUNT, 0)
     remote_prefix: str | None = field(k.REMOTE_PREFIX)
     license_status: str = field(k.LICENSE_STATUS, k.UNKNOWN)
+    revision: int | None = field(k.REVISION)
+    supersedes: str | None = field(k.SUPERSEDES)
+    superseded_by: list[str] | None = field(k.SUPERSEDED_BY)
 
 
 class NamespaceRow(_Generated):

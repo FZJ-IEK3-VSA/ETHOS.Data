@@ -72,6 +72,7 @@ Regular tasks:
 | Make data that cannot move yet available through the public cache | [Link existing data into the cache](catalogue-maintainers/link-existing-data.md) |
 | Turn a linked dataset into a verified copy the cache owns | [Materialize linked data](catalogue-maintainers/materialize-linked-data.md) |
 | Register or move a licensed dataset in the restricted cache | [Add restricted data](catalogue-maintainers/add-restricted-data.md) |
+| Publish corrected bytes or a new delivery of a dataset, as a revision or a successor | [Publish a new version](catalogue-maintainers/publish-a-new-version.md) |
 | Remove a dataset that should not have been added, from the catalogue and from dCache | [Remove a dataset](catalogue-maintainers/withdraw-a-dataset.md) |
 | Build, check and release the internal and the public catalogue | [Release the catalogue](catalogue-maintainers/release-the-catalogue.md) |
 | Create, rename and delete folders on dCache | [Manage dCache folders](catalogue-maintainers/manage-dcache-folders.md) |

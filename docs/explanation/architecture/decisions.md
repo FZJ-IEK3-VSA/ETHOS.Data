@@ -25,7 +25,7 @@ the canonical account of the reasoning.
 | Record each dataset's state in a status file | Implemented | `datasets/<name>/status.yaml` holds the state, the build input and a history, and the commands check every transition. `source_dir`, `ethos:uploaded` and `ethos:frozen` leave `dataset.yaml`. See [datasets record their state](#datasets-record-their-state-in-a-status-file-2026-10-02). |
 | Find files through one lookup chain | Proposed | Root override, staging, bundles, restricted cache, public cache and download are one locator each, and each answers found, pass or refuse. See [one lookup chain](#one-lookup-chain-decides-where-a-file-is-read-2026-10-02). |
 | Run catalogue maintenance as pipelines | Implemented, except notices | Accepting, releasing and removing a dataset become commands whose stages plan before they act and record what they did; dCache, downloads, metadata and git sit behind ports. See [catalogue maintenance runs as pipelines](#catalogue-maintenance-runs-as-pipelines-2026-10-02). |
-| Version data as revisions or successors | Proposed | A byte-level change becomes a revision of the same dataset under the same keys; a changed layout becomes a successor dataset. Published objects, rather than paths, never change. See [revisions and successors](#revisions-and-successors-2026-10-02). |
+| Version data as revisions or successors | Implemented, except bundles | A byte-level change becomes a revision of the same dataset under the same keys; a changed layout becomes a successor dataset. Published objects, rather than paths, never change. See [revisions and successors](#revisions-and-successors-2026-10-02). |
 | Give the handoffs between roles templates | Proposed | Proposals, answers, problem reports and notices are filled in by `propose`, `report`, `catalog release` and `catalog remove` from templates beside the formats. See [handoffs have templates](#handoffs-between-roles-have-templates-2026-10-02). |
 | Separate the model, the services, the adapters and the presentation | Proposed | Library code raises typed errors and reports progress through a reporter; only the command line prints and chooses exit codes. See [four layers](#four-layers-2026-10-02). |
 
@@ -507,7 +507,11 @@ runner elsewhere cannot reach it.
 
 ## Revisions and successors (2026-10-02)
 
-**Status: proposed.** Implemented by the refactoring pull requests.
+**Status: implemented, except bundles.** `catalog build --revision` numbers a
+revision, upload and purge follow each file's revision folder, readers keep a
+revision in its own cache entry, and `ethos:supersedes` marks a successor.
+`bundle update`, which numbers a bundle's revision, comes with
+repository-first bundles.
 
 Published paths never change, so changed bytes need new paths, which somebody
 has to choose by hand; [Keep data in the repository](../../how-to/package-maintainers/keep-data-in-the-repository.md#sync)

@@ -159,7 +159,8 @@ ensure that advertised files are ready before consumers see the new metadata.
 
 ### Revision and withdrawal
 
-Changed bytes need new paths so existing catalogue versions retain their meaning.
+Changed bytes are a new revision, published beside the old ones, or a successor
+dataset, so existing catalogue versions retain their meaning.
 Withdrawing a dataset starts by removing its entry from the published view; any
 necessary deletion of remote bytes follows. Old catalogue pins still describe
 old resources, but cannot make deleted bytes available. Follow
@@ -186,8 +187,9 @@ with lower storage-service load and temporary experiments during bug fixing.
    and a warning identifies changed resource keys. Missing files remain errors.
 4. After verification, the maintainer either restores the local authoritative
    copy or submits the changed dataset through the acceptance boundary above.
-5. Catalogue maintainers publish accepted revised bytes at a new path and release
-   updated metadata. The package then deliberately refreshes its pin and copies.
+5. Catalogue maintainers publish accepted revised bytes as a revision or a
+   successor and release updated metadata. The package then deliberately
+   refreshes its pin and copies.
 
 An allowance to use a changed repository fixture must be scoped to that local
 workflow. It must not disable ordinary download checksum checks, silently repair

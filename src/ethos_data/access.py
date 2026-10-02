@@ -141,14 +141,15 @@ def entry_for(catalog: Catalog, roots: Roots, name: str) -> Path:
     there is nowhere to put it, and the public cache is the one place it may
     never go.
     """
-    root = roots.for_access(access_class(catalog.dataset(name)))
+    dataset = catalog.dataset(name)
+    root = roots.for_access(access_class(dataset))
     if root is None:
         raise AccessError(
             f"dataset {name!r} is restricted and no restricted cache is configured; "
             "there is no entry for it. Set one with:\n"
             "    ethos-data config set-restricted-cache /path/to/ethos_data_restricted"
         )
-    return root / name
+    return root / dataset.entry_name
 
 
 def _staged(staging: Path | None, name: str) -> Path | None:
@@ -261,7 +262,7 @@ class RestrictedCache(Locator):
         self._why.clear()
 
     def _unreadable(self, name: str) -> str:
-        """Why this dataset cannot be read from the restricted cache; "" if it can."""
+        """Why this cache entry cannot be read from the restricted cache; "" if it can."""
         if self.root is None:
             return "no restricted cache is configured on this machine"
         entry = self.root / name
@@ -281,11 +282,11 @@ class RestrictedCache(Locator):
         # Once per dataset: 170,000 files behind one entry cost one look at it.
         why = self._why.get(dataset.name)
         if why is None:
-            why = self._why[dataset.name] = self._unreadable(dataset.name)
+            why = self._why[dataset.name] = self._unreadable(dataset.entry_name)
         if not why:
             return Location(
                 resource,
-                self.root / dataset.name / resource.path,
+                self.root / dataset.entry_name / resource.path,
                 "in-place",
                 ORIGIN_RESTRICTED,
             )
@@ -358,11 +359,11 @@ class PublicLinks(Locator):
         linked = self._linked.get(dataset.name)
         if linked is None:
             linked = self._linked[dataset.name] = (
-                linked_entry(self.root, dataset.name) is not None
+                linked_entry(self.root, dataset.entry_name) is not None
             )
         if not linked:
             return None
-        entry = self.root / dataset.name
+        entry = self.root / dataset.entry_name
         return Location(resource, entry / resource.path, "in-place", ORIGIN_LINK)
 
 
@@ -380,7 +381,7 @@ class PublicCopies(Locator):
         return f"copies in the public cache {self.root}"
 
     def locate(self, catalog, dataset, resource):
-        target = self.root / dataset.name / resource.path
+        target = self.root / dataset.entry_name / resource.path
         try:
             present = target.stat().st_size == resource.bytes
         except OSError:
@@ -425,7 +426,7 @@ class Download(Locator):
                 f"or, for this one dataset only:\n"
                 f"    ethos-data config set-root {dataset.name} /path/to/{dataset.name}"
             )
-        target = self.root / dataset.name / resource.path
+        target = self.root / dataset.entry_name / resource.path
         return Location(resource, target, "download", ORIGIN_DOWNLOAD)
 
 

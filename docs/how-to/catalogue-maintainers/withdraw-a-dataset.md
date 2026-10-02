@@ -3,8 +3,8 @@
 Take a dataset that should not have been added out of the catalogue, the
 shared caches and dCache. Removal is for data that must stop existing: a
 wrongly accepted candidate, a licence that turned out to forbid what was done,
-test data nobody needs. A correction is not a removal; it is a new version at
-new paths, see [Licensing and immutability](../../explanation/licensing.md).
+test data nobody needs. A correction is not a removal; it is a
+[new version](publish-a-new-version.md).
 
 The order is the reverse of publishing: **metadata first, bytes second**.
 A catalogue that points at deleted bytes breaks every reader half-way.

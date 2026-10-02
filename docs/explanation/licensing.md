@@ -172,7 +172,9 @@ and until when, is nobody else's business.
 ## Paths are immutable
 
 **A file at a published path never changes.** If a dataset's content changes,
-the new bytes go to a new path.
+the new bytes are a new revision, published beside the old ones under
+`<remote_prefix>@<revision>/`, or a successor, a new dataset; see
+[Publish a new version](../how-to/catalogue-maintainers/publish-a-new-version.md).
 
 The reason is the checksum. A consumer's cache holds a file it verified against
 the manifest, and it re-verifies cheaply on every fetch. If the bytes behind a
@@ -185,9 +187,10 @@ because it looks like a bug in the tool.
 The rule is enforced where it can be: `ethos-data catalog upload` passes
 `rclone --immutable`, which fails loudly on an attempted overwrite.
 
-Publishing a revision at a new path also has a practical payoff — the unchanged
-files keep their paths, so an update re-downloads only what actually changed
-rather than forcing a full re-fetch.
+Publishing a revision beside the old one also has a practical payoff — the
+unchanged files keep their objects, and a reader's cache takes them from the
+entry of the revision before, so an update downloads only what actually
+changed rather than forcing a full re-fetch.
 
 ## Deleting is not how a dataset changes
 

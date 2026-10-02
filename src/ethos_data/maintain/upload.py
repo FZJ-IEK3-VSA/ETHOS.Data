@@ -52,7 +52,13 @@ from ..adapters.dcache import FRONTEND, MODE_0755, DcacheStore
 from ..errors import UploadError
 from ..formats import keys as k
 from ..formats.catalogue import store_of
-from ..formats.derived import license_settled, remote_prefix_of, resource_url
+from ..formats.derived import (
+    license_settled,
+    object_folder,
+    object_url,
+    remote_prefix_of,
+    resource_url,
+)
 from ..formats.keys import ROLE_PUBLISHED
 from ..formats.status_file import Copy, StatusFile
 from ..model import lifecycle
@@ -188,7 +194,7 @@ def remote_manifest_check(
     """
     ok, missing, wrong = [], [], []
     for resource in resources:
-        url = f"{base_url.rstrip('/')}/{resource[k.PATH]}"
+        url = object_url(base_url, resource)
         request = urllib.request.Request(url, method="HEAD")
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
@@ -325,15 +331,27 @@ def upload_one(
     report.info(f"public URL   {dataset_url}\n")
 
     resources = resources_of(plan.package, plan.dataset_dir)
+    # Each file into the folder of the revision its bytes were published in.
+    # The folders of earlier revisions hold their files already, and an
+    # --immutable copy leaves what is there alone.
+    by_revision: dict[int, list[str]] = {}
+    for resource in resources:
+        by_revision.setdefault(int(resource.get(k.REVISION, 1)), []).append(
+            resource[k.PATH]
+        )
 
     if not options.verify_only:
-        status = store.copy(
-            plan.source_dir,
-            f"{root}/{plan.prefix}",
-            [resource["path"] for resource in resources],
-            transfers=options.transfers,
-            dry_run=options.dry_run,
-        )
+        status = 0
+        for revision, paths in sorted(by_revision.items()):
+            status = store.copy(
+                plan.source_dir,
+                f"{root}/{object_folder(plan.prefix, revision)}",
+                paths,
+                transfers=options.transfers,
+                dry_run=options.dry_run,
+            )
+            if status != 0:
+                break
         if status != 0:
             report.warning("\nrclone failed. Common causes:")
             report.warning(
@@ -353,10 +371,14 @@ def upload_one(
             return 0
 
     if not options.no_chmod and plan.package.get(k.ACCESS, k.PUBLIC) == k.PUBLIC:
-        status = store.chmod(namespace_path, MODE_0755, bearer())
-        report.info(f"\nchmod 0755 {namespace_path} -> HTTP {status}")
-        if status not in (200, 204):
-            report.info("  chmod failed; anonymous reads will 401 until it succeeds.")
+        for revision in sorted(by_revision):
+            folder = f"{options.vo_path}/{root}/{object_folder(plan.prefix, revision)}"
+            status = store.chmod(folder, MODE_0755, bearer())
+            report.info(f"\nchmod 0755 {folder} -> HTTP {status}")
+            if status not in (200, 204):
+                report.info(
+                    "  chmod failed; anonymous reads will 401 until it succeeds."
+                )
 
     report.info(
         "\nverifying anonymous access (no credentials, exactly what a public user gets)"
@@ -383,7 +405,10 @@ def upload_one(
         )
 
     sample = resources[0]["path"]
-    where = store.locality(f"{namespace_path}/{sample}", bearer())
+    sample_folder = object_folder(plan.prefix, int(resources[0].get(k.REVISION, 1)))
+    where = store.locality(
+        f"{options.vo_path}/{root}/{sample_folder}/{sample}", bearer()
+    )
     report.info(f"\n  storage locality of {sample}: {where}")
     if where == "NEARLINE":
         report.info(
