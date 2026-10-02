@@ -22,6 +22,7 @@ import json
 from pathlib import Path
 
 from ..catalogs import ROLE_KEY, ROLE_PUBLISHED, ROLE_SOURCE
+from ..errors import CatalogueRootError, DescriptorError
 
 CATALOG_MARKER = "catalog.yaml"
 #: Present in a *generated* catalogue too, so it can never identify a source one.
@@ -54,13 +55,13 @@ def _source_catalogue_near(path: Path) -> Path | None:
     return next((p for p in siblings if (p / CATALOG_MARKER).is_file()), None)
 
 
-def _refuse(path: Path, searched_upward: bool) -> SystemExit:
+def _refuse(path: Path, searched_upward: bool) -> CatalogueRootError:
     """Explain why this directory cannot be worked on, as specifically as possible."""
     role = catalogue_role(path)
     has_index = (path / GENERATED_MARKER).is_file()
     if role != ROLE_PUBLISHED and not (role is None and has_index):
         where = f"{path} or any parent directory" if searched_upward else str(path)
-        return SystemExit(
+        return CatalogueRootError(
             f"no {CATALOG_MARKER} in {where}.\n"
             "Run this from inside a catalogue checkout, or pass --catalog-root."
         )
@@ -73,7 +74,7 @@ def _refuse(path: Path, searched_upward: bool) -> SystemExit:
     source = _source_catalogue_near(path)
     where_to_go = str(source) if source else "<the source catalogue>"
 
-    return SystemExit(
+    return CatalogueRootError(
         f"{path} is a {ROLE_PUBLISHED} catalogue, not a {ROLE_SOURCE} one ({says}).\n"
         "It carries the published output only -- no dataset.yaml and no source_dir -- so there "
         "are no local bytes to build, upload or publish from, and anything you change in it is "
@@ -218,7 +219,7 @@ def resources_of(package: dict, dataset_dir: Path) -> list[dict]:
     for shard in package.get("ethos:shards", []):
         shard_file = dataset_dir / shard["path"]
         if not shard_file.is_file():
-            raise SystemExit(
+            raise DescriptorError(
                 f"{package['name']}: shard {shard['path']} is missing. Run:\n"
                 f"    ethos-data catalog build {package['name']}"
             )

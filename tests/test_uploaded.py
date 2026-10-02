@@ -20,6 +20,7 @@ import pytest
 import yaml
 
 from ethos_data.maintain.manifest import render_dataset, stale_files, write_dataset
+from ethos_data.errors import DescriptorError
 
 
 def make_dataset(
@@ -98,7 +99,7 @@ class TestFreezingAfterUpload:
             dataset_dir, _ = make_dataset(
                 workspace, {"ethos:uploaded": True}, {"a.txt": b"hello"}
             )
-            with pytest.raises(SystemExit, match="never read again"):
+            with pytest.raises(DescriptorError, match="never read again"):
                 render_dataset(dataset_dir)
         finally:
             shutil.rmtree(workspace)
@@ -118,7 +119,7 @@ class TestFreezingAfterUpload:
                     }
                 )
             )
-            with pytest.raises(SystemExit, match="no datapackage.json to freeze"):
+            with pytest.raises(DescriptorError, match="no datapackage.json to freeze"):
                 render_dataset(dataset_dir)
         finally:
             shutil.rmtree(workspace)
@@ -131,7 +132,7 @@ class TestFreezingAfterUpload:
             (dataset_dir / "dataset.yaml").write_text(
                 yaml.safe_dump({"name": "d", "title": "t", "ethos:remote_prefix": "d"})
             )
-            with pytest.raises(SystemExit, match="source_dir is required"):
+            with pytest.raises(DescriptorError, match="source_dir is required"):
                 render_dataset(dataset_dir)
         finally:
             shutil.rmtree(workspace)

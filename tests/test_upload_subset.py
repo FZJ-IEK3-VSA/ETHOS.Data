@@ -22,6 +22,7 @@ import yaml
 from ethos_data.maintain import upload
 from ethos_data.maintain.manifest import render_dataset, write_dataset
 from ethos_data.maintain.manifest import run as build_run
+from ethos_data.errors import UploadError
 
 CATALOG = (
     "name: t\n"
@@ -121,14 +122,14 @@ class TestNamingDatasets:
             '{"ethos:catalog_role": "published"}'
         )
 
-        with pytest.raises(SystemExit, match="published catalogue"):
+        with pytest.raises(UploadError, match="published catalogue"):
             upload.resolve_name(workspace, str(published / "datasets" / "gwa"))
 
     def test_a_path_somewhere_else_entirely_names_both_directories(self, workspace):
         make_catalog(workspace, {"gwa": {}})
         stray = workspace / "elsewhere" / "datasets" / "gwa"
         stray.mkdir(parents=True)
-        with pytest.raises(SystemExit, match="not a dataset of the catalogue"):
+        with pytest.raises(UploadError, match="not a dataset of the catalogue"):
             upload.resolve_name(workspace, str(stray))
 
 
@@ -140,13 +141,13 @@ class TestSubsetIsCheckedBeforeAnythingUploads:
         # published, and a loop would already have uploaded `a` before finding out.
         make_catalog(workspace, {"a": {}, "b": {"ethos:access": "restricted"}})
 
-        with pytest.raises(SystemExit, match="restricted"):
+        with pytest.raises(UploadError, match="restricted"):
             upload.run(workspace, make_args(["a", "b"]))
         assert no_rclone == [], "nothing may be uploaded once any dataset is ineligible"
 
     def test_a_mistyped_name_stops_the_run_the_same_way(self, workspace, no_rclone):
         make_catalog(workspace, {"a": {}})
-        with pytest.raises(SystemExit, match="no dataset called 'typo'"):
+        with pytest.raises(UploadError, match="no dataset called 'typo'"):
             upload.run(workspace, make_args(["a", "typo"]))
         assert no_rclone == []
 
@@ -263,6 +264,6 @@ class TestNamingAFamily:
 
     def test_an_ineligible_member_stops_the_whole_family(self, workspace, no_rclone):
         make_family(workspace, {"a": {}, "b": {"ethos:access": "restricted"}})
-        with pytest.raises(SystemExit, match="restricted"):
+        with pytest.raises(UploadError, match="restricted"):
             upload.run(workspace, make_args(["fam"]))
         assert no_rclone == []

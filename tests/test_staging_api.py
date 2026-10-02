@@ -65,8 +65,8 @@ def test_wrapper_staging_lifecycle_needs_no_catalogue(workspace, capsys):
     assert "experiment" in capsys.readouterr().out
     staged = root / "staging" / "trial"
     assert (staged / "new.txt").read_text() == "development bytes"
-    with pytest.raises(SystemExit, match="--force"):
-        run("staging", "remove", "trial")
+    assert run("staging", "remove", "trial") == 2
+    assert "--force" in capsys.readouterr().err
     assert staged.exists()
     assert run("staging", "remove", "trial", "--force") == 0
     assert not staged.exists()

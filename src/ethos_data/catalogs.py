@@ -35,6 +35,14 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
+from .errors import (
+    AccessError,
+    CatalogUnavailable,
+    IncompleteCatalog,
+    UnknownDataset,
+    UnknownKey,
+)
+
 if TYPE_CHECKING:
     from .config import Roots
 
@@ -46,6 +54,7 @@ __all__ = [
     "IncompleteCatalog",
     "Resource",
     "UnknownDataset",
+    "UnknownKey",
     "directory_of",
     "license_settled",
     "load_catalog",
@@ -178,42 +187,6 @@ def describe_catalog(descriptor: dict, location: str = "") -> str:
     role = descriptor.get(ROLE_KEY)
     label = f"{role} catalogue {name!r}" if role else f"catalogue {name!r}"
     return f"{label} ({location})" if location else label
-
-
-class UnknownDataset(KeyError):
-    """A collection names a dataset this catalogue does not describe.
-
-    Usually a withdrawn dataset rather than a typo: a collections file pinned to
-    an older catalogue keeps working, and only breaks when it is repointed at a
-    newer one that no longer publishes what it asks for. Subclasses KeyError so
-    existing ``except KeyError`` handlers keep working; the CLI catches this
-    specific type so a genuine bug still surfaces as a traceback.
-    """
-
-
-class CatalogUnavailable(OSError):
-    """The catalogue index itself could not be read.
-
-    Distinct from :class:`IncompleteCatalog`, which is about a dataset the index
-    promised: here there is no index. The common cause is not a network fault
-    but a pin -- a collections file naming a tag or a repository that does not
-    exist (yet, or any more) -- and the person hitting it usually did not write
-    that pin, so the message says how to point at another catalogue.
-    """
-
-
-class IncompleteCatalog(FileNotFoundError):
-    """The index lists a dataset whose descriptor or shard is not where it says.
-
-    Loading is lazy, so this surfaces long after the index was read -- on the
-    first fetch that touches the dataset -- and a bare FileNotFoundError at that
-    point names a path the user never typed and gives no hint that the
-    *catalogue copy* is the problem. It happens when a tree is deployed
-    piecemeal, or an index from one revision sits beside descriptors from
-    another (a dataset renamed on disk after the index was generated, say).
-    Subclasses FileNotFoundError so existing ``except OSError`` handlers still
-    catch it.
-    """
 
 
 def _missing_part(
@@ -691,7 +664,6 @@ class Catalog:
         fetched first. :meth:`resources` says what is under a key without
         fetching. Files already in the cache are not downloaded again.
         """
-        from .access import AccessError
         from .config import Roots
         from .retrieval import download
 
@@ -776,7 +748,7 @@ def select_key(
             r for member in catalog.members_of(name) for r in member.resources.values()
         ]
         if not found:
-            raise KeyError(f"{key!r} has no files in the catalogue")
+            raise UnknownKey(f"{key!r} has no files in the catalogue")
         return found, None
     dataset = catalog.dataset(name)
     resource = dataset.resource_at(inner)
@@ -792,7 +764,7 @@ def select_key(
         if p.startswith(prefix)
     ]
     if not under:
-        raise KeyError(
+        raise UnknownKey(
             f"{key!r} is not in the catalogue: {name!r} has no file or folder {inner!r}"
         )
     return sorted(under, key=lambda r: r.key), None
@@ -811,8 +783,6 @@ def directory_of(
     come from the public cache, the restricted cache, staging or its own root,
     and each returned path already says which.
     """
-    from .access import AccessError
-
     found = set()
     for resource in resources:
         local = files.get(resource.key)

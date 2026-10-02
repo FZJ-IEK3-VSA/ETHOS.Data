@@ -45,6 +45,7 @@ from typing import NamedTuple
 import yaml
 
 from ..catalogs import ROLE_PUBLISHED, license_settled
+from ..errors import UploadError
 from . import (
     catalogue_role,
     dataset_name_for,
@@ -65,7 +66,7 @@ def _capture(command: list[str], **kwargs) -> subprocess.CompletedProcess:
 def token(profile: str) -> str:
     result = _capture(["oidc-token", profile])
     if result.returncode != 0 or not result.stdout.strip():
-        raise SystemExit(
+        raise UploadError(
             f"could not get a token from `oidc-token {profile}`.\n"
             f"  {result.stderr.strip()}\n"
             "Start the agent and register the profile:\n"
@@ -91,13 +92,13 @@ def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path | None
             for d in iter_dataset_dirs(datasets_dir(catalog_root))
         )
         listing = "\n".join(f"    {name}" for name in known) or "    (none)"
-        raise SystemExit(
+        raise UploadError(
             f"no dataset called {dataset_name!r} in {datasets_dir(catalog_root)}.\n"
             f"Datasets in this catalogue:\n{listing}\n"
             "To add a new one, describe it first -- see docs/how-to/catalogue-maintainers/describe-a-dataset.md."
         )
     if not package_file.is_file():
-        raise SystemExit(
+        raise UploadError(
             f"{dataset_name!r} has no datapackage.json yet. Run:\n"
             f"    ethos-data catalog build {dataset_name}"
         )
@@ -129,13 +130,13 @@ def preflight(
     prefix = package.get("ethos:remote_prefix")
 
     if access == "restricted":
-        raise SystemExit(
+        raise UploadError(
             f"{name} is restricted and must never be uploaded.\n"
             "Restricted data stays where it is; users point at it with\n"
             f"    ethos-data config set-root {name} /path/to/{name}"
         )
     if access == "internal" and not allow_internal:
-        raise SystemExit(
+        raise UploadError(
             f"{name} is internal (not published). Upload it only if the VO-only "
             "prefix is really where you want it, and pass --allow-internal.\n"
             "It will NOT be made world-readable."
@@ -150,7 +151,7 @@ def preflight(
     # rechecking what is already published copies nothing.
     if not verify_only and not license_settled(package):
         note = package.get("ethos:license_note", "")
-        raise SystemExit(
+        raise UploadError(
             f"{name} has unresolved licensing and is not uploaded. {note}\n".rstrip()
             + "\n"
             "Record the terms in its dataset.yaml -- a `licenses:` entry, or "
@@ -160,19 +161,19 @@ def preflight(
         )
 
     if not prefix:
-        raise SystemExit(
+        raise UploadError(
             f"{name} declares no ethos:remote_prefix, so there is nowhere to put it."
         )
 
     if source_dir is None:
         if not verify_only:
-            raise SystemExit(
+            raise UploadError(
                 f"{name} has no source_dir (ethos:uploaded: true) -- there is nothing left "
                 "to upload. Pass --verify-only to recheck what is already on dCache, or "
                 "unset ethos:uploaded and restore source_dir to publish a fresh copy."
             )
     elif not source_dir.is_dir():
-        raise SystemExit(f"source_dir does not exist: {source_dir}")
+        raise UploadError(f"source_dir does not exist: {source_dir}")
     return prefix
 
 
@@ -263,13 +264,13 @@ def resolve_name(catalog_root: Path, argument: str) -> str:
     # it carries no dataset.yaml and no source_dir -- there are no local bytes
     # there to upload, and never were.
     if catalogue_role(path.parent.parent) == ROLE_PUBLISHED:
-        raise SystemExit(
+        raise UploadError(
             f"{path}\nis in a {ROLE_PUBLISHED} catalogue, which carries descriptors only "
             "-- no dataset.yaml, no source_dir, so nothing to upload from.\n"
             f"Name it in the source catalogue instead:\n"
             f"    ethos-data catalog upload {path.name}"
         )
-    raise SystemExit(
+    raise UploadError(
         f"{path}\nis not a dataset of the catalogue being uploaded from.\n"
         f"  catalogue  {catalog_root}\n"
         f"  datasets   {datasets}\n"
@@ -301,7 +302,7 @@ def expand_families(catalog_root: Path, names: list[str]) -> list[str]:
             if member != dataset_dir and not is_namespace(member)
         ]
         if not members:
-            raise SystemExit(
+            raise UploadError(
                 f"{name} is a family with no member dataset beneath it; nothing to upload."
             )
         print(
@@ -464,7 +465,7 @@ def run(catalog_root: Path, args) -> int:
     published_root = base_url.rstrip("/").rsplit("/", 1)[-1]
     root = args.root or published_root
     if args.root and args.root != published_root:
-        raise SystemExit(
+        raise UploadError(
             f"--root {args.root!r} does not match the catalogue's publication root "
             f"{published_root!r} (from ethos:publication_url in catalog.yaml).\n"
             f"Uploading to {args.root!r} would publish bytes that {base_url}/... never serves.\n"
@@ -484,7 +485,7 @@ def run(catalog_root: Path, args) -> int:
     # matter here -- restricted data, an unbuilt manifest, a vanished source_dir
     # -- are exactly the ones you want to hear about before bytes start moving,
     # and a subset upload that dies on its fourth dataset has already published
-    # three. Nothing below this loop can raise SystemExit for a reason that was
+    # three. Nothing below this loop can raise UploadError for a reason that was
     # knowable up here.
     plans = []
     for name in names:

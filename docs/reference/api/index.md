@@ -11,6 +11,7 @@ key. The rest is here for completeness.
 | [Configuration and access](configuration.md) | cache roots, scopes, provenance, `Location`, `locate`, `AccessError` |
 | [Integrity and staging](integrity.md) | `verify`, `repair`, `Finding`, `materialize`, the staging root |
 | [Maintainer tooling](maintain.md) | `ethos_data.maintain` — building, publishing, uploading |
+| [Errors](errors.md) | `EthosDataError` and every refusal the library raises, with the exit status the command line gives each |
 
 Consumers usually need no `ethos_data.maintain` imports. The public API includes
 local download, cache, staging, and configuration operations as well as reads.
