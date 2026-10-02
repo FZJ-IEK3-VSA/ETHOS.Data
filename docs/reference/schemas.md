@@ -1,13 +1,16 @@
 # File formats
 
-Three source files are hand-written. Dataset descriptors, catalogue indexes,
-and optional inventory shards are generated and must never be edited by hand.
+Three source files are hand-written. Each dataset's status file is written by
+the commands that change the dataset, and dataset descriptors, catalogue
+indexes and optional inventory shards are generated; none of these is edited
+by hand.
 
 | File | Written by | Lives in |
 |---|---|---|
 | [`collections.yaml`](#collectionsyaml) | you, in your tool | the consuming package |
 | [`dataset.yaml`](#datasetyaml) | a maintainer | `datasets/<name>/` in the source catalogue |
 | [`catalog.yaml`](#catalogyaml) | a maintainer, once | the catalogue root |
+| [`status.yaml`](#statusyaml) | the `catalog` commands | `datasets/<name>/` in the source catalogue |
 | [`datapackage.json` / `datacatalog.json`](#generated-descriptors) | `ethos-data catalog build` | generated |
 
 Institute-specific keys use the `ethos:` prefix — the
@@ -116,7 +119,7 @@ See [Write a collections file](../how-to/package-maintainers/write-a-collections
 
 One per dataset, in the **source** catalogue only. Hand-written.
 
-Only three things are mandatory. This builds:
+Only three things are mandatory. This draft builds:
 
 ```yaml
 name: my-dataset
@@ -125,6 +128,9 @@ licenses:
   - name: CC-BY-4.0
     path: https://creativecommons.org/licenses/by/4.0/
 ```
+
+In the catalogue, `source_dir` moves into the dataset's
+[`status.yaml`](#statusyaml), and `dataset.yaml` describes the data alone.
 
 `licenses` is not enforced by the build — a dataset without one still builds, and
 is marked `license_status: unknown` for somebody to come back to. It is in the
@@ -467,28 +473,28 @@ How it renders — see [below](#datapackagejson).
 
 ### Where the bytes are
 
-**`source_dir`** — *string (path), required to build.* Where the files are **on
+**`source_dir`** — *string (path); in a draft.* Where the files are **on
 this machine**. A relative path is resolved against the dataset directory; an
 absolute one is used exactly as written, symbolic links and all, so it can name
-the curated namespace rather than the physical mount. Stripped from anything
+the curated namespace rather than the physical mount. Once the dataset is in
+the catalogue, its [`status.yaml`](#statusyaml) holds it:
+`ethos-data catalog migrate` moves it there, and the build refuses a dataset
+whose `dataset.yaml` states it beside a status file. Stripped from anything
 published.
 
 **`ethos:remote_prefix`** — *string; default: the value of `name`.* Folder name on
 the public store. **Must not be set** for restricted data — the build rejects it,
 because restricted bytes are never uploaded.
 
-**`ethos:uploaded`** — *bool; default: false.* dCache now holds the copy this
-manifest's hashes describe. A rebuild reuses the recorded inventory instead of
-reading files, so `source_dir` must be removed at the same time — the build
-rejects both together. **Must not be set** for restricted data, which never
-reaches dCache; use `ethos:frozen` for that. Stripped from anything published.
-
-**`ethos:frozen`** — *bool; default: false.* The same freeze without the claim
-about dCache: the inventory is final and there is nothing local left to build
-from. For restricted data whose authorised installation is the permanent copy,
-and for data materialised into a cache after its original was retired. Implied by
-`ethos:uploaded`. Requires `source_dir` to be absent and a `datapackage.json` to
-already exist — build once, check it, then freeze. Stripped from anything
+**`ethos:uploaded`**, **`ethos:frozen`** — *bool; default: false; before
+status files.* What a dataset without a `status.yaml` states about its
+inventory: `ethos:uploaded: true` that dCache holds the copy its hashes
+describe, `ethos:frozen: true` the same freeze without the claim about dCache.
+The build still reads both, with a warning, and keeps their rules: `source_dir`
+must be absent, a `datapackage.json` must exist, and restricted data is never
+marked uploaded. `ethos-data catalog migrate` turns either into the `frozen`
+state of the dataset's status file, and from then on
+`ethos-data catalog record` freezes a dataset. Stripped from anything
 published.
 
 Freezing rather than repointing `source_dir` at the copy is deliberate: a rebuild
@@ -597,6 +603,73 @@ version: v1.2.0
 | `ethos:contact` | | team or username |
 | `ethos:catalog_role` | `source` \| `published` | always `source` in a hand-written file — `build` defaults it and **rejects** any other value. `ethos-data catalog publish` stamps `published` into the generated copy |
 | `version` | `vMAJOR.MINOR.PATCH` | the release this catalogue is, set before it is released; `build` refuses any other form and writes it into the index |
+
+---
+
+## `status.yaml`
+
+One beside each `dataset.yaml` that describes files, in the source catalogue
+only. Written by the commands that change the dataset, never by hand, and
+never published: it names directories on the maintainers' machines. A family's
+`dataset.yaml` has none, because a family has no bytes of its own.
+
+```yaml
+# Written by the ethos-data catalog commands; do not edit it by hand.
+# `ethos-data catalog status` shows where each dataset stands.
+state: available
+source_dir: /projects/shared/candidates/my-dataset
+copies:
+- kind: uploaded
+  location: https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ethos-data/my-dataset-v1/
+  verified: '2026-10-02T09:30:01Z'
+history:
+- at: '2026-10-02T09:12:44Z'
+  by: maintainer
+  step: build
+  from: draft
+  to: built
+  files: 12
+  bytes: 104857600
+- at: '2026-10-02T09:30:01Z'
+  by: maintainer
+  step: upload
+  from: built
+  to: available
+  files: 12
+  bytes: 104857600
+  copy:
+    kind: uploaded
+    location: https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ethos-data/my-dataset-v1/
+    verified: '2026-10-02T09:30:01Z'
+```
+
+| Key | | |
+|---|---|---|
+| `state` | one of the states below | where the dataset stands |
+| `source_dir` | path | the build input: required while the dataset is `draft`, `built` or `available`, gone once it is `frozen`. Relative to the dataset directory if relative |
+| `copies` | list | every place a command made the bytes available: `kind` (`uploaded`, `linked` or `materialized`), `location` (the dataset's folder on the store, or the cache entry), `target` for a link, and `verified`, when every file was last found there |
+| `authority` | a copy's `location` | the authoritative copy, once the dataset is frozen |
+| `history` | list | every step taken, oldest first: `at` (UTC), `by`, `step`, `from` when the step changed the state, `to`, and what the step read or made: `files` and `bytes`, the `copy`, a `note`, and the `source_dir` a freeze retired |
+
+| State | Means | Reached by |
+|---|---|---|
+| `draft` | described, not built | `ethos-data catalog migrate` of a dataset with a `source_dir` |
+| `built` | inventory built from `source_dir`; a rebuild keeps the state | `ethos-data catalog build` |
+| `available` | bytes reachable for the access class: uploaded and verified, linked, or registered | `ethos-data catalog upload`; `ethos-data link` and `materialize` given `--catalog-root` |
+| `frozen` | inventory final, no build input left, authoritative copy recorded | `ethos-data catalog record` |
+| `withdrawn` | out of the catalogue; bytes not yet deleted | [removing the dataset](../how-to/catalogue-maintainers/withdraw-a-dataset.md) |
+| `purged` | bytes deleted after the release that dropped the dataset | removing its bytes |
+
+Every command checks its step against the state first: a draft is built
+before it is uploaded or linked, a dataset is frozen only with a copy that
+`catalog record` has just found complete, and a frozen dataset is only
+rechecked, never uploaded again. A rebuild that finds other files than the
+inventory before is recorded as a `change`, and returns an available dataset
+to built, because what was checked is no longer what the inventory describes.
+A rebuild that changes no file records nothing.
+
+Keys a later release adds are kept as they are when an older one rewrites the
+file. See [`ethos-data catalog status`](cli/catalog.md#status-datasets).
 
 ---
 

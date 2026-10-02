@@ -1,4 +1,9 @@
-"""The ``ethos-data catalog ...`` subcommands: build, publish, upload, check-store.
+"""The ``ethos-data catalog ...`` subcommands.
+
+``build``, ``publish``, ``upload`` and ``check-store``, and the three that keep
+each dataset's ``status.yaml``: ``status`` shows where every dataset stands,
+``record`` freezes one, and ``migrate`` writes the status files of a catalogue
+from the keys ``dataset.yaml`` held before.
 
 The maintainer group owns source metadata and publication operations. Local
 configuration, staging, and cache management also write files, but remain at the
@@ -9,10 +14,10 @@ one and the person pointing a single dataset at a directory are doing the same
 thing at different scale, and splitting them across two command groups made the
 smaller job look like the unrelated one.
 
-Three of the four need a catalogue checkout, found by searching upward from the
-current directory for ``catalog.yaml``, so they work from anywhere inside one.
-``check-store`` is the exception: it probes dCache and has nothing to do with
-any particular catalogue.
+Every one of them but ``check-store`` needs a catalogue checkout, found by
+searching upward from the current directory for ``catalog.yaml``, so they work
+from anywhere inside one. ``check-store`` probes dCache and has nothing to do
+with any particular catalogue.
 
 This module owns the argument definitions rather than exporting a ``main``:
 :mod:`ethos_data.cli` calls :func:`add_catalog_parser` to graft them on, and
@@ -117,7 +122,8 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         "upload",
         help="upload dataset bytes and check anonymous readability and sizes",
         description="Upload built, licensed, non-restricted datasets. Checks use anonymous "
-        "HTTP HEAD, not remote SHA-256. Does not set ethos:uploaded automatically.",
+        "HTTP HEAD, not remote SHA-256. A verified upload is recorded in the dataset's "
+        "status.yaml; `catalog record` then freezes the dataset.",
     )
     # A list, like `build`, so that publishing a subset of the catalogue is one
     # command rather than a shell loop. A loop is not equivalent: it re-checks
@@ -167,6 +173,56 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         type=int,
         default=8,
         help="parallel rclone transfers (default: 8)",
+    )
+
+    stater = catalog_sub.add_parser(
+        "status",
+        help="each dataset's state and next step, from its status.yaml",
+        description="List every dataset with its state -- draft, built, available, "
+        "frozen, withdrawn or purged -- its access class and what it needs next. "
+        "A dataset without a status.yaml shows '-'.",
+    )
+    stater.add_argument(
+        "datasets",
+        nargs="*",
+        help="dataset names; a family lists its members (default: all)",
+    )
+    stater.add_argument(
+        "--check",
+        action="store_true",
+        help="also compare each record with the evidence -- the inventory, the "
+        "source_dir and every recorded copy, file by file; exit 1 if one does not hold",
+    )
+
+    recorder = catalog_sub.add_parser(
+        "record",
+        help="freeze a dataset whose bytes are available, naming its authoritative copy",
+        description="Check a recorded copy file by file, make it the dataset's "
+        "authoritative copy and retire its source_dir; a rebuild then keeps the "
+        "inventory as it is.",
+    )
+    recorder.add_argument("dataset", help="dataset name, or the path to it")
+    recorder.add_argument(
+        "--copy",
+        default=None,
+        metavar="LOCATION",
+        help="the recorded copy to make authoritative (default: the upload, else the "
+        "copy a cache owns, else for restricted data its registered installation)",
+    )
+    recorder.add_argument(
+        "--dry-run", action="store_true", help="check the copy; write nothing"
+    )
+
+    migrator = catalog_sub.add_parser(
+        "migrate",
+        help="move source_dir, ethos:uploaded and ethos:frozen into status.yaml",
+        description="Write each dataset's status.yaml from the keys its dataset.yaml "
+        "held before status files, and remove them line by line, keeping every "
+        "other line and comment.",
+    )
+    migrator.add_argument("datasets", nargs="*", help="dataset names (default: all)")
+    migrator.add_argument(
+        "--dry-run", action="store_true", help="show what would change; write nothing"
     )
 
     # Was `check-access`, which did not say access to *what*. It probes the
@@ -224,5 +280,20 @@ def dispatch(args) -> int:
         from . import upload
 
         return _status(upload.run(root, args.datasets, _upload_options(args)))
+
+    if args.catalog_command == "status":
+        from . import status
+
+        return status.run(root, args.datasets, check=args.check)
+
+    if args.catalog_command == "record":
+        from . import freeze
+
+        return freeze.run(root, args.dataset, copy=args.copy, dry_run=args.dry_run)
+
+    if args.catalog_command == "migrate":
+        from . import migrate
+
+        return migrate.run(root, args.datasets, dry_run=args.dry_run)
 
     raise MaintenanceError(f"unknown catalog command: {args.catalog_command}")

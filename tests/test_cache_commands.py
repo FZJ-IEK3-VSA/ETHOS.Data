@@ -20,7 +20,9 @@ class TestLinkAll:
         self, source, tmp_path
     ):
         source.dataset("here", {"a.csv": "1"})
-        source.dataset("gone", source_dir=str(tmp_path / "nowhere"))
+        source.dataset("gone", {"b.csv": "2"})
+        assert source.build()[0] == 0
+        shutil.rmtree(source.bytes / "gone")
         cache = tmp_path / "public"
 
         code, out, _ = run_cli(

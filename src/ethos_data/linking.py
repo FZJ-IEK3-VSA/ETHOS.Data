@@ -32,6 +32,11 @@ records "these bytes are borrowed": retrieval reads them in place, refuses to
 write through them, and ``ethos-data materialize`` knows there is something to
 copy. A real directory means the opposite -- data the cache owns -- so neither
 mode of ``ethos-data link`` will ever replace one with a link.
+
+A catalogue maintainer who links a dataset into a shared cache, or registers
+an installation, passes ``--catalog-root``: the link is then a step in the
+dataset's lifecycle, checked against its state and recorded as a copy in its
+``status.yaml``.
 """
 
 from __future__ import annotations
@@ -61,6 +66,11 @@ class LinkReport:
     #: a link made one directory too high or too low. Empty when nothing is
     #: wrong, or when the inventory could not be read to check.
     missing: str = ""
+    #: The dataset's state in the checkout after the link was recorded there;
+    #: empty when nothing was recorded.
+    recorded: str = ""
+    #: Recording was asked for and the dataset has no status file to record in.
+    unrecorded: bool = False
 
     def __str__(self) -> str:
         if self.target is None:
@@ -219,9 +229,22 @@ def link(
     except OSError as error:
         raise LinkError(_refusal(name, target, error)) from None
 
-    return LinkReport(
+    result = LinkReport(
         name, verb, entry, target, missing=_sample_missing(catalog, name, target)
     )
+    if checkout is not None:
+        from .formats.status_file import Copy
+        from .maintain import status as dataset_status
+
+        state = dataset_status.record_copy(
+            checkout,
+            name,
+            "link",
+            Copy(kind=k.COPY_LINKED, location=str(entry), target=str(target)),
+        )
+        result.recorded = state or ""
+        result.unrecorded = state is None
+    return result
 
 
 def unlink(

@@ -95,6 +95,13 @@ VARIANT_TEST = "test"
 VARIANT_FULL = "full"
 VARIANTS = (VARIANT_TEST, VARIANT_FULL)
 
+# -- status.yaml, the record the catalog commands keep of each dataset -------------
+
+STATE = "state"
+COPIES = "copies"
+AUTHORITY = "authority"
+HISTORY = "history"
+
 # -- closed vocabularies -----------------------------------------------------------
 
 PUBLIC = "public"
@@ -130,6 +137,29 @@ UPSTREAM_STATUSES = (
 ROLE_SOURCE = "source"
 ROLE_PUBLISHED = "published"
 CATALOG_ROLES = (ROLE_SOURCE, ROLE_PUBLISHED)
+
+#: A dataset's states in status.yaml, in the order a dataset passes through
+#: them; ``ethos_data.model.lifecycle`` says which step leads from which.
+STATE_DRAFT = "draft"
+STATE_BUILT = "built"
+STATE_AVAILABLE = "available"
+STATE_FROZEN = "frozen"
+STATE_WITHDRAWN = "withdrawn"
+STATE_PURGED = "purged"
+STATES = (
+    STATE_DRAFT,
+    STATE_BUILT,
+    STATE_AVAILABLE,
+    STATE_FROZEN,
+    STATE_WITHDRAWN,
+    STATE_PURGED,
+)
+
+#: How a copy of a dataset's bytes in status.yaml came to be where it is.
+COPY_UPLOADED = "uploaded"
+COPY_LINKED = "linked"
+COPY_MATERIALIZED = "materialized"
+COPY_KINDS = (COPY_UPLOADED, COPY_LINKED, COPY_MATERIALIZED)
 
 #: ``until`` of an embargo whose end nobody can name yet; needs a reason.
 UNSPECIFIED = "unspecified"

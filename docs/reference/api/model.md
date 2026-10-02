@@ -96,6 +96,22 @@ dataset, the part and its location.
       show_root_toc_entry: false
       heading_level: 3
 
+## Lifecycle
+
+A dataset's states in its source catalogue, and the step that leads from
+each to the next; the commands that take a step ask `step` first.
+
+::: ethos_data.model.lifecycle
+    options:
+      members:
+        - step
+        - next_step
+        - freezable
+        - Step
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
 ## Resource records
 
 A [`Resource`][ethos_data.model.resource.Resource] is one file of a dataset,

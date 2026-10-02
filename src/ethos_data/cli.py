@@ -543,7 +543,8 @@ def _add_cache_commands(sub) -> None:
         "--catalog-root",
         default=None,
         help="catalogue checkout to read source_dir from, when there is no "
-        "entry and no --from (default: search upward for catalog.yaml)",
+        "entry and no --from (default: search upward for catalog.yaml); given, "
+        "each copy is also recorded in the dataset's status.yaml there",
     )
 
     linker = sub.add_parser(
@@ -604,8 +605,9 @@ def _add_cache_commands(sub) -> None:
     linker.add_argument(
         "--catalog-root",
         default=None,
-        help="catalogue checkout to read source_dir from "
-        "(default: search upward for catalog.yaml)",
+        help="catalogue checkout to read source_dir from (default: search upward "
+        "for catalog.yaml); given, each link is also recorded in the dataset's "
+        "status.yaml there",
     )
     unlinker = sub.add_parser(
         "unlink", help="remove a cache entry that is a link; never a real directory"
@@ -1209,6 +1211,7 @@ def _link_all_command(args, roots) -> int:
         root,
         dry_run=args.dry_run,
         prune=args.prune,
+        record=args.catalog_root is not None,
     )
     return 0 if result.ok else 1
 
@@ -1276,6 +1279,8 @@ def _link_command(args, settings) -> int:
     # streams arrive in the opposite order and the warning reads as being about
     # whatever came before it.
     print(f"  {report}", flush=True)
+    if args.command == "link":
+        _print_recorded([report])
     if report.missing:
         # Not a failure: the link is made, and the person who typed the path is
         # the only one who can say whether it is the right level.
@@ -1286,6 +1291,20 @@ def _link_command(args, settings) -> int:
             file=sys.stderr,
         )
     return 0
+
+
+def _print_recorded(reports) -> None:
+    """Say what a link or a copy recorded in the checkout's status files."""
+    for report in reports:
+        if report.recorded:
+            print(
+                f"  recorded    {report.dataset} is {report.recorded}, in its status.yaml"
+            )
+    unrecorded = [report.dataset for report in reports if report.unrecorded]
+    if unrecorded:
+        from .maintain.status import unrecorded as unrecorded_warning
+
+        print(f"warning: {unrecorded_warning(unrecorded)}", file=sys.stderr, flush=True)
 
 
 def _materialize_command(args, settings) -> int:
@@ -1329,6 +1348,7 @@ def _materialize_command(args, settings) -> int:
         print(f"  {report}")
         for failure in report.failures[:10]:
             print(f"      ! {failure}")
+    _print_recorded(reports)
 
     total = sum(r.bytes for r in reports if r.action in ("would copy", "materialized"))
     destinations = sorted(

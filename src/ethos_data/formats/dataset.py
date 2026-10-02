@@ -8,6 +8,9 @@ Three things live here, for the one file:
   code typed access and the package its JSON Schema.
 * :func:`check`, the rules the build enforces, with the messages maintainers
   already know. The first broken rule raises :class:`~ethos_data.errors.DescriptorError`.
+  :func:`check_legacy_state` adds the rules on ``source_dir``,
+  ``ethos:uploaded`` and ``ethos:frozen`` for a dataset that keeps them here
+  rather than in a ``status.yaml``.
 * :func:`lint`, what the structure says beyond those rules: a value of the
   wrong type, an ``ethos:`` key the format does not know, a value outside a
   closed vocabulary. Reported as warnings: the build names each one and goes
@@ -37,6 +40,7 @@ __all__ = [
     "Upstream",
     "apply_defaults",
     "check",
+    "check_legacy_state",
     "check_namespace",
     "lint",
 ]
@@ -218,7 +222,7 @@ class DatasetDescriptor(_Part):
     # -- where the bytes are -----------------------------------------------
     source_dir: str | None = field(
         k.SOURCE_DIR,
-        description="Where the files are on this machine; relative to the dataset directory if relative.",
+        description="Where a draft's files are; status.yaml keeps it once the dataset is in a catalogue.",
         published=False,
     )
     remote_prefix: str | None = field(
@@ -229,13 +233,13 @@ class DatasetDescriptor(_Part):
     uploaded: bool = field(
         k.UPLOADED,
         False,
-        description="dCache holds the copy the inventory describes.",
+        description="Before status.yaml: dCache holds the copy the inventory describes.",
         published=False,
     )
     frozen: bool = field(
         k.FROZEN,
         False,
-        description="The inventory is final; nothing local is left to build from.",
+        description="Before status.yaml: the inventory is final, nothing local is left to build from.",
         published=False,
     )
 
@@ -337,12 +341,21 @@ def check(meta: dict) -> None:
     inherited keys applied. It is not changed.
     """
     problem = (
-        _classification(meta)
-        or _provenance(meta)
-        or _licenses(meta)
-        or _patterns(meta)
-        or _freeze(meta)
+        _classification(meta) or _provenance(meta) or _licenses(meta) or _patterns(meta)
     )
+    if problem:
+        raise DescriptorError(problem)
+
+
+def check_legacy_state(meta: dict) -> None:
+    """The rules on where the bytes are, for a dataset without a ``status.yaml``.
+
+    Before status files, ``source_dir``, ``ethos:uploaded`` and
+    ``ethos:frozen`` in ``dataset.yaml`` said where the bytes were and whether
+    the inventory was final; ``catalog migrate`` moves them into the status
+    file, which keeps the same rules.
+    """
+    problem = _legacy_upload(meta) or _freeze(meta)
     if problem:
         raise DescriptorError(problem)
 
@@ -398,8 +411,12 @@ def _classification(meta: dict) -> str | None:
             "restricted data must not declare ethos:remote_prefix -- "
             "it is never uploaded. Each machine reads it from a restricted cache."
         )
-    if access == k.RESTRICTED and meta.get(k.UPLOADED):
-        # The freeze this asks for is right; the claim attached to it is not.
+    return None
+
+
+def _legacy_upload(meta: dict) -> str | None:
+    """``ethos:uploaded`` on restricted data: the freeze is right, the claim is not."""
+    if meta.get(k.ACCESS, k.PUBLIC) == k.RESTRICTED and meta.get(k.UPLOADED):
         return (
             f"restricted data is never uploaded, so {k.UPLOADED}: true cannot "
             f"be right. If its inventory is final -- the authorised installation is the "

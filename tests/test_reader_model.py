@@ -311,10 +311,14 @@ class TestStagingAFamilyMember:
 
 
 class TestDescriptorsAreReadOnce:
+    @pytest.mark.legacy(
+        reason="status files: source_dir moves into status.yaml, whose rules "
+        "refuse an empty one the same way"
+    )
     def test_an_empty_source_dir_is_refused_rather_than_read_as_the_dataset(
         self, source
     ):
-        source.dataset("flat", {"a.csv": "1"})
+        source.dataset("flat", {"a.csv": "1"}, legacy=True)
         source.edit("flat", source_dir="")
 
         code, _, err = source.build()
