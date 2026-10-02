@@ -57,6 +57,22 @@ dataset or bundle may hold.
       show_root_toc_entry: false
       heading_level: 3
 
+## Lifecycle
+
+A dataset's states in its source catalogue, and the step that leads from
+each to the next; the commands that take a step ask `step` first.
+
+::: ethos_data.model.lifecycle
+    options:
+      members:
+        - step
+        - next_step
+        - freezable
+        - Step
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
 ## Resource records
 
 ::: ethos_data.model.resource

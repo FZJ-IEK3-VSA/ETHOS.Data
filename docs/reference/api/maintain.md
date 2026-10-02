@@ -21,15 +21,16 @@ exactly why its command sits with the user-facing `link` rather than under
 `catalog`.
 
 The catalogue-locating helpers below serve both entry points: `link --all` reads
-`source_dir` from the hand-written `dataset.yaml` of a source checkout, and it
-finds that checkout the same way the maintainer commands find theirs.
+`source_dir` from the status files of a source checkout, and it finds that
+checkout the same way the maintainer commands find theirs.
 
 ## Reporting
 
 Every entry point below that runs a command (`manifest.run`, `publish.run`,
-`upload.run`, the namespace builder's `run`) takes a `reporter=` keyword and
-sends its progress and warnings there; without one they go to the console.
-Refusals are raised, never reported.
+`upload.run`, `status.run`, `freeze.run`, `migrate.run`, the namespace
+builder's `run`) takes a `reporter=` keyword and sends its progress and
+warnings there; without one they go to the console. Refusals are raised, never
+reported.
 
 ::: ethos_data.report
     options:
@@ -82,6 +83,48 @@ Refusals are raised, never reported.
         - apply_resource_licenses
         - slugify
         - mediatype_of
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+## Dataset status
+
+Each dataset's [`status.yaml`](../schemas.md#statusyaml): read and written
+here, and every step a command takes checked against the
+[lifecycle](model.md#lifecycle) and recorded with `take`.
+
+::: ethos_data.maintain.status
+    options:
+      members:
+        - run
+        - read
+        - write
+        - take
+        - build_input
+        - BuildInput
+        - evidence
+        - check_copy
+        - Finding
+        - LEGACY_KEYS
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.freeze
+    options:
+      members:
+        - run
+        - choose
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.migrate
+    options:
+      members:
+        - run
+        - without_keys
+        - Outcome
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

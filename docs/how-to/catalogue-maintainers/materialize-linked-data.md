@@ -16,8 +16,11 @@ carry over the source's ownership. Keep the source unchanged while copying.
 ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json --root /shared/ethos/public \
     materialize climate-inputs --dry-run
 ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json --root /shared/ethos/public \
-    materialize climate-inputs
+    materialize climate-inputs --catalog-root /shared/ethos/catalogue/source
 ```
+
+`--catalog-root` records the copy in the dataset's `status.yaml`, in place of
+the link it replaces.
 
 Only the files the catalogue describes are copied, each is checked against its
 recorded size and hash, and the link is replaced only after the whole copy
@@ -50,7 +53,14 @@ While the original directory remains the dataset's `source_dir`, a rebuild
 reads it, so the original stays the authority and the copy may fail
 verification after an edit there. Before the original is removed:
 
-1. In `dataset.yaml`, remove `source_dir` and set `ethos:frozen: true`.
+1. Freeze the dataset, in the source checkout:
+
+    ```bash
+    ethos-data catalog record climate-inputs
+    ```
+
+    It checks the copy file by file, makes it the authoritative copy and
+    retires `source_dir`.
 2. Rebuild. The recorded inventory is kept as it is; the copy is not rehashed,
    so the independent baseline that detects later corruption survives.
 3. [Release](release-the-catalogue.md) the new internal version.

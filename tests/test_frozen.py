@@ -9,6 +9,10 @@ bytes into the manifest as correct.
 
 ``ethos:uploaded`` froze the inventory but said something false about restricted
 data. This says the true half on its own.
+
+Both keys are what a dataset without a ``status.yaml`` states; once migrated,
+its status file says it is frozen, and ``test_status_files.py`` holds the same
+rules for it.
 """
 
 from __future__ import annotations
@@ -20,6 +24,11 @@ import yaml
 
 from ethos_data.maintain.manifest import render_dataset, write_dataset
 from ethos_data.errors import DescriptorError
+
+pytestmark = pytest.mark.legacy(
+    reason="status files: ethos:frozen moves into status.yaml; read from "
+    "dataset.yaml only for a dataset not migrated yet"
+)
 
 RESTRICTED = {
     "ethos:access": "restricted",

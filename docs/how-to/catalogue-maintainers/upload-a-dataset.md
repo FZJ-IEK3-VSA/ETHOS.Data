@@ -35,7 +35,8 @@ before transfer; uploads then run per dataset without rollback of earlier succes
 Require `readable N/N`, no wrong sizes, and a successful exit. The final check
 uses anonymous HTTP HEAD requests, not a remote SHA-256 read. For end-to-end
 content verification, fetch the selected files into an independent cache and
-run consumer `verify --deep`.
+run consumer `verify --deep`. A verified upload is recorded in the dataset's
+`status.yaml`: the dataset is `available`, with its copy on dCache.
 
 The command refuses restricted data and unresolved licensing. If `--immutable`
 reports a conflict, assign new published paths; do not delete and overwrite a
@@ -49,24 +50,25 @@ ethos-data catalog upload my-dataset --verify-only --no-chmod
 
 `--verify-only` alone still attempts to chmod a public prefix. Pair it with
 `--no-chmod` for a diagnostic that does not change permissions. Storage-locality
-lookup still requires authentication.
+lookup still requires authentication. A recheck that passes is recorded as
+well, and a frozen dataset can only be rechecked.
 
 For failures, use [Diagnose a report](diagnose-a-report.md).
 
 ## 4. Record and release the accepted inventory
 
-After successful transfer and verification, set `ethos:uploaded: true` in
-`dataset.yaml` and remove `source_dir`. Then:
+After successful transfer and verification, freeze the dataset. `record`
+checks the copy on dCache again, makes it the authoritative copy and retires
+`source_dir`, so later rebuilds keep the recorded inventory:
 
 ```bash
-ethos-data catalog build my-dataset
+ethos-data catalog record my-dataset
 ethos-data catalog build --check
 ethos-data catalog publish ../ETHOS.Data-Catalogue
 ```
 
-[Release the catalogue](release-the-catalogue.md).
-`upload` does not mark the dataset uploaded automatically, and `publish` does
-not push or deploy it.
+[Release the catalogue](release-the-catalogue.md). `publish` does not push or
+deploy it.
 
 ## Internal uploads
 

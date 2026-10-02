@@ -39,6 +39,9 @@ Key concepts used across `ethos-data`.
 | **Origin** | `downloaded` (mirrored as obtained) · `derived` (computed from other data) · `created` (produced here from scratch). Declared, not inferred; decides whose rights a consumer is dealing with. |
 | **Narrowed licence** | A `licenses` entry carrying `ethos:applies_to`, covering only the files its patterns match. Rendered as a resource-level `licenses` override. |
 | **Catalogue role** | `source` (hand-written, holds `dataset.yaml` and `source_dir`) or `published` (generated, metadata only). Declared, not inferred. |
+| **Status file** | A dataset's `status.yaml` in the source catalogue, written by the commands: its state, its build input, the copies of its bytes and the history of every step taken. Never published. |
+| **Dataset state** | Where a dataset stands: `draft`, `built`, `available`, `frozen`, `withdrawn` or `purged`. Each command checks its step against it. |
+| **Frozen** | A dataset whose inventory is final: its build input is retired, its authoritative copy recorded, and a rebuild keeps the recorded hashes. |
 
 ## Operations
 

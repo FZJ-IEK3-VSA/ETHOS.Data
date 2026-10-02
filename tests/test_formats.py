@@ -33,6 +33,7 @@ class TestTemplates:
     def test_every_dataset_template_passes_the_build_rules_and_lints_clean(self, name):
         meta = render(name)
         formats.dataset.check(meta)
+        formats.dataset.check_legacy_state(meta)  # a draft `catalog migrate` takes
         assert formats.dataset.lint(meta) == []
 
     def test_the_catalogue_template_is_a_valid_catalog_yaml(self):
@@ -164,7 +165,6 @@ BROKEN = [
     ({"ethos:include": "*.tif"}, "ethos:include must be a list of patterns, got str"),
     ({"ethos:exclude": []}, "ethos:exclude is an empty list, which would select nothing."),
     ({"ethos:shard_depth": -1}, "ethos:shard_depth must not be negative"),
-    ({"ethos:uploaded": True}, "declares ethos:uploaded: true and still has source_dir"),
 ]  # fmt: skip
 
 
@@ -179,10 +179,35 @@ def test_each_rule_says_what_is_wrong_in_the_words_maintainers_know(meta, messag
     assert raised.value.message.startswith(message)
 
 
-def test_a_frozen_dataset_needs_no_source_and_a_built_one_does():
-    formats.dataset.check({"ethos:frozen": True})
-    with pytest.raises(DescriptorError, match="source_dir is required"):
-        formats.dataset.check({})
+def test_where_the_bytes_are_is_not_a_rule_of_the_description():
+    """status.yaml says it; a dataset.yaml without source_dir is complete."""
+    formats.dataset.check({})
+
+
+@pytest.mark.legacy(
+    reason="status files: source_dir, ethos:uploaded and ethos:frozen move into "
+    "status.yaml, and these rules apply only to a dataset not migrated yet"
+)
+class TestTheStateBeforeStatusFiles:
+    def test_a_frozen_dataset_needs_no_source_and_a_built_one_does(self):
+        formats.dataset.check_legacy_state({"ethos:frozen": True})
+        with pytest.raises(DescriptorError, match="source_dir is required"):
+            formats.dataset.check_legacy_state({})
+
+    def test_uploaded_and_a_source_together_are_refused(self):
+        with pytest.raises(DescriptorError) as raised:
+            formats.dataset.check_legacy_state(
+                {"source_dir": ".", "ethos:uploaded": True}
+            )
+        assert raised.value.message.startswith(
+            "declares ethos:uploaded: true and still has source_dir"
+        )
+
+    def test_restricted_data_is_frozen_rather_than_marked_uploaded(self):
+        with pytest.raises(DescriptorError, match="ethos:frozen: true"):
+            formats.dataset.check_legacy_state(
+                {"ethos:access": "restricted", "ethos:uploaded": True}
+            )
 
 
 def test_defaults_are_written_in_the_order_the_descriptor_has_always_had_them():
