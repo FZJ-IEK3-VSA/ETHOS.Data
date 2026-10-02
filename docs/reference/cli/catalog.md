@@ -85,9 +85,23 @@ A sharded dataset built before the shard directory was renamed still has
 `manifests/`. The build moves its shards to `shards/` and deletes the old
 directory, and `--check` fails until that has happened.
 
+A plain build refuses other bytes for a dataset whose bytes were uploaded or
+materialized: published objects never change. `--revision` makes the next
+revision of one such dataset from the corrected files, `--from DIR` or its
+`source_dir`: it compares them with the recorded inventory, names what
+changed, is new or is gone, and writes the inventory as the next revision,
+each changed and new file published under `<remote_prefix>@<revision>/` and
+each unchanged one kept where it is. A file that is gone is refused unless
+`--remove-missing` says so. See
+[Publish a new version](../../how-to/catalogue-maintainers/publish-a-new-version.md).
+
 | Flag | |
 |---|---|
 | `--check` | report staleness and exit non-zero; write nothing |
+| `--revision` | make the next revision of one dataset |
+| `--from DIR` | with `--revision`: the corrected files (default: its `source_dir`) |
+| `--remove-missing` | with `--revision`: let files that are gone go, keys and all |
+| `--dry-run` | with `--revision`: compare and plan; write nothing |
 
 ## `publish <target>`
 

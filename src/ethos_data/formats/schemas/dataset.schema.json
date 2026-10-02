@@ -548,6 +548,25 @@
         "user_facing": true
       }
     },
+    "ethos:supersedes": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The dataset this one replaces, with another layout and other keys.",
+      "title": "Ethos:Supersedes",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": true,
+        "published": true,
+        "user_facing": false
+      }
+    },
     "ethos:origin": {
       "default": "downloaded",
       "description": "How the dataset came to exist.",

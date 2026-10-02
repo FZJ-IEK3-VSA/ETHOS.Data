@@ -565,6 +565,9 @@ def render_dataset(
     inherited: dict | None = None,
     namespace: bool = False,
     member_totals: tuple[int, int] | None = None,
+    superseded_by: list[str] | None = None,
+    source: Path | None = None,
+    revision: int | None = None,
 ) -> dict[str, str]:
     """Build every generated file for one dataset.
 
@@ -627,6 +630,12 @@ def render_dataset(
     for key in dataset_status.LEGACY_KEYS:
         meta.pop(key, None)
     frozen, source_dir = built_from.frozen, built_from.source_dir
+    if source is not None:
+        # A new revision, built from the corrected files.
+        frozen, source_dir = False, source
+    status = built_from.status
+    if revision is None:
+        revision = status.revision if status is not None else 1
 
     if frozen:
         resources = frozen_resources(name, dataset_dir)
@@ -649,6 +658,9 @@ def render_dataset(
         if not check:
             save_hash_cache(dataset_dir, cache)
         resources = [build_resource(p, source_dir, *hashes[p]) for p in selected]
+        if source is None:
+            _refuse_changed_publication(name, dataset_dir, status, resources)
+        _carry_revisions(resources, dataset_dir, revision)
 
     # After the inventory exists, because a narrowed licence has to be checked
     # against the files it claims to cover.
@@ -702,8 +714,89 @@ def render_dataset(
 
     package["ethos:total_bytes"] = sum(r["bytes"] for r in resources)
     package["ethos:file_count"] = len(resources)
+    if revision > 1:
+        package[k.REVISION] = revision
+    if superseded_by:
+        package[k.SUPERSEDED_BY] = sorted(superseded_by)
     files["datapackage.json"] = dumps(package)
     return files
+
+
+def _recorded(dataset_dir: Path) -> dict[str, dict]:
+    """The inventory on disk, by path; empty before the first build."""
+    package_file = dataset_dir / "datapackage.json"
+    if not package_file.is_file():
+        return {}
+    package = json.loads(package_file.read_text(encoding="utf-8"))
+    return {
+        resource[k.PATH]: resource for resource in resources_of(package, dataset_dir)
+    }
+
+
+def _carry_revisions(resources: list[dict], dataset_dir: Path, revision: int) -> None:
+    """Give each file the revision its bytes were published in.
+
+    A file whose bytes the inventory on disk records keeps that record's
+    revision; a file new in this revision, or with other bytes, gets
+    ``revision``. Before a second revision there is nothing to carry.
+    """
+    if revision <= 1:
+        return
+    before = _recorded(dataset_dir)
+    for resource in resources:
+        earlier = before.get(resource[k.PATH])
+        same = earlier is not None and earlier[k.HASH] == resource[k.HASH]
+        kept = int(earlier.get(k.REVISION, 1)) if same else revision
+        if kept > 1:
+            resource[k.REVISION] = kept
+
+
+def _refuse_changed_publication(
+    name: str, dataset_dir: Path, status, resources: list[dict]
+) -> None:
+    """Refuse new bytes for a dataset whose bytes the catalogue published or owns.
+
+    Published objects never change, so other bytes are a new revision, made on
+    purpose. A dataset that is only linked changes in place with its source.
+    """
+    if status is None or status.state != lifecycle.AVAILABLE:
+        return
+    if not any(
+        copy.kind in (k.COPY_UPLOADED, k.COPY_MATERIALIZED) for copy in status.copies
+    ):
+        return
+    before = {(r[k.PATH], r[k.HASH]) for r in _recorded(dataset_dir).values()}
+    if before and before != {(r[k.PATH], r[k.HASH]) for r in resources}:
+        raise DescriptorError(
+            f"{name}: its files are not the ones its uploaded or materialized copy "
+            "holds any more, and published bytes never change. Make the change a "
+            f"new revision:\n    ethos-data catalog build {name} --revision"
+        )
+
+
+def superseded_by_map(catalog_root: Path) -> dict[str, list[str]]:
+    """Which datasets each dataset is superseded by, from every ``ethos:supersedes``.
+
+    Raises :class:`~ethos_data.errors.DescriptorError` for a name the catalogue
+    has never described: neither a dataset nor one purged.
+    """
+    root = datasets_dir(catalog_root)
+    found: dict[str, list[str]] = {}
+    for directory in iter_dataset_dirs(root):
+        old = read_descriptor(directory).get(k.SUPERSEDES)
+        if not old:
+            continue
+        name = dataset_name_for(root, directory)
+        known = (root / str(old) / "dataset.yaml").is_file() or (
+            root / str(old) / dataset_status.STATUS
+        ).is_file()
+        if not known or str(old) == name:
+            raise DescriptorError(
+                f"{name}: {k.SUPERSEDES} names {old!r}, which is not another dataset "
+                "of this catalogue"
+            )
+        found.setdefault(str(old), []).append(name)
+    return found
 
 
 def _render_namespace(
@@ -943,7 +1036,16 @@ def inherited_for(root: Path, dataset_dir: Path) -> dict:
 def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
     catalog_meta(catalog_root)  # fail on a bad catalog.yaml before hashing anything
     root = datasets_dir(catalog_root)
+    superseded = superseded_by_map(catalog_root)
     selected = [root / name for name in names] if names else iter_dataset_dirs(root)
+    if names:
+        # A successor built by name rebuilds the dataset it replaces too, whose
+        # descriptor says who replaces it.
+        for name in names:
+            old = read_descriptor(root / name).get(k.SUPERSEDES)
+            if old and (root / str(old) / "dataset.yaml").is_file():
+                selected.append(root / str(old))
+        selected = list(dict.fromkeys(selected))
 
     # Members before the namespaces that contain them: a namespace reports the
     # totals of everything beneath it, so it cannot be rendered until they are
@@ -992,6 +1094,7 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
             inherited=inherited_for(root, dataset_dir),
             namespace=namespace,
             member_totals=totals,
+            superseded_by=superseded.get(name),
         )
         package = json.loads(files["datapackage.json"])
         rendered[dataset_dir] = package

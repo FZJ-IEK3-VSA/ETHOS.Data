@@ -124,6 +124,30 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         action="store_true",
         help="fail if any manifest is out of date; write nothing",
     )
+    builder.add_argument(
+        "--revision",
+        action="store_true",
+        help="make the next revision of one uploaded or materialized dataset from "
+        "corrected files: the same keys, the changed and new files under "
+        "<remote_prefix>@<revision>/",
+    )
+    builder.add_argument(
+        "--from",
+        dest="source",
+        metavar="DIR",
+        default=None,
+        help="with --revision: the corrected files (default: the dataset's source_dir)",
+    )
+    builder.add_argument(
+        "--remove-missing",
+        action="store_true",
+        help="with --revision: let files that are not there any more go, keys and all",
+    )
+    builder.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="with --revision: compare and plan; write nothing",
+    )
 
     publisher = catalog_sub.add_parser(
         "publish", help="generate the public catalogue from this source one"
@@ -372,6 +396,25 @@ def dispatch(args) -> int:
     root = resolve_catalog_root(args.catalog_root)
 
     if args.catalog_command == "build":
+        if args.revision:
+            if len(args.datasets) != 1 or args.check:
+                raise MaintenanceError(
+                    "--revision makes the next revision of one dataset:\n"
+                    "    ethos-data catalog build <dataset> --revision [--from DIR]"
+                )
+            from . import revision
+
+            return revision.run(
+                root,
+                args.datasets[0],
+                source=args.source,
+                remove_missing=args.remove_missing,
+                dry_run=args.dry_run,
+            )
+        if args.source or args.remove_missing or args.dry_run:
+            raise MaintenanceError(
+                "--from, --remove-missing and --dry-run go with --revision"
+            )
         from . import manifest
 
         return manifest.run(root, args.datasets, check=args.check)

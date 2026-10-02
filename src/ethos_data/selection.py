@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -355,6 +356,14 @@ class Collections:
             # `dataset: reskit-test-data/era5` with `files: ["*.nc"]` selects
             # what you meant.
             for dataset in self.catalog.matching_datasets(rule["dataset"]):
+                if dataset.superseded_by:
+                    warnings.warn(
+                        f"collection {name!r} reads {dataset.name!r}, which "
+                        f"{', '.join(dataset.superseded_by)} supersedes: a newer "
+                        "version of the data with another layout and other keys.",
+                        UserWarning,
+                        stacklevel=3,
+                    )
                 patterns = rule.get("files") or ["**"]
                 # resources_matching narrows a sharded dataset to the shards these
                 # patterns can reach; the glob below is still the real filter.

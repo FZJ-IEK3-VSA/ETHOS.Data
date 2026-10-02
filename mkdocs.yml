@@ -206,6 +206,7 @@ nav:
                       - Link existing data into the cache: how-to/catalogue-maintainers/link-existing-data.md
                       - Materialize linked data: how-to/catalogue-maintainers/materialize-linked-data.md
                       - Add restricted data: how-to/catalogue-maintainers/add-restricted-data.md
+                      - Publish a new version: how-to/catalogue-maintainers/publish-a-new-version.md
                       - Remove a dataset: how-to/catalogue-maintainers/withdraw-a-dataset.md
                       - Release the catalogue: how-to/catalogue-maintainers/release-the-catalogue.md
                       - Manage dCache folders: how-to/catalogue-maintainers/manage-dcache-folders.md
