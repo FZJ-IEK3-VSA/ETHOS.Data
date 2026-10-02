@@ -32,6 +32,7 @@ from pathlib import Path
 import yaml
 
 from ..catalogs import ROLE_KEY, ROLE_PUBLISHED
+from ..errors import PublishError
 from . import NAMESPACE_KEY, dataset_name_for, datasets_dir, iter_dataset_dirs
 
 # Maintainer-only. Never appears in the public catalogue.
@@ -160,7 +161,7 @@ def render(catalog_root: Path) -> dict[Path, str]:
                 continue
             source = dataset_dir / doc
             if not source.is_file():
-                raise SystemExit(
+                raise PublishError(
                     f"{public_package['name']}: licences entry names "
                     f"ethos:document {doc}, which is not a file at {source}."
                 )
@@ -172,7 +173,7 @@ def render(catalog_root: Path) -> dict[Path, str]:
         for shard in public_package.get("ethos:shards", []):
             source = dataset_dir / shard["path"]
             if not source.is_file():
-                raise SystemExit(
+                raise PublishError(
                     f"{public_package['name']}: shard {shard['path']} is missing. Run:\n"
                     f"    ethos-data catalog build {dataset_name_for(datasets_dir(catalog_root), dataset_dir)}"
                 )
@@ -274,7 +275,7 @@ def run(catalog_root: Path, target: str, check: bool = False) -> int:
         return 0
 
     if not destination_root.exists():
-        raise SystemExit(
+        raise PublishError(
             f"target does not exist: {destination_root}\nClone the public repo there first."
         )
 

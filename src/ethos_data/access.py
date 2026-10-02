@@ -36,6 +36,7 @@ from pathlib import Path
 
 from .catalogs import Catalog, Dataset, Resource
 from .config import Roots, resolve_skip_unavailable
+from .errors import AccessError
 
 __all__ = [
     "AccessError",
@@ -67,10 +68,6 @@ ORIGIN_STAGING = "staging"
 ORIGIN_RESTRICTED = "restricted cache"
 ORIGIN_LINK = "namespace link"
 ORIGIN_DOWNLOAD = "download"
-
-
-class AccessError(RuntimeError):
-    """Raised when a dataset cannot be reached under the current configuration."""
 
 
 #: This machine cannot reach these bytes at all, and saying so is the whole
@@ -117,13 +114,13 @@ def entry_for(catalog: Catalog, roots: Roots, name: str) -> Path:
     The access class picks the root, exactly as :func:`locate` does -- so the
     commands that *make* an entry cannot put one somewhere retrieval would never
     look for it. Raises UnknownDataset for a name the catalogue does not
-    describe, and ValueError when a restricted dataset has no restricted cache:
+    describe, and AccessError when a restricted dataset has no restricted cache:
     there is nowhere to put it, and the public cache is the one place it may
     never go.
     """
     root = roots.for_access(access_class(catalog.dataset(name)))
     if root is None:
-        raise ValueError(
+        raise AccessError(
             f"dataset {name!r} is restricted and no restricted cache is configured; "
             "there is no entry for it. Set one with:\n"
             "    ethos-data config set-restricted-cache /path/to/ethos_data_restricted"

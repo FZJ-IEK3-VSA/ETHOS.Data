@@ -22,6 +22,7 @@ import pooch
 import yaml
 
 from .catalogs import Catalog, Resource, _join, _read_binary
+from .errors import BundleError
 from .retrieval import DataFiles
 from .selection import load_collections
 
@@ -40,10 +41,6 @@ FORMAT = "ethos-data-bundle-v1"
 #: own ``datasets/<name>/<document>`` layout so the two are read the same way.
 METADATA_DIR = "datasets"
 _SHA256 = re.compile(r"sha256:[0-9a-fA-F]{64}\Z")
-
-
-class BundleError(ValueError):
-    """The bundle is incomplete, invalid, or differs from its catalogue."""
 
 
 class ModifiedBundleWarning(UserWarning):
