@@ -207,6 +207,9 @@ class TestCommandLineOutput:
         cli._use_utf8_output()
 
 
+@pytest.mark.legacy(
+    "one settings file per account: there is no scope to choose a file by"
+)
 class TestConfiguration:
     def test_a_non_ascii_cache_path_can_be_written_and_read_back(
         self, tmp_path, monkeypatch

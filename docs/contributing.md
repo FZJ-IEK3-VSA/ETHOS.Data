@@ -49,6 +49,30 @@ The comment style in this codebase is unusual on purpose: comments explain
 patch that changes a rule should change the comment that justifies it in the
 same commit — the reasoning is the part that is expensive to recover.
 
+### What the test suite guarantees
+
+`tests/conftest.py` applies two things to every test. Nothing but the loopback
+interface can be reached, so a test that would fall back to the public
+catalogue or reach dCache fails instead of passing on a connected machine. And
+none of your own settings apply: every `ETHOS_*` variable is cleared and the
+settings files and the default cache move into a temporary directory, so a
+catalogue configured on your account cannot replace the one a test wrote.
+
+`tests/support.py` holds the builders the newer tests share: a reader-side
+catalogue, a source catalogue that runs the real `ethos-data catalog`
+commands, and a local HTTP server standing in for the published store, so the
+download path runs with real checksums and no network. Prefer them, and the
+public entry points they go through, to building `Dataset` objects by hand.
+
+A test marked `legacy` pins behaviour that a [decision
+record](explanation/architecture/decisions.md) replaces. It keeps running
+until the change it describes is made, and the pull request making that change
+rewrites it:
+
+```bash
+pytest -m legacy --collect-only -q   # what is still waiting to be rewritten
+```
+
 ## Two invariants that a patch must not break
 
 **Deduplication depends on path agreement.** Every tool must derive the same

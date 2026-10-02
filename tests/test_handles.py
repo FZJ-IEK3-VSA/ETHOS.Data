@@ -315,7 +315,10 @@ def test_ethos_data_rejects_collection_commands(world, tmp_path, monkeypatch, ca
         ["info", "wind"],
         ["plan", "wind"],
         ["paths", "wind"],
-        ["verify"],
+        pytest.param(
+            ["verify"],
+            marks=pytest.mark.legacy("ethos-data gains verify <key>"),
+        ),
         ["bundle", "--help"],
         ["staging", "--help"],
         ["path", "flat"],
