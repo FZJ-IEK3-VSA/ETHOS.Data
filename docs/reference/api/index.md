@@ -65,6 +65,12 @@ of the result's `.named`, recorded in `NamedPaths.omitted` and named in a
 `UserWarning`, and asking the mapping for it raises a `KeyError` that says it
 was left out here rather than never defined.
 
+!!! warning "Gap: `skip_unavailable=` is to be removed"
+    With [every input is
+    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
+    the parameter and `NamedPaths.omitted` go, and unreachable data always
+    raises `AccessError`. To be implemented separately.
+
 ::: ethos_data.retrieval
     options:
       members:

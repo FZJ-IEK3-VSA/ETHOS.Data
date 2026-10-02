@@ -71,7 +71,9 @@ A licensed dataset that may not be redistributed:
 ```yaml
 ethos:access: restricted
 ethos:visibility: hidden
-ethos:restriction: Contact the dataset custodian for authorised access.
+ethos:restriction: >-
+  Licensed per user. Obtain a copy from the provider under its terms, or ask
+  the dataset custodian for access to the institute's copy.
 ethos:embargo:
   until: "unspecified"
   reason: Metadata publication has not been approved; review with the custodian.
@@ -81,6 +83,17 @@ ethos:embargo:
 A restricted dataset has no `ethos:remote_prefix` and is never marked
 `ethos:uploaded`. With the custodian's approval it may be listed publicly
 without offering bytes.
+
+A user whose workflow needs the dataset and who has no copy sees its
+description in the error: title and description, `homepage` and `sources`,
+`licenses` and `ethos:attribution`, `ethos:restriction` and `ethos:contact`.
+Write them for that person: say where a copy can be obtained and under which
+terms.
+
+!!! warning "Gap: the error prints only `ethos:restriction`"
+    The rest of the description is planned with [every input is
+    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
+    to be implemented separately.
 
 ## 2. Review it
 

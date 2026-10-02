@@ -14,7 +14,7 @@ that fixes it. The common ones:
 | `CatalogUnavailable` | The catalogue location cannot be read: wrong path or URL, no network, or a version that does not exist yet. | Run `ethos-data config show`; check the location and, on the cluster computer, your read permission. |
 | `IncompleteCatalog` | The catalogue index lists a dataset whose descriptor is missing from the served copy. | Not yours to fix: report it. A copy of only the index is not a catalogue. |
 | `UnknownDataset`, unknown key | The selected catalogue does not describe that name. | Check the spelling and which catalogue is selected. An internal dataset is invisible through the public catalogue. |
-| `AccessError`, `unavailable` | A restricted dataset has no authorised copy on this machine. | Ask the custodian for access, or run with `skip_unavailable` if the workflow allows it. |
+| `AccessError` | A licensed dataset has no copy on this machine that you may read. The error describes the dataset and how to obtain it. | Obtain a copy under its terms and [register it](set-up-your-machine.md#public-installation-users); on the cluster computer, ask the dataset's custodian for access. |
 | Hash mismatch, `wrong checksum` | The downloaded or linked bytes differ from the catalogue. | [Verify and repair](verify-and-repair.md). If a repair fails again, report it. |
 | Download error, 404, 403 | The published store does not serve a file the catalogue lists. | Report it with the URL from the error. |
 | Unresolved-licence warning | The dataset's terms have not been reviewed yet. | Not an error. Tell the catalogue maintainer if you know the terms. |
@@ -22,14 +22,24 @@ that fixes it. The common ones:
 ## 2. Collect the facts
 
 ```bash
+ethos-data selftest
 ethos-data config show
 <your-tool>-data show
 <your-tool>-data fetch <collection> --plan
 ```
 
-The first prints every setting and its origin. The second names the catalogue
-the package actually reads and marks unresolvable collections. The plan says
-what a fetch would download and what is missing, without downloading.
+The [self-test](set-up-your-machine.md#check-a-download) fetches a small
+public collection that ships with ETHOS.Data. If it fails too, the cause is
+the machine, its settings or the store rather than the package, and its
+output names the failing step. `config show` prints every setting and its
+origin. `show` names the catalogue the package actually reads and marks
+unresolvable collections. The plan says what a fetch would download and what
+is missing, without downloading.
+
+!!! warning "Gap: `selftest` is not implemented"
+    Until it is, `ethos-data fetch
+    reskit-test-data/placements/turbine_placements.csv` checks a single
+    download from the configured catalogue.
 
 To rule out a stale metadata cache without changing settings:
 
@@ -60,6 +70,7 @@ Expected result:
 Actual result and full error text:
 Smallest command or Python snippet that reproduces it:
 Versions: ETHOS.Data, the package, Python, operating system:
+Output of `ethos-data selftest`:
 Catalogue location and version (from `config show` and `show`):
 Collection or catalogue key:
 Cache settings and their origins (from `config show`):

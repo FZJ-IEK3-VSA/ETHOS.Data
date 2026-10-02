@@ -80,6 +80,15 @@ to `user`. Settings affect package wrappers too. The
 variables, scopes and precedence. For setup steps, see
 [Set up your machine](../../how-to/data-users/set-up-your-machine.md).
 
+!!! warning "Gap: `--scope` is to be removed and `selftest` added"
+    With [one settings file per
+    account](../../explanation/architecture/decisions.md#one-settings-file-per-account-2026-10-02),
+    the setters and unsetters write to the settings file in effect and lose
+    `--scope`. A new command, `ethos-data selftest`, fetches the small public
+    collection that ships with the package and reports each step; see
+    [Check that a download works](../../how-to/data-users/set-up-your-machine.md#check-a-download).
+    Both are to be implemented separately.
+
 ## `link [dataset] [directory]` {#link-dataset-directory}
 
 Point cache entries at data already on this machine — one dataset by name, or
