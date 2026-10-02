@@ -6,7 +6,7 @@
 # (see "Write a collections file"):
 #   catalog:
 #     min_version: v2026.09.1
-# Until those keys exist, and until a release carries the current publication
+# Until a public release carries a version stamp and the current publication
 # root, this example follows the public catalogue's main branch.
 catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json
 

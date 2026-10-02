@@ -27,6 +27,7 @@ __all__ = [
     "AccessError",
     "BundleError",
     "CatalogUnavailable",
+    "CatalogVersionError",
     "CatalogueRootError",
     "CollectionError",
     "CollectionsNotFound",
@@ -82,6 +83,14 @@ class CatalogUnavailable(EthosDataError, OSError):
     but a pin, a collections file naming a tag or a repository that does not
     exist (yet, or any more), and the person hitting it usually did not write
     that pin, so the message says how to point at another catalogue.
+    """
+
+
+class CatalogVersionError(EthosDataError, LookupError):
+    """The catalogue is not a release the collections file accepts.
+
+    The message names both: the release the catalogue records, or that it
+    records none, and the bounds the file sets.
     """
 
 
