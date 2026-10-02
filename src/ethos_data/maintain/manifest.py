@@ -15,15 +15,23 @@ and ``ethos:exclude``.  Both are lists of glob patterns matched against the path
 relative to ``source_dir``, by the same rule a tool's ``collections.yaml`` uses,
 imported from the reader so the two can never diverge.
 
-``source_dir`` is not forever, though: once a dataset has been uploaded (see
-``ethos-data catalog upload``) and verified, dCache -- not somebody's workstation
-or a shared-storage mount that may get cleaned up or reorganised -- is the
-authoritative copy. Setting ``ethos:uploaded: true`` in ``dataset.yaml`` says so,
-and ``source_dir`` must be removed at the same time: a rebuild then freezes the
-existing inventory (paths, sizes, hashes) exactly as last recorded, re-deriving
-only the metadata that never depended on the bytes -- title, licence,
-provenance, access. This is also what makes a dataset build-able again after
-its ``source_dir`` has genuinely disappeared.
+``source_dir`` lives in the dataset's ``status.yaml`` beside it, with the
+dataset's state (see :mod:`.status`), and it is not forever: once the bytes
+are uploaded and verified, dCache -- not somebody's workstation or a
+shared-storage mount that may get cleaned up or reorganised -- is the
+authoritative copy. ``ethos-data catalog record`` freezes the dataset and
+retires ``source_dir``: a rebuild then keeps the existing inventory (paths,
+sizes, hashes) exactly as last recorded, re-deriving only the metadata that
+never depended on the bytes -- title, licence, provenance, access. This is
+also what makes a dataset build-able again after its ``source_dir`` has
+genuinely disappeared. A dataset without a status file states the same in
+``dataset.yaml``, as ``source_dir``, ``ethos:uploaded`` and ``ethos:frozen``,
+until ``ethos-data catalog migrate`` moves them.
+
+The build records in the status file what it changed: a draft's first build,
+and an inventory that differs from the one before, which returns a dataset
+whose bytes were made available to built, because what was checked is no
+longer what the inventory describes.
 
 Provenance and licensing are checked here rather than left to a reviewer's eye.
 ``ethos:origin`` says whether the data was downloaded, derived or created, and an
@@ -69,6 +77,7 @@ from ..formats import catalogue as catalogue_format
 from ..formats import dataset as dataset_format
 from ..formats import keys as k
 from ..formats.derived import index_row
+from ..model import lifecycle
 from ..model.digest import matches, of_file, recorded
 from ..selection import path_matches
 from . import (
@@ -81,8 +90,8 @@ from . import (
     read_catalog_meta,
     read_descriptor,
     resources_of,
-    source_dir_of,
 )
+from . import status as dataset_status
 
 # Scientific formats that ``mimetypes`` does not know about.
 EXTRA_MEDIATYPES = {
@@ -388,8 +397,8 @@ def frozen_resources(name: str, dataset_dir: Path) -> list[dict]:
     if not package_file.is_file():
         raise DescriptorError(
             f"{name}: the inventory is declared final but there is no datapackage.json to "
-            f"freeze. Build once with source_dir set, check the result, and only then set "
-            f"{k.FROZEN}: true (or {k.UPLOADED}: true) and remove source_dir."
+            f"freeze. Build it once from its source_dir and check the result before "
+            "freezing it."
         )
     resources = resources_of(
         json.loads(package_file.read_text(encoding="utf-8")), dataset_dir
@@ -600,19 +609,23 @@ def render_dataset(
     if namespace:
         return _render_namespace(dataset_dir, name, meta, member_totals or (0, 0))
 
+    # Where the bytes are is the status file's to say -- see the module
+    # docstring -- and none of it is published.
+    built_from = dataset_status.build_input(dataset_dir, meta, name)
+    if built_from.status is not None:
+        lifecycle.step("build", built_from.status.state, name)
     _checked(name, dataset_format.check, meta)
+    if built_from.status is None:
+        _checked(name, dataset_format.check_legacy_state, meta)
     for warning in dataset_format.lint(meta):
         report.warning(f"warning: {name}: {warning}")
     dataset_format.apply_defaults(meta)
     licenses = meta.get(k.LICENSES) or []
     record_license_documents(name, dataset_dir, licenses)
 
-    # All local to the maintainer, never published -- see the module docstring.
-    # Uploading implies freezing; freezing does not imply uploading.
-    uploaded = bool(meta.pop(k.UPLOADED, False))
-    frozen = bool(meta.pop(k.FROZEN, False)) or uploaded
-    source_dir = source_dir_of(dataset_dir, meta)
-    meta.pop(k.SOURCE_DIR, None)
+    for key in dataset_status.LEGACY_KEYS:
+        meta.pop(key, None)
+    frozen, source_dir = built_from.frozen, built_from.source_dir
 
     if frozen:
         resources = frozen_resources(name, dataset_dir)
@@ -785,6 +798,54 @@ def stale_files(dataset_dir: Path, files: dict[str, str]) -> list[Path]:
     return stale
 
 
+def _inventory(dataset_dir: Path) -> set[tuple] | None:
+    """The files the dataset's descriptor lists, by path, size and hash; None unbuilt."""
+    package_file = dataset_dir / "datapackage.json"
+    if not package_file.is_file():
+        return None
+    package = json.loads(package_file.read_text(encoding="utf-8"))
+    return {
+        (resource[k.PATH], resource[k.BYTES], resource[k.HASH])
+        for resource in resources_of(package, dataset_dir)
+    }
+
+
+def _record_build(
+    dataset_dir: Path, name: str, before: set[tuple] | None, package: dict
+) -> None:
+    """Record in the status file what this build changed, if anything.
+
+    A draft's first build makes it built. A rebuild that found other files
+    than the inventory before is recorded as a change, and returns a dataset
+    whose bytes were made available to built. A rebuild that changed nothing,
+    which is most of them, records nothing.
+    """
+    status = dataset_status.read(dataset_dir)
+    if status is None:
+        return
+    size = {"files": package[k.FILE_COUNT], "bytes": package[k.TOTAL_BYTES]}
+    if status.state == lifecycle.DRAFT:
+        dataset_status.take(dataset_dir, status, "build", dataset=name, **size)
+        return
+    changed = before is not None and before != _inventory(dataset_dir)
+    if not changed or status.state not in lifecycle.STEPS["change"].leads:
+        return
+    if status.state == lifecycle.AVAILABLE:
+        report.warning(
+            f"warning: {name}: its inventory changed since its bytes were made "
+            "available, so it is recorded as built again; make the new bytes "
+            "available before releasing it"
+        )
+    dataset_status.take(
+        dataset_dir,
+        status,
+        "change",
+        dataset=name,
+        note="the inventory changed",
+        **size,
+    )
+
+
 def catalog_meta(catalog_root: Path) -> dict:
     """Read and validate catalog.yaml.
 
@@ -820,7 +881,7 @@ def build_catalog(catalog_root: Path, dataset_dirs: list[Path]) -> dict:
     }
 
 
-def _inherited_for(root: Path, dataset_dir: Path) -> dict:
+def inherited_for(root: Path, dataset_dir: Path) -> dict:
     """Keys a nested dataset takes from the namespaces enclosing it.
 
     Outermost first, so a nearer namespace overrides a farther one, and the
@@ -855,11 +916,14 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
     stale: list[Path] = []
     rendered: dict[Path, dict] = {}
     rows: list[str] = []
+    unmigrated: list[str] = []
     for dataset_dir in selected:
         if not (dataset_dir / "dataset.yaml").exists():
             raise DescriptorError(f"no dataset.yaml in {dataset_dir}")
         name = dataset_name_for(root, dataset_dir)
         namespace = is_namespace(dataset_dir)
+        if not namespace and not dataset_status.path_of(dataset_dir).is_file():
+            unmigrated.append(name)
         totals = None
         if namespace:
             # Sum over every member already rendered in this run, plus any whose
@@ -885,7 +949,7 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
             dataset_dir,
             check=check,
             name=name,
-            inherited=_inherited_for(root, dataset_dir),
+            inherited=inherited_for(root, dataset_dir),
             namespace=namespace,
             member_totals=totals,
         )
@@ -896,7 +960,10 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
             stale += stale_files(dataset_dir, files)
             continue
 
+        before = None if namespace else _inventory(dataset_dir)
         write_dataset(dataset_dir, files)
+        if not namespace:
+            _record_build(dataset_dir, name, before, package)
         size_gb = package["ethos:total_bytes"] / 1e9
         if package.get(k.NAMESPACE):
             klass = "namespace"
@@ -915,6 +982,15 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
 
     for row in sorted(rows):
         report.info(row)
+    if unmigrated:
+        listed = ", ".join(unmigrated[:5])
+        if len(unmigrated) > 5:
+            listed += f" and {len(unmigrated) - 5} more"
+        report.warning(
+            f"warning: {listed} {'keeps its' if len(unmigrated) == 1 else 'keep their'} "
+            f"build input in dataset.yaml, as before {dataset_status.STATUS} existed. "
+            "`ethos-data catalog migrate` moves it across."
+        )
 
     all_dirs = [p for p in iter_dataset_dirs(root) if (p / "datapackage.json").exists()]
     catalog_path = catalog_root / "datacatalog.json"

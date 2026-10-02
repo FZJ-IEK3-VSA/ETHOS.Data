@@ -32,7 +32,9 @@ ethos:contact: Dataset maintainer
 ```
 
 `source_dir` is the directory you can read the bytes from; a relative path is
-relative to the dataset's directory in the catalogue. For created or derived
+relative to the dataset's directory in the catalogue. It is the draft's build
+input: once the dataset is in the catalogue, its `status.yaml` keeps it
+([step 3](#3-copy-it-into-the-catalogue-and-build)). For created or derived
 data, add `contributors` with an `author`, and for derived data `sources` and
 `ethos:derivation`. Every key is in the
 [format reference](../../reference/schemas.md#datasetyaml).
@@ -80,9 +82,9 @@ ethos:embargo:
   becomes: restricted
 ```
 
-A restricted dataset has no `ethos:remote_prefix` and is never marked
-`ethos:uploaded`. With the custodian's approval it may be listed publicly
-without offering bytes.
+A restricted dataset has no `ethos:remote_prefix` and is never uploaded.
+With the custodian's approval it may be listed publicly without offering
+bytes.
 
 A user whose workflow needs the dataset and who has no copy sees its
 description in the error: title and description, `homepage` and `sources`,
@@ -108,10 +110,18 @@ Settle every row before the file enters the catalogue:
 ```bash
 mkdir -p datasets/my-dataset
 cp /projects/shared/candidates/my-dataset/dataset.yaml datasets/my-dataset/
+ethos-data catalog migrate my-dataset
 ethos-data catalog build my-dataset
 ethos-data catalog build my-dataset --check
 git diff -- datasets/my-dataset datacatalog.json
 ```
+
+`catalog migrate` moves `source_dir` out of the copied description into the
+dataset's [`status.yaml`](../../reference/schemas.md#statusyaml), which the
+commands keep from now on: it records the dataset as a draft, the build makes
+it built, and every later step is checked against the state and recorded.
+`ethos-data catalog status my-dataset` shows where the dataset stands and what
+it needs next.
 
 A family from a bundle is imported with `ethos-data catalog add-bundle <bundle
 directory>`, which writes one directory per member,
@@ -137,14 +147,24 @@ installations only, and a dataset that should be downloadable is made
 `public`. A dataset that is `internal` until an embargo ends is linked now and
 uploaded when it becomes public.
 
+An upload records its copy in the dataset's `status.yaml`, and so do a link
+and a registration given `--catalog-root`, as those guides do: the dataset is
+then `available`.
+
 ## 5. Record the authoritative copy
 
-After a successful upload and verification, set `ethos:uploaded: true`,
-remove `source_dir`, and rebuild: the recorded inventory is now frozen and
-dCache is the authority. For linked data, keep `source_dir` as long as the
-original directory is the build input; when it is later
-[materialized](materialize-linked-data.md#retire-the-original), replace
-`source_dir` by `ethos:frozen: true`.
+After a successful upload and verification, freeze the dataset:
+
+```bash
+ethos-data catalog record my-dataset
+```
+
+It checks the copy on dCache file by file, records it as the authoritative
+copy and retires `source_dir`: the recorded inventory is now frozen, and a
+rebuild re-derives only the metadata. For linked data, keep `source_dir` as
+long as the original directory is the build input; when it is later
+[materialized](materialize-linked-data.md#retire-the-original), `catalog
+record` freezes the dataset with the copy the cache owns.
 
 ## 6. Release and hand off
 

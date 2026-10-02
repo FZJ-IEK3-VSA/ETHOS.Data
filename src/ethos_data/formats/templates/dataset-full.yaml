@@ -60,10 +60,8 @@ ethos:provenance: >-
 ethos:verified: "2026-09-10"                   # last checked against its source
 
 # ---- where the bytes are -----------------------------------------------
-source_dir: /legacy/shared/MyDataset           # required, unless frozen below
+source_dir: /legacy/shared/MyDataset           # a draft's; status.yaml keeps it
 ethos:remote_prefix: my-dataset                # default: the value of `name`
-ethos:uploaded: false                          # dCache holds it; drop source_dir
-ethos:frozen: false                            # inventory final; drop source_dir
 
 # ---- classification ----------------------------------------------------
 ethos:access: public                           # default: public | internal | restricted

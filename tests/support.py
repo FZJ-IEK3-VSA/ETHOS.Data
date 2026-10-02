@@ -6,8 +6,9 @@ Two halves, like the package:
   index, one ``datapackage.json`` per dataset, and the bytes, in the public
   cache, on the published store, or both.
 * :class:`SourceCatalogue` writes what a catalogue maintainer works on:
-  ``catalog.yaml`` and ``dataset.yaml`` files with their source directories. It
-  drives the real ``ethos-data catalog`` commands against them.
+  ``catalog.yaml``, and per dataset a ``dataset.yaml`` and the ``status.yaml``
+  naming its source directory. It drives the real ``ethos-data catalog``
+  commands against them.
 
 :class:`Store` serves a directory over HTTP on the loopback interface, which is
 the one place the network guard in ``conftest.py`` lets a test connect to. A
@@ -289,6 +290,7 @@ class SourceCatalogue:
         files: dict[str, bytes | str] | None = None,
         *,
         documents: dict[str, bytes | str] | None = None,
+        legacy: bool = False,
         **meta: object,
     ) -> Path:
         """Describe a dataset; ``files`` become its ``source_dir`` unless ``meta`` names one.
@@ -296,6 +298,11 @@ class SourceCatalogue:
         Keyword arguments are descriptor keys, with ``ethos_access`` meaning
         ``ethos:access``: an underscore after a leading ``ethos`` is the colon.
         ``documents`` are archived licence files written beside ``dataset.yaml``.
+
+        The ``source_dir`` goes into a ``status.yaml`` saying the dataset is a
+        draft, as a catalogue keeps it. ``legacy=True`` writes it into
+        ``dataset.yaml`` instead, as before status files, where
+        ``ethos_uploaded`` and ``ethos_frozen`` belong too.
         """
         descriptor: dict = {"title": f"The {name} dataset"}
         descriptor["licenses"] = DEFAULT_LICENSES
@@ -310,13 +317,44 @@ class SourceCatalogue:
             descriptor["source_dir"] = str(source)
         for key in [k for k, v in descriptor.items() if v is None]:
             del descriptor[key]
+        if not legacy and {"ethos:uploaded", "ethos:frozen"} & set(descriptor):
+            raise TypeError("ethos:uploaded and ethos:frozen need legacy=True")
+        source_dir = None if legacy else descriptor.pop("source_dir", None)
         directory = self.directory(name)
         for relative, content in (documents or {}).items():
             target = directory / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(as_bytes(content))
         self._write_yaml(directory / "dataset.yaml", descriptor)
+        if source_dir is not None:
+            self._write_yaml(
+                directory / "status.yaml", {"state": "draft", "source_dir": source_dir}
+            )
         return directory
+
+    def status(self, name: str) -> dict:
+        """The dataset's ``status.yaml``, as its keys and values."""
+        return yaml.safe_load(
+            (self.directory(name) / "status.yaml").read_text(encoding="utf-8")
+        )
+
+    def freeze(self, name: str, *, location: str | None = None) -> str:
+        """Record a built dataset as frozen, its upload the authoritative copy.
+
+        What ``catalog record`` writes, without the upload and the check that
+        come before it. ``location`` defaults to the dataset's folder under the
+        publication URL; it is returned.
+        """
+        location = location or f"{self.catalog_yaml['ethos:publication_url']}/{name}/"
+        self._write_yaml(
+            self.directory(name) / "status.yaml",
+            {
+                "state": "frozen",
+                "authority": location,
+                "copies": [{"kind": "uploaded", "location": location}],
+            },
+        )
+        return location
 
     def edit(self, name: str, **changes: object) -> None:
         """Change keys of a ``dataset.yaml``; a value of ``None`` removes the key."""

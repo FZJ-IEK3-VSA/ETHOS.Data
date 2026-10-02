@@ -29,6 +29,11 @@ configuration down to two settings.
 **Real directories are never touched.** An entry that has been downloaded from
 dCache, or materialised with ``ethos-data materialize``, is data the cache owns;
 replacing it with a link would silently discard it.
+
+Given ``--catalog-root``, the command also takes the ``link`` step of each
+dataset it links (see :mod:`.status`): a dataset whose state does not allow it,
+a draft not built yet, is skipped, and every link is recorded as a copy in the
+dataset's ``status.yaml``.
 """
 
 from __future__ import annotations
@@ -37,16 +42,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import report
+from ..errors import MaintenanceError
 from ..formats import keys as k
 from ..formats.derived import license_settled
+from ..formats.status_file import Copy
+from ..model import lifecycle
 from . import (
     dataset_name_for,
     datasets_dir,
     is_namespace,
     iter_dataset_dirs,
     read_descriptor,
-    source_dir_of,
 )
+from . import status as dataset_status
 
 __all__ = ["Action", "plan", "apply", "run"]
 
@@ -112,8 +120,13 @@ def _same_target(current: Path, source: Path) -> bool:
     return str(current).removeprefix("\\\\?\\") == str(source).removeprefix("\\\\?\\")
 
 
-def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
-    """Decide what the namespace needs, without touching the filesystem."""
+def plan(
+    catalog_root: Path, root: Path, prune: bool = False, *, record: bool = False
+) -> list[Action]:
+    """Decide what the namespace needs, without touching the filesystem.
+
+    ``record`` skips a dataset whose state does not allow the ``link`` step.
+    """
     actions: list[Action] = []
     declared = _declared(catalog_root)
     names = {name for name, _ in declared}
@@ -149,11 +162,22 @@ def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
             )
             continue
 
-        source = source_dir_of(datasets_dir(catalog_root) / name, meta)
-        if source is None:
-            actions.append(
-                Action(name, "skip", entry, detail="no source_dir in dataset.yaml")
+        try:
+            built_from = dataset_status.build_input(
+                datasets_dir(catalog_root) / name, meta, name
             )
+            if record and built_from.status is not None:
+                lifecycle.step("link", built_from.status.state, name)
+        except MaintenanceError as error:
+            first = error.message.splitlines()[0]
+            actions.append(Action(name, "skip", entry, detail=first))
+            continue
+        source = built_from.source_dir
+        if source is None:
+            detail = "no source_dir"
+            if built_from.frozen:
+                detail += ": its inventory is final"
+            actions.append(Action(name, "skip", entry, detail=detail))
             continue
 
         if not source.is_dir():
@@ -205,6 +229,25 @@ def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
     return actions
 
 
+def _record(catalog_root: Path, actions: list[Action]) -> tuple[int, list[str]]:
+    """Record every link the namespace has now; (recorded, without a status file)."""
+    recorded, unrecorded = 0, []
+    for action in actions:
+        if action.verb not in ("link", "repoint", "unchanged"):
+            continue
+        copy = Copy(
+            kind=k.COPY_LINKED, location=str(action.entry), target=str(action.target)
+        )
+        state = dataset_status.record_copy(
+            catalog_root, action.dataset, "link", copy, repeat=False
+        )
+        if state is None:
+            unrecorded.append(action.dataset)
+        else:
+            recorded += 1
+    return recorded, unrecorded
+
+
 def apply(actions: list[Action]) -> list[Action]:
     """Carry out the planned actions. Only links are ever created or removed."""
     for action in actions:
@@ -226,8 +269,12 @@ def run(
     *,
     dry_run: bool = False,
     prune: bool = False,
+    record: bool = False,
 ) -> int:
     """Plan the namespace, report it, and -- unless ``dry_run`` -- build it.
+
+    ``record`` takes the ``link`` step of every dataset linked, and records
+    each link in its ``status.yaml``.
 
     ``root`` arrives already decided, and deliberately has no default. The
     earlier signature took the argparse namespace and looked the public cache up
@@ -239,7 +286,7 @@ def run(
     Deciding once, in the caller, is what makes that impossible rather than
     merely unlikely.
     """
-    actions = plan(catalog_root, root, prune=prune)
+    actions = plan(catalog_root, root, prune=prune, record=record)
 
     changes = [a for a in actions if a.changes_anything]
     problems = [a for a in actions if a.verb == "missing"]
@@ -253,11 +300,18 @@ def run(
         report.info(f"\n{len(changes)} change(s) would be made. Nothing was written.")
         return 1 if problems else 0
 
+    if changes:
+        apply(changes)
+    if record:
+        recorded, unrecorded = _record(catalog_root, actions)
+        if recorded:
+            report.info(f"\nrecorded {recorded} link(s) in the datasets' status files.")
+        if unrecorded:
+            report.warning(dataset_status.unrecorded(unrecorded))
     if not changes:
         report.info("\nnothing to do.")
         return 1 if problems else 0
 
-    apply(changes)
     report.info(f"\n{len(changes)} change(s) applied.")
     if problems:
         report.info(

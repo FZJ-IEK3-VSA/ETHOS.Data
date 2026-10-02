@@ -38,6 +38,10 @@ checkout:
 ethos-data --root /shared/ethos/public link climate-inputs --catalog-root /shared/ethos/catalogue/source
 ```
 
+With `--catalog-root`, the link is also recorded in the dataset's
+`status.yaml`, which makes it `available`; a dataset that is not built yet is
+refused. Without it, as in the first example, nothing is recorded.
+
 A dataset with unresolved licensing is refused: a cache entry hands it to
 everyone. A real directory in the cache is never replaced by a link; that is
 data the cache owns. `--force` repoints an entry that is already a link.
@@ -51,8 +55,9 @@ ethos-data link --all --catalog-root /shared/ethos/catalogue/source --root /shar
 
 Review the preview: it names the root and the checkout before anything is
 written. Restricted datasets, datasets with unresolved licensing, datasets
-without `source_dir` and entries that are already real directories are left
-alone and reported as such. A `source_dir` that does not exist on this
+without `source_dir`, datasets not built yet and entries that are already real
+directories are left alone and reported as such. Each link is recorded in its
+dataset's `status.yaml`, once. A `source_dir` that does not exist on this
 machine is reported as `missing` and gives exit status `1` without stopping
 the rest.
 

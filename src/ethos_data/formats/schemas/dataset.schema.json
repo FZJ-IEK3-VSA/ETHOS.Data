@@ -694,7 +694,7 @@
         }
       ],
       "default": null,
-      "description": "Where the files are on this machine; relative to the dataset directory if relative.",
+      "description": "Where a draft's files are; status.yaml keeps it once the dataset is in a catalogue.",
       "title": "Source Dir",
       "x-ethos": {
         "inherited": false,
@@ -724,7 +724,7 @@
     },
     "ethos:uploaded": {
       "default": false,
-      "description": "dCache holds the copy the inventory describes.",
+      "description": "Before status.yaml: dCache holds the copy the inventory describes.",
       "title": "Ethos:Uploaded",
       "type": "boolean",
       "x-ethos": {
@@ -736,7 +736,7 @@
     },
     "ethos:frozen": {
       "default": false,
-      "description": "The inventory is final; nothing local is left to build from.",
+      "description": "Before status.yaml: the inventory is final, nothing local is left to build from.",
       "title": "Ethos:Frozen",
       "type": "boolean",
       "x-ethos": {

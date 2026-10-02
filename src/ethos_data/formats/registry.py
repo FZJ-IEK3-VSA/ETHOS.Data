@@ -17,6 +17,7 @@ from .dataset import DatasetDescriptor, NamespaceDescriptor
 from .package import CatalogIndex, PackageDescriptor, ShardFile
 from .records import MaterializedRecord, StagingRegistry
 from .settings_file import SettingsFile
+from .status_file import StatusFile
 
 __all__ = [
     "FORMATS",
@@ -52,6 +53,8 @@ FORMATS: dict[str, Format] = {
                "A family's description: a name and the keys its members inherit."),
         Format("catalog", "catalog.yaml", CatalogMeta, "person",
                "A source catalogue's name, contact and publication root."),
+        Format("status", "status.yaml", StatusFile, "tool",
+               "Where a dataset stands: its state, build input, copies and history."),
         Format("collections", "collections.yaml", CollectionsFile, "person",
                "A package's selection of catalogue data, by workflow."),
         Format("settings", "config.yaml", SettingsFile, "tool",

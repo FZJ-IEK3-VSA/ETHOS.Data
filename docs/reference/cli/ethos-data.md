@@ -141,7 +141,7 @@ ethos-data link --all --prune --dry-run             # review a full rebuild firs
 | `--root DIR` | build the namespace in this directory instead of the public cache this machine reads | `--all` only |
 | `--prune` | the only flag that removes anything: links for names the catalogue no longer describes | `--all` only |
 | `--dry-run` | show what would change, write nothing | honoured only with `--all`; a single-dataset link is applied immediately |
-| `--catalog-root DIR` | catalogue checkout to read `source_dir` from (default: searched upward from the current directory) | both |
+| `--catalog-root DIR` | catalogue checkout to read `source_dir` from (default: searched upward from the current directory); given, each link is recorded there | both |
 
 A flag that belongs to the other mode is refused with exit `2` rather than
 quietly ignored: `--root` or `--prune` beside a dataset name, `--force` beside
@@ -165,10 +165,18 @@ cache owns. If the catalogue's first listed file is not under the directory, the
 link is still made and a warning names the file — the usual cause is naming a
 level too high.
 
-Without a directory, `source_dir` is read from the hand-written
-`datasets/<name>/dataset.yaml`, which is the only place it exists: it is popped
-out of the descriptor when the manifest is built. An uploaded dataset has none
-by design, and is refused with the explicit form to use instead.
+Without a directory, `source_dir` is read from the source checkout: the
+dataset's `status.yaml`, or the `dataset.yaml` of a dataset not migrated yet.
+It is never published. A frozen dataset has none left, and is refused with the
+explicit form to use instead.
+
+Given `--catalog-root`, linking is a step in the dataset's lifecycle: it is
+refused before anything is linked when the dataset's state does not allow it,
+a draft not built yet, and each link made is recorded in the dataset's
+[`status.yaml`](../schemas.md#statusyaml) as a `linked` copy, which makes a
+built dataset `available`. `--all` skips such a dataset and records each link
+once. Without `--catalog-root` nothing is recorded, which is how a user
+registers an installation of their own.
 
 A dataset with **unresolved licensing is refused**, and skipped by `--all`: a
 cache entry hands it to everyone reading that cache. Record the terms, or use
@@ -232,7 +240,7 @@ Replace symbolic-link cache entries with real, verified copies.
 | `--force` | compatibility option; existing real directories are still skipped |
 | `--no-verify` | skip checksum verification of each copied file (not advised) |
 | `--from DIR` | copy from this directory instead of the entry's link target |
-| `--catalog-root DIR` | catalogue checkout to read `source_dir` from, when there is no entry and no `--from` |
+| `--catalog-root DIR` | catalogue checkout to read `source_dir` from, when there is no entry and no `--from`; given, each copy is recorded there |
 
 Only files the catalogue describes are copied. Refuses if the copy would leave
 less than 2% of the filesystem free. Explicit dataset names use the root for
@@ -246,7 +254,9 @@ catalogue's `source_dir` is used. This also supports seeding an authorised
 restricted installation. It will not write over a real directory the cache owns,
 and `--all` still walks the public cache only. Provenance is written to
 `.ethos-data-materialized.json` in the new directory; `was_a_link_at` is null
-when no link was replaced.
+when no link was replaced. Given `--catalog-root`, a dataset whose state does
+not allow the step is not copied, and each copy is recorded in the dataset's
+`status.yaml` as `materialized`, in place of the link it replaced.
 
 ## `catalog`
 

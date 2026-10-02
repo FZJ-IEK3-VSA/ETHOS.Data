@@ -40,6 +40,7 @@ __all__ = [
     "NotFetched",
     "PublishError",
     "StagingError",
+    "TransitionError",
     "UnknownCollection",
     "UnknownDataset",
     "UnknownKey",
@@ -176,3 +177,7 @@ class UploadError(MaintenanceError):
 
 class PublishError(MaintenanceError):
     """The public catalogue cannot be generated as asked."""
+
+
+class TransitionError(MaintenanceError):
+    """A step the dataset's state does not allow, and what it needs first."""

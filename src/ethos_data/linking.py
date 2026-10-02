@@ -29,6 +29,11 @@ records "these bytes are borrowed": retrieval reads them in place, refuses to
 write through them, and ``ethos-data materialize`` knows there is something to
 copy. A real directory means the opposite -- data the cache owns -- so neither
 mode of ``ethos-data link`` will ever replace one with a link.
+
+A catalogue maintainer who links a dataset into a shared cache, or registers
+an installation, passes ``--catalog-root``: the link is then a step in the
+dataset's lifecycle, checked against its state and recorded as a copy in its
+``status.yaml``.
 """
 
 from __future__ import annotations
@@ -58,6 +63,11 @@ class LinkReport:
     #: a link made one directory too high or too low. Empty when nothing is
     #: wrong, or when the inventory could not be read to check.
     missing: str = ""
+    #: The dataset's state in the checkout after the link was recorded there;
+    #: empty when nothing was recorded.
+    recorded: str = ""
+    #: Recording was asked for and the dataset has no status file to record in.
+    unrecorded: bool = False
 
     def __str__(self) -> str:
         if self.target is None:
@@ -84,15 +94,31 @@ def source_dir_for(name: str, catalog_root: str | Path | None = None) -> Path:
     to be: nothing is pulled in until somebody asks for a path only a checkout
     can answer.
     """
-    from .maintain import (
-        datasets_dir,
-        read_descriptor,
-        resolve_catalog_root,
-        source_dir_of,
-    )
+    from .maintain import datasets_dir, read_descriptor
+    from .maintain.status import build_input
+
+    root = _checkout(catalog_root)
+    dataset_dir = datasets_dir(root) / name
+    descriptor = dataset_dir / "dataset.yaml"
+    if not descriptor.is_file():
+        raise LinkError(f"no dataset called {name!r} in {datasets_dir(root)}")
+    source = build_input(dataset_dir, read_descriptor(dataset_dir), name).source_dir
+    if source is None:
+        raise LinkError(
+            f"{name} has no source_dir left in {dataset_dir}, so there is nothing "
+            "to link from: its inventory is final, and its authoritative copy is "
+            f"elsewhere. Name the directory instead:\n    ethos-data link {name} "
+            f"/path/to/{name}"
+        )
+    return source
+
+
+def _checkout(catalog_root: str | Path | None) -> Path:
+    """The source catalogue ``catalog_root`` names, or the one around the current directory."""
+    from .maintain import resolve_catalog_root
 
     try:
-        root = resolve_catalog_root(
+        return resolve_catalog_root(
             str(catalog_root) if catalog_root is not None else None
         )
     except CatalogueRootError as error:
@@ -100,18 +126,6 @@ def source_dir_for(name: str, catalog_root: str | Path | None = None) -> Path:
         # exit on a missing checkout. Here it is one way of answering a question,
         # so it becomes the same error every other failure in this module raises.
         raise LinkError(error.message) from None
-    dataset_dir = datasets_dir(root) / name
-    descriptor = dataset_dir / "dataset.yaml"
-    if not descriptor.is_file():
-        raise LinkError(f"no dataset called {name!r} in {datasets_dir(root)}")
-    source = source_dir_of(dataset_dir, read_descriptor(dataset_dir))
-    if source is None:
-        raise LinkError(
-            f"{descriptor} has no source_dir, so there is nothing to link from.\n"
-            "An uploaded dataset has none by design -- dCache holds it. Name the "
-            f"directory instead:\n    ethos-data link {name} /path/to/{name}"
-        )
-    return source
 
 
 def _absolute(directory: str | Path) -> Path:
@@ -203,12 +217,18 @@ def link(
     roots: "Roots | str | Path | None" = None,
     force: bool = False,
     catalog_root: str | Path | None = None,
+    *,
+    record: bool = False,
 ) -> LinkReport:
     """Make this dataset's cache entry a symbolic link to ``directory``.
 
     Without a ``directory``, the source catalogue's ``source_dir`` for this
     dataset is used -- see :func:`source_dir_for`, which is also what decides
     where ``catalog_root`` is looked for.
+
+    ``record`` makes the link the ``link`` step of the dataset in that
+    checkout: refused before anything is linked when its state does not allow
+    it, and recorded as a copy in its ``status.yaml`` once made.
 
     The entry goes in whichever root the dataset's access class belongs to, so a
     restricted dataset lands in the restricted cache or nowhere at all. That is
@@ -228,6 +248,13 @@ def link(
         raise LinkError(error.message) from None
 
     _require_settled_licence(catalog, name)
+
+    checkout = None
+    if record:
+        from .maintain import status as dataset_status
+
+        checkout = _checkout(catalog_root)
+        dataset_status.allow(checkout, name, "link")
 
     if directory is None:
         directory = source_dir_for(name, catalog_root)
@@ -256,9 +283,22 @@ def link(
     except OSError as error:
         raise LinkError(_refusal(name, target, error)) from None
 
-    return LinkReport(
+    result = LinkReport(
         name, verb, entry, target, missing=_sample_missing(catalog, name, target)
     )
+    if checkout is not None:
+        from .formats.status_file import Copy
+        from .maintain import status as dataset_status
+
+        state = dataset_status.record_copy(
+            checkout,
+            name,
+            "link",
+            Copy(kind=k.COPY_LINKED, location=str(entry), target=str(target)),
+        )
+        result.recorded = state or ""
+        result.unrecorded = state is None
+    return result
 
 
 def unlink(

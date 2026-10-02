@@ -14,7 +14,7 @@ error's `exit_code`:
 | Exit | Errors | Means |
 |---|---|---|
 | `2` | everything below except the maintenance errors | the request could not be served: an unknown name, an unreadable catalogue, data this machine cannot read, an invalid collection, bundle or setting, a refused staging entry |
-| `1` | [`MaintenanceError`][ethos_data.errors.MaintenanceError] and its subclasses | a `catalog` command refused its input: a descriptor the build rejects, a checkout that is not a source catalogue, an upload or a publication that cannot go ahead |
+| `1` | [`MaintenanceError`][ethos_data.errors.MaintenanceError] and its subclasses | a `catalog` command refused its input: a descriptor the build rejects, a checkout that is not a source catalogue, an upload or a publication that cannot go ahead, a step the dataset's state does not allow |
 
 A command can also return `1` for a finding rather than a refusal, a stale
 `build --check` or a failed `verify`, as its reference page describes.

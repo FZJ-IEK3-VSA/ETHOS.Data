@@ -49,7 +49,7 @@ def built(source):
     source.dataset("done", {"c.csv": "3\n"})
     code, _, err = source.build()
     assert code == 0, err
-    source.edit("done", ethos_uploaded=True, source_dir=None)
+    source.freeze("done")
     code, _, err = source.build()
     assert code == 0, err
     return source

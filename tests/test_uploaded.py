@@ -6,6 +6,10 @@ verified, a rebuild should not need that mount to still exist -- it should
 freeze the inventory (paths, hashes, sizes) exactly as last recorded, and only
 re-derive the metadata that never depended on the bytes.
 
+Both keys are what a dataset without a ``status.yaml`` states; once migrated,
+``catalog record`` freezes it, and ``test_status_files.py`` holds the same
+rules for it.
+
 Run with pytest, or directly:  python tests/test_uploaded.py
 """
 
@@ -21,6 +25,11 @@ import yaml
 
 from ethos_data.maintain.manifest import render_dataset, stale_files, write_dataset
 from ethos_data.errors import DescriptorError
+
+LEGACY = pytest.mark.legacy(
+    reason="status files: ethos:uploaded and source_dir move into status.yaml; "
+    "read from dataset.yaml only for a dataset not migrated yet"
+)
 
 
 def make_dataset(
@@ -60,6 +69,7 @@ def freeze(dataset_dir: Path, title: str | None = None) -> None:
     (dataset_dir / "dataset.yaml").write_text(yaml.safe_dump(meta))
 
 
+@LEGACY
 class TestFreezingAfterUpload:
     def test_rebuild_without_source_dir_reuses_the_same_inventory(self):
         workspace = Path(tempfile.mkdtemp())
@@ -211,6 +221,7 @@ class TestShardDirectory:
         finally:
             shutil.rmtree(workspace)
 
+    @LEGACY
     def test_frozen_legacy_shards_move_to_shards_on_rebuild(self):
         workspace = Path(tempfile.mkdtemp())
         try:

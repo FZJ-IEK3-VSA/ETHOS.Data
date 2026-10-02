@@ -130,10 +130,10 @@ a rebuild reflects changes to that original and the independent cache may then
 fail verification. `materialize --force` does not overwrite a real directory;
 changed data needs a deliberate version/migration decision.
 
-If the original is retired, a verified local installation can retain its
-inventory using `ethos:frozen: true` without `source_dir`. Uploaded data uses
-`ethos:uploaded: true` instead. Both preserve recorded resource hashes while
-allowing metadata to be regenerated. Rehashing the cache itself would erase the
+If the original is retired, `ethos-data catalog record` freezes the dataset
+with the verified local installation, or the upload, as its authoritative copy
+and retires `source_dir`. A frozen dataset keeps its recorded resource hashes
+while its metadata can still be regenerated. Rehashing the cache itself would erase the
 independent baseline needed to detect corruption. Frozen metadata does not back
 up bytes; the storage owner still needs retention and recovery arrangements.
 

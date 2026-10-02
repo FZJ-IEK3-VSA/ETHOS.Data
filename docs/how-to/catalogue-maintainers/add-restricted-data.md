@@ -12,20 +12,22 @@ Follow [Add a dataset](add-a-dataset.md#restricted-installations)
 with `ethos:access: restricted` and, unless the custodian agreed to list it
 publicly, `ethos:visibility: hidden` with an embargo block. Record the actual
 agreement in `ethos:restriction` and `licenses` or `ethos:license_note`. A
-restricted dataset has no `ethos:remote_prefix` and is never marked
-`ethos:uploaded`. Build it.
+restricted dataset has no `ethos:remote_prefix` and is never uploaded.
+Build it.
 
 ## 2. Register the installation
 
 ```bash
 ethos-data config set-restricted-cache /shared/ethos/restricted
 ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json \
-    link gadm-3.6 /projects/licensed/gadm36_levels_shp
+    link gadm-3.6 /projects/licensed/gadm36_levels_shp \
+    --catalog-root /shared/ethos/catalogue/source
 ```
 
 Naming a restricted dataset puts its entry into the restricted cache; that is
 how one authorised installation is recorded, by somebody who knows it is
-authorised. `link --all` never does this.
+authorised. `link --all` never does this. `--catalog-root` records the
+registration in the dataset's `status.yaml`, which makes it `available`.
 
 ## 3. Or move it into the restricted cache
 
@@ -36,12 +38,13 @@ of linking:
 ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json \
     materialize gadm-3.6 --from /projects/licensed/gadm36_levels_shp --dry-run
 ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json \
-    materialize gadm-3.6 --from /projects/licensed/gadm36_levels_shp
+    materialize gadm-3.6 --from /projects/licensed/gadm36_levels_shp \
+    --catalog-root /shared/ethos/catalogue/source
 ```
 
-The copy is verified against the catalogue's hashes. Set the directory's group
-to the licence group and remove read permission for everyone else before
-announcing it.
+The copy is verified against the catalogue's hashes and recorded in the
+dataset's `status.yaml`. Set the directory's group to the licence group and
+remove read permission for everyone else before announcing it.
 
 ## 4. Check
 
@@ -56,6 +59,16 @@ assert all(finding.ok for finding in findings)
 
 Then, as a user outside the group, expect `ethos-data fetch gadm-3.6/<file>`
 to fail with an explanation and no copy.
+
+When the installation, or the copy in the restricted cache, is the permanent
+copy, freeze the dataset in the source checkout:
+
+```bash
+ethos-data catalog record gadm-3.6
+```
+
+It checks the copy file by file and retires `source_dir`, so later rebuilds
+keep the recorded hashes as the witness to that copy.
 
 ## 5. Release
 
