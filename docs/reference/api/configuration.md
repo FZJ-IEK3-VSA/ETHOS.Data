@@ -24,7 +24,6 @@ keeps as its `settings`.
         - resolve_restricted_cache
         - resolve_staging_cache
         - resolve_cache_dir
-        - resolve_skip_unavailable
         - resolve_catalog
         - resolve_collections
         - resolve_publication_url

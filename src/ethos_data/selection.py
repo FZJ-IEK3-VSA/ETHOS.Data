@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import fnmatch
 import os
-import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -377,7 +376,6 @@ class Collections:
         test: bool = False,
         root: Roots | str | Path | None = None,
         progressbar: bool = True,
-        skip_unavailable: bool | None = None,
         fetch: bool = True,
     ) -> DataFiles:
         """Make a collection available locally and return ``{key: Path}``.
@@ -392,10 +390,9 @@ class Collections:
         without variants is the same either way. The result's ``.named`` holds
         the collection's ``paths`` as ``{handle: Path}`` -- see :meth:`paths`.
 
-        ``skip_unavailable`` decides what happens to licensed data this machine
-        cannot reach: ``True`` leaves it out of the result (and out of
-        ``.named``) with a warning, ``False`` raises, ``None`` takes the
-        configured answer.
+        Every input is required: licensed data this machine cannot read raises
+        :class:`~ethos_data.errors.AccessError` before anything is downloaded,
+        describing the dataset and how to register a copy.
 
         ``fetch=False`` downloads nothing and contacts no store: every file is
         returned where it is on this machine, and one that is not raises
@@ -412,7 +409,6 @@ class Collections:
             resources,
             root=roots,
             progressbar=progressbar,
-            skip_unavailable=skip_unavailable,
             fetch=fetch,
         )
         files.named = self._named_paths(targets, files, name)
@@ -425,7 +421,6 @@ class Collections:
         test: bool = False,
         root: Roots | str | Path | None = None,
         progressbar: bool = True,
-        skip_unavailable: bool | None = None,
         fetch: bool = True,
     ) -> NamedPaths:
         """The inputs a collection names, as ``{handle: absolute Path}``, fetched.
@@ -444,10 +439,6 @@ class Collections:
         are the same in both variants, so the call above runs unchanged on the
         full data once ``test`` is dropped. A collection that declares no
         ``paths`` is refused here -- :meth:`fetch` returns its files by key.
-        Under ``skip_unavailable`` a handle whose data this machine cannot
-        reach is left out, with a warning naming it, exactly as the file is
-        left out of :meth:`fetch`'s result.
-
         ``fetch=False`` resolves the handles without downloading anything, and
         raises :class:`~ethos_data.errors.NotFetched` for a file that is not on
         this machine, naming the path the same call with ``fetch=True`` puts it.
@@ -457,10 +448,9 @@ class Collections:
             test=test,
             root=root,
             progressbar=progressbar,
-            skip_unavailable=skip_unavailable,
             fetch=fetch,
         )
-        if not files.named and not files.named.omitted:
+        if not files.named:
             raise CollectionError(
                 f"collection {name!r} declares no named paths -- nothing under 'paths:' in "
                 f"its definition. fetch({name!r}) returns its files by resource key; "
@@ -475,7 +465,6 @@ class Collections:
         *,
         test: bool = False,
         root: Roots | str | Path | None = None,
-        skip_unavailable: bool | None = None,
     ) -> dict:
         """What fetching a collection would do, without touching the network.
 
@@ -486,7 +475,6 @@ class Collections:
             self.catalog,
             self.resolve(name, test=test),
             self._roots(root),
-            skip_unavailable,
         )
 
     def main(self, argv: list[str] | None = None, *, prog: str | None = None) -> int:
@@ -572,36 +560,18 @@ class Collections:
     ) -> NamedPaths:
         """Where each handle ended up on this machine, read off the fetched files.
 
-        A handle whose data this machine cannot reach is left out and named in
-        a warning -- the same contract ``skip_unavailable`` gives the files
-        themselves: absent from the mapping, never a path to nothing. Without
-        ``skip_unavailable`` the unreachable data has already raised before this.
+        Every file is there: a fetch that could not provide one has raised
+        before this, so every handle the collection defines is in the mapping.
         """
         named = NamedPaths(collection=name)
         for target in targets:
             if target.file is not None:
-                local = files.get(target.file.key)
-                if local is None:
-                    named.omitted.append(target.handle)
-                    continue
-                named[target.handle] = Path(os.path.abspath(local))
-                continue
-            available = [r for r in target.under if r.key in files]
-            if not available:
-                named.omitted.append(target.handle)
+                named[target.handle] = Path(os.path.abspath(files[target.file.key]))
                 continue
             directory = directory_of(
-                files, available, target.dataset, target.inner, target.key
+                files, target.under, target.dataset, target.inner, target.key
             )
             named[target.handle] = Path(os.path.abspath(directory))
-        if named.omitted:
-            warnings.warn(
-                f"collection {name!r}: the named path(s) {', '.join(named.omitted)} are not "
-                f"available on this machine and have been left out -- the mapping has no entry "
-                f"for them.",
-                UserWarning,
-                stacklevel=4,
-            )
         return named
 
 

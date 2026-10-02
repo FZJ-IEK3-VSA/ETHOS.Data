@@ -72,15 +72,6 @@ ethos-data link gadm-3.6 /data/licensed/gadm36_levels_shp
 
 Every input a workflow names is required; no setting lets it run without one.
 
-!!! warning "Gap: the error does not describe the dataset, and inputs can be left out"
-    The error names the dataset and prints its `ethos:restriction` note
-    only. It also offers to carry on without the dataset, through
-    `--skip-unavailable`, `skip_unavailable=True`,
-    `config set-skip-unavailable` or `ETHOS_SKIP_UNAVAILABLE`. The planned
-    change, [every input is
-    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
-    is to be implemented separately.
-
 ## Cluster users {#cluster-users}
 
 Work on the ICE-2 cluster computer, in the environment your package is

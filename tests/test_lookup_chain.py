@@ -41,7 +41,7 @@ def place(reader, name: str, path: str, roots: Roots) -> tuple[str, Path | None]
     """Where the chain reads one file from, as ``(origin, path)``."""
     catalog = load_catalog(str(reader.write()))
     resource = catalog.dataset(name).resource_at(path)
-    [found] = locate(catalog, [resource], roots, skip_unavailable=False)
+    [found] = locate(catalog, [resource], roots)
     return found.origin, found.path
 
 
@@ -78,6 +78,7 @@ class TestTheOrder:
             "licensed", {"a.csv": "1\n"}, access="restricted", where="nowhere"
         )
         (tmp_path / "staging" / "licensed").mkdir(parents=True)
+        (tmp_path / "restricted" / "licensed").mkdir(parents=True)
         roots = Roots(
             public=reader.cache,
             staging=tmp_path / "staging",
@@ -96,7 +97,7 @@ class TestTheOrder:
         reader.dataset("licensed", {"a.csv": "1\n"}, access="restricted", where="cache")
         roots = Roots(public=reader.cache)
 
-        with pytest.raises(AccessError, match="is restricted and is never downloaded"):
+        with pytest.raises(AccessError, match="is restricted, and this machine cannot"):
             place(reader, "licensed", "a.csv", roots)
 
     def test_a_link_wins_over_a_download(self, reader, tmp_path):
@@ -284,10 +285,8 @@ def test_locate_keeps_taking_a_mapping_of_dataset_roots(reader, tmp_path):
     resource = catalog.dataset("flat").resource_at("a.csv")
     roots = replace(Roots(public=reader.cache), datasets={"flat": str(tmp_path / "x")})
 
-    [from_roots] = locate(catalog, [resource], roots, skip_unavailable=False)
-    [given] = locate(
-        catalog, [resource], roots, {"flat": tmp_path / "y"}, skip_unavailable=False
-    )
+    [from_roots] = locate(catalog, [resource], roots)
+    [given] = locate(catalog, [resource], roots, {"flat": tmp_path / "y"})
 
     assert from_roots.path == tmp_path / "x" / "a.csv"
     assert given.path == tmp_path / "y" / "a.csv"

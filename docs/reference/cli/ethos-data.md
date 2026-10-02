@@ -262,7 +262,7 @@ other mode — `--root` or `--prune` beside a dataset name, `--force` beside
 
 `-c` / `--collections`, default collections-file discovery, and
 `config set-collections` / `unset-collections` have been removed from the CLI.
-`--test` and `--skip-unavailable` are package-wrapper options.
+`--test` is a package-wrapper option.
 Applications without a wrapper can still pass an explicit file to
 [`ethos_data.collections`][ethos_data.collections] in Python.
 

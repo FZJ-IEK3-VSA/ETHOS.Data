@@ -72,11 +72,9 @@ plain collection extending a lopsided one is rejected too. A pattern that matche
 resources can produce an empty selection; consuming packages must check that
 their required inputs were selected. Bundle export rejects empty collections. If Access
 policy finds inaccessible required data,
-Retrieval fails before returning an apparently complete result. Explicitly
-skipping unavailable data changes the returned keys and leaves the affected
-`paths` handles out of the named mapping — recorded in `NamedPaths.omitted`
-and named in a warning, never a path to nothing — so the consuming workflow
-must distinguish required from optional inputs.
+Retrieval fails before returning an apparently complete result, with the
+dataset's description. Every input is required, so a result either holds
+every handle the collection names or is not returned at all.
 
 Local development can overlay catalogue data with staging entries. A staging
 overlay changes metadata selection as well as file locations: new resources must

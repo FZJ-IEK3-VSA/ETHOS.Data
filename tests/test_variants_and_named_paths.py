@@ -834,114 +834,6 @@ class TestValidationBeforeDownload:
         ethos_data.paths("onshore_wind", define(ONSHORE), progressbar=False, test=True)
         assert download_spy == [TEST_KEYS]
 
-    @pytest.mark.legacy(
-        "every input is required: skip_unavailable goes and the error describes the dataset"
-    )
-    def test_unreachable_data_is_an_access_error_unless_the_caller_said_to_skip_it(
-        self, define, monkeypatch
-    ):
-        """Having no restricted cache is a legitimate state, not a broken one --
-        but a result with a hole in it is worse than a command that stops and
-        says so. locate() raises before any transfer; the explicit keyword beats
-        the configured answer in both directions."""
-        file = define(LICENSED)
-        with pytest.raises(ethos_data.AccessError) as caught:
-            ethos_data.paths("with_licensed", file, progressbar=False)
-        message = str(caught.value)
-        assert message.startswith(
-            "dataset 'licensed' is restricted and is never downloaded."
-        )
-        assert "--skip-unavailable" in message
-        with pytest.raises(ethos_data.AccessError):
-            ethos_data.fetch(
-                "with_licensed", file, progressbar=False, skip_unavailable=False
-            )
-        # skip_unavailable=False is forwarded as such, over a configured True.
-        monkeypatch.setenv("ETHOS_SKIP_UNAVAILABLE", "true")
-        with pytest.raises(ethos_data.AccessError):
-            ethos_data.fetch(
-                "with_licensed", file, progressbar=False, skip_unavailable=False
-            )
-        # ...and None takes the configured answer, as download() always has.
-        with pytest.warns(UserWarning):
-            assert ethos_data.fetch(
-                "with_licensed", file, progressbar=False
-            ).named.omitted == ["secret"]
-
-    @pytest.mark.legacy(
-        "every input is required: skip_unavailable goes and the error describes the dataset"
-    )
-    def test_under_skip_unavailable_an_unreachable_handle_is_left_out_and_named(
-        self, world, define
-    ):
-        """The same contract the files themselves get: absent from the mapping,
-        never a path to nothing -- and named in a warning, so a workflow hears
-        which handle went missing rather than failing on ``inputs["secret"]``
-        three frames deep in a raster reader."""
-        _, cache, _ = world
-        file = define(LICENSED)
-        with pytest.warns(UserWarning) as record:
-            files = ethos_data.fetch(
-                "with_licensed", file, progressbar=False, skip_unavailable=True
-            )
-        messages = [str(warning.message) for warning in record]
-        assert any(
-            m.startswith("1 file(s) from licensed are not available on this machine")
-            for m in messages
-        )
-        assert (
-            "collection 'with_licensed': the named path(s) secret are not available on this "
-            "machine and have been left out -- the mapping has no entry for them."
-        ) in messages
-        assert sorted(files) == ["landcover/clc.tif"]
-        assert files.named == {"clc": cache / "landcover/clc.tif"}
-        assert files.named.omitted == ["secret"]
-
-        with pytest.warns(UserWarning) as record:
-            inputs = ethos_data.paths(
-                "with_licensed", file, progressbar=False, skip_unavailable=True
-            )
-        assert any("named path(s) secret" in str(w.message) for w in record)
-        assert inputs == {"clc": cache / "landcover/clc.tif"}
-        assert inputs.omitted == ["secret"]
-        with pytest.raises(KeyError) as caught:
-            inputs["secret"]
-        message = caught.value.args[0]
-        assert (
-            "named path 'secret' in collection 'with_licensed' is not available on this machine"
-            in message
-        )
-        assert "left out under skip_unavailable" in message
-        assert "available: clc" in message
-        # A handle nobody defined is still "no such handle", not "unavailable".
-        with pytest.raises(KeyError, match="no named path 'nope'"):
-            inputs["nope"]
-        assert inputs.get("secret") is None
-
-    @pytest.mark.legacy(
-        "every input is required: skip_unavailable goes and the error describes the dataset"
-    )
-    def test_paths_is_empty_not_an_error_when_every_handle_was_left_out(self, define):
-        """ "Declares no named paths" is about the file. A collection whose one
-        handle is unreachable *here* declared it fine; the caller who chose to
-        skip unavailable data gets an empty mapping that says why."""
-        file = define("""
-            only_secret:
-              include:
-                - dataset: licensed
-              paths:
-                secret: licensed/secret.tif
-            """)
-        with pytest.warns(UserWarning) as record:
-            inputs = ethos_data.paths(
-                "only_secret", file, progressbar=False, skip_unavailable=True
-            )
-        assert any("named path(s) secret" in str(w.message) for w in record)
-        assert inputs == {}
-        assert inputs.omitted == ["secret"]
-        with pytest.raises(KeyError, match="left out under skip_unavailable"):
-            inputs["secret"]
-
 
 class TestListResources:
     def test_a_family_a_folder_and_a_single_file(self, world, download_spy):
@@ -1234,14 +1126,14 @@ class TestCommandLine:
             == 0
         )
         assert capsys.readouterr().out.startswith(
-            "onshore_wind [test]: all 6 available files already present"
+            "onshore_wind [test]: all 6 files already present"
         )
         assert (
             tool_main(str(file), prog="example-data", argv=["fetch", "onshore_wind"])
             == 0
         )
         assert capsys.readouterr().out.startswith(
-            "onshore_wind [full]: all 7 available files already present"
+            "onshore_wind [full]: all 7 files already present"
         )
 
     def test_paths_prints_tab_separated_handle_and_path_lines(
@@ -1469,48 +1361,6 @@ class TestCommandLine:
         assert re.search(r"^  onshore_wind \[test\]\s+6 files", out, re.MULTILINE)
         assert re.search(r"^  onshore_wind \[full\]\s+7 files", out, re.MULTILINE)
 
-    @pytest.mark.legacy(
-        "every input is required: skip_unavailable goes and the error describes the dataset"
-    )
-    def test_paths_under_skip_unavailable_prints_only_the_handles_this_machine_can_honour(
-        self, world, define, capsys
-    ):
-        """One ``handle<TAB>path`` line per reachable input; the unreachable one
-        is a warning, never a path to nothing that a shell loop would hand on."""
-        _, cache, _ = world
-        file = define(LICENSED)
-        with pytest.warns(UserWarning) as record:
-            assert (
-                tool_main(
-                    str(file),
-                    prog="example-data",
-                    argv=["--skip-unavailable", "fetch", "with_licensed", "--paths"],
-                )
-                == 0
-            )
-        assert capsys.readouterr().out.splitlines() == [
-            f"clc\t{cache / 'landcover/clc.tif'}"
-        ]
-        assert any(
-            "named path(s) secret are not available on this machine" in str(w.message)
-            for w in record
-        )
-        # Without the flag the command stops, as the API does, before any transfer.
-        assert (
-            tool_main(
-                str(file),
-                prog="example-data",
-                argv=["fetch", "with_licensed", "--paths"],
-            )
-            == 2
-        )
-        captured = capsys.readouterr()
-        assert captured.out == ""
-        assert captured.err.startswith(
-            "error: dataset 'licensed' is restricted and is never downloaded."
-        )
-        assert "--skip-unavailable" in captured.err
-
     def test_verify_all_skips_what_it_cannot_resolve_and_says_so_in_its_exit_status(
         self, define, incomplete, capsys
     ):
@@ -1585,7 +1435,7 @@ class TestCommandLine:
             == 0
         )
         assert capsys.readouterr().out.startswith(
-            "onshore_wind [test]: all 6 available files already present"
+            "onshore_wind [test]: all 6 files already present"
         )
         # A command without the flag ignores it rather than rejecting it.
         assert tool_main(str(file), prog="example-data", argv=["--test", "show"]) == 0
@@ -1901,28 +1751,6 @@ class TestSecondReviewRound:
         message = str(caught.value)
         assert "at the top level and also the variant(s)" in message
         assert "cannot be compared" not in message
-
-    @pytest.mark.legacy(
-        "every input is required: skip_unavailable goes and the error describes the dataset"
-    )
-    def test_a_fetch_with_nothing_reachable_says_so(self, define, capsys):
-        """ "all 0 available files already present" described a collection none
-        of which is on this machine; the sentence now says what happened."""
-        file = define("""
-            only_licensed:
-              include:
-                - dataset: licensed
-        """)
-        assert (
-            tool_main(
-                str(file),
-                prog="example-data",
-                argv=["--skip-unavailable", "fetch", "only_licensed"],
-            )
-            == 0
-        )
-        out = capsys.readouterr().out
-        assert "nothing to fetch" in out and "none of its 1 file(s)" in out
 
     @pytest.fixture
     def staged_landcover(self, world, monkeypatch):

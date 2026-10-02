@@ -72,8 +72,6 @@ __all__ = [
     "ENV_VAR",
     "RESTRICTED_ENV_VAR",
     "STAGING_ENV_VAR",
-    "SKIP_UNAVAILABLE_ENV_VAR",
-    "SKIP_UNAVAILABLE_KEY",
     "PUBLIC_CACHE_KEY",
     "LEGACY_CACHE_KEY",
     "RESTRICTED_CACHE_KEY",
@@ -91,7 +89,6 @@ __all__ = [
     "resolve_restricted_cache",
     "resolve_staging_cache",
     "resolve_roots",
-    "resolve_skip_unavailable",
     "resolve_catalog",
     "resolve_collections",
     "resolve_publication_url",
@@ -132,11 +129,10 @@ STAGING_CACHE_KEY = "staging_cache"
 CATALOG_KEY = "catalog"
 PUBLICATION_URL_KEY = "publication_url"
 DATASET_ROOTS_KEY = "dataset_roots"
-#: "I do not have the licensed data, carry on without it." Set once by anybody
-#: working away from the institute cluster, where the restricted cache does not
-#: and cannot exist.
-SKIP_UNAVAILABLE_KEY = "skip_unavailable"
-SKIP_UNAVAILABLE_ENV_VAR = "ETHOS_SKIP_UNAVAILABLE"
+#: Settings earlier releases read and this one ignores, with why. A workflow
+#: cannot run without one of its inputs, so nothing lets it leave one out.
+RETIRED_KEYS = {"skip_unavailable": "every input is required"}
+RETIRED_ENV_VARS = {"ETHOS_SKIP_UNAVAILABLE": "every input is required"}
 
 CONFIG_FILENAME = "config.yaml"
 APP = "ethos-data"
@@ -554,38 +550,6 @@ def resolve_staging_cache(explicit: str | Path | None = None) -> Resolved | None
     return _optional_root(explicit, STAGING_ENV_VAR, STAGING_CACHE_KEY, *load_config())
 
 
-#: Strings a person plausibly types meaning yes.
-_TRUTHY = {"1", "true", "yes", "on"}
-_FALSY = {"0", "false", "no", "off"}
-
-
-def resolve_skip_unavailable(explicit: bool | None = None) -> tuple[bool, str]:
-    """Whether to carry on when licensed data cannot be reached here.
-
-    Off by default: a dataset quietly missing from a result is worse than a
-    command that stops and says so. Somebody who simply does not have access to
-    the licensed data -- most people, most of the time, away from the institute
-    cluster -- sets this once and stops being asked.
-    """
-    if explicit is not None:
-        return bool(explicit), "explicit argument"
-    from_env = os.environ.get(SKIP_UNAVAILABLE_ENV_VAR)
-    if from_env is not None:
-        lowered = from_env.strip().lower()
-        if lowered in _TRUTHY:
-            return True, f"${SKIP_UNAVAILABLE_ENV_VAR}"
-        if lowered in _FALSY:
-            return False, f"${SKIP_UNAVAILABLE_ENV_VAR}"
-        raise ConfigurationError(
-            f"${SKIP_UNAVAILABLE_ENV_VAR}={from_env!r} is not a yes/no value; "
-            f"use one of {', '.join(sorted(_TRUTHY | _FALSY))}"
-        )
-    settings, origin = load_config()
-    if SKIP_UNAVAILABLE_KEY in settings:
-        return bool(settings[SKIP_UNAVAILABLE_KEY]), origin[SKIP_UNAVAILABLE_KEY]
-    return False, "built-in default (stop rather than omit data)"
-
-
 def resolve_roots(public: str | Path | None = None) -> Roots:
     """All three roots at once, each with its provenance, and the per-dataset ones."""
     return _roots(public, *load_config())
@@ -693,6 +657,8 @@ class Settings:
     publication_url: str | None = None
     publication_url_source: str = ""
     ignored: tuple[tuple[str, Path], ...] = ()
+    #: Settings of an earlier release that are set but no longer read, with why.
+    retired: tuple[tuple[str, str], ...] = ()
 
     def choose_catalog(
         self,
@@ -793,6 +759,8 @@ class Settings:
             rows.append(("dataset root", f"{name} -> {where}"))
         for what, path in self.ignored:
             rows.append(("ignored", f"{path}  ({what}; no longer read)"))
+        for setting, why in self.retired:
+            rows.append(("ignored", f"{setting}  (no longer read: {why})"))
         return rows
 
     def __str__(self) -> str:
@@ -824,4 +792,12 @@ def read_settings(
         publication_url=url[0] if url else None,
         publication_url_source=url[1] if url else "",
         ignored=tuple(ignored_config_files()),
+        retired=tuple(
+            [(key, why) for key, why in RETIRED_KEYS.items() if key in settings]
+            + [
+                (f"${variable}", why)
+                for variable, why in RETIRED_ENV_VARS.items()
+                if variable in os.environ
+            ]
+        ),
     )

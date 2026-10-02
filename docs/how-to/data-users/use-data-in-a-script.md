@@ -126,15 +126,6 @@ that register a copy you have, which
 explains. A workflow cannot run without one of its inputs, so no option leaves
 one out.
 
-!!! warning "Gap: the error does not describe the dataset, and inputs can be left out"
-    The error names the dataset and prints its `ethos:restriction` note
-    only. `skip_unavailable=True`, `--skip-unavailable`,
-    `config set-skip-unavailable true` and `ETHOS_SKIP_UNAVAILABLE` still
-    drop an unreachable handle from the mapping with a warning, and the
-    error suggests them. The planned change, [every input is
-    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
-    is to be implemented separately.
-
 ## Try catalogue data that is not in a collection yet {#by-key}
 
 Anything the catalogue describes can be asked for by its key,
