@@ -94,3 +94,25 @@ def test_verify_only_fails_on_a_file_the_store_does_not_serve(uploading, store):
 
     assert code == 1
     assert "NOT READABLE   1" in out
+
+
+def test_a_dataset_without_a_prefix_goes_to_the_folder_named_after_it(
+    tmp_path, store, monkeypatch
+):
+    """The documented default, and the folder the reader downloads from."""
+    catalogue = SourceCatalogue(tmp_path, publication_url=f"{store.url}/ethos-data")
+    catalogue.dataset("plain", {"a.csv": "1\n"})
+    assert catalogue.build()[0] == 0
+    commands = []
+    monkeypatch.setattr(
+        upload.subprocess,
+        "run",
+        lambda command, *a, **k: (
+            commands.append(command) or subprocess.CompletedProcess(command, 0)
+        ),
+    )
+
+    code, _, err = catalogue.catalog("upload", "plain", "--dry-run")
+
+    assert code == 0, err
+    assert commands[0][3] == "HIFIS:ethos-data/plain"

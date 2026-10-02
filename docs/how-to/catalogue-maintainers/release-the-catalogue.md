@@ -25,8 +25,8 @@ catalogue alike.
 
 ## 2. Update the internal catalogue {#internal}
 
-Cluster users read one checkout of the source catalogue on the cluster computer
-computer, see [Set up the shared machine](set-up-the-shared-machine.md). It
+Cluster users read one checkout of the source catalogue on the cluster computer,
+see [Set up the shared machine](set-up-the-shared-machine.md). It
 holds one version, the latest release. Update it when no jobs are reading it
 and check it before announcing:
 
@@ -55,18 +55,23 @@ ethos-data catalog publish ../ETHOS.Data-Catalogue
 
 `publish` emits, for every dataset with `ethos:visibility: public`, the index,
 the descriptor and shards with `source_dir`, `ethos:embargo`,
-`ethos:license_note` and `ethos:uploaded` stripped, the licence documents, and
-the README table. It stamps `ethos:catalog_role: published` into the index.
+`ethos:license_note`, `ethos:uploaded` and `ethos:frozen` stripped, the
+licence documents, and the README table. It stamps
+`ethos:catalog_role: published` into the index.
 
 ### Check for a leak before committing {#leak-check}
 
+`publish` checks the tree it generates before writing any of it. A stripped
+key that is still there, or a hidden dataset named anywhere, in a descriptor,
+the index or the README, stops it with nothing written, and it names each
+finding. Fix the source descriptor or its visibility, rebuild, and publish
+again. The check knows names, not meaning, so read the diff:
+
 ```bash
-rg -n 'source_dir|ethos:embargo|ethos:license_note|ethos:uploaded' ../ETHOS.Data-Catalogue   # expect no output
-rg -n '<name of a hidden dataset>' ../ETHOS.Data-Catalogue                                    # expect no output
 cd ../ETHOS.Data-Catalogue && git diff
 ```
 
-A hidden dataset must not be mentioned at all. Read the diff.
+A hidden dataset must not be mentioned at all.
 
 ### Commit, tag, push
 
@@ -130,6 +135,9 @@ ethos-data catalog build --check
 ethos-data catalog publish ../ETHOS.Data-Catalogue --check
 ```
 
+`publish --check` runs the [leak check](#leak-check) too, so a merge request
+that would leak fails before anybody publishes.
+
 | Dataset state | The runner needs |
 | --- | --- |
 | Candidate with `source_dir` | Read access to that directory, so a runner on the cluster computer |
@@ -153,5 +161,4 @@ GitHub, is still to be established.
 
 !!! warning "Gap: releases are manual"
     Only the two check commands exist. No pipeline publishes, uploads the
-    catalogue to dCache or updates the cluster computer checkout, and the leak check
-    is not part of `publish --check`.
+    catalogue to dCache or updates the cluster computer checkout.

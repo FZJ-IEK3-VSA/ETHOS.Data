@@ -38,12 +38,13 @@ from pathlib import Path
 
 import yaml
 
-from ..catalogs import license_settled
+from ..formats import keys as k
+from ..formats.derived import license_settled
 from . import dataset_name_for, datasets_dir, is_namespace, iter_dataset_dirs
 
 __all__ = ["Action", "plan", "apply", "run"]
 
-RESTRICTED = "restricted"
+RESTRICTED = k.RESTRICTED
 
 
 @dataclass
@@ -127,7 +128,7 @@ def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
 
     for name, meta in declared:
         entry = root / name
-        access = meta.get("ethos:access", "public")
+        access = meta.get(k.ACCESS, k.PUBLIC)
 
         if access == RESTRICTED:
             actions.append(

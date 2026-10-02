@@ -62,17 +62,19 @@ import mimetypes
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath
 
 import yaml
 
+from ..catalogs import ROOT_SHARD, shard_key
 from ..errors import DescriptorError
-from ..catalogs import CATALOG_ROLES, ROLE_KEY, ROLE_SOURCE, ROOT_SHARD, shard_key
+from ..formats import catalogue as catalogue_format
+from ..formats import dataset as dataset_format
+from ..formats import keys as k
+from ..formats.derived import index_row
 from ..selection import path_matches
 from . import (
-    INHERITED_KEYS,
     LEGACY_SHARD_DIR,
-    NAMESPACE_KEY,
     SHARD_DIR,
     dataset_name_for,
     datasets_dir,
@@ -109,72 +111,6 @@ SHAPEFILE_SIDECAR_EXTS = [
     ".sbx",
     ".xml",
 ]
-
-ACCESS_CLASSES = ("public", "internal", "restricted")
-VISIBILITIES = ("public", "hidden")
-
-#: How this dataset came to exist. Declared, never inferred -- the same reason
-#: ``ethos:catalog_role`` is declared. "Somebody here made this" is a claim with
-#: licensing consequences, and guessing it from the presence of an author
-#: contributor would make it true by accident.
-ORIGIN_KEY = "ethos:origin"
-#: downloaded -- mirrored as obtained; the upstream terms are the terms.
-#: derived    -- computed from other data; ours, but downstream of somebody else's.
-#: created    -- produced here from scratch; ICE-2 holds the rights.
-ORIGINS = ("downloaded", "derived", "created")
-DEFAULT_ORIGIN = "downloaded"
-#: Prose saying *how* a derived dataset was computed. Already used by
-#: geothermal-resource before it was formalised here; required for `derived`,
-#: because "derived from what, by what method" is the whole content of the claim.
-DERIVATION_KEY = "ethos:derivation"
-
-#: Declared, not inferred, exactly like ``ethos:origin``. Once true, dCache holds
-#: the copy this manifest's hashes must match, ``source_dir`` stops being read,
-#: and it must be removed outright -- a stale path nobody rebuilds from is worse
-#: than no path, since nothing about the descriptor would say it stopped being
-#: the truth.
-UPLOADED_KEY = "ethos:uploaded"
-
-#: The same freeze, without the claim about dCache: the inventory is final and
-#: there is no local build input any more.
-#:
-#: Uploading is one way a dataset reaches that state and it is not the only one.
-#: Restricted data is never uploaded -- the authorised installation *is* the
-#: permanent copy, and this manifest's hashes are what says it is still intact --
-#: so once it has been moved into the restricted cache and the original retired,
-#: there is nothing left to build from and nothing that should be rebuilt. The
-#: same is true of public data materialised into a cache.
-#:
-#: Why freeze rather than repoint ``source_dir`` at the copy: a rebuild re-reads
-#: and re-hashes whatever it is pointed at. Pointed at the copy, it would record
-#: that copy's current bytes as the truth -- so a corrupted copy would be written
-#: into the manifest as correct, and the check that would have caught it is the
-#: thing that just destroyed the evidence. Hashes taken from the original are an
-#: independent witness; keeping them is the whole point.
-#:
-#: ``ethos:uploaded: true`` implies this. Both are maintainer bookkeeping and
-#: neither is published.
-FROZEN_KEY = "ethos:frozen"
-
-CONTRIBUTORS_KEY = "contributors"
-#: Data Package's suggested roles. `author` is the one that carries weight here:
-#: an origin of `derived` or `created` has to name who did it.
-CONTRIBUTOR_ROLES = ("author", "contributor", "maintainer", "publisher", "wrangler")
-AUTHOR_ROLE = "author"
-
-LICENSES_KEY = "licenses"
-#: Optional on one entry of ``licenses``: the glob patterns that licence covers,
-#: for a dataset whose files are not all under the same terms -- upstream
-#: originals beside conversions we made, say. Matched by the same rule as
-#: ``ethos:include`` and a collection's ``files:``.
-APPLIES_TO_KEY = "ethos:applies_to"
-#: Optional on one entry of ``licenses``: an archived copy of the terms, as a path
-#: relative to the dataset directory. Carried verbatim into the published catalogue.
-DOCUMENT_KEY = "ethos:document"
-#: Derived: the build hashes the archived document and records the digest here,
-#: exactly as it does for a resource. Written in dataset.yaml by hand it is a pin
-#: the build verifies instead -- for terms somebody has actually reviewed.
-DOCUMENT_HASH_KEY = "ethos:document_sha256"
 
 # Per-dataset, maintainer-local, never published -- see the module docstring.
 HASH_CACHE_NAME = ".ice2-hash-cache.json"
@@ -324,10 +260,6 @@ def iter_data_files(root: Path):
         yield path
 
 
-INCLUDE_KEY = "ethos:include"
-EXCLUDE_KEY = "ethos:exclude"
-
-
 def expand_pattern(pattern: str) -> list[str]:
     """The glob patterns one ``ethos:include`` / ``ethos:exclude`` entry stands for.
 
@@ -346,10 +278,10 @@ def expand_pattern(pattern: str) -> list[str]:
     """
     pattern = pattern.strip()
     if not pattern:
-        raise DescriptorError(f"{INCLUDE_KEY}/{EXCLUDE_KEY}: empty pattern")
+        raise DescriptorError(f"{k.INCLUDE}/{k.EXCLUDE}: empty pattern")
     if pattern.startswith("/"):
         raise DescriptorError(
-            f"{INCLUDE_KEY}/{EXCLUDE_KEY}: {pattern!r} starts with '/'. Patterns are "
+            f"{k.INCLUDE}/{k.EXCLUDE}: {pattern!r} starts with '/'. Patterns are "
             "relative to source_dir; drop the leading slash."
         )
     if pattern.endswith("/"):
@@ -357,25 +289,6 @@ def expand_pattern(pattern: str) -> list[str]:
     if any(character in pattern for character in "*?["):
         return [pattern]
     return [pattern, pattern + "/**"]
-
-
-def _patterns(name: str, meta: dict, key: str) -> list[str] | None:
-    """Read one pattern list out of dataset.yaml, or None if it is absent."""
-    raw = meta.get(key)
-    if raw is None:
-        return None
-    if isinstance(raw, str) or not isinstance(raw, list):
-        raise DescriptorError(
-            f"{name}: {key} must be a list of patterns, got {type(raw).__name__}"
-        )
-    if not raw:
-        raise DescriptorError(
-            f"{name}: {key} is an empty list, which would select nothing. "
-            f"Remove the key instead -- absent means 'no filter'."
-        )
-    if not all(isinstance(entry, str) for entry in raw):
-        raise DescriptorError(f"{name}: every entry in {key} must be a string")
-    return raw
 
 
 def select(name: str, root: Path, paths: list[Path], meta: dict) -> list[Path]:
@@ -401,8 +314,9 @@ def select(name: str, root: Path, paths: list[Path], meta: dict) -> list[Path]:
     ``.dbf`` and ``.shx`` is unreadable, and an include list is exactly where
     somebody would forget them.
     """
-    include = _patterns(name, meta, INCLUDE_KEY)
-    exclude = _patterns(name, meta, EXCLUDE_KEY)
+    # Their shape is checked with the rest of the descriptor, before this runs.
+    include = meta.get(k.INCLUDE)
+    exclude = meta.get(k.EXCLUDE)
     if include is None and exclude is None:
         return paths
 
@@ -425,7 +339,7 @@ def select(name: str, root: Path, paths: list[Path], meta: dict) -> list[Path]:
         empty = [pattern for pattern, found in hits.items() if not found]
         if empty:
             raise DescriptorError(
-                f"{name}: {INCLUDE_KEY} pattern(s) match no file under {root}:\n"
+                f"{name}: {k.INCLUDE} pattern(s) match no file under {root}:\n"
                 + "".join(f"    {pattern}\n" for pattern in empty)
                 + "Fix the pattern, or drop it if the file is gone. An include list that\n"
                 "silently matches nothing would publish a smaller dataset than intended."
@@ -438,7 +352,7 @@ def select(name: str, root: Path, paths: list[Path], meta: dict) -> list[Path]:
         for pattern, found in hits.items():
             if not found:
                 print(
-                    f"warning: {name}: {EXCLUDE_KEY} pattern {pattern!r} matches nothing "
+                    f"warning: {name}: {k.EXCLUDE} pattern {pattern!r} matches nothing "
                     f"under {root} -- already cleaned up, or a typo?",
                     file=sys.stderr,
                 )
@@ -485,13 +399,13 @@ def frozen_resources(name: str, dataset_dir: Path) -> list[dict]:
         raise DescriptorError(
             f"{name}: the inventory is declared final but there is no datapackage.json to "
             f"freeze. Build once with source_dir set, check the result, and only then set "
-            f"{FROZEN_KEY}: true (or {UPLOADED_KEY}: true) and remove source_dir."
+            f"{k.FROZEN}: true (or {k.UPLOADED}: true) and remove source_dir."
         )
     resources = resources_of(
         json.loads(package_file.read_text(encoding="utf-8")), dataset_dir
     )
     return [
-        {k: v for k, v in resource.items() if k != LICENSES_KEY}
+        {key: value for key, value in resource.items() if key != k.LICENSES}
         for resource in resources
     ]
 
@@ -518,100 +432,6 @@ def build_resource(path: Path, root: Path, size: int, digest: str) -> dict:
     return resource
 
 
-def validate_classification(name: str, meta: dict) -> tuple[str, str]:
-    """Check the access/visibility pair, defaulting both to public.
-
-    These two are independent: a dataset can be listed publicly while its bytes
-    stay closed (so a public user gets a useful message instead of a mystery
-    failure), and it can be hidden while colleagues use it daily (embargo).
-    """
-    access = meta.setdefault("ethos:access", "public")
-    visibility = meta.setdefault("ethos:visibility", "public")
-
-    if access not in ACCESS_CLASSES:
-        raise DescriptorError(
-            f"{name}: ethos:access must be one of {ACCESS_CLASSES}, got {access!r}"
-        )
-    if visibility not in VISIBILITIES:
-        raise DescriptorError(
-            f"{name}: ethos:visibility must be one of {VISIBILITIES}, got {visibility!r}"
-        )
-    if access == "public" and visibility == "hidden":
-        raise DescriptorError(
-            f"{name}: access=public with visibility=hidden makes no sense -- "
-            "if the bytes are downloadable by anyone, list the dataset."
-        )
-    if visibility == "hidden" and "ethos:embargo" not in meta:
-        raise DescriptorError(
-            f"{name}: visibility=hidden needs an ethos:embargo block saying when and why "
-            "it becomes public, otherwise it stays hidden by accident forever. "
-            'Use `until: "unspecified"` only with an explicit reason.'
-        )
-    if access == "restricted" and meta.get("ethos:remote_prefix"):
-        raise DescriptorError(
-            f"{name}: restricted data must not declare ethos:remote_prefix -- "
-            "it is never uploaded. Configure dataset_roots on each machine instead."
-        )
-    if access == "restricted" and meta.get(UPLOADED_KEY):
-        # The freeze this asks for is right; the claim attached to it is not.
-        # Restricted data never reaches dCache, so "dCache holds it now" would be
-        # a false statement sitting in the catalogue -- and there is a key that
-        # says the true half on its own.
-        raise DescriptorError(
-            f"{name}: restricted data is never uploaded, so {UPLOADED_KEY}: true cannot "
-            f"be right. If its inventory is final -- the authorised installation is the "
-            f"permanent copy and there is nothing local left to build from -- say that "
-            f"instead:\n    {FROZEN_KEY}: true"
-        )
-    return access, visibility
-
-
-def validate_licenses(name: str, meta: dict) -> list[dict]:
-    """Check the ``licenses`` array, and return it.
-
-    Frictionless makes ``licenses`` a list already, so several licences need no
-    extension -- only checking. A dataset really does carry more than one: a
-    product whose documentation is CC-BY while the data is under bespoke terms,
-    or an upstream mirror beside conversions we made and licence ourselves.
-
-    An entry needs ``name`` (an Open Definition id) or ``path`` (a URL) to say
-    anything at all; one carrying only a ``title`` reads as a licence and
-    identifies nothing, which is worse than an honest
-    ``ethos:license_status: unresolved``.
-    """
-    licenses = meta.get(LICENSES_KEY)
-    if licenses is None:
-        return []
-    if not isinstance(licenses, list):
-        raise DescriptorError(
-            f"{name}: {LICENSES_KEY} must be a list, even with one entry -- "
-            "a dataset can be under several."
-        )
-    for index, entry in enumerate(licenses):
-        where = f"{name}: {LICENSES_KEY}[{index}]"
-        if not isinstance(entry, dict):
-            raise DescriptorError(
-                f"{where} must be a mapping with 'name' and/or 'path'."
-            )
-        if not (entry.get("name") or entry.get("path")):
-            raise DescriptorError(
-                f"{where} has neither 'name' nor 'path'. Give an Open Definition id "
-                "(name: CC-BY-4.0) or a URL to the terms (path: https://...); a bare "
-                "title names no licence. If the terms are not settled, drop the entry "
-                "and set ethos:license_status: unresolved instead."
-            )
-        patterns = entry.get(APPLIES_TO_KEY)
-        if patterns is None:
-            continue
-        if not isinstance(patterns, list) or not all(
-            isinstance(p, str) and p for p in patterns
-        ):
-            raise DescriptorError(
-                f"{where}: {APPLIES_TO_KEY} must be a list of glob patterns."
-            )
-    return licenses
-
-
 def record_license_documents(
     name: str, dataset_dir: Path, licenses: list[dict]
 ) -> None:
@@ -626,54 +446,31 @@ def record_license_documents(
     A missing document fails here, where the maintainer is, not later in publish.
     """
     for index, entry in enumerate(licenses):
-        where = f"{name}: {LICENSES_KEY}[{index}]"
-        document = entry.get(DOCUMENT_KEY)
+        where = f"{name}: {k.LICENSES}[{index}]"
+        document = entry.get(k.DOCUMENT)
         if document is None:
-            if DOCUMENT_HASH_KEY in entry:
-                raise DescriptorError(
-                    f"{where} has {DOCUMENT_HASH_KEY} but no {DOCUMENT_KEY} to hash. "
-                    "Archive the terms beside dataset.yaml and name the file, or drop "
-                    "the hash."
-                )
             continue
-        relative = PurePosixPath(str(document))
-        if (
-            not isinstance(document, str)
-            or not document
-            or "\\" in document
-            or relative.is_absolute()
-            or PureWindowsPath(document).drive
-            or any(part in ("", ".", "..") for part in relative.parts)
-        ):
-            raise DescriptorError(
-                f"{where}: {DOCUMENT_KEY} must be a relative path inside the dataset "
-                f"directory, such as licenses/terms.txt; got {document!r}."
-            )
-        path = dataset_dir.joinpath(*relative.parts)
+        # Its spelling is checked with the rest of the descriptor, before this
+        # runs; what is left needs the disk.
+        path = dataset_dir.joinpath(*PurePosixPath(document).parts)
         if not path.is_file():
             raise DescriptorError(
-                f"{where} names {DOCUMENT_KEY} {document}, which is not a file at "
-                f"{path}. Archive the terms there, or drop {DOCUMENT_KEY}."
+                f"{where} names {k.DOCUMENT} {document}, which is not a file at "
+                f"{path}. Archive the terms there, or drop {k.DOCUMENT}."
             )
         actual = sha256_of(path)
-        pinned = entry.get(DOCUMENT_HASH_KEY)
+        pinned = entry.get(k.DOCUMENT_SHA256)
         if pinned is not None:
-            if not isinstance(pinned, str):
-                raise DescriptorError(
-                    f"{where}: {DOCUMENT_HASH_KEY} must be a hex digest in quotes; YAML "
-                    f"read {pinned!r} as a number, which loses leading zeros. Quote it, "
-                    f"or delete it and let the build record the digest."
-                )
             declared = pinned.strip().lower().removeprefix("sha256:")
             if declared != actual:
                 raise DescriptorError(
                     f"{where}: {document} hashes to {actual}, but dataset.yaml pins "
-                    f"{DOCUMENT_HASH_KEY}: {declared}. The archived text is not the one "
+                    f"{k.DOCUMENT_SHA256}: {declared}. The archived text is not the one "
                     f"that hash was recorded for. If the file is right, delete "
-                    f"{DOCUMENT_HASH_KEY} and rebuild -- the build records the digest "
+                    f"{k.DOCUMENT_SHA256} and rebuild -- the build records the digest "
                     "itself. If the hash is right, restore the file."
                 )
-        entry[DOCUMENT_HASH_KEY] = actual
+        entry[k.DOCUMENT_SHA256] = actual
 
 
 def apply_resource_licenses(
@@ -697,123 +494,51 @@ def apply_resource_licenses(
     silently licensing no files is how a dataset ends up published under terms
     nobody applied.
     """
-    narrowed = [entry for entry in licenses if entry.get(APPLIES_TO_KEY)]
+    narrowed = [entry for entry in licenses if entry.get(k.APPLIES_TO)]
     if not narrowed:
         return
 
     for entry in narrowed:
-        patterns = entry[APPLIES_TO_KEY]
+        patterns = entry[k.APPLIES_TO]
         # The resource-level copy drops applies_to: it is a build-time
         # instruction about which files to attach to, and on the file it was
         # attached to it answers a question nobody is asking.
-        published = {k: v for k, v in entry.items() if k != APPLIES_TO_KEY}
+        published = {key: value for key, value in entry.items() if key != k.APPLIES_TO}
         matched = 0
         for resource in resources:
             if any(path_matches(resource["path"], p) for p in patterns):
-                resource.setdefault(LICENSES_KEY, []).append(published)
+                resource.setdefault(k.LICENSES, []).append(published)
                 matched += 1
         if not matched:
             raise DescriptorError(
-                f"{name}: {LICENSES_KEY} entry "
-                f"{entry.get('name') or entry.get('path')!r} has {APPLIES_TO_KEY} "
+                f"{name}: {k.LICENSES} entry "
+                f"{entry.get('name') or entry.get('path')!r} has {k.APPLIES_TO} "
                 f"{patterns}, which matches none of the {len(resources)} files in this "
                 "dataset. Fix the pattern, or drop the key so the licence covers "
                 "everything."
             )
 
-    uncovered = [r["path"] for r in resources if LICENSES_KEY not in r]
+    uncovered = [r["path"] for r in resources if k.LICENSES not in r]
     if uncovered and len(narrowed) == len(licenses):
         # Every licence was narrowed, so these files inherit an empty package
         # licence -- described by nothing at all.
         shown = ", ".join(uncovered[:5])
         more = "" if len(uncovered) <= 5 else f", and {len(uncovered) - 5} more"
         print(
-            f"warning: {name}: every {LICENSES_KEY} entry is narrowed with "
-            f"{APPLIES_TO_KEY}, so {len(uncovered)} file(s) are covered by no licence "
-            f"at all: {shown}{more}. Add a licence without {APPLIES_TO_KEY} for the "
+            f"warning: {name}: every {k.LICENSES} entry is narrowed with "
+            f"{k.APPLIES_TO}, so {len(uncovered)} file(s) are covered by no licence "
+            f"at all: {shown}{more}. Add a licence without {k.APPLIES_TO} for the "
             "rest, or widen one of the patterns.",
             file=sys.stderr,
         )
 
 
-def validate_provenance(name: str, meta: dict) -> str:
-    """Check ``ethos:origin`` and ``contributors``, defaulting origin to downloaded.
-
-    Most of this catalogue is mirrored data: somebody else made it, we hold a
-    copy, and the upstream terms are the terms. Some of it is not -- the GeoTIFF
-    conversions in ``landcover``, the whole of ``geothermal-resource`` -- and for
-    those the licence question has a different answer, because the rights are
-    ours. Nothing in a descriptor said which kind a dataset was, so it had to be
-    read out of prose in ``ethos:attribution``, one dataset at a time.
-
-    ``downloaded`` is the default because it is both the common case and the
-    conservative one: claiming less about authorship than is true is safe, and
-    claiming more is not.
-    """
-    origin = meta.setdefault(ORIGIN_KEY, DEFAULT_ORIGIN)
-    if origin not in ORIGINS:
-        raise DescriptorError(
-            f"{name}: {ORIGIN_KEY} must be one of {ORIGINS}, got {origin!r}"
-        )
-
-    contributors = meta.get(CONTRIBUTORS_KEY) or []
-    if not isinstance(contributors, list):
-        raise DescriptorError(f"{name}: {CONTRIBUTORS_KEY} must be a list of mappings.")
-    for index, person in enumerate(contributors):
-        where = f"{name}: {CONTRIBUTORS_KEY}[{index}]"
-        if not isinstance(person, dict):
-            raise DescriptorError(f"{where} must be a mapping with at least a 'title'.")
-        if not person.get("title"):
-            raise DescriptorError(
-                f"{where} needs a 'title' -- the person or group's name."
-            )
-        roles = person.get("roles", [])
-        if isinstance(roles, str):
-            # Data Package v1 spelled this `role`, singular and scalar. Reject
-            # rather than coerce: a descriptor that half-follows two versions of
-            # the spec is worse than one that is told which it is following.
-            raise DescriptorError(
-                f"{where}: 'roles' is a list in Data Package v2 -- write "
-                f"roles: [{roles}], not roles: {roles}."
-            )
-        if not isinstance(roles, list):
-            raise DescriptorError(f"{where}: 'roles' must be a list.")
-        for role in roles:
-            if role not in CONTRIBUTOR_ROLES:
-                raise DescriptorError(
-                    f"{where}: unknown role {role!r}. Use one of {CONTRIBUTOR_ROLES}."
-                )
-
-    if origin == DEFAULT_ORIGIN:
-        return origin
-
-    authors = [p for p in contributors if AUTHOR_ROLE in (p.get("roles") or [])]
-    if not authors:
-        raise DescriptorError(
-            f"{name}: {ORIGIN_KEY} is {origin!r}, which claims this data was made here, "
-            f"so it has to say by whom. Add a {CONTRIBUTORS_KEY} entry with "
-            f"roles: [{AUTHOR_ROLE}]:\n"
-            f"    {CONTRIBUTORS_KEY}:\n"
-            f"      - title: Some Person\n"
-            f"        roles: [{AUTHOR_ROLE}]\n"
-            f"        organization: Forschungszentrum Julich, ICE-2"
-        )
-
-    if origin == "derived":
-        if not meta.get("sources"):
-            raise DescriptorError(
-                f"{name}: {ORIGIN_KEY}: derived needs 'sources' saying what it was "
-                "derived FROM. Derived data inherits obligations from its inputs; a "
-                "derivation with no named input cannot be checked against them."
-            )
-        if not meta.get(DERIVATION_KEY):
-            raise DescriptorError(
-                f"{name}: {ORIGIN_KEY}: derived needs {DERIVATION_KEY} saying HOW -- the "
-                "method, parameters and inputs, in enough detail that somebody could "
-                "redo it. Without that, 'derived' says only that the numbers are not "
-                "upstream's, which is the least useful half of the claim."
-            )
-    return origin
+def _checked(name: str, rule, meta: dict) -> None:
+    """Run one of the format's rules, naming the dataset in its refusal."""
+    try:
+        rule(meta)
+    except DescriptorError as error:
+        raise DescriptorError(f"{name}: {error.message}") from None
 
 
 def shard_path(prefix: str) -> str:
@@ -861,10 +586,13 @@ def render_dataset(
     ``namespace`` says this directory holds other datasets rather than files of
     its own; ``member_totals`` is the ``(bytes, files)`` of everything beneath it,
     which a namespace reports in place of an inventory. ``inherited`` carries the
-    few keys a member takes from the namespace above it -- see INHERITED_KEYS.
+    few keys a member takes from the namespace above it -- see
+    ``formats.dataset.INHERITED``.
     """
     name = name or dataset_dir.name
-    meta = yaml.safe_load((dataset_dir / "dataset.yaml").read_text(encoding="utf-8"))
+    meta = (
+        yaml.safe_load((dataset_dir / "dataset.yaml").read_text(encoding="utf-8")) or {}
+    )
 
     # The name is derived from where the file sits, not trusted from inside it.
     # A dataset.yaml that disagrees with its own location is a rename half-done,
@@ -885,39 +613,22 @@ def render_dataset(
     if namespace:
         return _render_namespace(dataset_dir, name, meta, member_totals or (0, 0))
 
-    validate_classification(name, meta)
-    validate_provenance(name, meta)
-    licenses = validate_licenses(name, meta)
+    _checked(name, dataset_format.check, meta)
+    for warning in dataset_format.lint(meta):
+        print(f"warning: {name}: {warning}", file=sys.stderr)
+    dataset_format.apply_defaults(meta)
+    licenses = meta.get(k.LICENSES) or []
     record_license_documents(name, dataset_dir, licenses)
 
     # All local to the maintainer, never published -- see the module docstring.
-    uploaded = bool(meta.pop(UPLOADED_KEY, False))
-    # Uploading implies it; it does not imply uploading. See FROZEN_KEY.
-    frozen = bool(meta.pop(FROZEN_KEY, False)) or uploaded
-    raw_source_dir = meta.pop("source_dir", None)
+    # Uploading implies freezing; freezing does not imply uploading.
+    uploaded = bool(meta.pop(k.UPLOADED, False))
+    frozen = bool(meta.pop(k.FROZEN, False)) or uploaded
+    raw_source_dir = meta.pop(k.SOURCE_DIR, None)
 
     if frozen:
-        if raw_source_dir is not None:
-            reason = (
-                "Once uploaded, dCache is the source of truth and source_dir is never "
-                "read again -- remove it."
-                if uploaded
-                else "A frozen inventory is never rebuilt from local files; the copy it "
-                "describes is the permanent one -- remove it."
-            )
-            declared = UPLOADED_KEY if uploaded else FROZEN_KEY
-            raise DescriptorError(
-                f"{name}: declares {declared}: true and still has "
-                f"source_dir: {raw_source_dir!r}. {reason}"
-            )
         resources = frozen_resources(name, dataset_dir)
     else:
-        if raw_source_dir is None:
-            raise DescriptorError(
-                f"{name}: source_dir is required, unless {UPLOADED_KEY}: true says the "
-                f"dataset was already uploaded, or {FROZEN_KEY}: true says its inventory "
-                "is final and there is nothing local left to build from."
-            )
         source_dir = Path(raw_source_dir).expanduser()
         # Only a *relative* source_dir is resolved, and only to make it absolute.
         # An absolute one is used exactly as written, symbolic links and all: when
@@ -936,7 +647,7 @@ def render_dataset(
         selected = select(name, source_dir, found, meta)
         if not selected:
             raise DescriptorError(
-                f"{name}: {INCLUDE_KEY}/{EXCLUDE_KEY} filtered out every one of the "
+                f"{name}: {k.INCLUDE}/{k.EXCLUDE} filtered out every one of the "
                 f"{len(found)} files under {source_dir}"
             )
 
@@ -950,12 +661,10 @@ def render_dataset(
     # against the files it claims to cover.
     apply_resource_licenses(name, resources, licenses)
 
-    depth = int(meta.get("ethos:shard_depth", 0) or 0)
-    if depth < 0:
-        raise DescriptorError(f"{name}: ethos:shard_depth must not be negative")
+    depth = int(meta.get(k.SHARD_DEPTH, 0) or 0)
 
     package = {
-        "$schema": "https://datapackage.org/profiles/2.0/datapackage.json",
+        k.SCHEMA: k.DATAPACKAGE_PROFILE,
         **meta,
     }
     files: dict[str, str] = {}
@@ -1019,37 +728,13 @@ def _render_namespace(
     the parent's own inventory, or everything beneath it. Forbidding it is what
     keeps the name unambiguous.
     """
-    for forbidden in (
-        "source_dir",
-        "ethos:uploaded",
-        "ethos:shard_depth",
-        INCLUDE_KEY,
-        EXCLUDE_KEY,
-    ):
-        if forbidden in meta:
-            raise DescriptorError(
-                f"{name}: is a namespace -- it holds other datasets -- so it cannot also "
-                f"describe files of its own, and {forbidden} says it does. Move that key "
-                f"into one of its members, or move the members out."
-            )
-    if "ethos:access" in meta:
-        raise DescriptorError(
-            f"{name}: is a namespace and must not declare ethos:access. An access class says "
-            "where bytes are read from, and a namespace has none -- its members each declare "
-            "their own, which is the whole reason a family can be part public and part not."
-        )
-    if "licenses" in meta or meta.get("ethos:license_status"):
-        raise DescriptorError(
-            f"{name}: is a namespace and must not carry licensing. Its members each state "
-            "their own -- a licence inherited without being read is how a dataset ends up "
-            "published under terms nobody applied to it."
-        )
+    _checked(name, dataset_format.check_namespace, meta)
 
     total_bytes, file_count = member_totals
     package = {
-        "$schema": "https://datapackage.org/profiles/2.0/datapackage.json",
+        k.SCHEMA: k.DATAPACKAGE_PROFILE,
         **meta,
-        NAMESPACE_KEY: True,
+        k.NAMESPACE: True,
         # Reported, not owned: these are the sum over the members, so that
         # a package's `show` command can report what the family costs without loading every
         # member's inventory. There is no `resources` key at all -- a namespace
@@ -1134,17 +819,8 @@ def catalog_meta(catalog_root: Path) -> dict:
     # the dataset.yaml files this reads. Default rather than demand it, so an
     # existing catalog.yaml keeps working, but reject a wrong value outright --
     # a catalogue mislabelled `published` would make every tool refuse to touch it.
-    role = meta.setdefault(ROLE_KEY, ROLE_SOURCE)
-    if role not in CATALOG_ROLES:
-        raise DescriptorError(
-            f"catalog.yaml: {ROLE_KEY} must be one of {CATALOG_ROLES}, got {role!r}"
-        )
-    if role != ROLE_SOURCE:
-        raise DescriptorError(
-            f"catalog.yaml declares {ROLE_KEY}: {role!r}, but this is the catalogue being built "
-            f"from dataset.yaml files, which makes it {ROLE_SOURCE!r}. The published copy gets "
-            "its role set by `ethos-data catalog publish`; do not set it by hand."
-        )
+    catalogue_format.check(meta)
+    meta.setdefault(k.CATALOG_ROLE, k.ROLE_SOURCE)
     return meta
 
 
@@ -1156,55 +832,10 @@ def build_catalog(catalog_root: Path, dataset_dirs: list[Path]) -> dict:
         package = json.loads(
             (dataset_dir / "datapackage.json").read_text(encoding="utf-8")
         )
-        if package.get(NAMESPACE_KEY):
-            # A namespace row carries no access class, no remote prefix and no
-            # licence status, because it has no bytes for any of those to be
-            # about. It is in the index so that a family can be listed and
-            # described by name; a resolver that meets one and tries to fetch it
-            # should find nothing to fetch, not a plausible-looking default.
-            datasets.append(
-                {
-                    "name": package["name"],
-                    "path": f"datasets/{dataset_dir.relative_to(datasets_root).as_posix()}/datapackage.json",
-                    "title": package.get("title", ""),
-                    NAMESPACE_KEY: True,
-                    "ethos:total_bytes": package["ethos:total_bytes"],
-                    "ethos:file_count": package["ethos:file_count"],
-                }
-            )
-            continue
-        datasets.append(
-            {
-                "name": package["name"],
-                "path": f"datasets/{dataset_dir.relative_to(datasets_root).as_posix()}/datapackage.json",
-                "title": package.get("title", ""),
-                # The publisher's own release string. Promoted for the same reason
-                # as license_status: "which release of the upstream product is
-                # this?" is a question a consumer asks before deciding to fetch
-                # 60 GiB, and answering it should not cost an inventory read.
-                # Omitted rather than blanked when a dataset does not declare one,
-                # so absent means "nobody has recorded it", not "unversioned".
-                **({"version": package["version"]} if package.get("version") else {}),
-                "ethos:access": package.get("ethos:access", "public"),
-                "ethos:visibility": package.get("ethos:visibility", "public"),
-                "ethos:total_bytes": package["ethos:total_bytes"],
-                "ethos:file_count": package["ethos:file_count"],
-                # Promoted out of the datapackage so that resolvers can answer
-                # "where does it live?" and "is the licence settled?" from the
-                # index alone. Without these, laziness buys nothing: locating a
-                # file or warning about licensing would pull the whole inventory.
-                "ethos:remote_prefix": package.get(
-                    "ethos:remote_prefix", package["name"]
-                ),
-                "ethos:license_status": (
-                    "resolved"
-                    if package.get("licenses")
-                    else package.get("ethos:license_status", "unknown")
-                ),
-            }
-        )
+        relative = dataset_dir.relative_to(datasets_root).as_posix()
+        datasets.append(index_row(package, f"datasets/{relative}/datapackage.json"))
     return {
-        "$schema": "https://datapackage.org/profiles/2.0/datacatalog.json",
+        k.SCHEMA: k.DATACATALOG_PROFILE,
         **meta,
         "datasets": datasets,
     }
@@ -1227,7 +858,7 @@ def _inherited_for(root: Path, dataset_dir: Path) -> dict:
         meta = (
             yaml.safe_load((parent / "dataset.yaml").read_text(encoding="utf-8")) or {}
         )
-        for key in INHERITED_KEYS:
+        for key in dataset_format.INHERITED:
             if key in meta:
                 inherited[key] = meta[key]
     return inherited
@@ -1266,7 +897,7 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
                     if not on_disk.is_file():
                         continue
                     package = json.loads(on_disk.read_text(encoding="utf-8"))
-                if package.get(NAMESPACE_KEY):
+                if package.get(k.NAMESPACE):
                     continue
                 total_bytes += package.get("ethos:total_bytes", 0)
                 file_count += package.get("ethos:file_count", 0)
@@ -1289,7 +920,7 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
 
         write_dataset(dataset_dir, files)
         size_gb = package["ethos:total_bytes"] / 1e9
-        if package.get(NAMESPACE_KEY):
+        if package.get(k.NAMESPACE):
             klass = "namespace"
             shards = ""
         else:

@@ -74,6 +74,7 @@ finds that checkout the same way the maintainer commands find theirs.
         - render
         - public_datasets
         - strip
+        - leaks
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3
