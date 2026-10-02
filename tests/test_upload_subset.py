@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from ethos_data.adapters.fakes import FakeStore
 from ethos_data.errors import UploadError
 from ethos_data.maintain import upload
 from ethos_data.maintain.manifest import render_dataset, write_dataset
@@ -77,16 +78,21 @@ def workspace():
 
 
 @pytest.fixture
-def no_rclone(monkeypatch):
-    """Record every rclone invocation instead of running one."""
-    calls: list[list[str]] = []
+def store(monkeypatch):
+    """The publication store every upload in the test gets: a fake that records."""
+    fake = FakeStore()
+    monkeypatch.setattr(upload, "DcacheStore", lambda remote: fake)
+    return fake
 
-    def fake_run(command, *args, **kwargs):
-        calls.append(command)
-        return type("Result", (), {"returncode": 0})()
 
-    monkeypatch.setattr(upload.subprocess, "run", fake_run)
-    return calls
+@pytest.fixture
+def no_rclone(store):
+    """The destination of every copy the store was asked for, in order."""
+    return store.copies
+
+
+def destinations(copies: list[dict]) -> list[str]:
+    return [copy["destination"] for copy in copies]
 
 
 class TestNamingDatasets:
@@ -145,15 +151,15 @@ class TestUploadingTheSubset:
         make_catalog(workspace, {"a": {}, "b": {}})
         assert upload.run(workspace, *make_args(["a", "b"])) == 0
 
-        destinations = [command[3] for command in no_rclone]
-        assert destinations == ["HIFIS:ice2-data-files/a", "HIFIS:ice2-data-files/b"]
+        found = destinations(no_rclone)
+        assert found == ["ice2-data-files/a", "ice2-data-files/b"]
 
     def test_the_order_asked_for_is_the_order_uploaded(self, workspace, no_rclone):
         make_catalog(workspace, {"a": {}, "b": {}})
         upload.run(workspace, *make_args(["b", "a"]))
-        assert [command[3] for command in no_rclone] == [
-            "HIFIS:ice2-data-files/b",
-            "HIFIS:ice2-data-files/a",
+        assert destinations(no_rclone) == [
+            "ice2-data-files/b",
+            "ice2-data-files/a",
         ]
 
     def test_naming_a_dataset_twice_costs_one_upload(self, workspace, no_rclone):
@@ -164,33 +170,23 @@ class TestUploadingTheSubset:
     def test_a_path_and_a_name_may_be_mixed_in_one_run(self, workspace, no_rclone):
         make_catalog(workspace, {"a": {}, "b": {}})
         upload.run(workspace, *make_args([str(workspace / "datasets" / "a"), "b"]))
-        assert [command[3] for command in no_rclone] == [
-            "HIFIS:ice2-data-files/a",
-            "HIFIS:ice2-data-files/b",
+        assert destinations(no_rclone) == [
+            "ice2-data-files/a",
+            "ice2-data-files/b",
         ]
 
-    def test_one_dataset_still_returns_rclones_own_exit_code(
-        self, workspace, monkeypatch
-    ):
+    def test_one_dataset_still_returns_rclones_own_exit_code(self, workspace, store):
         # Scripts read this. Adding the list must not turn a transfer failure
         # into a generic 1, so the single-dataset path passes the code through.
         make_catalog(workspace, {"a": {}})
-        monkeypatch.setattr(
-            upload.subprocess,
-            "run",
-            lambda *a, **k: type("Result", (), {"returncode": 7})(),
-        )
+        store.copy_status = 7
         assert upload.run(workspace, *make_args(["a"])) == 7
 
     def test_a_failure_is_reported_per_dataset_and_fails_the_run(
-        self, workspace, monkeypatch
+        self, workspace, store
     ):
         make_catalog(workspace, {"a": {}, "b": {}})
-        monkeypatch.setattr(
-            upload.subprocess,
-            "run",
-            lambda *a, **k: type("Result", (), {"returncode": 7})(),
-        )
+        store.copy_status = 7
         # Aggregated to 1 across a subset: which dataset failed is in the summary,
         # and there is no single rclone exit code left to report.
         assert upload.run(workspace, *make_args(["a", "b"])) == 1
@@ -234,10 +230,10 @@ class TestNamingAFamily:
     ):
         make_family(workspace, {"b": {}, "a": {}})
         assert upload.run(workspace, *make_args(["fam"])) == 0
-        destinations = [command[3] for command in no_rclone]
-        assert destinations == [
-            "HIFIS:ice2-data-files/fam/a",
-            "HIFIS:ice2-data-files/fam/b",
+        found = destinations(no_rclone)
+        assert found == [
+            "ice2-data-files/fam/a",
+            "ice2-data-files/fam/b",
         ]
 
     def test_a_family_and_one_of_its_members_still_cost_one_upload_each(
@@ -245,9 +241,9 @@ class TestNamingAFamily:
     ):
         make_family(workspace, {"a": {}, "b": {}})
         upload.run(workspace, *make_args(["fam/b", "fam"]))
-        assert [command[3] for command in no_rclone] == [
-            "HIFIS:ice2-data-files/fam/b",
-            "HIFIS:ice2-data-files/fam/a",
+        assert destinations(no_rclone) == [
+            "ice2-data-files/fam/b",
+            "ice2-data-files/fam/a",
         ]
 
     def test_an_ineligible_member_stops_the_whole_family(self, workspace, no_rclone):

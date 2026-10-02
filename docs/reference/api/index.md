@@ -12,6 +12,7 @@ key. The rest is here for completeness.
 | [Integrity and staging](integrity.md) | `verify`, `repair`, `Finding`, `run_selftest`, `materialize`, the staging root |
 | [Shared model](model.md) | `ethos_data.model` — digests, dataset names and families, resource records |
 | [Maintainer tooling](maintain.md) | `ethos_data.maintain` — building, publishing, uploading |
+| [Adapters](adapters.md) | `ethos_data.adapters` — dCache, downloads and git behind ports, each with a fake |
 | [Errors](errors.md) | `EthosDataError` and every refusal the library raises, with the exit status the command line gives each |
 
 Consumers usually need no `ethos_data.maintain` imports. The public API includes
