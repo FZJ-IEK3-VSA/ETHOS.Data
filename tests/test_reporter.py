@@ -42,30 +42,24 @@ def test_a_null_reporter_silences_a_publish(source, tmp_path, capsys):
     assert (target / "datacatalog.json").is_file()
 
 
-def test_an_upload_takes_its_flags_as_options_not_a_command_line(source, monkeypatch):
-    import subprocess
+def test_an_upload_takes_its_flags_as_options_not_a_command_line(source):
+    from ethos_data.adapters.fakes import FakeStore
 
     source.dataset("flat", {"a.csv": "1\n"})
     assert source.build()[0] == 0
-    commands = []
-    monkeypatch.setattr(
-        upload.subprocess,
-        "run",
-        lambda command, *a, **k: (
-            commands.append(command) or subprocess.CompletedProcess(command, 0)
-        ),
-    )
+    store = FakeStore()
     recorded = report.RecordingReporter()
 
     code = upload.run(
         source.root,
         ["flat"],
         upload.UploadOptions(dry_run=True, transfers=2),
+        store=store,
         reporter=recorded,
     )
 
     assert code == 0
-    assert commands[0][commands[0].index("--transfers") + 1] == "2"
+    assert store.copies[0]["transfers"] == 2
     assert "Dry run only; nothing was uploaded." in "\n".join(recorded.infos)
 
 

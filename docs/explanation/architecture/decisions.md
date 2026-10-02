@@ -568,9 +568,10 @@ The same templates serve as issue templates in the catalogue repositories.
 
 ## Four layers (2026-10-02)
 
-**Status: in progress.** Typed errors and the reporter are in, and library code
-no longer prints; the adapters for external systems follow with the ports and
-fakes.
+**Status: implemented.** Typed errors, the reporter and the adapters are in:
+library code neither prints nor exits, and dCache, downloads and git sit
+behind ports with fakes. The command line is still one module, now of parsing,
+wiring and printing only.
 
 The reader imports the writer, library code prints and exits the process,
 and the command line is one module of 1,700 lines that also holds logic.

@@ -130,9 +130,6 @@ be a whole link tree built somewhere nobody named.
         - preflight
         - resources_of
         - remote_manifest_check
-        - locality
-        - chmod
-        - token
         - load
       show_root_heading: false
       show_root_toc_entry: false

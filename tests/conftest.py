@@ -6,6 +6,8 @@ Two guarantees apply to every test without being asked for:
   interface fails, so a test that would quietly fall back to the public
   catalogue or reach dCache fails instead. The local :class:`support.Store`
   serves on loopback and keeps working.
+* **No dCache.** rclone and ``oidc-token`` are never run: code that
+  uploads is handed a :class:`~ethos_data.adapters.fakes.FakeStore`.
 * **No settings from the person running the tests.** Every ``ETHOS_*``
   variable is cleared, and the settings files and the default cache directory
   are moved into a temporary directory. Without this a configured catalogue on
@@ -59,6 +61,19 @@ def _no_network(monkeypatch):
 
     monkeypatch.setattr(socket.socket, "connect", connect)
     monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+
+
+@pytest.fixture(autouse=True)
+def _no_dcache(monkeypatch):
+    """No test runs rclone or oidc-token: dCache is a FakeStore in tests."""
+    from ethos_data.adapters import dcache
+
+    def refuse(command, *args, **kwargs):
+        raise AssertionError(
+            f"tests do not run {command[0]}; give the code under test a FakeStore"
+        )
+
+    monkeypatch.setattr(dcache, "_run", refuse)
 
 
 @pytest.fixture(autouse=True)
