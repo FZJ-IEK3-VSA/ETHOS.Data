@@ -34,8 +34,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
-import tempfile
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -43,6 +41,8 @@ from pathlib import Path
 from typing import NamedTuple
 
 from .. import report
+from ..adapters import Store
+from ..adapters.dcache import FRONTEND, MODE_0755, DcacheStore
 from ..errors import UploadError
 from ..formats import keys as k
 from ..formats.derived import license_settled, remote_prefix_of, resource_url
@@ -74,30 +74,6 @@ class UploadOptions:
     allow_internal: bool = False
     no_chmod: bool = False
     transfers: int = 8
-
-
-FRONTEND = "https://hifis-storage-web.desy.de/api/v1"
-MODE_0755 = 493  # dCache wants the mode as a decimal integer, not octal
-
-
-def _capture(command: list[str], **kwargs) -> subprocess.CompletedProcess:
-    return subprocess.run(command, text=True, capture_output=True, **kwargs)
-
-
-def token(profile: str) -> str:
-    result = _capture(["oidc-token", profile])
-    if result.returncode != 0 or not result.stdout.strip():
-        raise UploadError(
-            f"could not get a token from `oidc-token {profile}`.\n"
-            f"  {result.stderr.strip()}\n"
-            "Start the agent and register the profile:\n"
-            "    eval $(oidc-agent-service use)\n"
-            f"    oidc-gen {profile} --flow=code --client-id=desy-public \\\n"
-            "        --scope='openid profile offline_access' \\\n"
-            "        --iss=https://keycloak.desy.de/auth/realms/production/ \\\n"
-            "        --redirect-uri=http://localhost:4242"
-        )
-    return result.stdout.strip()
 
 
 def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path | None, Path]:
@@ -207,34 +183,6 @@ def remote_manifest_check(
     return ok, missing, wrong
 
 
-def locality(path: str, bearer: str) -> str:
-    """ONLINE (disk) / NEARLINE (tape only) / ONLINE_AND_NEARLINE (both)."""
-    url = f"{FRONTEND}/namespace/{path.lstrip('/')}?locality=true"
-    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {bearer}"})
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return json.load(response).get("fileLocality", "unknown")
-    except Exception as error:  # noqa: BLE001
-        return f"unknown ({error})"
-
-
-def chmod(path: str, mode: int, bearer: str) -> int:
-    request = urllib.request.Request(
-        f"{FRONTEND}/namespace/{path.lstrip('/')}",
-        data=json.dumps({"action": "chmod", "mode": mode}).encode(),
-        headers={
-            "Authorization": f"Bearer {bearer}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return response.status
-    except urllib.error.HTTPError as error:
-        return error.code
-
-
 def resolve_name(catalog_root: Path, argument: str) -> str:
     """Turn one command-line argument -- a name, or a path -- into a dataset name.
 
@@ -333,7 +281,12 @@ class Plan(NamedTuple):
 
 
 def upload_one(
-    options: UploadOptions, plan: Plan, base_url: str, root: str, bearer
+    options: UploadOptions,
+    plan: Plan,
+    base_url: str,
+    root: str,
+    bearer,
+    store: Store,
 ) -> int:
     """Upload and verify a single dataset. Returns a process-style exit code."""
     namespace_path = f"{options.vo_path}/{root}/{plan.prefix}"
@@ -353,51 +306,14 @@ def upload_one(
     resources = resources_of(plan.package, plan.dataset_dir)
 
     if not options.verify_only:
-        # Upload the manifest, not the directory. They are the same thing only
-        # when nothing else lives under source_dir; with ethos:include or
-        # ethos:exclude in play they are not, and `rclone copy <dir>` would
-        # publish the strays the manifest deliberately leaves out -- silently,
-        # since verification only ever looks for files it knows about.
-
-        # A nested dataset's name is `reskit-test-data/era5`, and a slash is a
-        # directory separator in a filename on every platform -- on Windows not
-        # a legal character in one at all. Flatten it, or naming such a dataset
-        # fails in mkstemp before a single byte is uploaded.
-        stem = plan.name.replace("/", "-").replace(os.sep, "-")
-        handle, listing_path = tempfile.mkstemp(
-            prefix=f"ethos-data-upload-{stem}-", suffix=".txt"
+        status = store.copy(
+            plan.source_dir,
+            f"{root}/{plan.prefix}",
+            [resource["path"] for resource in resources],
+            transfers=options.transfers,
+            dry_run=options.dry_run,
         )
-        # rclone reads --files-from as UTF-8, one path per line. Written as bytes
-        # because a text-mode write on Windows would end every line CRLF, and
-        # rclone would then look for files whose names end in a carriage return.
-        with open(handle, "wb") as listing_file:
-            listing_file.writelines(
-                f"{resource['path']}\n".encode() for resource in resources
-            )
-        listing = Path(listing_path)
-        command = [
-            "rclone",
-            "copy",
-            str(plan.source_dir),
-            destination,
-            "--files-from",
-            str(listing),
-            "--transfers",
-            str(options.transfers),
-            "--checksum",
-            # dCache cannot modify a file in place -- a changed file is delete +
-            # rewrite. --immutable makes rclone fail loudly if a published file
-            # differs, instead of silently republishing under the same path.
-            "--immutable",
-            "--progress" if not options.dry_run else "--dry-run",
-        ]
-        report.info(f"  ({len(resources)} files listed in {listing})")
-        report.info("  $ " + " ".join(command) + "\n")
-        try:
-            result = subprocess.run(command)
-        finally:
-            listing.unlink(missing_ok=True)
-        if result.returncode != 0:
+        if status != 0:
             report.warning("\nrclone failed. Common causes:")
             report.warning(
                 "  * no rclone remote called "
@@ -410,13 +326,13 @@ def upload_one(
                 "  * --immutable tripped: a published file changed. Publish it at a "
                 "NEW path rather than overwriting."
             )
-            return result.returncode
+            return status
         if options.dry_run:
             report.info("\nDry run only; nothing was uploaded.")
             return 0
 
     if not options.no_chmod and plan.package.get(k.ACCESS, k.PUBLIC) == k.PUBLIC:
-        status = chmod(namespace_path, MODE_0755, bearer())
+        status = store.chmod(namespace_path, MODE_0755, bearer())
         report.info(f"\nchmod 0755 {namespace_path} -> HTTP {status}")
         if status not in (200, 204):
             report.info("  chmod failed; anonymous reads will 401 until it succeeds.")
@@ -446,7 +362,7 @@ def upload_one(
         )
 
     sample = resources[0]["path"]
-    where = locality(f"{namespace_path}/{sample}", bearer())
+    where = store.locality(f"{namespace_path}/{sample}", bearer())
     report.info(f"\n  storage locality of {sample}: {where}")
     if where == "NEARLINE":
         report.info(
@@ -474,14 +390,21 @@ class UploadResult:
 
 @report.reported
 def run(
-    catalog_root: Path, datasets: list[str], options: UploadOptions | None = None
+    catalog_root: Path,
+    datasets: list[str],
+    options: UploadOptions | None = None,
+    *,
+    store: Store | None = None,
 ) -> UploadResult:
     """Upload ``datasets`` -- names, paths or families -- and verify each anonymously.
 
     Every dataset is loaded and checked before any of them is uploaded.
-    ``options`` are the command's flags; ``reporter=`` takes the progress.
+    ``options`` are the command's flags; ``store`` is the publication store,
+    dCache through ``options.remote`` by default; ``reporter=`` takes the
+    progress.
     """
     options = options or UploadOptions()
+    store = store if store is not None else DcacheStore(options.remote)
     catalog_meta = read_catalog_meta(catalog_root)
     base_url = catalog_meta[k.PUBLICATION_URL].rstrip("/")
 
@@ -530,7 +453,7 @@ def run(
 
     def bearer() -> str:
         if not cached:
-            cached.append(token(options.oidc_profile))
+            cached.append(store.token(options.oidc_profile))
         return cached[0]
 
     if len(plans) > 1:
@@ -546,7 +469,7 @@ def run(
                 f"---- [{index}/{len(plans)}] {plan.name} "
                 + "-" * max(0, 50 - len(plan.name))
             )
-        status = upload_one(options, plan, base_url, root, bearer)
+        status = upload_one(options, plan, base_url, root, bearer, store)
         if status:
             failed[plan.name] = status
         if len(plans) > 1:

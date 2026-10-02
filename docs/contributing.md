@@ -87,6 +87,15 @@ script filters it like any other. The maintainer entry points take
 `report.NullReporter()`. A test fails when a `print` or a `warnings.warn`
 appears below the command line.
 
+## External systems sit behind ports
+
+dCache, downloads and git are reached through the ports of
+`ethos_data.adapters`, and code that needs one takes it as an argument:
+`upload.run(..., store=)`, `ethos_data.download(..., downloader=)`. A test
+hands the code the fake, `FakeStore`, `FakeDownloader` or `FakeGit`, rather
+than patching `subprocess` or a module function, and `tests/conftest.py`
+refuses to run rclone or `oidc-token` at all.
+
 ## Two invariants that a patch must not break
 
 **Deduplication depends on path agreement.** Every tool must derive the same

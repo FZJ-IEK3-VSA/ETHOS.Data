@@ -24,8 +24,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pooch
-
 from . import report
 from .access import (
     ORIGIN_CACHED,
@@ -35,6 +33,8 @@ from .access import (
     locate,
     unavailable,
 )
+from .adapters import Downloader
+from .adapters.downloads import PoochDownloader
 from .catalogs import Catalog
 from .config import Roots
 from .errors import AccessError, NotFetched
@@ -173,6 +173,7 @@ def download(
     progressbar: bool = True,
     *,
     fetch: bool = True,
+    downloader: Downloader | None = None,
 ) -> DataFiles:
     """Make every resource available locally and return where each one is.
 
@@ -189,6 +190,7 @@ def download(
     naming the path it belongs at.
     """
     roots = root if root is not None else catalog.settings.roots
+    downloader = downloader if downloader is not None else PoochDownloader()
     warn_about_licensing(catalog, resources)
 
     locations = locate(catalog, resources, roots)
@@ -226,18 +228,14 @@ def download(
         dataset = catalog.dataset(dataset_name)
         destination = roots.public / dataset_name
         _refuse_to_write_through_a_link(roots.public, dataset_name)
-        base_url = catalog.base_url_for(dataset)
-        puller = pooch.create(
-            path=destination,
-            base_url=base_url,
-            # Frictionless writes "sha256:..."; pooch reads the same "alg:hash"
-            # convention, so the manifest value passes straight through.
-            registry={loc.resource.path: loc.resource.hash for loc in items},
-            retry_if_failed=3,
+        fetched = downloader.fetch(
+            catalog.base_url_for(dataset),
+            destination,
+            {loc.resource.path: loc.resource.hash for loc in items},
+            progressbar=progressbar,
         )
         for location in items:
-            fetched = puller.fetch(location.resource.path, progressbar=progressbar)
-            files[location.resource.key] = Path(fetched)
+            files[location.resource.key] = fetched[location.resource.path]
 
     # In catalogue order, not download order.
     return DataFiles((loc.resource.key, files[loc.resource.key]) for loc in locations)
