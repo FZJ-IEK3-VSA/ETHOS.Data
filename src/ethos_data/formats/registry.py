@@ -10,7 +10,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from .bundle import BundleManifest
+from .bundle import BundleManifest, RepositoryBundle
 from .catalogue import CatalogMeta
 from .collections_file import CollectionsFile
 from .dataset import DatasetDescriptor, NamespaceDescriptor
@@ -66,7 +66,9 @@ FORMATS: dict[str, Format] = {
         Format("datacatalog", "datacatalog.json", CatalogIndex, "tool",
                "The generated index: catalog.yaml's keys and one row per dataset."),
         Format("bundle", "bundle.json", BundleManifest, "tool",
-               "A repository copy of catalogue data."),
+               "A copy of catalogue data exported into a repository."),
+        Format("repository-bundle", "bundle.json", RepositoryBundle, "tool",
+               "A family of test data a repository holds, and its version."),
         Format("staging", ".ice2-staging.json", StagingRegistry, "tool",
                "Who staged which directory, and why."),
         Format("materialized", ".ethos-data-materialized.json", MaterializedRecord, "tool",

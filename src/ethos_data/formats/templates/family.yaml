@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data/main/src/ethos_data/formats/schemas/namespace.schema.json
+#
+# Drafted by `bundle create`: the family the bundle's datasets belong to. Its
+# members inherit homepage, contact and attribution from here.
+name: ${name}
+title: ${title}

@@ -91,6 +91,7 @@ dataset_roots:
 | `ETHOS_DATA_CATALOG` | `catalog` |
 | `ETHOS_CATALOG_NO_CACHE` | if set, a fetched catalogue descriptor is never cached on disk |
 | `ETHOS_PUBLICATION_URL` | `publication_url` |
+| `ETHOS_DATA_DOWNLOAD` | a package's bundles: `1` reads the catalogue route instead, as `download=True` does |
 
 Every input a workflow names is required, so nothing leaves one out: a
 `skip_unavailable` key and `ETHOS_SKIP_UNAVAILABLE` from an earlier release
@@ -130,14 +131,18 @@ Each file is read from the first of these places that has it, and
 
 1. a per-dataset root (`config set-root`), read in place;
 2. the staging root, never for restricted data, read in place without checksums;
-3. the restricted cache, for restricted data only, read in place;
-4. a link in the public cache, the dataset's own or its family's, read in place;
-5. a copy already in the public cache, of the size the catalogue records;
-6. a download from the publication root into the public cache, for public data only.
+3. the bundles a package's handle ships, read in place and hash-checked once
+   per process, unless the download switch is on;
+4. the restricted cache, for restricted data only, read in place;
+5. a link in the public cache, the dataset's own or its family's, read in place;
+6. a copy already in the public cache, of the size the catalogue records;
+7. a download from the publication root into the public cache, for public data only.
 
 A place that may not serve a file refuses, and the search stops there. A
 restricted dataset without a restricted cache is never read from a copy in the
-public cache, and internal data, which is not published, is never downloaded.
+public cache, internal data, which is not published, is never downloaded, and
+a bundled file that is missing or altered is an error, never a reason to
+download.
 With `fetch=False` nothing is downloaded: a file that only the last place could
 provide raises `NotFetched`, naming the path it belongs at.
 

@@ -112,6 +112,23 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         "--dry-run", action="store_true", help="check and plan; write nothing"
     )
 
+    bundler = catalog_sub.add_parser(
+        "add-bundle",
+        help="bring a family up to a package's repository bundle",
+        description="Compare a repository bundle with what the catalogue holds of "
+        "its family: add new members, take changed descriptions, rebuild members "
+        "not published yet, and make the next revision of published ones.",
+    )
+    bundler.add_argument("directory", help="the bundle directory, in a checkout")
+    bundler.add_argument(
+        "--remove-missing",
+        action="store_true",
+        help="let published files the bundle no longer has go, keys and all",
+    )
+    bundler.add_argument(
+        "--dry-run", action="store_true", help="compare and plan; write nothing"
+    )
+
     builder = catalog_sub.add_parser(
         "build",
         help="regenerate datapackage.json and datacatalog.json from dataset.yaml",
@@ -443,6 +460,16 @@ def dispatch(args) -> int:
         from . import migrate
 
         return migrate.run(root, args.datasets, dry_run=args.dry_run)
+
+    if args.catalog_command == "add-bundle":
+        from . import bundle_intake
+
+        return bundle_intake.run(
+            root,
+            args.directory,
+            remove_missing=args.remove_missing,
+            dry_run=args.dry_run,
+        )
 
     if args.catalog_command == "add":
         from . import accept
