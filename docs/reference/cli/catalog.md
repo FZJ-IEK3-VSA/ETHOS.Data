@@ -61,9 +61,15 @@ ethos-data catalog publish ../ETHOS.Data-Catalogue --check
 ```
 
 Emits `datacatalog.json`, each public `datasets/<name>/datapackage.json` with
-`source_dir`, `ethos:embargo` and `ethos:license_note` stripped, and the README
-table — for every dataset marked `ethos:visibility: public`. Anything it no
-longer generates is deleted from the target.
+the keys the dataset.yaml format marks unpublished stripped (`source_dir`,
+`ethos:embargo`, `ethos:license_note`, `ethos:uploaded`, `ethos:frozen`), and
+the README table — for every dataset marked `ethos:visibility: public`.
+Anything it no longer generates is deleted from the target.
+
+Before it compares or writes anything, it checks the generated tree for a
+leak: an unpublished key that is still there, or a withheld dataset named in
+a descriptor, the index or the README. A leak exits non-zero with nothing
+written, in both modes. Licence documents are copied verbatim and not searched.
 
 !!! danger "It wipes everything in its target except `.git`"
     Point it only at the public repository. See
@@ -71,7 +77,7 @@ longer generates is deleted from the target.
 
 | Flag | |
 |---|---|
-| `--check` | fail if the target is out of date; write nothing |
+| `--check` | fail if the target is out of date or the tree would leak; write nothing |
 
 ## `upload <dataset> [<dataset> ...]`
 
@@ -115,6 +121,10 @@ second.
 A dataset may be named by directory name or by path — a path must point into
 the source catalogue's `datasets/`, so naming one in the *published* catalogue
 is refused with the name to use instead.
+
+The bytes go to `<root>/<ethos:remote_prefix>/` on the remote. A dataset that
+declares no `ethos:remote_prefix` goes to the folder named after it, which is
+where readers download it from.
 
 Refuses `restricted` datasets outright and unresolved licensing for transfers
 (`--verify-only` is allowed). It passes `rclone --immutable` to refuse detected

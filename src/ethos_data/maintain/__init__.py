@@ -21,8 +21,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..catalogs import ROLE_KEY, ROLE_PUBLISHED, ROLE_SOURCE
 from ..errors import CatalogueRootError, DescriptorError
+from ..formats import keys as k
+from ..formats.keys import CATALOG_ROLE as ROLE_KEY
+from ..formats.keys import ROLE_PUBLISHED, ROLE_SOURCE
 
 CATALOG_MARKER = "catalog.yaml"
 #: Present in a *generated* catalogue too, so it can never identify a source one.
@@ -126,24 +128,30 @@ SHARD_DIR = "shards"
 LEGACY_SHARD_DIR = "manifests"
 
 
-#: Keys a nested dataset inherits from the namespace above it when it does not
-#: state its own. Deliberately short, and the rule that keeps it short is: a key
-#: may be inherited only if inheriting it cannot *weaken* a claim.
-#:
-#: `homepage` and `ethos:contact` are descriptive -- getting them from the parent
-#: is a convenience and nothing turns on it. `ethos:attribution` is an obligation,
-#: so inheriting it can only ever add a duty, never remove one.
-#:
-#: What is deliberately absent: `licenses`, `ethos:access`, `ethos:visibility`,
-#: `ethos:origin`, `source_dir`. Silent inheritance of any of those is how a
-#: dataset ends up published under terms nobody read, or readable by people the
-#: licence never covered. A child states them or it does not build.
-INHERITED_KEYS = ("homepage", "ethos:contact", "ethos:attribution")
-
 #: Set on a namespace node's generated descriptor. A namespace has no files of
 #: its own -- it exists to name a family and to carry the metadata its members
 #: share -- so tools must not treat it as something to download.
-NAMESPACE_KEY = "ethos:namespace"
+NAMESPACE_KEY = k.NAMESPACE
+
+
+def __getattr__(name: str):
+    """``INHERITED_KEYS``, from the dataset.yaml specification, on first use.
+
+    The keys a nested dataset takes from the namespace above it when it does
+    not state its own: those the specification marks ``inherited``. A key may
+    be inherited only if inheriting it cannot *weaken* a claim -- `homepage` and
+    `ethos:contact` are descriptive, `ethos:attribution` can only add a duty.
+    `licenses`, `ethos:access`, `ethos:visibility`, `ethos:origin` and
+    `source_dir` are deliberately not: a child states them or it does not build.
+
+    Resolved lazily because every command imports this package, and the
+    specification's models are only worth loading when a descriptor is read.
+    """
+    if name == "INHERITED_KEYS":
+        from ..formats import dataset
+
+        return dataset.INHERITED
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def iter_dataset_dirs(root: Path) -> list[Path]:

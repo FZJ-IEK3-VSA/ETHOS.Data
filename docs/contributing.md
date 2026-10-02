@@ -93,7 +93,8 @@ together. Every file format is specified once, in `ethos_data/formats/`:
    `dataset.yaml`), with its type, default and description, and say what the
    tools do with it: `published=False` strips it from the public catalogue
    (`source_dir`, `ethos:embargo` and `ethos:license_note` are stripped; a leak
-   of any of them is the failure that matters), `promoted=True` copies it into
+   of any of them is the failure that matters, and `publish` refuses a tree
+   that still carries one), `promoted=True` copies it into
    the index row, `user_facing=True` prints it for a user without a copy,
    `inherited=True` hands it from a family to its members. Name it in
    `formats/keys.py` rather than as a string literal.

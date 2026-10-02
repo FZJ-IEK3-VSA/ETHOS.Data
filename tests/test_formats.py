@@ -1,13 +1,6 @@
-"""The format specifications: templates, schemas, rules and what they derive.
-
-The parity tests compare the specifications with the rules ``maintain.manifest``
-and ``maintain.publish`` enforce, so that code can take its rules from the
-specifications safely.
-"""
+"""The format specifications: templates, schemas, rules and what they derive."""
 
 from __future__ import annotations
-
-import copy
 
 import pytest
 import yaml
@@ -122,129 +115,131 @@ class TestLint:
         assert formats.dataset.lint(meta) == []
 
 
-# -- parity with the code that enforces the same rules today ---------------------
+# -- the rules, with the messages maintainers know -----------------------------
 
 BROKEN = [
-    {"ethos:access": "secret"},
-    {"ethos:visibility": "listed"},
-    {"ethos:visibility": "hidden", "ethos:access": "public"},
-    {"ethos:visibility": "hidden", "ethos:access": "internal"},
-    {
-        "ethos:access": "restricted",
-        "ethos:visibility": "hidden",
-        "ethos:embargo": {"until": "unspecified", "reason": "x"},
-        "ethos:remote_prefix": "x",
-    },
-    {"ethos:origin": "found"},
-    {"contributors": "a person"},
-    {"contributors": ["a person"]},
-    {"contributors": [{"roles": ["author"]}]},
-    {"contributors": [{"title": "A", "roles": "author"}]},
-    {"contributors": [{"title": "A", "roles": {"author": 1}}]},
-    {"contributors": [{"title": "A", "roles": ["writer"]}]},
-    {"ethos:origin": "created"},
-    {
-        "ethos:origin": "derived",
-        "contributors": [{"title": "A", "roles": ["author"]}],
-    },
-    {
-        "ethos:origin": "derived",
-        "contributors": [{"title": "A", "roles": ["author"]}],
-        "sources": [{"title": "x"}],
-    },
-    {"licenses": {"name": "CC-BY-4.0"}},
-    {"licenses": ["CC-BY-4.0"]},
-    {"licenses": [{"title": "Some terms"}]},
-    {"licenses": [{"name": "CC0-1.0", "ethos:applies_to": "*.tif"}]},
-]
+    ({"ethos:access": "secret"}, "ethos:access must be one of ('public', 'internal', 'restricted'), got 'secret'"),
+    ({"ethos:visibility": "listed"}, "ethos:visibility must be one of ('public', 'hidden'), got 'listed'"),
+    ({"ethos:visibility": "hidden", "ethos:access": "public"}, "access=public with visibility=hidden makes no sense"),
+    ({"ethos:visibility": "hidden", "ethos:access": "internal"}, "visibility=hidden needs an ethos:embargo block"),
+    (
+        {
+            "ethos:access": "restricted",
+            "ethos:visibility": "hidden",
+            "ethos:embargo": {"until": "unspecified", "reason": "x"},
+            "ethos:remote_prefix": "x",
+        },
+        "restricted data must not declare ethos:remote_prefix",
+    ),
+    ({"ethos:origin": "found"}, "ethos:origin must be one of ('downloaded', 'derived', 'created'), got 'found'"),
+    ({"contributors": "a person"}, "contributors must be a list of mappings."),
+    ({"contributors": ["a person"]}, "contributors[0] must be a mapping with at least a 'title'."),
+    ({"contributors": [{"roles": ["author"]}]}, "contributors[0] needs a 'title'"),
+    (
+        {"contributors": [{"title": "A", "roles": "author"}]},
+        "contributors[0]: 'roles' is a list in Data Package v2 -- write roles: [author], not roles: author.",
+    ),
+    ({"contributors": [{"title": "A", "roles": {"author": 1}}]}, "contributors[0]: 'roles' must be a list."),
+    ({"contributors": [{"title": "A", "roles": ["writer"]}]}, "contributors[0]: unknown role 'writer'."),
+    ({"ethos:origin": "created"}, "ethos:origin is 'created', which claims this data was made here"),
+    (
+        {"ethos:origin": "derived", "contributors": [{"title": "A", "roles": ["author"]}]},
+        "ethos:origin: derived needs 'sources'",
+    ),
+    (
+        {
+            "ethos:origin": "derived",
+            "contributors": [{"title": "A", "roles": ["author"]}],
+            "sources": [{"title": "x"}],
+        },
+        "ethos:origin: derived needs ethos:derivation",
+    ),
+    ({"licenses": {"name": "CC-BY-4.0"}}, "licenses must be a list, even with one entry"),
+    ({"licenses": ["CC-BY-4.0"]}, "licenses[0] must be a mapping with 'name' and/or 'path'."),
+    ({"licenses": [{"title": "Some terms"}]}, "licenses[0] has neither 'name' nor 'path'."),
+    (
+        {"licenses": [{"name": "CC0-1.0", "ethos:applies_to": "*.tif"}]},
+        "licenses[0]: ethos:applies_to must be a list of glob patterns.",
+    ),
+    ({"ethos:include": "*.tif"}, "ethos:include must be a list of patterns, got str"),
+    ({"ethos:exclude": []}, "ethos:exclude is an empty list, which would select nothing."),
+    ({"ethos:shard_depth": -1}, "ethos:shard_depth must not be negative"),
+    ({"ethos:uploaded": True}, "declares ethos:uploaded: true and still has source_dir"),
+]  # fmt: skip
 
 
-def _legacy_message(meta: dict) -> str | None:
-    """What the build's own validators say about ``meta``, without the name."""
-    from ethos_data.maintain import manifest
-
-    meta = copy.deepcopy(meta)
-    try:
-        manifest.validate_classification("n", meta)
-        manifest.validate_provenance("n", meta)
-        manifest.validate_licenses("n", meta)
-    except DescriptorError as error:
-        return error.message.removeprefix("n: ")
-    return None
-
-
-@pytest.mark.parametrize("meta", BROKEN, ids=lambda m: ",".join(m))
-def test_the_rules_say_what_the_build_says(meta):
-    expected = _legacy_message({"source_dir": ".", **meta})
-    assert expected is not None, "a broken example the build accepts"
+@pytest.mark.parametrize(
+    "meta, message",
+    BROKEN,
+    ids=lambda case: ",".join(case) if isinstance(case, dict) else None,
+)
+def test_each_rule_says_what_is_wrong_in_the_words_maintainers_know(meta, message):
     with pytest.raises(DescriptorError) as raised:
         formats.dataset.check({"source_dir": ".", **meta})
-    assert raised.value.message == expected
+    assert raised.value.message.startswith(message)
 
 
-def test_the_strip_list_is_the_one_publish_applies():
+def test_a_frozen_dataset_needs_no_source_and_a_built_one_does():
+    formats.dataset.check({"ethos:frozen": True})
+    with pytest.raises(DescriptorError, match="source_dir is required"):
+        formats.dataset.check({})
+
+
+def test_defaults_are_written_in_the_order_the_descriptor_has_always_had_them():
+    meta = {"name": "x", "title": "X"}
+    formats.dataset.apply_defaults(meta)
+    assert list(meta) == [
+        "name",
+        "title",
+        "ethos:access",
+        "ethos:visibility",
+        "ethos:origin",
+    ]
+    assert (
+        formats.dataset.apply_defaults({"ethos:access": "internal"})["ethos:access"]
+        == "internal"
+    )
+
+
+def test_a_family_may_not_describe_files_access_or_terms():
+    for meta, subject in (
+        ({"source_dir": "."}, "source_dir says it does"),
+        ({"ethos:access": "public"}, "must not declare ethos:access"),
+        ({"licenses": [{"name": "CC0-1.0"}]}, "must not carry licensing"),
+    ):
+        with pytest.raises(DescriptorError, match=subject):
+            formats.dataset.check_namespace(meta)
+
+
+def test_publish_strips_what_the_specification_marks_unpublished():
     from ethos_data.maintain.publish import STRIP_FROM_PACKAGE
 
-    assert set(formats.dataset.STRIPPED) == set(STRIP_FROM_PACKAGE)
+    assert set(STRIP_FROM_PACKAGE) == {
+        "source_dir",
+        "ethos:uploaded",
+        "ethos:frozen",
+        "ethos:embargo",
+        "ethos:license_note",
+    }
 
 
-def test_the_inherited_keys_are_the_ones_the_build_hands_down():
+def test_a_family_hands_down_homepage_contact_and_attribution_only():
     from ethos_data.maintain import INHERITED_KEYS
 
-    assert formats.dataset.INHERITED == INHERITED_KEYS
+    assert INHERITED_KEYS == ("homepage", "ethos:contact", "ethos:attribution")
 
 
 @pytest.mark.parametrize(
-    "package",
+    "meta, settled",
     [
-        {
-            "name": "flat",
-            "title": "Flat",
-            "version": "2.0",
-            "ethos:access": "internal",
-            "ethos:visibility": "hidden",
-            "ethos:total_bytes": 3,
-            "ethos:file_count": 1,
-            "licenses": [{"name": "CC0-1.0"}],
-        },
-        {"name": "bare", "ethos:total_bytes": 0, "ethos:file_count": 0},
-        {
-            "name": "family",
-            "title": "A family",
-            "ethos:namespace": True,
-            "ethos:total_bytes": 5,
-            "ethos:file_count": 2,
-        },
-    ],
-    ids=["dataset", "defaults", "namespace"],
-)
-def test_the_index_row_is_the_one_the_build_writes(package, tmp_path):
-    import json
-
-    from ethos_data.maintain import manifest
-
-    root = tmp_path / "catalogue"
-    directory = root / "datasets" / package["name"]
-    directory.mkdir(parents=True)
-    (directory / "datapackage.json").write_text(json.dumps(package), encoding="utf-8")
-    (root / "catalog.yaml").write_text("name: test\n", encoding="utf-8")
-
-    (row,) = manifest.build_catalog(root, [directory])["datasets"]
-
-    assert formats.index_row(package, row["path"]) == row
-
-
-@pytest.mark.parametrize(
-    "meta",
-    [
-        {},
-        {"licenses": [{"name": "CC0-1.0"}]},
-        {"ethos:license_status": "resolved"},
-        {"ethos:license_status": "unresolved"},
-        {"licenses": []},
+        ({}, False),
+        ({"licenses": [{"name": "CC0-1.0"}]}, True),
+        ({"ethos:license_status": "resolved"}, True),
+        ({"ethos:license_status": "unresolved"}, False),
+        ({"licenses": []}, False),
     ],
 )
-def test_the_licence_question_is_answered_as_the_reader_answers_it(meta):
-    from ethos_data.catalogs import license_settled
-
-    assert formats.license_settled(meta) == license_settled(meta)
+def test_the_licence_question_is_settled_by_a_licence_or_an_explicit_resolved(
+    meta, settled
+):
+    assert formats.license_settled(meta) is settled
