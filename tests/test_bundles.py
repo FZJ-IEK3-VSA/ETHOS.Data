@@ -19,6 +19,10 @@ from ethos_data.bundles import (
     load_bundle,
 )
 
+pytestmark = pytest.mark.legacy(
+    "bundles become repository-first: bundle.json gains a family, a version and per-member dataset.yaml files"
+)
+
 
 def digest(data):
     return "sha256:" + hashlib.sha256(data).hexdigest()

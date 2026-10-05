@@ -17,6 +17,10 @@ import pytest
 from ethos_data import config
 from ethos_data.cli import _unreachable, main
 
+pytestmark = pytest.mark.legacy(
+    "config show changes with one settings file per account and without skip_unavailable"
+)
+
 
 @pytest.fixture
 def public(monkeypatch, tmp_path) -> Path:
