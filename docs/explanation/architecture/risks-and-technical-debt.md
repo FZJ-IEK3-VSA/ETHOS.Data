@@ -70,7 +70,7 @@ one as the target; another answer changes the decision named.
 | The store's copy of the latest public catalogue on dCache is not a reader entry point: readers use the release tags or the served checkout. | [ADR 0027][adr-0027] |
 
 Smaller questions, each with the default these pages describe, are collected
-on the project's [GitHub Discussions](https://github.com/FZJ-IEK3-VSA/ETHOS.Data/discussions).
+in the discussion [Target architecture: questions that can wait](https://github.com/FZJ-IEK3-VSA/ETHOS.Data/discussions/38).
 
 [adr-0004]: decisions/0004-cache-paths-from-resource-identity.md
 [adr-0006]: decisions/0006-every-file-format-specified-once.md

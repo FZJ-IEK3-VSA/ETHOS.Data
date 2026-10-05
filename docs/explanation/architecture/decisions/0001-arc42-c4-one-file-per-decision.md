@@ -1,6 +1,6 @@
 # 0001. Describe the target architecture in arc42, with C4 views and one file per decision
 
-**Status:** implemented · **Date:** 2026-10-05 · **Implemented by:** a new PR (target architecture)
+**Status:** implemented · **Date:** 2026-10-05 · **Implemented by:** #36
 
 ## Context
 

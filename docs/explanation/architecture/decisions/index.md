@@ -16,7 +16,7 @@ dash means that the decision is implemented and needs no pull request.
 | No. | Decision | Status | Implemented by |
 |---|---|---|---|
 | | **Process** | | |
-| 0001 | [Describe the target architecture in arc42, with C4 views and one file per decision](0001-arc42-c4-one-file-per-decision.md) | implemented | a new PR (target architecture) |
+| 0001 | [Describe the target architecture in arc42, with C4 views and one file per decision](0001-arc42-c4-one-file-per-decision.md) | implemented | #36 |
 | 0002 | [Make a clean break during the beta; `catalog migrate` converts the internal catalogue once](0002-clean-break-during-the-beta.md) | proposed | #10–#27, #21 (`catalog migrate`); implemented once `catalog migrate` is removed |
 | | **Data and identity** | | |
 | 0003 | [One catalogue describes the data; each package's collections file selects from it](0003-one-catalogue-many-collections.md) | implemented | — |
