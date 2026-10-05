@@ -54,7 +54,7 @@ the dataset and how to obtain it.
 !!! warning "Gap: handles can still be left out"
     Under `skip_unavailable` the current release leaves an unreachable
     handle out of the mapping with a warning. See [every input is
-    required](architecture/decisions.md#every-input-is-required-2026-10-02).
+    required](architecture/decisions/0013-every-input-is-required.md).
 
 A test variant is not a bundle. A bundle is an offline copy of a selection,
 identified by resource keys and hashes, for tests that must run without the

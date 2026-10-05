@@ -1,0 +1,97 @@
+% Where one file is read: the lookup chain's eight locators, in order. Each
+% locator finds the file (right), passes it on (down) or refuses it (left).
+% The first that finds it decides; a refusal ends the call before any transfer.
+\begin{tikzpicture}[
+  x=1mm, y=1mm,
+  locator/.style={decision, aspect=3.4, minimum width=34mm},
+  found/.style={outcome, text width=53mm, align=left},
+  fetched/.style={outcomedownload, text width=53mm, align=left},
+  refused/.style={stop, text width=42mm, align=left},
+  passlabel/.style={c4rellabel, text=muted, anchor=west, align=left},
+  exitlabel/.style={c4rellabel, text=muted, above, inner sep=1.2pt},
+]
+\newcommand{\origin}[1]{\enspace{\color{muted}\itshape #1}}
+
+% -- the key -------------------------------------------------------------
+\begin{scope}[shift={(-72,6)}]
+  \keytitle{Key}
+  \keynode{1}{decision}{a locator, in chain order}
+  \keynode{2}{outcome}{found: read in place}
+  \keynode{3}{outcomedownload}{found: in the user's own public cache}
+  \keynode{4}{stop}{the error that ends the call}
+  \keyline{5}{yes}{found, or yes}
+  \keyline{6}{no}{pass, or no}
+  \keyline{7}{refusal}{refuse}
+\end{scope}
+
+% -- the chain -----------------------------------------------------------
+\node[artifact, font=\sffamily\scriptsize, minimum width=0mm, minimum height=6mm]
+  (start) at (0,0) {each file of the selection};
+
+\node[locator] (l1) at (0,-16)  {\textbf{1}\enspace dataset roots};
+\node[locator] (l2) at (0,-34)  {\textbf{2}\enspace staging};
+\node[locator] (l3) at (0,-52)  {\textbf{3}\enspace bundles};
+\node[locator] (l4) at (0,-70)  {\textbf{4}\enspace restricted cache};
+\node[locator] (l5) at (0,-88)  {\textbf{5}\enspace shared cache};
+\node[locator] (l6) at (0,-106) {\textbf{6}\enspace public-cache link};
+\node[locator] (l7) at (0,-124) {\textbf{7}\enspace public-cache copy};
+\node[locator] (l8) at (0,-142) {\textbf{8}\enspace download};
+
+\draw[c4relmuted] (start) -- (l1);
+\foreach \a/\b in {l1/l2, l2/l3, l3/l4, l4/l5, l5/l6, l6/l7, l7/l8}
+  \draw[no] (\a) -- (\b);
+
+% what makes each locator pass the file on
+\node[passlabel] at (1.5,-25)  {pass: no root set};
+\node[passlabel] at (1.5,-43)  {pass: restricted data,\\or nothing staged};
+\node[passlabel] at (1.5,-61)  {pass: not bundled, or the\\download switch is on};
+\node[passlabel] at (1.5,-79)  {pass: public or\\internal data};
+\node[passlabel] at (1.5,-97)  {pass: no shared cache,\\or the file is not there};
+\node[passlabel] at (1.5,-115) {pass: internal data,\\or no link};
+\node[passlabel] at (1.5,-133) {pass: internal data,\\or no such copy};
+
+% found
+\node[found, anchor=west] (f1) at (27,-16)
+  {a root is set for the dataset\\read in place\origin{configured root}};
+\node[found, anchor=west] (f2) at (27,-34)
+  {a staged entry; the data is not restricted\\read in place, unchecked; warns once\origin{staging}};
+\node[found, anchor=west] (f3) at (27,-52)
+  {in a listed bundle; size and SHA-256 match\\read in place; warns if unpublished\origin{bundle}};
+\node[found, anchor=west] (f4) at (27,-70)
+  {restricted data with a readable entry\\read in place\origin{restricted cache}};
+\node[found, anchor=west] (f5) at (27,-88)
+  {a maintainer linked or copied the file there\\read in place, never written\origin{shared cache}};
+\node[found, anchor=west] (f6) at (27,-106)
+  {public data whose entry or family entry is a link\\read in place\origin{namespace link}};
+\node[fetched, anchor=west] (f7) at (27,-124)
+  {public data, a file of the recorded size\\hash-checked when fetched\origin{public cache copy}};
+\foreach \i in {1,...,7}
+  \draw[yes] (l\i) -- node[exitlabel] {found} (f\i);
+
+% the download, or not
+\node[decision] (nofetch) at (39.5,-142) {\texttt{fetch=False}?};
+\draw[yes] (l8) -- node[exitlabel] {found} (nofetch);
+\node[outcomedownload, anchor=west, text width=23.5mm, align=left] (dl) at (59.5,-142)
+  {public data: downloaded and hash-checked\origin{download}};
+\draw[no] (nofetch) -- node[exitlabel] {no} (dl);
+\node[stop, text width=50mm, align=left, below=7mm of nofetch] (nf)
+  {\textbf{NotFetched}: names each file and where it belongs; no store is contacted};
+\draw[yes] (nofetch) -- node[c4rellabel, text=muted, right] {yes} (nf);
+
+% refuse: the call ends
+\node[refused, anchor=east] (r3) at (-27,-52)
+  {\textbf{BundleError}\\a bundled file is missing or altered; it is never downloaded instead};
+\node[refused, anchor=east] (r4) at (-27,-70)
+  {\textbf{AccessError}\\no restricted cache, no entry, or a dangling or unreadable one; it describes the dataset and how to register a copy};
+\node[refused, anchor=east] (r8) at (-27,-142)
+  {\textbf{AccessError}\\internal data: not published, so never downloaded; on the cluster it is read from the shared cache\\or: no publication URL};
+\foreach \i in {3,4,8}
+  \draw[refusal] (l\i) -- node[exitlabel] {refuse} (r\i);
+
+\node[note, text width=154mm, align=left, anchor=north west] at (-72,-166)
+  {The first locator that finds the file decides where it is read, and a refusal ends the call before any transfer.
+   Locators 1 to 6 read the file where it lies; 7 and 8 give its place in the user's own public cache, which a fetch
+   hash-checks or fills by downloading. Restricted data ends at 4, so it never reaches the shared cache. The shared cache
+   never refuses: a broken entry passes, and \texttt{verify} reports it to the maintainers.
+   \texttt{plan} and \texttt{verify} run the same chain in describe mode, where a refusal is reported as not available here.};
+\end{tikzpicture}

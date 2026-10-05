@@ -1,0 +1,145 @@
+% C4 level 3, detail (arc42 5.3.3): the one inventory reader. It sits in the
+% model layer and reads every part through the metadata source its caller hands
+% it, so both service groups see the same resources and the same missing-part
+% error. The build writes shards with the reader's shard rules.
+% Cylinders are placed by their centre.
+\begin{tikzpicture}[
+  x=1mm, y=1mm,
+  comp/.style={c4component, font=\sffamily\scriptsize, inner sep=1mm,
+    minimum height=9mm, text width=#1},
+  comp/.default=18mm,
+  mchip/.style={c4component, font=\sffamily\scriptsize\bfseries, inner sep=0.6mm,
+    minimum height=5.6mm, text width=22mm, rounded corners=0.8mm},
+  part/.style={draw=accent, fill=paper, text=ink, rounded corners=0.8mm,
+    font=\sffamily\scriptsize, inner sep=1mm, align=left},
+  adapter/.style={c4component, font=\sffamily\scriptsize, inner sep=1mm,
+    minimum height=13mm, text width=#1},
+  % A cylinder #1 mm wide; its caps stay the same height at any width.
+  st/.style={c4db, minimum height=11mm, inner sep=0.5mm,
+    font=\sffamily\scriptsize, minimum width=#1mm, text width=\dimexpr#1mm-2mm\relax,
+    /utils/exec={\pgfmathsetmacro\cylaspect{3.6/#1}}, shape aspect=\cylaspect},
+  stx/.style={st=#1, draw=muted, fill=fillsoft},
+  lab/.style={c4rellabel},
+  labbg/.style={c4rellabelbg},
+  grp/.style={c4boundary, inner sep=1.8mm},
+]
+\newcommand{\mod}[1]{\texttt{#1}}
+\newcommand{\store}[2]{{\bfseries #1}\\[-0.2ex]{\color{muted}[#2]}}
+\newcommand{\items}[2]{\begin{minipage}[t]{#1}\raggedright\setlength{\parindent}{0pt}#2\end{minipage}}
+% One entry of a list: a bullet with a hanging indent.
+\newcommand{\bul}[1]{\par\hangindent=2.2mm\hangafter=1\makebox[2.2mm][l]{\textbullet}#1}
+
+% -- callers: data access --------------------------------------------------------------
+\node[comp=18mm] (catalogs) at (11,0) {\elementshort{Catalogue reader}{\mod{catalogs}}};
+\node[comp=14mm] (bundles) at (32,0) {\elementshort{Bundles}{\mod{bundles}}};
+\node[comp=14mm] (staging) at (51,0) {\elementshort{Staging}{\mod{staging}}};
+\begin{scope}[on background layer]
+  \node[grp, fit=(catalogs)(staging)] (da) {};
+\end{scope}
+\node[c4boundarylabel] at (da.north west) {Data access [service group]};
+
+% -- callers: catalogue maintenance ------------------------------------------------------
+\foreach \n/\name/\x/\y in {
+    sm8/Uploader/82/7, sm10/Freeze/107/7, sm11/Provenance/132/7,
+    sm12/Public-view generator/82/0.6, sm15/Removal/107/0.6, sm5/Bundle intake/132/0.6,
+    sm3/Status recorder/82/-5.8, sm6/Inventory builder/107/-5.8, sm7/Revision/132/-5.8}
+  \node[mchip] (\n) at (\x,\y) {\name};
+\begin{scope}[on background layer]
+  \node[c4boundary, inner sep=1.4mm, fit=(sm8)(sm7)] (users) {};
+\end{scope}
+\node[comp=30mm] (sm2) at (86,-23)
+  {\element{Checkout access}{\mod{maintain}}{a missing part becomes \mod{DescriptorError}: run \mod{catalog build}}};
+\begin{scope}[on background layer]
+  \node[grp, fit=(users)(sm2)] (cm) {};
+\end{scope}
+\node[c4boundarylabel] at (cm.north west) {Catalogue maintenance [service group]};
+
+% -- the model layer -----------------------------------------------------------------------
+\node[c4component, anchor=north west, text width=116mm, minimum height=34mm, align=left,
+      font=\sffamily\scriptsize, inner sep=1.6mm] (reader) at (1.5,-44) {%
+  \items{85mm}{{\footnotesize\bfseries Inventory reader}\enspace{\color{muted}[\mod{model.inventory}]}\\[0.3ex]
+    One dataset's descriptor and inventory, inline or in shards.
+    It does no input or output of its own.\\[0.9ex]
+    \items{41mm}{\textbf{Answers}
+      \bul{the descriptor, read on first access}
+      \bul{the resources under a path, from one shard}
+      \bul{the resources that match patterns, from the shards a pattern can reach}
+      \bul{every resource in inventory order, typed or as the records are written}}\hspace{3mm}%
+    \items{41mm}{\textbf{Guarantees}
+      \bul{each shard is read at most once}
+      \bul{a pattern never misses a shard that holds a match}
+      \bul{a missing part raises \mod{IncompleteCatalog}, naming the dataset, the part and the location}
+      \bul{built from records or resources, it reads nothing}}}};
+\node[part, anchor=north east, text width=27mm] (rules) at ([xshift=-1.6mm, yshift=-1.6mm]reader.north east)
+  {\textbf{Shard rules}\\shard key, root shard, pruning, splitting, file names};
+\node[comp=19mm] (resource) at (140,-61) {\elementshort{Resources}{\mod{model.resource}}};
+\begin{scope}[on background layer]
+  \node[grp, fit=(reader)(resource)] (model) {};
+\end{scope}
+\node[c4boundarylabel] at (model.north west) {Model layer};
+
+% -- the adapters ----------------------------------------------------------------------------------
+\node[adapter=32mm] (file) at (18,-114) {\element{File source}{file system}{a path or a checkout}};
+\node[adapter=28mm] (cached) at (55,-114) {\element{Caching source}{file system}{in front of HTTPS; keeps every URL that names no moving ref}};
+\node[adapter=28mm] (http) at (91,-114) {\element{HTTPS source}{urllib}{GET with gzip, 60~s timeout}};
+\node[adapter=28mm] (memory) at (127,-114) {\element{In-memory tree}{memory}{a rendered tree; the fake in tests}};
+\begin{scope}[on background layer]
+  \node[grp, fit=(file)(cached)(http)(memory)] (sources) {};
+\end{scope}
+\node[c4port, anchor=south, yshift=-0.4pt, text width=80mm, inner sep=1mm] (port) at ([xshift=9mm]sources.north)
+  {\textbf{Metadata source}: the bytes of a file at a location, and a part's location relative to its
+   base. An absent part is reported as missing; an unreachable location raises \mod{CatalogUnavailable}.};
+\node[c4boundarylabel] at (sources.north west) {Metadata sources [adapters]};
+
+% -- the stores ------------------------------------------------------------------------------------
+\node[st=22] (clone) at (12,-141) {\store{Maintainer's clone of the source catalogue}{own account}};
+\node[st=14] (served) at (31,-141) {\store{Served checkout}{cluster}};
+\node[st=20] (metacache) at (55,-141) {\store{Metadata cache}{in the public cache}};
+\node[stx=22] (published) at (91,-141) {\store{Published public catalogue}{GitHub}};
+
+% -- arrows: callers to the reader ---------------------------------------------------------------
+\draw[c4rel] (catalogs) -- node[lab, right, pos=0.3] {each dataset} (catalogs |- reader.north);
+\draw[c4rel] (bundles) -- node[lab, right, pos=0.45] {from records} (bundles |- reader.north);
+\draw[c4rel] (staging) -- node[lab, right, pos=0.3, align=left] {from\\resources} (staging |- reader.north);
+\draw[c4rel] (users.south -| sm2) -- node[lab, right] {read the clone} (sm2);
+\draw[c4rel] (sm2) -- node[lab, left, align=right] {a clone's inventories,\\over a file source} (sm2 |- reader.north);
+\draw[c4rel] (sm6) -- node[lab, right, pos=0.4, align=left] {the build writes shards\\by the same rules} (sm6 |- rules.north);
+\draw[c4rel] (sm7.east) -| (154,-95) -| ([xshift=6mm]memory.north);
+\node[lab, anchor=south east] at (153.4,-94.8) {Revision: revision r+1, rendered in memory};
+
+% -- arrows: the reader, the port and the stores ---------------------------------------------------
+\draw[c4rel] (reader.east |- resource) -- node[lab, above] {typed} (resource);
+\draw[c4rel] (reader.south -| port) -- node[lab, left, align=right]
+  {reads each part through\\the source its caller hands it} (port);
+\draw[c4rel] (cached) -- (http);
+\draw[c4rel] (file.south -| clone) -- (clone);
+\draw[c4rel] (file.south -| served) -- (served);
+\draw[c4rel] (cached.south -| metacache) -- (metacache);
+\draw[c4rel] (http.south -| published) -- node[lab, right] {HTTPS} (published);
+
+% -- the note and the key -----------------------------------------------------------------------------
+\node[note, anchor=north west, align=left, text width=150mm] at (0,-154)
+  {The caller chooses the source. The catalogue reader hands on the one it read the index through:
+   the caching source in front of HTTPS, or a file source on the cluster. Checkout access opens a file
+   source over the maintainer's clone. A revision and the tests use an in-memory tree.};
+\begin{scope}[shift={(0,-168)}]
+  \keytitle{Key}
+  \keynode{1}{c4component}{Component}
+  \node[part, minimum width=9mm, minimum height=4.2mm, inner sep=0pt] at (4.5,-13) {};
+  \node[keytext] at (11.5,-13) {Part of a component};
+\end{scope}
+\begin{scope}[shift={(44,-168)}]
+  \node[c4port, minimum width=9mm] at (4.5,-6.5) {port};
+  \node[keytext] at (11.5,-6.5) {Port the adapters implement};
+  \node[c4boundary, inner sep=0pt, minimum width=9mm, minimum height=4.2mm] at (4.5,-13) {};
+  \node[keytext] at (11.5,-13) {Layer or service group};
+\end{scope}
+\begin{scope}[shift={(96,-168)}]
+  \keystore{1}{brand}{fillbrand}{Data store}
+  \keystore{2}{muted}{fillsoft}{External store}
+\end{scope}
+\begin{scope}[shift={(128,-168)}]
+
+  \keyline{1}{c4rel}{Uses, reads, writes}
+\end{scope}
+\end{tikzpicture}

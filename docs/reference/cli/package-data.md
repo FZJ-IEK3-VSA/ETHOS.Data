@@ -25,7 +25,7 @@ to expose the wrapper.
 
 !!! warning "Gap: `--skip-unavailable` is to be removed"
     With [every input is
-    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
+    required](../../explanation/architecture/decisions/0013-every-input-is-required.md),
     unreachable data always stops `fetch`, with an error that describes the
     dataset; `fetch --plan` and `show` still list it as not available here.
     To be implemented separately.

@@ -63,7 +63,7 @@ package, the same object is `your_tool.data.handle().settings`.
     caches depending on where it is started. Until this changes,
     `ethos-data config show`, run in the script's environment and working
     directory, reports the settings the script reads. The [planned
-    change](../../explanation/architecture/decisions.md#one-settings-file-per-account-2026-10-02)
+    change](../../explanation/architecture/decisions/0010-one-settings-file-per-account.md)
     is to be implemented separately.
 
 ## See what a fetch will download {#plan}
@@ -151,7 +151,7 @@ one out.
     `config set-skip-unavailable true` and `ETHOS_SKIP_UNAVAILABLE` still
     drop an unreachable handle from the mapping with a warning, and the
     error suggests them. The planned change, [every input is
-    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
+    required](../../explanation/architecture/decisions/0013-every-input-is-required.md),
     is to be implemented separately.
 
 ## Try catalogue data that is not in a collection yet {#by-key}

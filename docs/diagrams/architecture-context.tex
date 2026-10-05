@@ -1,17 +1,96 @@
-\begin{tikzpicture}[node distance=12mm]
-\node[actor, text width=45mm] (user) {Consuming package\\e.g. ETHOS.RESKit};
-\node[actor, text width=45mm, right=25mm of user] (maint) {Catalogue maintainer\\ethos-data catalog};
-\node[artifact, text width=45mm, below=of user] (reader) {ethos-data reader\\select and locate resources};
-\node[artifact, text width=45mm, below=of maint] (source) {Source catalogue\\YAML and built inventories};
-\node[artifact, text width=45mm, below=of reader] (pub) {Published catalogue\\JSON metadata};
-\node[store, text width=45mm, below=of source] (remote) {Remote storage\\dataset bytes};
-\node[store, text width=45mm, left=20mm of reader] (local) {Local roots\\cached or existing bytes};
-\draw[flow] (user) -- node[edgelabel,right]{request} (reader);
-\draw[flow] (maint) -- node[edgelabel,right]{describe / build} (source);
-\draw[flow] (pub) -- node[edgelabel,left]{metadata} (reader);
-\draw[flowaccent] (local) -- node[edgelabel,above]{files} (reader);
-\draw[flowaccent] (remote.west) -- node[edgelabel,pos=0.22,above,sloped]{bytes} (reader.south east);
-\draw[flow] (source.south west) -- node[edgelabel,pos=0.22,above,sloped]{publish} (pub.east);
-\draw[flowaccent] (maint.east) -- ++(10mm,0) |- node[pos=0.25,note,right]{upload\\source files} (remote.east);
-\node[note, below=8mm of pub, text width=60mm] {Arrows show requests or supplied content.\\Metadata and dataset bytes travel separately.};
+% C4 level 1: the system context of ETHOS.Data (arc42 section 3).
+%
+% People and the package on the left, the catalogue maintainer on the right,
+% ETHOS.Data in the middle. The two catalogue repositories sit above and below
+% it, so the trackers of both can be reached from both sides without crossing:
+% the data users' and package maintainers' handoffs run down the left edge, the
+% catalogue maintainer's down the right edge. The wiki line is the one line that
+% has to cross another; the tracker line leaves a gap for it.
+\begin{tikzpicture}[
+  x=1mm, y=1mm,
+  % a strut keeps a two-line name clear of the head
+  person/.style={c4person, text width=25mm, execute at begin node={\rule{0pt}{3.4ex}}},
+  sys/.style={c4systemext, text width=25mm},
+  lab/.style={c4rellabel, text width=#1},
+  lab/.default=30mm,
+  dot/.style={circle, fill=brand, inner sep=0pt, minimum size=1.2mm},
+]
+% ---- elements ------------------------------------------------------------------
+\node[person] (user)   at (14.5,0)    {\element{Data user}{Person}{Runs workflows, examples and tests, on a public installation or on the cluster}};
+\node[person] (cmaint) at (143,0)     {\element{Catalogue maintainer}{Person}{Reviews proposals; maintains both catalogues, the cluster's caches and the published bytes}};
+\node[sys]    (pkg)    at (14.5,-61)  {\element{Consuming package}{Software system: Python package, for example ETHOS.RESKit}{Declares the data its workflows need; computes with the files}};
+\node[person] (pmaint) at (14.5,-101) {\element{Package maintainer}{Person}{Wires a package to ETHOS.Data; keeps its test data; proposes datasets}};
+\node[sys]    (code)   at (14.5,-137) {\element{GitHub\\ETHOS.Data}{Software system: FZJ-IEK3-VSA; git, Actions, issues}{Code, docs and CI; tracker for the commands, API and docs}};
+\node[c4system, text width=30mm, minimum height=84mm] (sys) at (80,-72)
+  {\element{ETHOS.Data}{Software system: Python distribution \texttt{ethos\_data}}{Selects, locates, downloads and verifies dataset files; maintains and releases both catalogues; drafts the handoffs}\\[1.2ex]{\scriptsize\color{muted}On the cluster: a served checkout of the latest release, and a shared cache that only catalogue maintainers fill.}};
+\node[sys, text width=27mm] (gh)   at (80,15)  {\element{GitHub\\ETHOS.Data-Catalogue}{Software system: FZJ-IEK3-VSA; git, raw files, issues}{The generated public catalogue, one tag per release}};
+\node[sys, text width=27mm] (prov) at (80,45)  {\element{Upstream data providers}{Software systems: HTTPS}{Publish the originals, sometimes checksums, and the licence terms}};
+\node[sys, text width=21mm] (wiki) at (145.5,40) {\element{ICE-2 wiki}{Software system: internal web wiki}{Real cluster locations, groups and contacts}};
+\node[sys, minimum height=38mm] (dcache) at (143,-66) {\element{dCache at DESY (HIFIS)}{Software system: download door, WebDAV door, REST frontend; tape}{Stores the published bytes and the latest public catalogue}};
+\node[sys]    (idp)    at (143,-106) {\element{Helmholtz ID}{Software system: DESY Keycloak, OIDC}{Issues the bearer tokens for dCache}};
+\node[sys, text width=29mm] (jugit) at (62,-141) {\element{JuGit\\ethos-data-catalog-internal}{Software system: iek-3/shared-code; GitLab, merge requests, issues}{The source catalogue, one tag per release}};
+% ---- the people and the package use ETHOS.Data ------------------------------------
+\draw[c4rel] (5.5,0 |- user.south) -- (5.5,0 |- pkg.north);
+\node[lab=15mm, anchor=west, align=left] at (7,-29) {\rel{runs workflows, examples and tests}{Python; \texttt{<tool>-data}}};
+\draw[c4rel] (24,0 |- user.south) |- (sys.west |- 0,-37);
+\node[lab=36mm, anchor=south] at (43.7,-36.2) {\rel{configures; self-test; lists, fetches and verifies by key; drafts a problem report}{\texttt{ethos-data}}};
+\draw[c4rel] (pkg.east) -- (pkg.east -| sys.west);
+\node[lab=33mm, anchor=south] at (46,-60.2) {\rel{\texttt{collections()}, \texttt{.paths()}, \texttt{.fetch()}, \texttt{.catalog.path()}, \texttt{tool\_main()}}{Python, in-process}};
+\draw[c4rel] (pmaint.east) -- (pmaint.east -| sys.west);
+\node[lab=33mm, anchor=south] at (46,-100.2) {\rel{wires collections and a handle; keeps bundles; stages data; drafts proposals}{Python API; \texttt{<tool>-data}}};
+\draw[c4rel] (137,0 |- cmaint.south) |- (sys.east |- 0,-37);
+\node[lab=38mm, anchor=south] at (116.8,-36.2) {\rel{accepts, builds, makes bytes available, records, releases, publishes new versions, withdraws, purges, checks provenance}{\texttt{ethos-data catalog}; \texttt{link}, \texttt{materialize}}};
+% ---- ETHOS.Data reaches the systems -------------------------------------------------
+\draw[c4rel] (70,0 |- sys.north) -- (70,0 |- gh.south);
+\node[lab=34mm, anchor=south east, align=right] at (68.5,-12) {\rel{reads the index, descriptors, shards and licence documents}{HTTPS GET, gzip}};
+\draw[c4rel] (90,0 |- sys.north) -- (90,0 |- gh.south);
+\node[lab=32mm, anchor=south west, align=left] at (91.5,-12) {\rel{pushes the generated public catalogue and its release tag}{git over HTTPS or SSH}};
+\draw[c4rel] (66,0 |- sys.south) -- (66,0 |- jugit.north);
+\node[lab=50mm, anchor=west, align=left] at (67.5,-121) {\rel{pushes the release commit and tag; fetches tags to move the served checkout}{git}};
+\draw[c4download] (sys.east |- 0,-53) -- (dcache.west |- 0,-53);
+\node[lab=28mm, anchor=south] at (112.75,-52.2) {\rel{downloads published files; reads uploads back}{anonymous HTTPS GET, HEAD}};
+\draw[c4maint] (sys.east |- 0,-67) -- (dcache.west |- 0,-67);
+\node[lab=28mm, anchor=south] at (112.75,-66.2) {\rel{copies, syncs and purges objects}{rclone over WebDAV, token}};
+\draw[c4maint] (sys.east |- 0,-80) -- (dcache.west |- 0,-80);
+\node[lab=28mm, anchor=south] at (112.75,-79.2) {\rel{sets permissions; asks for locality}{REST, token}};
+\draw[c4rel] (sys.east |- idp.west) -- (idp.west);
+\node[lab=28mm, anchor=south] at (112.75,-105.2) {\rel{obtains tokens}{\texttt{oidc-token} from oidc-agent; OIDC login in a browser once per profile}};
+% ---- handoffs: the trackers ------------------------------------------------------------
+\coordinate (lx) at (-2.5,0);
+\draw[c4manual, -] (user.west) -- (lx |- user.west);
+\draw[c4manual, -] (pmaint.west) -- (lx |- pmaint.west);
+\draw[c4manual] (lx |- 0,-161) -- (lx |- 0,20) -- (gh.west |- 0,20);
+\draw[c4manual] (lx |- pkg.west) -- (pkg.west);
+\draw[c4manual] (lx |- code.west) -- (code.west);
+\draw[c4manual] (lx |- 0,-161) -| (52,0 |- jugit.south);
+\node[dot] at (lx |- user.west) {};
+\node[dot] at (lx |- pmaint.west) {};
+\node[lab=50mm, anchor=north west, align=left] at (-1,-162) {\rel{proposals and problem reports, drafted by ETHOS.Data}{issue trackers}};
+\draw[c4manual] (cmaint.west |- 0,5) -- (gh.east |- 0,5);
+\node[lab=30mm, anchor=south] at (112,5.8) {\rel{answers, release and removal notices}{issues}};
+\draw[c4manual] (cmaint.east) -- (159.5,0 |- cmaint.east) |- (jugit.east);
+\node[lab=62mm, anchor=south] at (118.3,-140.2) {\rel{commits from their own clone on a branch and merges by merge request; answers and notices}{git; JuGit merge requests, issues}};
+% ---- handoffs: providers and wiki ----------------------------------------------------
+\draw[c4manual] (131,0 |- cmaint.north) |- (prov.east);
+\node[lab=32mm, anchor=south] at (113,45.8) {\rel{downloads the originals again to check provenance}{HTTPS, curl}};
+\draw[c4manual] (152,0 |- cmaint.north) -- (152,0 |- wiki.south);
+\node[c4rellabel, anchor=west] at (153,19) {writes};
+% the wiki line crosses the tracker line, which leaves a gap for it
+\fill[paper] (29.9,18.6) rectangle (32.1,21.4);
+\draw[c4manual] (wiki.north) -- (145.5,62) -| (31,6) -- (user.east |- 0,6);
+\node[lab=30mm, anchor=north west, align=left] at (32.5,60) {\rel{cluster locations, groups and contacts; the \texttt{config set-*} commands for the served checkout, the shared cache and the restricted cache; where to keep the public cache; release announcements}{wiki}};
+% ---- note and key --------------------------------------------------------------------
+\node[note, text width=30mm, anchor=north west, align=left] at (-2.5,58) {Supporting roles act outside the package: catalogue maintainers escalate dCache problems to the storage operator; data users ask a dataset custodian for access; the cluster administrator grants group membership.};
+\begin{scope}[shift={(86,-148)}]
+  \keytitle{Key}
+  \keynode{1}{c4personkey}{Person}
+  \keynode{2}{c4system}{ETHOS.Data}
+  \keynode{3}{c4systemext}{External system}
+\end{scope}
+\begin{scope}[shift={(117,-148)}]
+  \keyline{1}{c4rel}{Request or dependency}
+  \keyline{2}{c4manual}{Handoff a person posts}
+  \keyline{3}{c4download}{Anonymous download}
+  \keyline{4}{c4maint}{Authenticated maintenance}
+\end{scope}
 \end{tikzpicture}

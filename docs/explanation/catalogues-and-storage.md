@@ -55,6 +55,6 @@ The inverse withdrawal order removes current metadata before any deliberate
 remote deletion; old pins and existing copies still need separate consideration.
 
 See [Caches, classes and roots](caches-and-access.md),
-[The catalogue lifecycle](architecture/lifecycle.md), and
+[The catalogue lifecycle](architecture/runtime.md#dataset-lifecycle), and
 [Release the catalogue](../how-to/catalogue-maintainers/release-the-catalogue.md).
 

@@ -1,14 +1,65 @@
-\begin{tikzpicture}[node distance=8mm]
-\node[artifact, text width=70mm] (describe) {Describe dataset in source YAML};
-\node[artifact, text width=70mm, below=of describe] (build) {Build descriptors and inventories};
-\node[artifact, text width=70mm, below=of build] (check) {Validate all selected upload datasets};
-\node[artifact, text width=70mm, below=of check] (upload) {For each dataset: transfer manifest files\\then verify remote access and size};
-\node[artifact, text width=70mm, below=of upload] (review) {Review results and readiness};
-\node[artifact, text width=70mm, below=of review] (publish) {Generate public catalogue checkout};
-\node[actor, text width=70mm, below=of publish] (release) {Review and release catalogue version};
-\foreach \a/\b in {describe/build,build/check,check/upload,upload/review,review/publish,publish/release}
-  \draw[flow] (\a) -- (\b);
-\node[note, right=8mm of check, text width=38mm, align=left] {Preflight failure:\\no transfers started.};
-\node[note, right=8mm of upload, text width=38mm, align=left] {Later failure:\\earlier transfers remain.\\No batch rollback.};
-\node[note, right=8mm of release, text width=38mm, align=left] {Release is a separate\\maintainer action.};
+% A dataset's lifecycle, as the lifecycle model has it and its status.yaml
+% records it in a maintainer's clone of the source catalogue. Every arrow is a
+% step; steps that keep the state are listed in the note, not drawn.
+% (A line break followed by a group needs \\\relax inside a node on a path.)
+\begin{tikzpicture}[
+  x=1mm, y=1mm,
+  state/.style={c4state, minimum width=42mm, minimum height=10mm, inner sep=1.2mm},
+  gone/.style={c4stateend, minimum width=42mm, minimum height=10mm, inner sep=1.2mm},
+  steplabel/.style={transitionlabel, align=left},
+]
+\newcommand{\statetext}[2]{{\bfseries #1}\\[-0.2ex]{\scriptsize\color{muted}#2}}
+\newcommand{\guard}[1]{{\sffamily\color{muted}#1}}
+
+% -- states in the catalogue ---------------------------------------------
+\node[initialstate] (start) at (34,7) {};
+\node[state] (draft)     at (34,-14) {\statetext{draft}{described, not built}};
+\node[state] (built)     at (34,-33) {\statetext{built}{inventory built from \texttt{source\_dir}}};
+\node[state] (available) at (34,-52) {\statetext{available}{bytes reachable for the access class}};
+\node[state] (frozen)    at (34,-71) {\statetext{frozen}{inventory final; an authority recorded}};
+
+\draw[transition] (start) -- node[steplabel, right, pos=0.35] {add} (draft);
+\draw[transition] (draft) -- node[steplabel, right] {build} (built);
+\draw[transition] (built) -- node[steplabel, right] {upload, verify,\\link, materialize} (available);
+\draw[transition] (available) -- node[steplabel, right]
+  {record \guard{[a verified}\\\relax\guard{freezable copy]}} (frozen);
+
+% back to built: a changed inventory, or a new revision
+\draw[transition, rounded corners=2mm] (available.west) -- ++(-7,0) coordinate (lb) |- (built.west);
+\node[steplabel, anchor=east, align=right] at ([xshift=-1mm] lb |- 0,-42.5)
+  {change\\\relax\guard{[linked only],}\\revise};
+\draw[transition, rounded corners=2mm] (frozen.east) -- ++(9,0) coordinate (rb) |- (built.east);
+\node[steplabel, anchor=west] at ([xshift=1mm] rb |- 0,-52) {revise};
+
+\begin{scope}[on background layer]
+  \node[c4boundary, inner sep=4mm, fit={(draft) (frozen) (-12,-42) (74,-52)}] (in) {};
+\end{scope}
+\node[c4boundarylabel] at (in.north west) {in the catalogue};
+
+% -- out of the catalogue ------------------------------------------------
+\node[gone] (withdrawn) at (112,-46) {\statetext{withdrawn}{out of the catalogue; bytes kept}};
+\node[gone] (purged)    at (112,-66) {\statetext{purged}{bytes deleted; \texttt{status.yaml} kept}};
+\node[finalstate] (end) at (112,-80) {};
+
+\draw[transition] (in.east |- withdrawn) -- node[steplabel, above] {remove} (withdrawn);
+\draw[transition] (withdrawn) -- node[steplabel, right] {purge \guard{[after a release]}} (purged);
+\draw[transition] (purged) -- (end);
+
+% -- the key -------------------------------------------------------------
+\begin{scope}[shift={(91,7)}]
+  \keytitle{Key}
+  \node[initialstate] at (4.5,-6.5) {};
+  \node[keytext] at (11.5,-6.5) {start: no status file yet};
+  \keynode{2}{c4state, rounded corners=1.8mm}{a state in the catalogue}
+  \keynode{3}{c4stateend, rounded corners=1.8mm}{a state out of it}
+  \node[finalstate] at (4.5,-26) {};
+  \node[keytext] at (11.5,-26) {end: the status file stays};
+  \keyline{5}{transition}{a step; [a guard]}
+\end{scope}
+
+\node[note, text width=155mm, align=left, anchor=north west] at (-16,-87)
+  {Each command checks its step against the state in \texttt{status.yaml} before it acts, and records it there after.
+   Not drawn, because they keep the state: \texttt{build} again, \texttt{change} in built, \texttt{upload} in available,
+   \texttt{verify}, \texttt{link} and \texttt{materialize} in available or frozen, \texttt{record} in frozen (a new authority),
+   \texttt{check-source}, and \texttt{release}, which adds a step to every dataset that changed since the last release.};
 \end{tikzpicture}

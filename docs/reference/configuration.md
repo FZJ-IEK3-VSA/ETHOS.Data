@@ -18,12 +18,12 @@ network drive that is not connected, is marked `NOT REACHABLE` with the reason.
     the Windows file to `%LOCALAPPDATA%\ethos-data\config.yaml`, and gives
     every handle a `settings` snapshot, read once per process. See
     [Where the settings are stored](../how-to/data-users/set-up-your-machine.md#settings-file)
-    and the [decision record](../explanation/architecture/decisions.md#one-settings-file-per-account-2026-10-02).
+    and the [decision record](../explanation/architecture/decisions/0010-one-settings-file-per-account.md).
     It is to be implemented separately; this page is rewritten with it.
 
 !!! warning "Gap: `skip_unavailable` is to be removed"
     With [every input is
-    required](../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
+    required](../explanation/architecture/decisions/0013-every-input-is-required.md),
     the `skip_unavailable` key, `config set-skip-unavailable`,
     `unset-skip-unavailable` and `ETHOS_SKIP_UNAVAILABLE` go. To be
     implemented separately.

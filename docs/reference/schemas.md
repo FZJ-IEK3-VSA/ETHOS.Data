@@ -581,7 +581,7 @@ them nothing they did not just learn from the line above it.
 
 !!! warning "Gap: the error is to print the whole description"
     With [every input is
-    required](../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
+    required](../explanation/architecture/decisions/0013-every-input-is-required.md),
     the error also prints `title`, `description`, `version`, `homepage`,
     `sources`, `licenses`, `ethos:attribution`, `ethos:upstream` and
     `ethos:contact`, wherever a restricted dataset cannot be read on this

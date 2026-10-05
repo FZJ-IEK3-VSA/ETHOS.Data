@@ -82,7 +82,7 @@ variables, scopes and precedence. For setup steps, see
 
 !!! warning "Gap: `--scope` is to be removed and `selftest` added"
     With [one settings file per
-    account](../../explanation/architecture/decisions.md#one-settings-file-per-account-2026-10-02),
+    account](../../explanation/architecture/decisions/0010-one-settings-file-per-account.md),
     the setters and unsetters write to the settings file in effect and lose
     `--scope`. A new command, `ethos-data selftest`, fetches the small public
     collection that ships with the package and reports each step; see

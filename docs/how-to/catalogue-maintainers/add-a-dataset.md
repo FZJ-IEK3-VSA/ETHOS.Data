@@ -92,7 +92,7 @@ terms.
 
 !!! warning "Gap: the error prints only `ethos:restriction`"
     The rest of the description is planned with [every input is
-    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
+    required](../../explanation/architecture/decisions/0013-every-input-is-required.md),
     to be implemented separately.
 
 ## 2. Review it

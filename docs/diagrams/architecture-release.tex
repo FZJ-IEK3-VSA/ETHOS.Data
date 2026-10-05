@@ -1,0 +1,167 @@
+% Dynamic view (arc42 6.3): the release pipeline, then the served checkout on
+% the cluster; below it, removal and purge. Release: one lane per place a stage
+% writes, time running down; the numbers give the order. Every stage plans
+% before any acts (step 1); the acting stages' arrows run sideways, through
+% lanes that are empty at that height. Removal: a row of its own, read left to
+% right. Coordinates are millimetres; the lanes split 0..163.
+\begin{tikzpicture}[
+  x=1mm, y=1mm,
+  head/.style={anchor=north, minimum height=19mm, inner sep=1.2mm, font=\sffamily\footnotesize},
+  lane/.style={draw=boundary, line width=0.5pt},
+  % A step: a command or a stage, or (dashed) something a person does by hand.
+  step/.style={draw=brand, fill=fillbrand, text=ink, rounded corners=1.2mm,
+    align=left, font=\sffamily\scriptsize, inner sep=1.3mm, anchor=north west,
+    text width=#1},
+  step/.default=45.4mm,
+  hand/.style={step=#1, dash pattern=on 3pt off 2pt},
+  hand/.default=24mm,
+  % A stage chip, as in the components view of catalogue maintenance.
+  stage/.style={draw=muted, fill=paper, text=ink, rounded corners=0.5mm,
+    font=\sffamily\scriptsize, inner xsep=0.55mm, inner ysep=0.45mm,
+    text height=1.5ex, text depth=0.3ex, minimum height=0pt, minimum width=0pt,
+    text width={}, align=center, line width=0.5pt},
+  stagekey/.style={stage, minimum width=7mm, minimum height=3.6mm},
+  % A cylinder #1 mm wide, placed by its centre; caps the same height at any width.
+  st/.style={c4db, minimum height=12.5mm, inner sep=0.6mm,
+    font=\sffamily\scriptsize, minimum width=#1mm, text width=\dimexpr#1mm-2mm\relax,
+    /utils/exec={\pgfmathsetmacro\cylaspect{3.9/#1}}, shape aspect=\cylaspect},
+  lbl/.style={c4rellabel},
+  lblbg/.style={c4rellabelbg},
+  then/.style={c4relmuted},
+  rstep/.style={stepno, minimum size=5mm},
+]
+\newcommand{\stg}[1]{\tikz[baseline=(s.base)]\node[stage](s){#1};}
+\newcommand{\desc}[1]{{\color{muted}#1}}
+\newcommand{\store}[2]{{\bfseries #1}\\[-0.2ex]{\color{muted}[#2]}}
+% lane borders; the lanes' centres are 44, 96.5, 113.5, 130.5 and 151
+\def\la{88}\def\lb{105}\def\lc{122}\def\ld{139}
+\def\ybot{-181}
+
+% -- lanes ----------------------------------------------------------------------
+\node[c4person, head, minimum width=0pt, text width=46mm] at (44,-3)
+  {\elementshort{Catalogue maintainer}{in their own clone, beside their public catalogue checkout}};
+\node[c4systemext, head, text width=14.6mm] at (96.5,-3)
+  {\elementshort{dCache at DESY (HIFIS)}{publication root}};
+\node[c4systemext, head, text width=14.6mm] at (113.5,-3)
+  {\elementshort{GitHub}{public catalogue}};
+\node[c4systemext, head, text width=14.6mm] at (130.5,-3)
+  {\elementshort{JuGit}{source catalogue}};
+\node[c4systemext, head, draw=muted, double=paper, double distance=0.7pt, text width=18.4mm] at (150.7,-3)
+  {\elementshort{ICE-2 cluster computer}{shared storage}};
+\foreach \x in {\la,\lb,\lc,\ld}
+  \draw[lane] (\x,-23) -- (\x,\ybot);
+
+% -- 1: plan -----------------------------------------------------------------------
+\node[step] (s1) at (5,-26)
+  {\texttt{catalog release VERSION}\\\texttt{-{}-public DIR [-{}-push]}\\\texttt{[-{}-upload] [-{}-notices DIR]}\\[0.6ex]
+   \textbf{plan}: every stage plans, reading only, before any acts; \texttt{-{}-dry-run} stops here.\\[0.6ex]
+   \stg{check} refuses unless the build check and the publish check with its leak check pass, every public dataset has an upload verified after its last inventory change, the version follows the last release, and both checkouts are clean.};
+\node[stepno] at (2.6,-26 |- s1.center) {1};
+\node[stop, text width=24mm, anchor=west] (refused) at (58,-50) {refused before any write};
+\draw[refusal] (s1.east |- refused) -- (refused.west);
+
+% -- 2-4: stamp, commit, public, in the maintainer's account -------------------------
+\node[step] (s2) at (5,-63)
+  {\stg{stamp} writes the version into \texttt{catalog.yaml} and the index, and a release entry into the status files};
+\node[stepno] at (2.6,-63 |- s2.center) {2};
+\node[step] (s3) at (5,-77)
+  {\stg{commit} commits the release and tags it, through the Git port};
+\node[stepno] at (2.6,-77 |- s3.center) {3};
+\node[st=29, minimum height=24mm] (clone) at (71.5,-74)
+  {\store{Maintainer's clone of the source catalogue}{\texttt{catalog.yaml}, index, status files}};
+\draw[c4rel] (s2.east) -- (clone.west |- s2.east);
+\draw[c4rel] (s3.east) -- (clone.west |- s3.east);
+
+\node[step] (s4) at (5,-89)
+  {\stg{public} generates the public view into the public catalogue checkout, commits and tags it};
+\node[stepno] at (2.6,-89 |- s4.center) {4};
+\node[st=27] (public) at (71.5,-94.5) {\store{Public catalogue checkout}{git}};
+\draw[c4rel] (s4.east) -- (public.west |- s4.east);
+
+% -- 5-7: push, store, notices -------------------------------------------------------
+\node[step] (s5) at (5,-103)
+  {\stg{push} with \texttt{-{}-push}: both checkouts and their tags};
+\node[stepno] at (2.6,-103 |- s5.center) {5};
+\node[st=15] (pub) at (113.5,-117.5) {\store{Public catalogue}{release tag}};
+\node[st=15] (src) at (130.5,-117.5) {\store{Source catalogue}{release tag}};
+\draw[c4rel] (s5.east |- 0,-106) -- (130.5,-106) -- (src.north);
+\draw[c4rel] (113.5,-106) -- (pub.north);
+\node[lblbg, above] at (96.5,-106) {\rel{push}{Git port}};
+
+\node[step] (s6) at (5,-114)
+  {\stg{store} with \texttt{-{}-upload}: the public catalogue beside the data, through the Store port};
+\node[stepno] at (2.6,-114 |- s6.center) {6};
+\node[st=15] (cat) at (96.5,-133) {\store{\texttt{catalogue/}}{latest public catalogue}};
+\draw[c4maint] (s6.east |- 0,-117.5) -| (cat.north);
+\node[lblbg, above] at (71.5,-117.5) {sync, \texttt{chmod}, read back};
+
+\node[step] (s7) at (5,-128)
+  {\stg{notices} drafts the release notice and one answer per added dataset};
+\node[stepno] at (2.6,-128 |- s7.center) {7};
+\node[st=24] (notices) at (71.5,-134) {\store{Notices directory}{\texttt{-{}-notices}}};
+\draw[c4rel] (s7.east) -- (notices.west |- s7.east);
+
+% -- 8: the served checkout ------------------------------------------------------------
+\node[note, anchor=north west, align=left, text width=19mm] at (139.6,-109)
+  {Nothing else changes the served checkout. Run step 8 while no job reads it.};
+\node[step=19mm] (s8) at (139.6,-131)
+  {\texttt{catalog}\\\texttt{update-checkout}\\[0.4ex]\stg{fetch}\,\stg{advance}\\[0.2ex]\stg{check}\\[0.2ex]\desc{fast-forward to the newest release tag}};
+\node[stepno] at (s8.north west) {8};
+\draw[c4rel] (s8.west |- 0,-146) -| node[lblbg, above, pos=0.25] {fetch} (src.south);
+\node[st=20] (served) at (151,-171) {\store{Served checkout}{latest release only}};
+\draw[c4rel] (s8.south -| served) -- (served.north);
+
+% -- removal ---------------------------------------------------------------------------
+\def\yr{-196}
+\node[step=36.4mm] (r1) at (2.5,\yr)
+  {\texttt{catalog remove NAMES}\\\texttt{-{}-reason TEXT}\\[0.4ex]
+   \stg{withdraw}\,\stg{index}\,\stg{notices}\\[0.4ex]
+   \desc{state withdrawn; the index leaves it out; a removal notice; files and entries stay}};
+\node[hand=21.4mm] (r2) at (46,\yr)
+  {merge request; a later release (1--8) leaves the dataset out};
+\node[step=43.4mm] (r3) at (74.5,\yr)
+  {\texttt{catalog remove NAMES -{}-purge}\\[0.4ex]
+   \stg{check}\,\stg{cache}\,\stg{store}\,\stg{tombstone}\\[0.4ex]
+   \desc{withdrawn and released since; unlinks and deletes its entries in the shared and restricted caches; purges every revision folder on dCache, then probes; deletes its directory, keeping \texttt{status.yaml}}};
+\node[hand=19.4mm] (r4) at (127,\yr)
+  {merge request for the tombstone; \texttt{catalog add} refuses the name};
+\draw[then] (r1.east |- r2) -- (r2.west);
+\draw[then] (r2.east) -- (r3.west |- r2.east);
+\draw[then] (r3.east |- r4) -- (r4.west);
+\foreach \r/\n in {r1/R1,r2/R2,r3/R3,r4/R4}
+  \node[rstep] (n\r) at ($(\r.north west)+(3,3.4)$) {\n};
+\begin{scope}[on background layer]
+  \node[c4boundary, inner sep=2mm, fit=(r1)(r2)(r3)(r4)(nr1)] (removal) {};
+\end{scope}
+\node[c4boundarylabel] at (removal.north west) {Removal, then purge};
+
+% -- the key ------------------------------------------------------------------------
+\begin{scope}[shift={(0,-230)}]
+  \keytitle{Key}
+  \node[stepno] at (4.5,-6.5) {1};
+  \node[keytext] at (11.5,-6.5) {a step, in order};
+  \node[step=6.4mm, anchor=center, minimum height=4.2mm, inner sep=0pt] at (4.5,-13) {};
+  \node[keytext] at (11.5,-13) {a command or a stage};
+  \node[hand=6.4mm, anchor=center, minimum height=4.2mm, inner sep=0pt] at (4.5,-19.5) {};
+  \node[keytext] at (11.5,-19.5) {done by hand};
+\end{scope}
+\begin{scope}[shift={(37,-230)}]
+  \node[stagekey] at (4.5,-6.5) {stage};
+  \node[keytext] at (11.5,-6.5) {a stage of a pipeline};
+  \keystore{2}{brand}{fillbrand}{a data store}
+  \node[stop, anchor=center, minimum width=9mm, minimum height=4.2mm, inner sep=0pt] at (4.5,-19.5) {};
+  \node[keytext] at (11.5,-19.5) {an outcome};
+\end{scope}
+\begin{scope}[shift={(73,-230)}]
+  \keynode{1}{c4personkey}{a person}
+  \keynode{2}{c4systemext}{a system outside ETHOS.Data}
+  \node[c4systemext, keysample, double=paper, double distance=0.7pt] at (4.5,-19.5) {};
+  \node[keytext] at (11.5,-19.5) {a machine};
+\end{scope}
+\begin{scope}[shift={(121,-230)}]
+  \keyline{1}{c4rel}{writes or reads}
+  \keyline{2}{c4maint}{authenticated, to dCache}
+  \keyline{3}{refusal}{a refusal}
+  \keyline{4}{then}{the next step}
+\end{scope}
+\end{tikzpicture}

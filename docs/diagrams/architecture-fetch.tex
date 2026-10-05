@@ -1,21 +1,144 @@
-\begin{tikzpicture}
-\node[artifact, text width=25mm, minimum height=14mm] (entry) at (0,0) {Consumer\\entry points};
-\node[artifact, text width=25mm, minimum height=14mm] (selection) at (3.5,0) {Selection};
-\node[artifact, text width=25mm, minimum height=14mm] (catalog) at (7,0) {Catalogue\\model};
-\node[artifact, text width=25mm, minimum height=14mm] (retrieval) at (10.5,0) {Retrieval};
-\node[artifact, text width=25mm, minimum height=14mm] (access) at (14,0) {Access\\policy};
-\node[artifact, text width=30mm, minimum height=14mm] (store) at (17.7,0) {Pooch / files /\\dCache};
-\foreach \n in {entry,selection,catalog,retrieval,access,store}
-  \draw[link,dashed] (\n.south) -- +(0,-10.5);
-\draw[flow] (0,-1.5) -- node[edgelabel,above]{resolve collection} (3.5,-1.5);
-\draw[flow] (3.5,-2.5) -- node[edgelabel,above]{read required inventory} (7,-2.5);
-\draw[uses] (7,-3.5) -- node[edgelabel,above]{resources + sidecars} (3.5,-3.5);
-\draw[uses] (3.5,-4.5) -- node[edgelabel,above]{selected resources} (0,-4.5);
-\draw[flow] (0,-5.5) -- node[edgelabel,above]{download(selected resources)} (10.5,-5.5);
-\draw[flow] (10.5,-6.5) -- node[edgelabel,above]{locate} (14,-6.5);
-\draw[uses] (14,-7.5) -- node[edgelabel,above]{locations / unavailable} (10.5,-7.5);
-\draw[flow] (10.5,-8.5) -- node[edgelabel,above]{check in-place files OR hash-verified fetch} (17.7,-8.5);
-\draw[uses] (17.7,-9.5) -- node[edgelabel,above]{usable local paths} (10.5,-9.5);
-\draw[uses] (10.5,-10.5) -- node[edgelabel,above]{DataFiles: resource key to path} (0,-10.5);
-\node[note, text width=180mm] at (8.85,-12) {Time runs down. Solid arrows are requests; dashed arrows are returns.\\Missing required locations or failed verification stop the request. Metadata can also require network access.};
+% Build a handle, then fetch a collection: the settings snapshot, the catalogue
+% chosen within the release bounds, selection reading only the shards it
+% needs, the lookup chain placing every file before any transfer, and the
+% downloads. Time runs down. Lifeline positions are in mm.
+\begin{tikzpicture}[
+  x=1mm, y=1mm,
+  head/.style={minimum height=11mm, inner sep=1mm, font=\sffamily\footnotesize},
+  lab/.style={c4rellabel, above, inner sep=1pt},
+  labbg/.style={c4rellabelbg, above, inner sep=1pt},
+  act/.style={draw=brand, fill=fillbrand},
+  sidebg/.style={c4rellabelbg, text=muted, align=left, inner sep=0.5pt},
+  guardlabel/.style={c4rellabelbg, text=muted, anchor=north west, inner sep=1pt},
+]
+% A name on two lines; a line break inside \elementshort's group would end the node.
+\newcommand{\elementtwo}[3]{{\bfseries #1}\\[-0.3ex]{\bfseries #2}\\[-0.3ex]{\scriptsize\color{muted}[#3]}}
+\def\xP{11}\def\xS{32}\def\xH{54}\def\xC{76}\def\xR{95}\def\xL{113}\def\xD{131}\def\xG{152}
+\def\yend{-207}
+
+% -- participants ------------------------------------------------------
+\node[c4systemext, head] at (\xP,0) {\elementtwo{Consuming}{package}{via the facade}};
+\node[c4component, head] at (\xS,0) {\elementshort{Settings}{\texttt{config}}};
+\node[c4component, head] at (\xH,0) {\elementtwo{Collections}{handle}{\texttt{selection}}};
+\node[c4component, head] at (\xC,0) {\elementtwo{Catalogue}{reader}{\texttt{catalogs}}};
+\node[c4component, head] at (\xR,0) {\elementshort{Retrieval}{\texttt{retrieval}}};
+\node[c4component, head] at (\xL,0) {\elementtwo{Lookup}{chain}{\texttt{access}}};
+\node[c4component, head] at (\xD,0) {\elementshort{Downloader}{\texttt{pooch}}};
+\node[c4systemext, head] at (\xG,0) {\elementshort{dCache}{download door}};
+\foreach \x in {\xP,\xS,\xH,\xC,\xR,\xL,\xD,\xG}
+  \draw[lifeline] (\x,-6.5) -- (\x,\yend);
+
+% -- activations (drawn first, so arrows and labels lie on top) --------
+\draw[act] ({\xP-1},-8)    rectangle ({\xP+1},{\yend+2.5});
+\draw[act] ({\xS-1},-9.5)  rectangle ({\xS+1},-16);
+\draw[act] ({\xH-1},-27)   rectangle ({\xH+1},-73);
+\draw[act] ({\xS-1},-36.5) rectangle ({\xS+1},-43);
+\draw[act] ({\xC-1},-49.5) rectangle ({\xC+1},-61.5);
+\draw[act] ({\xH-1},-79.5) rectangle ({\xH+1},{\yend+5});
+\draw[act] ({\xC-1},-83.5) rectangle ({\xC+1},-90.5);
+\draw[act] ({\xR-1},-96.5) rectangle ({\xR+1},{\yend+7.5});
+\draw[act] ({\xL-1},-106)  rectangle ({\xL+1},-134);
+\draw[act] ({\xD-1},-169.5) rectangle ({\xD+1},-189.5);
+\draw[act] ({\xG-1},-173.5) rectangle ({\xG+1},-178.5);
+
+% -- 1-4: build the handle ---------------------------------------------
+\node[stepno] at ({\xP-4.5},-11) {1};
+\draw[message] ({\xP+1},-11) -- node[lab] {\texttt{read\_settings}} ({\xS-1},-11);
+\draw[reply] ({\xS-1},-15.5) -- node[lab] {snapshot} ({\xP+1},-15.5);
+
+\node[stepno] at ({\xP-4.5},-27) {2};
+\draw[message] ({\xP+1},-27) -- node[labbg, align=center]
+  {\texttt{load\_collections(file)}\\\relax{\color{muted}reads it, its release bounds}\\\relax{\color{muted}and the listed bundles}} ({\xH-1},-27);
+
+\draw[seqframe] (23,-29.5) rectangle (87,-64);
+\node[seqframelabel] at (23,-29.5) {opt};
+\node[guardlabel, anchor=north east, align=right] at (86.5,-29.8) {[first need for a dataset\\no bundle holds]};
+
+\node[stepno] at ({\xH+4.5},-38) {3};
+\draw[message] ({\xH-1},-38) -- node[lab] {\texttt{choose\_catalog}} ({\xS+1},-38);
+\draw[reply] ({\xS+1},-42.5) -- node[lab] {location} ({\xH-1},-42.5);
+
+\node[stepno] at ({\xH-4.5},-51) {4};
+\draw[message] ({\xH+1},-51) -- node[lab, align=center] {\texttt{load\_catalog},\\\texttt{check\_release}} ({\xC-1},-51);
+\draw[reply] ({\xC-1},-55.5) -- node[lab] {\texttt{Catalog}} ({\xH+1},-55.5);
+\draw[refusal] ({\xC-1},-61.5) -- ({\xP+1},-61.5);
+\node[labbg, align=center] at (37.5,-61.5) {\textbf{CatalogVersionError}:\\outside the bounds};
+
+\draw[reply] ({\xH-1},-73) -- node[labbg, align=center]
+  {\texttt{Collections}: bundles, then\\staging, over the catalogue} ({\xP+1},-73);
+
+% -- 5-9: fetch a collection -------------------------------------------
+\node[stepno] at ({\xP-4.5},-79.5) {5};
+\draw[message] ({\xP+1},-79.5) -- node[labbg] {\texttt{paths("offshore\_siting")}} ({\xH-1},-79.5);
+
+\node[stepno] at ({\xH-4.5},-85) {6};
+\draw[message] ({\xH+1},-85) -- node[lab, align=center] {matching\\datasets} ({\xC-1},-85);
+\node[sidebg, anchor=north west] at ({\xC+2},-81.5) {inventory reader:\\only the shards a\\pattern can match};
+\draw[reply] ({\xC-1},-90) -- node[lab] {resources} ({\xH+1},-90);
+\node[sidebg, anchor=north east] at ({\xH-7.5},-81.5) {selects files and\\sidecars; checks\\the named paths};
+
+\node[stepno] at ({\xH-4.5},-96.5) {7};
+\draw[message] ({\xH+1},-96.5) -- node[labbg] {\texttt{download(resources, fetch=)}} ({\xR-1},-96.5);
+\node[sidebg, anchor=north east] at ({\xR-2},-98) {warns about\\unsettled licensing};
+
+\node[stepno] at ({\xR-4.5},-106) {8};
+\draw[message] ({\xR+1},-106) -- node[lab, align=center] {\texttt{locate}\\every file} ({\xL-1},-106);
+\node[sidebg, anchor=north west] at ({\xL+2},-99.5) {eight locators:\\see the lookup flow};
+
+\draw[seqframe] (3,-108.5) rectangle (127,-136.5);
+\node[seqframelabel] at (3,-108.5) {alt};
+\node[guardlabel] at (11.5,-108.8) {[a locator refuses]};
+\draw[refusal] ({\xL-1},-117) -- ({\xP+1},-117);
+\node[labbg] at (32.5,-117) {restricted data: \textbf{AccessError}};
+\draw[refusal] ({\xL-1},-121.5) -- ({\xP+1},-121.5);
+\node[labbg] at (32.5,-121.5) {altered bundled file: \textbf{BundleError}};
+\draw[refusal] ({\xL-1},-126) -- ({\xP+1},-126);
+\node[labbg] at (32.5,-126) {internal data: \textbf{AccessError}};
+\draw[seqframe, dash pattern=on 2pt off 1.5pt] (3,-128.5) -- (127,-128.5);
+\node[guardlabel] at (4,-128.8) {[else]};
+\draw[reply] ({\xL-1},-133.5) -- node[lab] {locations} ({\xR+1},-133.5);
+\node[sidebg, anchor=north east] at ({\xR-2},-129.5) {checks in-place files are there;\\a missing one: \textbf{AccessError}};
+
+\draw[seqframe] (3,-139.5) rectangle (127,-152);
+\node[seqframelabel] at (3,-139.5) {opt};
+\node[guardlabel] at (11.5,-139.8) {[\texttt{fetch=False}, files to download]};
+\draw[refusal] ({\xR-1},-150) -- ({\xP+1},-150);
+\node[labbg, align=center] at (32.5,-150) {\textbf{NotFetched}: where each file\\belongs; no store contacted};
+
+\draw[seqframe] (79,-155) rectangle (161,-192);
+\node[seqframelabel] at (79,-155) {loop};
+\node[guardlabel] at ({\xR+2},-155.3) {[each dataset and revision folder]};
+\node[sidebg, anchor=north west] at ({\xR+2},-159.2)
+  {into the user's own public cache, never through a link;\\seeds revision entries from earlier ones};
+\node[stepno] at ({\xR-4.5},-169.5) {9};
+\draw[message] ({\xR+1},-169.5) -- node[labbg, pos=0.46] {\texttt{fetch(url, \{path: hash\})}} ({\xD-1},-169.5);
+\draw[message] ({\xD+1},-174) -- node[lab, align=center, pos=0.45] {anonymous\\HTTPS GET} ({\xG-1},-174);
+\draw[reply] ({\xG-1},-178.5) -- node[lab] {bytes} ({\xD+1},-178.5);
+\node[sidebg, anchor=north west] at ({\xD+2},-180) {keeps a file whose\\hash matches};
+\draw[reply] ({\xD-1},-189.5) -- node[labbg, align=center] {\texttt{\{path: Path\}}\\or \textbf{DownloadError}} ({\xR+1},-189.5);
+
+\draw[reply] ({\xR-1},-197.5) -- node[labbg] {\texttt{DataFiles}} ({\xH+1},-197.5);
+\draw[reply] ({\xH-1},-202.5) -- node[lab] {\texttt{NamedPaths}} ({\xP+1},-202.5);
+
+% -- the key -------------------------------------------------------------
+\begin{scope}[shift={(2,-212)}]
+  \keytitle{Key}
+  \keynode{1}{c4component}{a component of ETHOS.Data}
+  \keynode{2}{c4systemext}{a system outside it}
+\end{scope}
+\begin{scope}[shift={(48,-212)}]
+  \node[stepno] at (4.5,-6.5) {1};
+  \node[keytext] at (11.5,-6.5) {a step, in time order};
+  \draw[act] (3.5,-11.5) rectangle (5.5,-14.5);
+  \node[keytext] at (11.5,-13) {active};
+\end{scope}
+\begin{scope}[shift={(86,-212)}]
+  \keyline{1}{message}{a call}
+  \keyline{2}{reply}{its return}
+\end{scope}
+\begin{scope}[shift={(116,-212)}]
+  \keyline{1}{refusal}{a refusal: the call ends}
+  \draw[seqframe] (0,-11) rectangle (9,-15);
+  \node[keytext] at (11.5,-13) {a frame: only if, or for each};
+\end{scope}
 \end{tikzpicture}

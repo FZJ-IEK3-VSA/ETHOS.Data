@@ -68,6 +68,17 @@ For one dataset, first match wins:
 4. **The public root**, for everything else: in place if the entry is a symbolic
    link, downloaded otherwise.
 
+!!! warning "Gap: the lookup chain has eight places, and the cluster's shared cache is read-only"
+    The target reads every file through one lookup chain of eight places:
+    dataset roots, staging, bundles, the restricted cache, the shared cache, a
+    link in the public cache, a copy in it, and a download
+    ([decision 0012](architecture/decisions/0012-one-lookup-chain.md),
+    [the lookup chain](architecture/runtime.md#the-lookup-chain)). On the
+    cluster, the cache the institute shares is a read-only shared cache that
+    catalogue maintainers fill; each user's public cache is personal and takes
+    their downloads ([decision 0028](architecture/decisions/0028-read-only-shared-cache.md)).
+    The figure and the list above show the four places the code reads.
+
 ## The rule that does not bend
 
 Retrieval never writes restricted data into the public cache and never
@@ -87,7 +98,7 @@ a copy — and closes with the commands that register a copy once they have one.
     The current release offers `--skip-unavailable`, which leaves an
     unreachable dataset's key out of the result with a warning, and its
     error prints only the `ethos:restriction` note. See [every input is
-    required](architecture/decisions.md#every-input-is-required-2026-10-02).
+    required](architecture/decisions/0013-every-input-is-required.md).
 
 ## Downloads never write through a link
 

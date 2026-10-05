@@ -38,6 +38,17 @@ users download into their own public cache and read the shared one through
 per-dataset links or a second cache root of their own. Decide this before
 publishing the path.
 
+!!! warning "Gap: a read-only shared cache, and records in your own clone"
+    In the target, cluster users never write the shared cache: maintainers
+    fill it, and each user downloads into a public cache of their own
+    ([decision 0028](../../explanation/architecture/decisions/0028-read-only-shared-cache.md)).
+    Maintainers record links and copies only in their own clone of the source
+    catalogue and merge them on JuGit by merge request; the served checkout
+    changes only through `catalog update-checkout`
+    ([decision 0026](../../explanation/architecture/decisions/0026-internal-catalogue-on-the-cluster.md)).
+    Until the shared-cache setting exists, run step 3 with `--catalog-root`
+    naming your own clone, not the served checkout.
+
 ## 2. Serve the catalogue
 
 ```bash

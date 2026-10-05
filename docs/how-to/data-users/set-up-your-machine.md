@@ -46,7 +46,7 @@ collections file.
     in your account is `%LOCALAPPDATA%\ethos-data\ethos-data\config.yaml`
     and the default cache is `%LOCALAPPDATA%\ethos-data\ethos-data\Cache`.
     The planned change, [one settings file per
-    account](../../explanation/architecture/decisions.md#one-settings-file-per-account-2026-10-02),
+    account](../../explanation/architecture/decisions/0010-one-settings-file-per-account.md),
     is to be implemented separately.
 
 ## Check what is in effect
@@ -91,7 +91,7 @@ Every input a workflow names is required; no setting lets it run without one.
     `--skip-unavailable`, `skip_unavailable=True`,
     `config set-skip-unavailable` or `ETHOS_SKIP_UNAVAILABLE`. The planned
     change, [every input is
-    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
+    required](../../explanation/architecture/decisions/0013-every-input-is-required.md),
     is to be implemented separately.
 
 ## Cluster users {#cluster-users}
@@ -112,6 +112,20 @@ ethos-data config set-restricted-cache /shared/ethos/restricted
 | catalogue | Selects the internal catalogue, which includes every public entry plus the internal and restricted ones. It replaces the public catalogue and any version a package declares. |
 | public cache | The shared directory where public and internal data already lies, as links or copies, and where downloads land. |
 | restricted cache | The shared directory holding the licensed datasets the institute may use. Retrieval reads it in place and never writes to it. |
+
+!!! warning "Gap: no shared-cache setting"
+    In the target, cluster users read the shared data through a read-only
+    shared cache that catalogue maintainers fill, and download into a public
+    cache of their own
+    ([decision 0028](../../explanation/architecture/decisions/0028-read-only-shared-cache.md)):
+
+    ```bash
+    ethos-data config set-shared-cache /shared/ethos/cache
+    ethos-data config set-public-cache <a directory of your own, as the ICE-2 wiki recommends>
+    ```
+
+    `config set-shared-cache` does not exist yet, so the public cache above
+    points at the shared directory.
 
 The settings locate data; they grant no permission, which have to requested from the owner or a cluster administrator.
 
@@ -175,7 +189,7 @@ work with.
     are implemented, `ethos-data fetch
     reskit-test-data/placements/turbine_placements.csv` checks a single
     download. The [planned
-    change](../../explanation/architecture/decisions.md#a-self-test-collection-ships-with-the-package-2026-10-02)
+    change](../../explanation/architecture/decisions/0017-self-test-collection.md)
     is to be implemented separately.
 
 ## Use another settings file {#another-settings-file}
@@ -205,7 +219,7 @@ Every other command stops and names the missing file.
 
 !!! warning "Gap: `ETHOS_DATA_CONFIG` is not implemented"
     The variable is ignored. It is part of [one settings file per
-    account](../../explanation/architecture/decisions.md#one-settings-file-per-account-2026-10-02),
+    account](../../explanation/architecture/decisions/0010-one-settings-file-per-account.md),
     which is to be implemented separately.
 
 ## Override one shell or one run {#temporary-overrides}
