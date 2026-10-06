@@ -3,10 +3,12 @@
 `ethos_data.model` holds the rules every reader of a catalogue shares, each
 written once: the digest of a file and how a catalogue spells one, dataset
 names and the families they form, and the record a descriptor keeps for each
-file. The catalogue, a bundle, a staging root and the build all go through it,
-so a hash, a sidecar or a family member means the same to each of them. It
-reads no settings, makes no network request and prints nothing; its one input
-is hashing a file it is handed.
+file, the one inventory reader, and one glob semantics. The catalogue, a
+bundle, a staging root and the build all go through it, so a hash, a sidecar,
+a shard or a family member means the same to each of them. It reads no
+settings, makes no network request and prints nothing; its one input is
+hashing a file it is handed, and the inventory reader reads through the
+metadata source it is handed.
 
 ## Digests
 
@@ -52,6 +54,44 @@ dataset or bundle may hold.
         - Prefix
         - Bounds
         - releases
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+## Path patterns
+
+One glob semantics for a collection's `files:` and a dataset's
+`ethos:include` and `ethos:exclude`: `*` within one path segment, `**` across
+any number of them.
+
+::: ethos_data.model.patterns
+    options:
+      members:
+        - path_matches
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+## The inventory reader
+
+One dataset's descriptor and inventory, inline or in shards, read on demand:
+the descriptor on first access, each shard at most once, one shard for a path
+and only the shards patterns can reach. The catalogue, the maintainer
+commands (through `maintain.inventory_of`), bundles and staging all read
+inventories through it, and the build splits an inventory by its shard rules.
+A missing descriptor or shard raises
+[`IncompleteCatalog`][ethos_data.errors.IncompleteCatalog], naming the
+dataset, the part and its location.
+
+::: ethos_data.model.inventory
+    options:
+      members:
+        - Inventory
+        - PartReader
+        - shard_key
+        - shard_path
+        - split_into_shards
+        - shard_could_match
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

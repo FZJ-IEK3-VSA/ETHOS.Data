@@ -93,7 +93,14 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setenv("ETHOS_DATA_DIR", str(cache))
 
     catalogue = tmp_path / "catalogue"
-    entries = [{"name": "reskit-test-data", "ethos:namespace": True}]
+    entries = [
+        {
+            "name": "reskit-test-data",
+            "ethos:namespace": True,
+            "ethos:total_bytes": 0,
+            "ethos:file_count": 0,
+        }
+    ]
     for name, files in LAYOUT.items():
         resources = []
         for relative, text in files.items():
@@ -108,11 +115,15 @@ def world(tmp_path, monkeypatch):
         package = catalogue / "datasets" / name / "datapackage.json"
         package.parent.mkdir(parents=True, exist_ok=True)
         package.write_text(json.dumps({"name": name, "resources": resources}))
+        # The row the build writes: totals and remote prefix cost no descriptor.
         entries.append(
             {
                 "name": name,
                 "path": f"datasets/{name}/datapackage.json",
                 "ethos:license_status": "resolved",
+                "ethos:remote_prefix": name,
+                "ethos:total_bytes": sum(r["bytes"] for r in resources),
+                "ethos:file_count": len(resources),
             }
         )
     # Licensed data with no restricted cache on this machine: the one way a
@@ -123,6 +134,8 @@ def world(tmp_path, monkeypatch):
             "path": "datasets/licensed/datapackage.json",
             "ethos:access": "restricted",
             "ethos:license_status": "resolved",
+            "ethos:total_bytes": 3,
+            "ethos:file_count": 1,
         }
     )
     licensed = catalogue / "datasets" / "licensed" / "datapackage.json"
@@ -913,7 +926,7 @@ class TestIncompleteCatalog:
         gives no hint that the catalogue copy is the problem."""
         catalog = ethos_data.load_catalog(str(incomplete))
         with pytest.raises(ethos_data.IncompleteCatalog) as caught:
-            catalog.dataset("ghost").load()
+            _ = catalog.dataset("ghost").descriptor
         assert isinstance(caught.value, FileNotFoundError)
         message = str(caught.value)
         assert "dataset 'ghost' is listed in the catalogue index" in message
@@ -924,8 +937,8 @@ class TestIncompleteCatalog:
     def test_a_missing_shard_is_diagnosed_the_same_way(self, incomplete):
         catalog = ethos_data.load_catalog(str(incomplete))
         dataset = catalog.dataset("sharded")
-        dataset.load()  # the shard index itself is there
-        assert dataset.pending_shards == ["a"]
+        # The descriptor, with the shard list, is there.
+        assert dataset.inventory.pending_shards == ["a"]
         with pytest.raises(ethos_data.IncompleteCatalog) as caught:
             _ = dataset.resources
         message = str(caught.value)
@@ -1558,7 +1571,7 @@ class TestCatalogUnavailable:
             f"cannot read the catalogue index at {url}: HTTP 404 Not Found"
         )
         assert "--catalog" in message
-        assert isinstance(caught.value.__cause__, urllib.error.HTTPError)
+        assert isinstance(caught.value.__cause__, ethos_data.IncompleteCatalog)
 
         def unreachable(*args, **kwargs):
             raise urllib.error.URLError("no such host")

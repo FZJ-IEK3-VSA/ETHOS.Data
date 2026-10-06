@@ -9,6 +9,7 @@ import ethos_data
 from ethos_data import config, staging, tool_main
 from ethos_data.catalogs import Catalog, Dataset
 from ethos_data.config import Roots
+from ethos_data.model.inventory import Inventory
 from ethos_data.model.resource import Resource
 
 
@@ -83,8 +84,7 @@ def test_overlay_does_not_mutate_canonical_catalogue(workspace):
         "example",
         "Official",
         entry={"ethos:access": "public"},
-        _descriptor={"resources": []},
-        _resources={"old.txt": old},
+        inventory=Inventory.from_resources("example", {}, [old]),
     )
     catalog = Catalog("local", {}, {"example": dataset})
     with pytest.warns(UserWarning):
@@ -103,7 +103,7 @@ def test_restricted_catalogue_entry_is_not_shadowed(workspace):
         "example",
         "Licensed",
         entry={"ethos:access": "restricted"},
-        _descriptor={"resources": []},
+        inventory=Inventory.from_resources("example", {}, []),
     )
     catalog = Catalog("local", {}, {"example": dataset})
     with pytest.warns(UserWarning, match="IGNORED"):

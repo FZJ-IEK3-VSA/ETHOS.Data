@@ -49,11 +49,11 @@ from . import (
     catalogue_role,
     dataset_name_for,
     datasets_dir,
+    inventory_of,
     is_namespace,
     iter_dataset_dirs,
     read_catalog_meta,
     read_descriptor,
-    resources_of,
     source_dir_of,
 )
 
@@ -300,7 +300,7 @@ def upload_one(
     report.info(f"to           {destination}")
     report.info(f"public URL   {dataset_url}\n")
 
-    resources = resources_of(plan.package, plan.dataset_dir)
+    resources = inventory_of(plan.name, plan.dataset_dir).records()
 
     if not options.verify_only:
         store.copy(

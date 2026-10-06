@@ -42,7 +42,14 @@ def world(tmp_path, monkeypatch):
         "flat": {"one.csv": "1", "sub/two.csv": "2", "sub.csv": "s"},
     }
     catalogue = tmp_path / "catalogue"
-    entries = [{"name": "family", "ethos:namespace": True}]
+    entries = [
+        {
+            "name": "family",
+            "ethos:namespace": True,
+            "ethos:total_bytes": 0,
+            "ethos:file_count": 0,
+        }
+    ]
     for name, files in layout.items():
         resources = []
         for relative, text in files.items():
@@ -57,11 +64,15 @@ def world(tmp_path, monkeypatch):
         package = catalogue / "datasets" / name / "datapackage.json"
         package.parent.mkdir(parents=True, exist_ok=True)
         package.write_text(json.dumps({"name": name, "resources": resources}))
+        # The row the build writes: totals and remote prefix cost no descriptor.
         entries.append(
             {
                 "name": name,
                 "path": f"datasets/{name}/datapackage.json",
                 "ethos:license_status": "resolved",
+                "ethos:remote_prefix": name,
+                "ethos:total_bytes": sum(r["bytes"] for r in resources),
+                "ethos:file_count": len(resources),
             }
         )
     index = catalogue / "datacatalog.json"
@@ -149,7 +160,7 @@ def test_a_handle_is_built_once_and_reused(world, monkeypatch):
     catalog = ethos_data.catalog(str(index))
     loads = []
     monkeypatch.setattr(
-        ethos_data, "load_catalog", lambda location: loads.append(location)
+        ethos_data, "load_catalog", lambda location, **settings: loads.append(location)
     )
     assert catalog.path("family/alpha/era5/y.nc") == cache / "family/alpha/era5/y.nc"
     assert catalog.path("flat/one.csv") == cache / "flat/one.csv"
@@ -161,7 +172,7 @@ def test_without_a_catalogue_the_public_one_is_used(monkeypatch):
     monkeypatch.delenv("ETHOS_DATA_CATALOG", raising=False)
     asked = []
 
-    def stop(location):
+    def stop(location, **settings):
         asked.append(location)
         raise RuntimeError("no network in tests")
 
@@ -180,7 +191,9 @@ def test_a_collections_file_without_bounds_uses_the_public_catalogue(
     monkeypatch.setattr(
         selection,
         "load_catalog",
-        lambda location: asked.append(location) or ethos_data.Catalog(location, {}, {}),
+        lambda location, **settings: (
+            asked.append(location) or ethos_data.Catalog(location, {}, {})
+        ),
     )
     collections = tmp_path / "collections.yaml"
     collections.write_text("collections: {}\n")
@@ -352,15 +365,20 @@ def test_ethos_data_fetches_catalogue_keys(world, key, capsys):
 
 
 def test_catalogue_listing_only_reads_the_index(world, monkeypatch, capsys):
+    from ethos_data.adapters.metadata import FileSource
+
     _, _, index = world
+    read = []
+    original = FileSource.read
     monkeypatch.setattr(
-        ethos_data.Dataset,
-        "load",
-        lambda self: pytest.fail("loaded a dataset inventory"),
+        FileSource,
+        "read",
+        lambda self, location: read.append(location) or original(self, location),
     )
     assert main(["--catalog", str(index), "ls"]) == 0
     out = capsys.readouterr().out
     assert "family/alpha" in out and "flat" in out
+    assert [Path(location).name for location in read] == ["datacatalog.json"]
 
 
 def test_ethos_data_follows_the_catalogue_precedence(world, monkeypatch, capsys):
@@ -442,12 +460,12 @@ def test_tool_main_builds_the_handle_only_when_a_command_needs_it(
     monkeypatch.setattr(
         selection,
         "load_catalog",
-        lambda location: pytest.fail(f"loaded the catalogue at {location}"),
+        lambda location, **settings: pytest.fail(f"loaded the catalogue at {location}"),
     )
     monkeypatch.setattr(
         ethos_data,
         "load_catalog",
-        lambda location: pytest.fail(f"loaded the catalogue at {location}"),
+        lambda location, **settings: pytest.fail(f"loaded the catalogue at {location}"),
     )
     with pytest.raises(SystemExit) as stop:
         ethos_data.tool_main(shipped, tool="faketool", argv=["--help"])
@@ -468,7 +486,7 @@ def test_tool_main_runs_the_commands_and_reuses_one_handle(
     monkeypatch.setattr(
         selection,
         "load_catalog",
-        lambda location: loads.append(location) or real(location),
+        lambda location, **settings: loads.append(location) or real(location),
     )
     assert ethos_data.tool_main(shipped, tool="faketool", argv=["fetch", "wind"]) == 0
     assert len(loads) == 1

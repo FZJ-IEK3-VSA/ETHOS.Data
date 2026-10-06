@@ -24,10 +24,12 @@ from pathlib import Path
 
 import yaml
 
+from ..adapters.metadata import FileSource
 from ..errors import CatalogueRootError, DescriptorError
 from ..formats import keys as k
 from ..formats.keys import CATALOG_ROLE as ROLE_KEY
 from ..formats.keys import ROLE_PUBLISHED, ROLE_SOURCE
+from ..model.inventory import SHARD_DIR, Inventory
 
 CATALOG_MARKER = "catalog.yaml"
 #: Present in a *generated* catalogue too, so it can never identify a source one.
@@ -172,10 +174,9 @@ def source_dir_of(dataset_dir: Path, meta: Mapping) -> Path | None:
     return source
 
 
-#: Where a sharded dataset keeps its split inventory, beside its own
-#: ``datapackage.json``: one ``shards/<prefix>.json`` per shard. The build owns
-#: this directory outright and deletes whatever in it it did not just generate.
-SHARD_DIR = "shards"
+# A sharded dataset keeps its split inventory in SHARD_DIR, beside its own
+# ``datapackage.json``: one ``shards/<prefix>.json`` per shard. The build owns
+# this directory outright and deletes whatever in it it did not just generate.
 
 #: What SHARD_DIR was called before it was renamed. The build still owns it, so
 #: the first rebuild of an older catalogue moves every shard across and deletes
@@ -268,27 +269,23 @@ def parent_chain(root: Path, dataset_dir: Path) -> list[Path]:
     return list(reversed(chain))
 
 
-def resources_of(package: dict, dataset_dir: Path) -> list[dict]:
-    """Every resource in a dataset, whether its inventory is inline or sharded.
+def inventory_of(name: str, dataset_dir: Path) -> Inventory:
+    """A dataset's generated descriptor and inventory in a checkout.
 
-    A sharded descriptor carries an ``ethos:shards`` index instead of
-    ``resources``; the inventory lives in ``shards/<prefix>.json`` beside it.
-    Shared by the manifest builder (freezing an uploaded dataset's inventory
-    without re-reading source_dir) and the uploader (finding what to copy and
-    verify) so the two can never disagree about what a sharded package contains.
+    Read by the one inventory reader, as a data user reads it, so a maintainer
+    command sees exactly the resources a reader sees. A descriptor or shard
+    that is not there means a build is due, and says so.
     """
-    if k.RESOURCES in package:
-        return package[k.RESOURCES]
-    name = package[k.NAME]
-    resources: list[dict] = []
-    for shard in package.get(k.SHARDS, []):
-        shard_file = dataset_dir / shard[k.PATH]
-        if not shard_file.is_file():
-            raise DescriptorError(
-                f"{name}: shard {shard[k.PATH]} is missing. Run:\n"
-                f"    ethos-data catalog build {name}"
-            )
-        resources.extend(
-            json.loads(shard_file.read_text(encoding="utf-8"))[k.RESOURCES]
+
+    def missing(part: str, location: str) -> DescriptorError:
+        return DescriptorError(
+            f"{name}: its {part} is missing: {location}. Run:\n"
+            f"    ethos-data catalog build {name}"
         )
-    return resources
+
+    return Inventory(
+        name,
+        FileSource(),
+        (dataset_dir / "datapackage.json").as_posix(),
+        missing=missing,
+    )

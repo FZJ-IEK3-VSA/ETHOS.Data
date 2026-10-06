@@ -23,7 +23,7 @@ dash means that the decision is implemented and needs no pull request.
 | 0004 | [Derive cache paths from resource identity, and never reuse a name](0004-cache-paths-from-resource-identity.md) | implemented | — |
 | 0005 | [Read the index first and inventories on demand](0005-lazy-index-descriptors-and-shards.md) | implemented | — |
 | 0006 | [Specify every file format once](0006-every-file-format-specified-once.md) | proposed | #11, #12, #13, #27 |
-| 0007 | [Read every generated catalogue through one inventory reader](0007-one-inventory-reader.md) | proposed | a new PR (inventory reader) |
+| 0007 | [Read every generated catalogue through one inventory reader](0007-one-inventory-reader.md) | implemented | a new PR (inventory reader) |
 | | **Code structure** | | |
 | 0008 | [Build the package in four layers: model, adapters, services, presentation](0008-four-layers.md) | proposed | #10, #13, #17, #20, a new PR (service groups) |
 | 0009 | [Reach dCache, downloads, metadata sources and git through ports with fakes](0009-ports-and-fakes-for-external-systems.md) | proposed | #20, a new PR (inventory reader), #23 |

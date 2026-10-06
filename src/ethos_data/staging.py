@@ -45,6 +45,7 @@ from .config import Roots, current_user, read_settings
 from .errors import AccessError, StagingError
 from .formats import keys as k
 from .model import names
+from .model.inventory import Inventory
 from .model.resource import Resource
 
 __all__ = [
@@ -449,18 +450,20 @@ def synthesize(name: str, directory: Path, access: str = STAGING_ACCESS) -> Data
             "Restore its target or remove the staging entry; refusing an empty "
             "selection or a fallback to official data."
         )
-    resources: dict[str, Resource] = {}
+    resources: list[Resource] = []
     total = 0
     for path, relative in iter_files(directory):
         size = path.stat().st_size
         total += size
-        resources[relative] = Resource(
-            dataset=name,
-            name=relative.replace("/", "-").lower(),
-            path=relative,
-            bytes=size,
-            hash="",
-            mediatype=k.DEFAULT_MEDIATYPE,
+        resources.append(
+            Resource(
+                dataset=name,
+                name=relative.replace("/", "-").lower(),
+                path=relative,
+                bytes=size,
+                hash="",
+                mediatype=k.DEFAULT_MEDIATYPE,
+            )
         )
 
     entry = {
@@ -470,19 +473,15 @@ def synthesize(name: str, directory: Path, access: str = STAGING_ACCESS) -> Data
         k.FILE_COUNT: len(resources),
         k.TOTAL_BYTES: total,
     }
-    dataset = Dataset(
-        name=name, title=f"{name} (staged, not in the catalogue)", entry=entry
+    # An inventory of what is on disk: there is no datapackage.json to read,
+    # and asking for one must not reach the network.
+    descriptor = {k.NAME: name, k.STAGED: True, k.ACCESS: access}
+    return Dataset(
+        name=name,
+        title=f"{name} (staged, not in the catalogue)",
+        entry=entry,
+        inventory=Inventory.from_resources(name, descriptor, resources),
     )
-    # Setting the descriptor is what makes load() a no-op: there is no
-    # datapackage.json to fetch, and asking for one must not reach the network.
-    dataset._descriptor = {
-        k.NAME: name,
-        k.STAGED: True,
-        k.ACCESS: access,
-        k.RESOURCES: [],
-    }
-    dataset._resources = resources
-    return dataset
 
 
 def apply_staging(

@@ -19,11 +19,12 @@ import pooch
 import yaml
 
 from . import report
-from .catalogs import Catalog, _join, _read_binary
-from .errors import BundleError
+from .catalogs import Catalog
+from .errors import BundleError, CatalogUnavailable, IncompleteCatalog
 from .formats import keys as k
 from .formats.derived import resource_url
 from .model import digest, names
+from .model.inventory import Inventory
 from .model.resource import Resource, checked, to_record
 from .retrieval import DataFiles
 from .selection import load_collections
@@ -137,13 +138,6 @@ def _collect_documents(dataset, package: Mapping, catalog_location: str) -> dict
     wanted = _license_documents(package)
     if not wanted:
         return {}
-    try:
-        descriptor_location = _join(dataset.base, dataset.entry[k.PATH])
-    except (KeyError, TypeError) as error:
-        raise BundleError(
-            f"cannot locate the descriptor of {dataset.name!r} to read its licences"
-        ) from error
-    base = descriptor_location.rsplit("/", 1)[0] + "/"
     expected = {
         entry[k.DOCUMENT]: entry.get(k.DOCUMENT_SHA256)
         for entry in package.get(k.LICENSES, [])
@@ -151,13 +145,12 @@ def _collect_documents(dataset, package: Mapping, catalog_location: str) -> dict
     }
     collected = {}
     for document in wanted:
-        location = _join(base, document)
         try:
-            raw = _read_binary(location)
-        except OSError as error:
+            raw = dataset.inventory.read_part(document)
+        except (IncompleteCatalog, CatalogUnavailable) as error:
             raise BundleError(
                 f"cannot read the licence document {document!r} of "
-                f"{dataset.name!r} at {location} (catalogue {catalog_location}): {error}"
+                f"{dataset.name!r} (catalogue {catalog_location}): {error.message}"
             ) from error
         declared = expected.get(document)
         if declared is not None:
@@ -196,6 +189,8 @@ class Bundle:
     datasets: dict
     collections: dict[str, list[str]]
     resources: dict[str, Resource]
+    #: Each bundled dataset's inventory, read by the one inventory reader.
+    inventories: dict[str, Inventory]
 
     def names(self) -> list[str]:
         return sorted(self.collections)
@@ -310,6 +305,7 @@ def load_bundle(path: str | Path) -> Bundle:
     ):
         raise BundleError("bundle metadata needs datasets and collections")
     resources = {}
+    inventories = {}
     for name, package in datasets.items():
         _relative(name, "dataset name")
         if not isinstance(package, dict) or not isinstance(
@@ -323,10 +319,12 @@ def load_bundle(path: str | Path) -> Bundle:
         ):
             raise BundleError(f"{name!r} is not a public catalogue snapshot")
         for record in package[k.RESOURCES]:
+            # Committed to a repository, so checked before it is trusted.
             resource = _resource(record, name)
             if resource.key in resources:
                 raise BundleError(f"duplicate resource metadata: {resource.key}")
             resources[resource.key] = resource
+        inventories[name] = Inventory.from_records(name, package)
     _distinct_datasets(datasets)
     # An archived licence that did not travel is a licence the reader cannot
     # honour, so a bundle missing one is incomplete rather than merely thinner.
@@ -356,7 +354,7 @@ def load_bundle(path: str | Path) -> Bundle:
                     raise BundleError(
                         f"collection {name!r} lacks sidecar metadata for {key}: {sidecar}"
                     )
-    return Bundle(root.resolve(), source, datasets, collections, resources)
+    return Bundle(root.resolve(), source, datasets, collections, resources, inventories)
 
 
 def export_bundle(
@@ -445,7 +443,7 @@ def export_bundle(
             documents.update(
                 _collect_documents(dataset, package, loaded.catalog.location)
             )
-        record = dataset.resource_descriptor(resource.path) or to_record(resource)
+        record = dataset.inventory.record(resource.path) or to_record(resource)
         for field in STRIP_FROM_PACKAGE:
             record.pop(field, None)
         packages[resource.dataset][k.RESOURCES].append(record)

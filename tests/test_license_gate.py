@@ -23,6 +23,7 @@ from ethos_data.linking import link
 from ethos_data.maintain import namespace
 from ethos_data.maintain.manifest import render_dataset, write_dataset
 from ethos_data.maintain.upload import preflight
+from ethos_data.model.inventory import Inventory
 from ethos_data.model.resource import Resource
 
 PAYLOAD = b"first file"
@@ -67,8 +68,7 @@ def _catalog(status: str | None) -> Catalog:
         "example",
         "Example",
         entry=entry,
-        _descriptor={"resources": []},
-        _resources={"a.txt": resource},
+        inventory=Inventory.from_resources("example", {}, [resource]),
     )
     return Catalog("local", {}, {"example": dataset})
 

@@ -36,7 +36,13 @@ from ..formats import dataset as dataset_format
 from ..formats import keys as k
 from ..formats.derived import index_row
 from ..formats.registry import unpublished_keys
-from . import dataset_name_for, datasets_dir, iter_dataset_dirs, read_catalog_meta
+from . import (
+    dataset_name_for,
+    datasets_dir,
+    inventory_of,
+    iter_dataset_dirs,
+    read_catalog_meta,
+)
 
 #: Maintainer-only, never in the public catalogue: the keys the dataset.yaml
 #: specification marks unpublished. ``ethos:embargo`` would leak that unpublished
@@ -176,15 +182,13 @@ def render(catalog_root: Path, earlier: list[str] | None = None) -> dict[Path, s
 
         # A sharded dataset is useless without its shards: the index names them
         # by relative path, so they have to travel with it or every resolve
-        # 404s on a file the public catalogue swears exists.
-        for shard in public_package.get("ethos:shards", []):
-            source = dataset_dir / shard["path"]
-            if not source.is_file():
-                raise PublishError(
-                    f"{public_package['name']}: shard {shard['path']} is missing. Run:\n"
-                    f"    ethos-data catalog build {dataset_name_for(datasets_dir(catalog_root), dataset_dir)}"
-                )
-            files[here / shard["path"]] = source.read_text(encoding="utf-8")
+        # 404s on a file the public catalogue swears exists. The inventory
+        # lists them, and a missing one says which build is due.
+        inventory = inventory_of(
+            dataset_name_for(datasets_dir(catalog_root), dataset_dir), dataset_dir
+        )
+        for shard in inventory.shard_files():
+            files[here / shard] = inventory.read_part(shard).decode("utf-8")
 
         # The row the source index carries, built by the same function, so a
         # reader of the public catalogue finds what a reader of the internal one

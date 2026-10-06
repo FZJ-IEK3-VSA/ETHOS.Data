@@ -64,24 +64,24 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from .. import report
-from ..catalogs import ROOT_SHARD, shard_key
 from ..errors import DescriptorError
 from ..formats import catalogue as catalogue_format
 from ..formats import dataset as dataset_format
 from ..formats import keys as k
 from ..formats.derived import index_row
 from ..model.digest import matches, of_file, recorded
-from ..selection import path_matches
+from ..model.inventory import ROOT_SHARD, SHARD_DIR, shard_path, split_into_shards
+from ..model.patterns import path_matches
+from ..model.resource import Resource, to_record
 from . import (
     LEGACY_SHARD_DIR,
-    SHARD_DIR,
     dataset_name_for,
     datasets_dir,
+    inventory_of,
     is_namespace,
     iter_dataset_dirs,
     read_catalog_meta,
     read_descriptor,
-    resources_of,
     source_dir_of,
 )
 
@@ -392,9 +392,7 @@ def frozen_resources(name: str, dataset_dir: Path) -> list[dict]:
             f"freeze. Build once with source_dir set, check the result, and only then set "
             f"{k.FROZEN}: true (or {k.UPLOADED}: true) and remove source_dir."
         )
-    resources = resources_of(
-        json.loads(package_file.read_text(encoding="utf-8")), dataset_dir
-    )
+    resources = inventory_of(name, dataset_dir).records()
     return [
         {key: value for key, value in resource.items() if key != k.LICENSES}
         for resource in resources
@@ -402,27 +400,31 @@ def frozen_resources(name: str, dataset_dir: Path) -> list[dict]:
 
 
 def build_resource(path: Path, root: Path, size: int, digest: str) -> dict:
+    """The record of one file under ``root``, written as every record is written.
+
+    A shapefile names the companions found beside it, so a reader never takes
+    the ``.shp`` without them.
+    """
     relative = path.relative_to(root).as_posix()
-    # The record ethos_data.model.resource reads back into a Resource, key for
-    # key and in this order; a test holds the two together.
-    resource = {
-        k.NAME: slugify(relative),
-        k.PATH: relative,
-        k.BYTES: size,
-        k.HASH: recorded(digest),
-        k.MEDIATYPE: mediatype_of(path),
-    }
+    sidecars: tuple[str, ...] = ()
     if path.suffix.lower() == ".shp":
-        sidecars = [
-            (path.with_suffix(ext)).relative_to(root).as_posix()
+        sidecars = tuple(
+            path.with_suffix(ext).relative_to(root).as_posix()
             for ext in SHAPEFILE_SIDECAR_EXTS
             if path.with_suffix(ext).exists()
-        ]
-        if sidecars:
-            # Custom property -- the spec permits these, and the resolver uses it
-            # to pull companion files in automatically.
-            resource[k.SIDECARS] = sidecars
-    return resource
+        )
+    return to_record(
+        Resource(
+            # A record does not name its dataset; the descriptor holding it does.
+            dataset="",
+            name=slugify(relative),
+            path=relative,
+            bytes=size,
+            hash=recorded(digest),
+            mediatype=mediatype_of(path),
+            sidecars=sidecars,
+        )
+    )
 
 
 def record_license_documents(
@@ -529,19 +531,6 @@ def _checked(name: str, rule, meta: dict) -> None:
         rule(meta)
     except DescriptorError as error:
         raise DescriptorError(f"{name}: {error.message}") from None
-
-
-def shard_path(prefix: str) -> str:
-    """Where one shard's inventory lives, relative to the dataset directory."""
-    return f"{SHARD_DIR}/{prefix}.json"
-
-
-def split_into_shards(resources: list[dict], depth: int) -> dict[str, list[dict]]:
-    """Group an inventory by shard prefix, in a stable order."""
-    shards: dict[str, list[dict]] = {}
-    for resource in resources:
-        shards.setdefault(shard_key(resource["path"], depth), []).append(resource)
-    return {prefix: shards[prefix] for prefix in sorted(shards)}
 
 
 def dumps(payload: dict) -> str:

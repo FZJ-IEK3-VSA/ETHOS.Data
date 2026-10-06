@@ -41,7 +41,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .access import entry_for
-from .catalogs import LICENSE_RESOLVED, Catalog
+from .catalogs import Catalog
 from .config import Roots
 from .errors import AccessError, CatalogueRootError, LinkError
 from .formats import keys as k
@@ -162,7 +162,7 @@ def _require_settled_licence(catalog: Catalog, name: str) -> None:
     "but I need to work with it now": a staging entry is one person's, shadows
     nothing for anybody else, and is unverifiable by construction.
     """
-    if catalog.dataset(name).license_status == LICENSE_RESOLVED:
+    if catalog.dataset(name).license_status == k.RESOLVED:
         return
     try:
         note = catalog.dataset(name).descriptor.get(k.LICENSE_NOTE, "")
