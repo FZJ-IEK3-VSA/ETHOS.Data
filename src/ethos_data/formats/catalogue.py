@@ -63,7 +63,7 @@ class CatalogMeta(BaseModel):
     catalog_role: str = field(
         k.CATALOG_ROLE,
         k.ROLE_SOURCE,
-        description="Always source in a hand-written file; publish stamps published.",
+        description="Always `source` in a hand-written file; `publish` stamps `published`.",
         schema={"enum": list(k.CATALOG_ROLES)},
     )
     store: StoreSettings | None = field(

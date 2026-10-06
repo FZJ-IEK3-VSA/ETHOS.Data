@@ -23,7 +23,10 @@ templates and the tables of [File formats](../schemas.md) are made from them.
         - Format
         - schema
         - template
+        - template_names
         - placeholders
+        - handoff
+        - handoff_names
         - write_schemas
       show_root_heading: false
       show_root_toc_entry: false

@@ -28,6 +28,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from ..model.versions import BOUND_PATTERN, RELEASE_PATTERN
 from .registry import FORMATS, schema
 
 __all__ = ["formats", "render", "states", "steps", "table"]
@@ -37,9 +38,6 @@ SCHEMA_URL = (
     "https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data/main/"
     "src/ethos_data/formats/schemas/{name}.schema.json"
 )
-
-#: The form of a catalogue release, as the specifications write its pattern.
-_RELEASE_PATTERN = r"^v\d{4}\.\d{2}\.\d+$"
 
 #: How a field's four properties read in a table, when they differ from the default.
 _PROPERTIES = (
@@ -276,8 +274,10 @@ def _type(prop: dict[str, Any]) -> str:
         if isinstance(extra, dict) and extra:
             return f"mapping of name to {_type(extra)}"
         return "mapping"
-    if kind == "string" and prop.get("pattern") == _RELEASE_PATTERN:
-        return "`vYYYY.MM.N`"
+    if kind == "string" and prop.get("pattern") == RELEASE_PATTERN:
+        return "`vMAJOR.MINOR.PATCH`"
+    if kind == "string" and prop.get("pattern") == BOUND_PATTERN:
+        return "`vMAJOR.MINOR.PATCH`, or a prefix: `vMAJOR`, `vMAJOR.MINOR`"
     return {"string": "string", "integer": "integer", "number": "number",
             "boolean": "boolean"}.get(kind, "any")  # fmt: skip
 

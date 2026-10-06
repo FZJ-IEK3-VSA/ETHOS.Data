@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
+from ..model.versions import RELEASE_PATTERN
 from . import keys as k
 from .fields import field
 
@@ -201,11 +202,12 @@ class CatalogIndex(_Generated):
     version: str | None = field(
         k.VERSION,
         description="The release this index is.",
-        schema={"pattern": r"^v\d{4}\.\d{2}\.\d+$"},
+        schema={"pattern": RELEASE_PATTERN},
     )
     releases: list[str] | None = field(
         k.RELEASES,
         description="In the published index: every public release, oldest first, this one included.",
+        schema={"items": {"type": "string", "pattern": RELEASE_PATTERN}},
     )
     datasets: list[dict] = field(
         k.DATASETS, [], description="One row per dataset and per family."

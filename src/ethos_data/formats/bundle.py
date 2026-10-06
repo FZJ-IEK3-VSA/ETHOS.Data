@@ -59,8 +59,8 @@ class DocumentRecord(_Record):
     """A description or licence document under ``datasets/<dataset>/``."""
 
     path: str = Field(description="Relative to the dataset's description directory.")
-    bytes: int = Field(ge=0)
-    hash: str = Field(description='"sha256:<hex>".')
+    bytes: int = Field(ge=0, description="Its size.")
+    hash: str = Field(description="`sha256:<hex>`.")
 
 
 class Change(_Record):
@@ -70,7 +70,9 @@ class Change(_Record):
         description="The file's path in the dataset, or the document's in its "
         "description directory."
     )
-    change: Literal["changed", "added", "removed"]
+    change: Literal["changed", "added", "removed"] = Field(
+        description="What became of the file or the document since the alignment."
+    )
     document: bool = Field(
         False, description="A description or licence document, not a data file."
     )
@@ -95,11 +97,11 @@ class BundledDataset(_Record):
         [], description="The changes recorded since the alignment."
     )
     resources: list[ResourceRecord] = Field(
-        description="Every file under data/<dataset>/, with its size and SHA-256."
+        description="Every file under `data/<dataset>/`, with its size and SHA-256."
     )
     documents: list[DocumentRecord] = Field(
         [],
-        description="The description, dataset.yaml, and the licence documents.",
+        description="The description, `dataset.yaml`, and the licence documents.",
     )
 
 
@@ -107,16 +109,18 @@ class BundledFamily(_Record):
     """A family whose members the bundle holds: its own description."""
 
     documents: list[DocumentRecord] = Field(
-        description="The family's dataset.yaml, and any licence document it names."
+        description="The family's `dataset.yaml`, and any licence document it names."
     )
 
 
 class BundleManifest(_Record):
     """``bundle.json``."""
 
-    format: Literal["ethos-data-bundle"] = FORMAT
+    format: Literal["ethos-data-bundle"] = Field(
+        FORMAT, description="What the file is; always `ethos-data-bundle`."
+    )
     datasets: dict[str, BundledDataset] = Field(
-        description="Each dataset by its name; a member of a family is <family>/<member>."
+        description="Each dataset by its name; a member of a family is `<family>/<member>`."
     )
     families: dict[str, BundledFamily] = Field(
         {}, description="The families of the bundled members, by name."

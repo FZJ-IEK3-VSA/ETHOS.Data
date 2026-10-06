@@ -15,15 +15,18 @@ class SettingsFile(BaseModel):
     catalog: str | None = Field(
         None,
         description="The catalogue to read in place of the public one; checked "
-        "against a package's release bounds.",
+        "against a package's release bounds; `config set-catalog`.",
     )
     public_cache: str | None = Field(
-        None, description="Where public data is read and downloaded."
+        None,
+        description="Where public data is read and downloaded; "
+        "`config set-public-cache`.",
     )
     restricted_caches: list[str] = Field(
         [],
         description="Where restricted data is read in place, in order; one directory "
-        "per access combination, none by default.",
+        "per access combination, none by default; `config add-restricted-cache`, "
+        "`config remove-restricted-cache`.",
     )
     staging_cache: str | None = Field(
         None,

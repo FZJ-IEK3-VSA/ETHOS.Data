@@ -22,7 +22,7 @@ dash means that the decision is implemented and needs no pull request.
 | 0003 | [One catalogue describes the data; each package's collections file selects from it](0003-one-catalogue-many-collections.md) | implemented | — |
 | 0004 | [Derive cache paths from resource identity, and never reuse a name](0004-cache-paths-from-resource-identity.md) | implemented | — |
 | 0005 | [Read the index first and inventories on demand](0005-lazy-index-descriptors-and-shards.md) | implemented | — |
-| 0006 | [Specify every file format once](0006-every-file-format-specified-once.md) | proposed | #11, #12, #13, #27 |
+| 0006 | [Specify every file format once](0006-every-file-format-specified-once.md) | implemented | #11, #12, #13, #27 |
 | 0007 | [Read every generated catalogue through one inventory reader](0007-one-inventory-reader.md) | implemented | #40 |
 | | **Code structure** | | |
 | 0008 | [Build the package in four layers: model, adapters, services, presentation](0008-four-layers.md) | implemented | #10, #13, #17, #20, #41 |

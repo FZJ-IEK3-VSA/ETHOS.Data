@@ -146,7 +146,7 @@
     },
     "ethos:catalog_role": {
       "default": "source",
-      "description": "Always source in a hand-written file; publish stamps published.",
+      "description": "Always `source` in a hand-written file; `publish` stamps `published`.",
       "enum": [
         "source",
         "published"

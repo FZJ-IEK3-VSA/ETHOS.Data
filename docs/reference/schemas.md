@@ -14,7 +14,7 @@ entry keeps are written by the tools as well.
 | [`status.yaml`](#statusyaml) | the `catalog` commands | `datasets/<name>/` in the source catalogue |
 | [`datapackage.json` / `datacatalog.json`](#generated-descriptors) | `ethos-data catalog build` | generated |
 | [`bundle.json`](#bundlejson) | `bundle create`, `update` and `export` | a bundle in the package's repository |
-| [`.ice2-staging.json`, `.ethos-data-materialized.json`](#records-beside-the-data) | `staging`, `materialize` | the staging root, a cache entry |
+| [`.ethos-data-staging.json`, `.ethos-data-materialized.json`](#records-beside-the-data) | `staging`, `materialize` | the staging root, a cache entry |
 
 Institute-specific keys use the `ethos:` prefix — the
 [Data Package](https://datapackage.org/) standard's extension mechanism.
@@ -31,11 +31,70 @@ completes and checks a file whose first line names one:
 
 <!-- ethos-data: formats -->
 
+### Templates
+
 The files people write have templates beside the models, in
-`ethos_data/formats/templates/`: `dataset.yaml` for downloaded, derived,
-created and restricted data and a minimal one for staging, `catalog.yaml` and
-`collections.yaml`. The annotated `dataset.yaml` below is one of them. The
-settings file has no template: `ethos-data config set-*` writes it.
+`ethos_data/formats/templates/`, each starting with the schema line: a
+`dataset.yaml` for downloaded, derived, created, restricted and bundled data,
+a minimal one for staging, a family's `dataset.yaml`, `catalog.yaml` and
+`collections.yaml`. A command that writes such a file starts from its
+template; `${...}` marks what it fills in. The annotated `dataset.yaml` under
+[`dataset.yaml`](#datasetyaml) holds every key. The settings file has no
+template: the `config` commands write it.
+
+??? example "`dataset.yaml` for downloaded data"
+
+    ```yaml
+    --8<-- "src/ethos_data/formats/templates/dataset-downloaded.yaml"
+    ```
+
+??? example "`dataset.yaml` for derived data"
+
+    ```yaml
+    --8<-- "src/ethos_data/formats/templates/dataset-derived.yaml"
+    ```
+
+??? example "`dataset.yaml` for data made here"
+
+    ```yaml
+    --8<-- "src/ethos_data/formats/templates/dataset-created.yaml"
+    ```
+
+??? example "`dataset.yaml` for restricted data"
+
+    ```yaml
+    --8<-- "src/ethos_data/formats/templates/dataset-restricted.yaml"
+    ```
+
+??? example "`dataset.yaml` as `staging add` writes it"
+
+    ```yaml
+    --8<-- "src/ethos_data/formats/templates/dataset-minimal.yaml"
+    ```
+
+??? example "`dataset.yaml` as `bundle create` drafts it"
+
+    ```yaml
+    --8<-- "src/ethos_data/formats/templates/dataset-bundled.yaml"
+    ```
+
+??? example "a family's `dataset.yaml`"
+
+    ```yaml
+    --8<-- "src/ethos_data/formats/templates/family.yaml"
+    ```
+
+??? example "`catalog.yaml`"
+
+    ```yaml
+    --8<-- "src/ethos_data/formats/templates/catalog.yaml"
+    ```
+
+??? example "`collections.yaml`"
+
+    ```yaml
+    --8<-- "src/ethos_data/formats/templates/collections.yaml"
+    ```
 
 ### Reading the key tables
 
@@ -52,7 +111,7 @@ settings file has no template: `ethos-data config set-*` writes it.
 |---|---|
 | *Never published.* | `publish` strips it from the public catalogue, and the leak check looks for it there |
 | *In the index row.* | `build` copies it into the dataset's row of `datacatalog.json`, so a reader answers it without the descriptor |
-| *Shown to users.* | printed by `--meta`, and by the error for a licensed dataset this machine cannot read |
+| *Shown to users.* | printed by `--meta`, with the access class and the origin |
 | *Inherited from the family.* | a member of a family takes it from the family's `dataset.yaml` when it does not set it |
 
 A key outside a table is kept as written: an unknown key passes through, and
@@ -865,10 +924,9 @@ shard directory, land in `_root`.
 Shard paths in the index are relative to the **dataset** directory, not the
 catalogue root.
 
-The directory used to be called `manifests/`. Readers do not care, because they
-follow the path the index records. The build still owns the old name: the next
-`ethos-data catalog build` moves every shard to `shards/` and deletes
-`manifests/`, and until then `--check` reports it as out of date.
+Readers follow the path the index records. For a catalogue that keeps its
+shards in `manifests/`, [`ethos-data catalog migrate`](cli/catalog.md#migrate-datasets)
+moves them to `shards/`.
 
 See [The catalogue format](../explanation/catalogue-format.md).
 
@@ -876,19 +934,13 @@ See [The catalogue format](../explanation/catalogue-format.md).
 
 ## `bundle.json`
 
-The manifest of a bundle, test data a package keeps in its repository. Two
-kinds share the file name and tell themselves apart by `format`.
-
-A **repository bundle** is the source of truth for one family of datasets:
-`bundle create` starts it and `bundle update` records each change, counting
-the versions a catalogue release publishes. The bytes are under
-`data/<family>/<member>/` and each member's description under
-`datasets/<family>/<member>/`, beside `bundle.json`.
-
-<!-- ethos-data: table repository-bundle -->
-
-An **exported bundle** is a copy of what the catalogue already publishes,
-written by `bundle export` with the collections it was exported for.
+The manifest of a bundle: data a package keeps in its repository, the files
+of a selection of catalogue datasets. The bytes are under
+`data/<dataset>/<path>` and each dataset's description and licence documents
+under `datasets/<dataset>/`, beside `bundle.json`. `bundle create` starts it,
+`bundle update` records each change against the dataset's alignment with the
+catalogue, and `bundle export` writes a new one through a package's handle. A
+bundle holds public, visible data with settled licensing only.
 
 <!-- ethos-data: table bundle -->
 
@@ -898,7 +950,7 @@ See [Keep data in the repository](../how-to/package-maintainers/keep-data-in-the
 
 ## Records beside the data
 
-### `.ice2-staging.json`
+### `.ethos-data-staging.json`
 
 In the staging root: who staged each entry, and why. `staging add` writes an
 entry, `staging remove` deletes it.
