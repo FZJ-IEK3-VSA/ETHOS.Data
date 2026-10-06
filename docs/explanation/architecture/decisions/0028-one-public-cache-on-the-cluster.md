@@ -1,6 +1,6 @@
 # 0028. Share one public cache on the cluster
 
-**Status:** implemented · **Date:** 2026-10-06 · **Implemented by:** a new PR (caches: repair never touches a link; `link --all` into the public cache)
+**Status:** implemented · **Date:** 2026-10-06 · **Implemented by:** #39 (repair never touches a link; `link --all` into the public cache)
 
 ## Context
 

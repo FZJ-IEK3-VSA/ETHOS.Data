@@ -1,6 +1,6 @@
 # 0012. Find every file through one lookup chain
 
-**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #15, a new PR (caches: the restricted-caches locator), #16, #24, #25
+**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #15, #39 (the restricted-caches locator), #16, #24, #25
 
 ## Context
 
