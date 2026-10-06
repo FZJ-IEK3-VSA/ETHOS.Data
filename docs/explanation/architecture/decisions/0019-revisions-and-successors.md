@@ -53,8 +53,10 @@ There are two kinds of new version.
 - A revision needs no change to any collections file; a successor needs new
   keys under the same named paths ([0014](0014-named-inputs-and-test-full-variants.md)).
 - Every cache entry name follows revisions, in the public cache and the
-  shared cache alike ([0004](0004-cache-paths-from-resource-identity.md)).
-- Older releases keep their meaning as long as the hosts keep their objects;
+  restricted caches alike ([0004](0004-cache-paths-from-resource-identity.md)).
+- Within a major release, older releases keep their meaning as long as the
+  hosts keep their objects. A dataset's earlier revisions stay as long as the
+  dataset is in the catalogue ([0018](0018-numbered-catalogue-releases.md));
   see [11. Risks and Technical Debt](../risks-and-technical-debt.md).
 - See [Licensing and immutability](../../licensing.md#paths-are-immutable).
 
@@ -62,7 +64,8 @@ There are two kinds of new version.
 
 - [0004. Derive cache paths from resource identity, and never reuse a name](0004-cache-paths-from-resource-identity.md)
 - [0014. Name workflow inputs in the collection and pair test and full variants](0014-named-inputs-and-test-full-variants.md)
-- [0020. Keep a package's test data in a repository bundle that the catalogue publishes](0020-repository-bundles.md)
+- [0018. Number catalogue releases `vMAJOR.MINOR.PATCH`, purge data only after a major release, and let collections files bound them](0018-numbered-catalogue-releases.md)
+- [0020. Keep attributed data in bundles that are authoritative for their package](0020-repository-bundles.md)
 - [0022. Record each dataset's state in a status file](0022-dataset-status-files.md)
 - [0023. Run every catalogue workflow that writes as a pipeline that plans before it acts](0023-maintenance-pipelines.md)
 - [0026. Serve the internal catalogue's latest release from one checkout on the cluster, and change it only through JuGit](0026-internal-catalogue-on-the-cluster.md)

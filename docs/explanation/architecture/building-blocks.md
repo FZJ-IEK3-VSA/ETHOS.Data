@@ -12,8 +12,8 @@ responsibility. How the blocks work together is in the
 ## 5.1 Containers and data stores (C4 level 2) {#containers}
 
 <figure markdown="span">
-  ![ETHOS.Data is one library, run in the caller's process by a consuming package and by three command lines (the package command, ethos-data and ethos-data catalog), over stores whose formats it specifies: each user's settings, personal public cache, restricted cache and staging root, the package's collections file and bundles, the cluster's read-only shared cache and its served checkout of the latest release, and a maintainer's own clone of the source catalogue. The library reads the published catalogue on GitHub and downloads from dCache; maintainers fill the shared cache with ethos-data, merge their clone by merge request on JuGit, and with ethos-data catalog update the served checkout, push releases to JuGit and GitHub and maintain dCache with tokens from Helmholtz ID.](../../assets/diagrams/architecture-containers-light.svg#only-light){ .diagram }
-  ![ETHOS.Data is one library, run in the caller's process by a consuming package and by three command lines (the package command, ethos-data and ethos-data catalog), over stores whose formats it specifies: each user's settings, personal public cache, restricted cache and staging root, the package's collections file and bundles, the cluster's read-only shared cache and its served checkout of the latest release, and a maintainer's own clone of the source catalogue. The library reads the published catalogue on GitHub and downloads from dCache; maintainers fill the shared cache with ethos-data, merge their clone by merge request on JuGit, and with ethos-data catalog update the served checkout, push releases to JuGit and GitHub and maintain dCache with tokens from Helmholtz ID.](../../assets/diagrams/architecture-containers-dark.svg#only-dark){ .diagram }
+  ![ETHOS.Data is one library, run in the caller's process by a consuming package and by three command lines (the package command, ethos-data and ethos-data catalog), over stores whose formats it specifies: on every user's machine the settings file, the public cache (personal; on the cluster, shared) with its metadata cache, and the staging root; in the package repository the collections file and the bundles; on the cluster's shared storage the cluster's public cache, the served checkout of the latest release and the optional restricted caches, one per access combination; a maintainer's own clones; and the maintainer folders. The library reads the stores of the user, the package and the cluster, downloads files from dCache into the public cache and reads the published catalogue on GitHub; maintainers fill the cluster's public cache and register installations in restricted caches with ethos-data, merge their clone by merge request on JuGit, and with ethos-data catalog update the served checkout, purge recorded cache entries, push releases to JuGit and GitHub and maintain dCache with tokens from Helmholtz ID.](../../assets/diagrams/architecture-containers-light.svg#only-light){ .diagram }
+  ![ETHOS.Data is one library, run in the caller's process by a consuming package and by three command lines (the package command, ethos-data and ethos-data catalog), over stores whose formats it specifies: on every user's machine the settings file, the public cache (personal; on the cluster, shared) with its metadata cache, and the staging root; in the package repository the collections file and the bundles; on the cluster's shared storage the cluster's public cache, the served checkout of the latest release and the optional restricted caches, one per access combination; a maintainer's own clones; and the maintainer folders. The library reads the stores of the user, the package and the cluster, downloads files from dCache into the public cache and reads the published catalogue on GitHub; maintainers fill the cluster's public cache and register installations in restricted caches with ethos-data, merge their clone by merge request on JuGit, and with ethos-data catalog update the served checkout, purge recorded cache entries, push releases to JuGit and GitHub and maintain dCache with tokens from Helmholtz ID.](../../assets/diagrams/architecture-containers-dark.svg#only-dark){ .diagram }
 </figure>
 
 ETHOS.Data is one Python distribution with one console script. It deploys no
@@ -24,7 +24,7 @@ specifies.
 | Container | Technology | Responsibility | Run by |
 |---|---|---|---|
 | `ethos_data` library | Python 3.10 or later; PyYAML, platformdirs, pooch; `pydantic>=2`, loaded on first use | The model, adapters, services and package facade, in the calling process. `import ethos_data` loads neither catalogue maintenance nor pydantic. | Consuming packages, scripts, the commands |
-| `ethos-data` | The console script | Key access, self-test, problem report, settings, cache entries | Data users; maintainers, for the shared and the restricted cache |
+| `ethos-data` | The console script | Key access, self-test, problem report, settings, cache entries | Data users; maintainers, to fill the cluster's public cache and register installations in restricted caches |
 | `ethos-data catalog` | The same script; git, rclone, oidc-agent | Maintains the source catalogue in a maintainer's own clone; updates the served checkout | Catalogue maintainers |
 | `<tool>-data` | A script a package defines with `ethos_data.tool_main` | The package's collections: show, fetch, verify, bundles, staging, propose, report, config | Data users, package maintainers |
 
@@ -33,30 +33,32 @@ different people run them, on different machines, against different stores.
 
 | Store | Holds | Written by |
 |---|---|---|
-| Settings file | `public_cache`, `shared_cache`, `restricted_cache`, `staging_cache`, `catalog`, `publication_url`, `dataset_roots`; one per account | `config set-*`, `unset-*` |
-| Public cache | Personal, on every machine: public data in entries `<dataset>/` or `<dataset>@<r>/`; the metadata cache | That user's commands |
-| Shared cache | On the cluster: public and internal data, never restricted, read in place by every cluster user | Maintainers only, naming it with `--root`; purge |
-| Restricted cache | Licensed installations or links; on the cluster, one group per dataset | `link`, `materialize` of a restricted dataset; purge |
+| Settings file | `public_cache`, `restricted_caches`, `staging_cache`, `catalog`, `publication_url`; one per account | `config set-*`, `unset-*`, `add-restricted-cache`, `remove-restricted-cache` |
+| Public cache | One per account, with public data only, in entries `<dataset>/` or `<dataset>@<r>/`: links read in place, copies the cache owns, downloads; the metadata cache. On the cluster, one shared directory that every user sets: the cluster's public cache. | Its user's downloads, links and copies; on the cluster, every user's downloads, and maintainers' links and copies; purge |
+| Restricted caches | Optional: set up where someone may read restricted data; an account lists any number, in order. Restricted data, read in place, as links to installations or as copies. On the cluster, one per access combination; on a workstation, the user's own licensed copies. | `link`, `materialize` of a restricted dataset; purge |
 | Staging root | Personal: staged links or copies | `staging add`, `remove` |
 | Served internal catalogue checkout | The source catalogue at its latest release, for every cluster user | `catalog update-checkout` only |
 | Maintainer's clone of the source catalogue | The catalogue, with each dataset's status file, in the maintainer's own account | `ethos-data catalog`; `link`, `materialize` with `--catalog-root`; merged by merge request on JuGit |
 | Status files | `status.yaml` per dataset: state, build input, revision, authority, copies, history; never published | The status recorder only |
 | Public catalogue checkout | The generated public catalogue | The public-view generator |
-| Collections file, bundles | Release bounds and collections; a repository bundle (the package's next test data) or an exported bundle (released public data) | The package maintainer; `bundle` commands |
-| Build inputs, validation folder, notices directory | What a dataset is built from until it is frozen; re-downloaded originals; drafted notices | Maintainers; release and removal draft the notices |
-| GitHub, dCache | The public catalogue, one tag `vYYYY.MM.N` per release; the world-readable bytes at `<remote_prefix>[@<r>]/<path>` | Release; the uploader and removal on dCache |
+| Collections file | Release bounds and collections | The package maintainer |
+| Bundles | Attributed public data a package keeps in its repository: files, descriptions and licence documents; `bundle.json` records their hashes and each dataset's alignment with the catalogue | The package maintainer; `bundle` commands |
+| Build inputs, validation folder, notices directory | What a dataset is built from until it is frozen; re-downloaded originals; drafted notices | Maintainers; `catalog add-bundle` copies a bundle's files into a build input; release and removal draft the notices |
+| GitHub, dCache | The public catalogue, one tag `vMAJOR.MINOR.PATCH` per release; the world-readable bytes at `<remote_prefix>[@<r>]/<path>` | Release; the uploader and removal on dCache |
 
-A cluster user's settings name the served checkout, the shared cache and the
-restricted cache, side by side on shared storage, for example under
-`/shared/ethos/` ([§7.2](deployment.md#cluster)). A collections file whose
-release bounds exclude the latest release is refused there with
+On the cluster, shared storage holds the served checkout, the cluster's public
+cache and the restricted caches, for example under `/shared/ethos/`
+([§7.2](deployment.md#cluster)). Each cluster user's settings name the served
+checkout, the cluster's public cache and the restricted caches their groups
+admit; an account that reads public data only lists none. A collections file
+whose release bounds exclude the latest release is refused on the cluster with
 `CatalogVersionError`.
 
 Decisions: [one settings file per account](decisions/0010-one-settings-file-per-account.md),
 [the access class picks the root](decisions/0011-access-class-picks-the-root.md),
 [package commands own collections](decisions/0015-package-commands-own-collections.md),
 [the internal catalogue on the cluster](decisions/0026-internal-catalogue-on-the-cluster.md),
-[a read-only shared cache](decisions/0028-read-only-shared-cache.md).
+[one public cache on the cluster](decisions/0028-one-public-cache-on-the-cluster.md).
 
 ## 5.2 Components by layer (C4 level 3) {#layers}
 
@@ -94,7 +96,7 @@ from the package.
 | Digests | `model.digest` | SHA-256 only; anything else is unverifiable |
 | Names and entries | `model.names` | Safe relative paths, families, and the cache entry `<name>` or `<name>@<r>` |
 | Resources | `model.resource` | `Resource`, keyed `<dataset>/<path>`: the one reader and writer of a resource record, and transitive sidecars |
-| Versions | `model.versions` | Release names `vYYYY.MM.N`, compared as numbers, and release bounds |
+| Versions | `model.versions` | Release names `vMAJOR.MINOR.PATCH`, compared part by part as numbers, and release bounds, whose versions may be prefixes such as `v1.3` |
 | Lifecycle | `model.lifecycle` | A dataset's states, steps and guards; a refused step raises `TransitionError`, naming what the dataset needs first |
 | Inventory reader | `model.inventory` | One dataset's descriptor and inventory, read on demand ([5.3.3](#inventory-reader)) |
 | Path matching | `model` | One glob semantics, `**` spanning segments, for `files:`, `ethos:include` and `ethos:exclude` |
@@ -133,8 +135,8 @@ the adapters.
 ### 5.3.1 Data access {#data-access}
 
 <figure markdown="span">
-  ![The collections handle answers which resources: it takes the catalogue view from the catalogue reader, which gets each dataset's inventory from the one inventory reader through the metadata sources, and lays bundles and then staging over it. Retrieval asks the lookup chain where each file is read before any transfer, through eight locators from dataset roots to the download, of which bundles, the restricted cache and the download may refuse and the cluster's shared cache is only read, and downloads the rest through the Downloader port from dCache.](../../assets/diagrams/architecture-reader-light.svg#only-light){ .diagram }
-  ![The collections handle answers which resources: it takes the catalogue view from the catalogue reader, which gets each dataset's inventory from the one inventory reader through the metadata sources, and lays bundles and then staging over it. Retrieval asks the lookup chain where each file is read before any transfer, through eight locators from dataset roots to the download, of which bundles, the restricted cache and the download may refuse and the cluster's shared cache is only read, and downloads the rest through the Downloader port from dCache.](../../assets/diagrams/architecture-reader-dark.svg#only-dark){ .diagram }
+  ![The collections handle answers which resources: it takes the catalogue view from the catalogue reader, which reads each dataset's inventory through the one inventory reader and the metadata sources, and lays the package's bundles and then staging over it. Retrieval asks the lookup chain where each file is read before any transfer, through five locators (staging, bundles, restricted caches, public cache, download, of which the second, third and fifth may refuse), and downloads the rest through the Downloader port from dCache into the public cache, which is personal, and on the cluster one directory that every cluster user shares; cache entries put links and copies into the public cache or a listed restricted cache.](../../assets/diagrams/architecture-reader-light.svg#only-light){ .diagram }
+  ![The collections handle answers which resources: it takes the catalogue view from the catalogue reader, which reads each dataset's inventory through the one inventory reader and the metadata sources, and lays the package's bundles and then staging over it. Retrieval asks the lookup chain where each file is read before any transfer, through five locators (staging, bundles, restricted caches, public cache, download, of which the second, third and fifth may refuse), and downloads the rest through the Downloader port from dCache into the public cache, which is personal, and on the cluster one directory that every cluster user shares; cache entries put links and copies into the public cache or a listed restricted cache.](../../assets/diagrams/architecture-reader-dark.svg#only-dark){ .diagram }
 </figure>
 
 The collections handle answers which resources a workflow needs, the lookup
@@ -144,40 +146,43 @@ verification inspects files without changing the selection.
 
 | Component | Module | Responsibility |
 |---|---|---|
-| Settings | `config` | Resolves every setting once into a frozen snapshot that records each value's source (argument, environment, settings file, default): the roots, the publication URL, the download switch. Chooses the catalogue within the release bounds. |
+| Settings | `config` | Resolves every setting once into a frozen snapshot that records each value's source (argument, environment, settings file, default): the public cache, the restricted caches in order, the staging root, the publication URL, the download switch. Chooses the catalogue within the release bounds. |
 | Catalogue reader | `catalogs` | Reads only the index when it loads a catalogue, so access, revision, entry name, successors, totals and licence status need no descriptor. Checks a catalogue against release bounds. |
-| Collections handle | `selection` | Validates the collections file, lays the bundles and then staging over the catalogue view, and resolves variants, `extends`, `include`, file patterns, sidecars and named paths. Reads the index only for a dataset no bundle holds. |
-| Lookup chain | `access` | Decides for every file where it is read ([below](#lookup-chain)); in describe mode, for `plan` and `verify`, a refusal becomes "not available here". Names the root of a cache entry: the restricted cache for restricted data, else the root given with `--root`, or the public cache for public data; internal data gets no entry without `--root`. |
-| Retrieval | `retrieval` | Locates every file before any transfer, then downloads the missing ones per revision folder into the user's own public cache, never through a link or into the shared cache. With `fetch=False` it raises `NotFetched`. |
-| Integrity | `verify` | Checks each file where the chain finds it, by size or SHA-256, and reports a broken shared-cache entry. Repair writes only the user's own public cache. |
-| Bundles | `bundles` | Creates, updates, exports, loads and verifies repository and exported bundles |
+| Collections handle | `selection` | Validates the collections file, lays the bundles and then staging over the catalogue view, and resolves variants, `extends`, `include`, file patterns, sidecars and named paths. Reads the index only for a dataset no bundle holds, or under the download switch. |
+| Lookup chain | `access` | Decides for every file where it is read, through five locators ([below](#lookup-chain)); in describe mode, for `plan` and `verify`, a refusal becomes "not available here". Names the cache for a dataset's entry. |
+| Retrieval | `retrieval` | Locates every file before any transfer, then downloads the missing ones per revision folder into the public cache, never through a link; a downloaded file appears there only once its hash is checked. With `fetch=False` it raises `NotFetched`. |
+| Integrity | `verify` | Checks each file where the chain finds it, by size or SHA-256, and reports a broken link. Repair downloads a damaged copy again into the public cache; it never removes or replaces a link, and never touches restricted or staged data. |
+| Bundles | `bundles` | Creates, updates, loads and verifies bundles, all in one format (`bundle.json`), and warns once per bundle that is ahead of or behind the catalogue. Export writes a new bundle of what the package's handle reads, staging excluded. |
 | Staging | `staging` | Adds, lists and removes staged datasets, as links or copies; its overlay never shadows a restricted name |
-| Cache entries | `linking`, `materialize` | Makes one dataset's entry in the root the chain names: a link, or a verified copy the cache owns; never replaces a real directory. Removes links. Refused while licensing is unsettled. |
+| Cache entries | `linking`, `materialize` | Makes one dataset's entry in the cache the chain names: a public dataset's in the public cache, or in the cache `--root` names; a restricted dataset's in a listed restricted cache, the one `--root` names when several are listed. An entry is a link, or a verified copy the cache owns; a real directory is never replaced. Removes links. Refused while licensing is unsettled. |
 | Self-test | `selftest` | Runs the shipped example collection through settings, catalogue and files |
 | Handoffs | `handoffs` | Fills the handoff templates, scrubs reports of tokens, credentials and personal paths, and routes each to a tracker by access class |
 | Local files | `files` | Walks a data directory, applies `ethos:include` and `ethos:exclude`, and makes hashed resource records |
 
 #### The lookup chain {#lookup-chain}
 
-Eight locators decide where a file is read, in this order: dataset roots,
-staging, bundles, the restricted cache, the shared cache, a link in the user's
-own public cache, a copy in it, and a download into it; the first that finds a
-file wins, and a refusal ends the call before any transfer. The shared cache
-is only read, finds or passes and never refuses, and restricted data is never
-looked up there; [§6.1](runtime.md#the-lookup-chain) follows one file through
-the chain, and [one lookup chain](decisions/0012-one-lookup-chain.md) gives
-each locator's places and refusals.
+Five locators decide where a file is read, in this order: staging, bundles,
+the restricted caches, the public cache, and a download into the public cache.
+The first that finds a file wins. Bundles, the restricted caches and the
+download may refuse, and a refusal ends the call before any transfer.
+Restricted data is found in a restricted cache or refused before the public
+cache and the download are consulted. A file read in place must be present, so
+a broken link in the public cache refuses the read, and `verify` reports it.
+[§6.1](runtime.md#the-lookup-chain) follows one file through the chain, and
+[one lookup chain](decisions/0012-one-lookup-chain.md) gives each locator's
+places and refusals.
 
 Decisions: [one lookup chain](decisions/0012-one-lookup-chain.md),
 [every input is required](decisions/0013-every-input-is-required.md),
-[repository bundles](decisions/0020-repository-bundles.md),
-[a read-only shared cache](decisions/0028-read-only-shared-cache.md).
+[bundles authoritative for their package](decisions/0020-repository-bundles.md),
+[bundles ahead of the catalogue](decisions/0021-bundles-ahead-of-the-catalogue.md),
+[one public cache on the cluster](decisions/0028-one-public-cache-on-the-cluster.md).
 
 ### 5.3.2 Catalogue maintenance {#catalogue-maintenance}
 
 <figure markdown="span">
-  ![Every catalogue workflow that writes is a pipeline whose stages plan before they act, run by the pipeline runner; the catalogue command group dispatches to the pipelines, and the command line runs link and materialize through the cache-copy recorder and namespace builder. The pipelines record each step through the status recorder in the status files of the maintainer's own clone, read checkouts through the inventory reader, commit, tag, push and fast-forward through the Git port, write dCache through the Store port with a Helmholtz ID token, fill the shared and restricted caches through the cache entries, hash the build inputs through local files, and draft notices into the notices directory.](../../assets/diagrams/architecture-maintainer-light.svg#only-light){ .diagram }
-  ![Every catalogue workflow that writes is a pipeline whose stages plan before they act, run by the pipeline runner; the catalogue command group dispatches to the pipelines, and the command line runs link and materialize through the cache-copy recorder and namespace builder. The pipelines record each step through the status recorder in the status files of the maintainer's own clone, read checkouts through the inventory reader, commit, tag, push and fast-forward through the Git port, write dCache through the Store port with a Helmholtz ID token, fill the shared and restricted caches through the cache entries, hash the build inputs through local files, and draft notices into the notices directory.](../../assets/diagrams/architecture-maintainer-dark.svg#only-dark){ .diagram }
+  ![Every catalogue workflow that writes is a pipeline whose stages plan before they act, run by the pipeline runner; the catalogue command group dispatches to the pipelines, and the command line runs link and materialize through the cache-copy recorder and namespace builder. The pipelines record each step through the status recorder in the status files of the maintainer's own clone, read checkouts through the inventory reader, commit, tag, push and fast-forward through the Git port, write dCache through the Store port with a Helmholtz ID token, put links and copies into the cluster's public cache and the restricted caches through the cache entries, hash the build inputs through local files, and draft notices into the notices directory.](../../assets/diagrams/architecture-maintainer-light.svg#only-light){ .diagram }
+  ![Every catalogue workflow that writes is a pipeline whose stages plan before they act, run by the pipeline runner; the catalogue command group dispatches to the pipelines, and the command line runs link and materialize through the cache-copy recorder and namespace builder. The pipelines record each step through the status recorder in the status files of the maintainer's own clone, read checkouts through the inventory reader, commit, tag, push and fast-forward through the Git port, write dCache through the Store port with a Helmholtz ID token, put links and copies into the cluster's public cache and the restricted caches through the cache entries, hash the build inputs through local files, and draft notices into the notices directory.](../../assets/diagrams/architecture-maintainer-dark.svg#only-dark){ .diagram }
 </figure>
 
 Maintenance works in a maintainer's own clone of the source catalogue. Every
@@ -192,17 +197,17 @@ contract and each command's stages are in
 | Checkout access | `maintain` | Finds the catalogue root and reads a clone through the inventory reader |
 | Status recorder | `maintain.status` | Reads and writes `status.yaml`, checking each step with the lifecycle; `catalog status [--check]` |
 | Accept | `maintain.accept` | `catalog add`: takes a reviewed draft into the clone, with its licence documents and a status file, and builds it |
-| Bundle intake | `maintain.bundle_intake` | `catalog add-bundle`: takes a repository bundle's version into the clone |
+| Bundle intake | `maintain.bundle_intake` | `catalog add-bundle`: takes a bundle's ahead datasets into the clone, as new datasets, revisions or changed descriptions, and copies their files into a build input the catalogue maintainers own |
 | Inventory builder | `maintain.manifest` | `catalog build`: renders descriptors, shards and the index from the build input, or from the recorded inventory once frozen; refuses changed published bytes |
 | Revision | `maintain.revision` | `catalog build --revision`: renders revision r+1 in memory, compares it with the inventory on disk, writes it |
 | Uploader | `maintain.upload` | `catalog upload`: checks the whole batch, copies each revision folder without overwriting, makes it world-readable, reads it back anonymously |
-| Cache-copy recorder and namespace builder | `maintain.namespace` | `ethos-data link --all --root <shared cache>` links the whole catalogue into the shared cache; `--catalog-root <own clone>` records what `link` and `materialize` make |
+| Cache-copy recorder and namespace builder | `maintain.namespace` | `ethos-data link --all --root <the cluster's public cache>` links the catalogue's public data into that cache; `--catalog-root <own clone>` records what `link` and `materialize` make |
 | Freeze | `maintain.freeze` | `catalog record`: checks a copy file by file and makes it the authority |
 | Provenance | `maintain.provenance` | `catalog check-source`: hashes re-downloaded originals against the inventory |
 | Public-view generator | `maintain.publish` | `catalog publish`: generates the public catalogue without unpublished keys, and runs the leak check |
-| Release | `maintain.release` | `catalog release`: stamps, commits and tags both catalogues, pushes them, puts the latest public catalogue on dCache, drafts the notices |
+| Release | `maintain.release` | `catalog release VERSION`: computes the smallest level the changes since the last release require, and accepts only the next patch, minor or major release at or above it; stamps, commits and tags both catalogues, pushes them, puts the latest public catalogue on dCache, drafts the notices |
 | Checkout updater | `maintain.checkout` | `catalog update-checkout`: fast-forwards the served checkout to the newest release tag; the only command that changes it |
-| Removal | `maintain.remove` | `catalog remove`: withdraws datasets; `--purge`, after a later release, deletes their recorded cache entries and store folders and leaves a tombstone |
+| Removal | `maintain.remove` | `catalog remove`: withdraws datasets; `--purge`, once a major release is recorded after the removal, deletes their recorded cache entries and store folders and leaves a tombstone |
 | Migrator | `maintain.migrate` | `catalog migrate`: the one-time converter of the internal catalogue ([clean break](decisions/0002-clean-break-during-the-beta.md)) |
 
 Decisions: [maintenance pipelines](decisions/0023-maintenance-pipelines.md),

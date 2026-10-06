@@ -240,22 +240,22 @@ nav:
                       - 0010. One settings file per account: explanation/architecture/decisions/0010-one-settings-file-per-account.md
                       - 0011. The access class picks the root: explanation/architecture/decisions/0011-access-class-picks-the-root.md
                       - 0012. One lookup chain: explanation/architecture/decisions/0012-one-lookup-chain.md
-                      - 0013. Every input is required: explanation/architecture/decisions/0013-every-input-is-required.md
+                      - 0013. Every input required, say what is missing: explanation/architecture/decisions/0013-every-input-is-required.md
                       - 0014. Named inputs and variants: explanation/architecture/decisions/0014-named-inputs-and-test-full-variants.md
                       - 0015. Package commands own collections: explanation/architecture/decisions/0015-package-commands-own-collections.md
                       - 0016. One link command, two modes: explanation/architecture/decisions/0016-one-link-command-two-modes.md
                       - 0017. Self-test collection: explanation/architecture/decisions/0017-self-test-collection.md
-                      - 0018. Numbered catalogue releases: explanation/architecture/decisions/0018-numbered-catalogue-releases.md
+                      - 0018. Numbered releases, purge and bounds: explanation/architecture/decisions/0018-numbered-catalogue-releases.md
                       - 0019. Revisions and successors: explanation/architecture/decisions/0019-revisions-and-successors.md
-                      - 0020. Repository bundles: explanation/architecture/decisions/0020-repository-bundles.md
-                      - 0021. One bundle version per release: explanation/architecture/decisions/0021-one-bundle-version-per-release.md
+                      - 0020. Bundles authoritative for their package: explanation/architecture/decisions/0020-repository-bundles.md
+                      - 0021. Bundles ahead of the catalogue: explanation/architecture/decisions/0021-bundles-ahead-of-the-catalogue.md
                       - 0022. Dataset status files: explanation/architecture/decisions/0022-dataset-status-files.md
                       - 0023. Maintenance pipelines: explanation/architecture/decisions/0023-maintenance-pipelines.md
                       - 0024. Licensing gates distribution: explanation/architecture/decisions/0024-licensing-gates-distribution.md
                       - 0025. Handoff templates: explanation/architecture/decisions/0025-handoff-templates.md
                       - 0026. Internal catalogue on the cluster: explanation/architecture/decisions/0026-internal-catalogue-on-the-cluster.md
                       - 0027. Public catalogue on GitHub: explanation/architecture/decisions/0027-public-catalogue-releases-on-github.md
-                      - 0028. Read-only shared cache: explanation/architecture/decisions/0028-read-only-shared-cache.md
+                      - 0028. One public cache on the cluster: explanation/architecture/decisions/0028-one-public-cache-on-the-cluster.md
                 - 10. Quality Requirements: explanation/architecture/quality-requirements.md
                 - 11. Risks and Technical Debt: explanation/architecture/risks-and-technical-debt.md
                 - 12. Glossary: explanation/architecture/glossary.md

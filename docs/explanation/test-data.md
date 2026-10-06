@@ -7,27 +7,31 @@ service. One package can use several approaches.
 | Input | Suitable for | Tradeoff |
 |---|---|---|
 | Tiny synthetic fixture created in a test or committed directly | Parser edge cases and self-contained unit tests | The package owns its meaning and updates; no catalogue is required. |
-| Verified repository bundle of catalogued data | Regression tests that must run without network access | Larger checkout; the bundle must be refreshed deliberately. |
+| Verified bundle of attributed public data | Required tests and examples that must run without network access | Larger checkout; a bundle ahead of the catalogue warns until it is realigned. |
 | Pinned catalogue plus download cache | Large fixtures and tests of live data access | A fresh runner needs metadata and data access; retained caches reduce transfers. |
 | Staged development dataset | New inputs or inventory changes before catalogue acceptance | Mutable, warned about, and not evidence of an official version. |
 | `test:` variant of a collection, beside its `full:` data | Examples and live-data tests that run the production code path on small inputs | Needs the catalogue and a small download; offers the same named paths as the full data, so the same code runs on both. |
 
 A test that generates three numbers need not propose them to the institute's
 catalogue. Catalogue a fixture when its identity, provenance, reuse, or connection
-to a real published input matters. Bundles currently accept public data only;
-licensed fixtures belong in authorised local installations and restricted CI.
+to a real published input matters. A bundle holds public data with settled
+licensing only, because the repository distributes it; licensed fixtures belong
+in restricted CI.
 
 ## Downloading is conditional
 
-Normal fetching reuses the shared cache. It does not download every file on
-every test run. A fresh CI worker or an evicted cache does need a transfer, and
-loading remote metadata can still require a network request. An offline bundle
-carries its metadata and bytes together, so its reads need neither the live
-catalogue nor dCache.
+Normal fetching reuses the public cache; on the cluster, that is one directory
+every user shares. It does not download every file on every test run. A fresh
+CI worker or an evicted cache does need a transfer, and loading remote metadata
+can still require a network request. A bundle carries its descriptions and
+bytes together, so reading it needs neither the catalogue nor dCache.
 
-For catalogued public fixtures, the published store remains authoritative. A
-repository bundle is a selected snapshot, identified by resource keys and original
-hashes. A file in a Git checkout is not automatically that published version.
+Within a major release, dCache keeps every version it published, and a
+published version never changes. A package's bundle is authoritative for that
+package: the package reads what its bundle holds, even where the bundle is
+ahead of the catalogue, and its maintainer is warned to realign the bundle with
+the catalogue soon. `bundle.json` records which catalogue revision each dataset
+was last aligned with, and what changed since.
 
 ## Test and full variants of a collection
 
@@ -41,29 +45,32 @@ lopsided pair is refused as well. That check is the interchangeability
 guarantee: code written as
 `data.paths("onshore_wind", test=True)`, where
 `data = ethos_data.collections("collections.yaml")`, runs unchanged
-on the full data once `test=True` is dropped, because every handle it asks for
-exists in both variants. A handle present in only one of them would fail on the
-machine that has the full data, long after the example passed — so the reader
-refuses the collection instead.
+on the full data once `test=True` is dropped, because every named path it asks
+for exists in both variants. A named path present in only one of them would fail
+on the machine that has the full data, long after the example passed — so the
+reader refuses the collection instead.
 
-The guarantee is about the definition, not about this machine. Whether the data
-behind a handle is reachable here is a separate question. Every handle is
-required, so unreachable data stops the fetch, with an error that describes
-the dataset and how to obtain it.
+Every named path is required, and no option leaves one out: a call returns
+all of them, or stops before anything is downloaded and says what is missing.
 
-!!! warning "Gap: handles can still be left out"
-    Under `skip_unavailable` the current release leaves an unreachable
-    handle out of the mapping with a warning. See [every input is
+- **A variant is missing.** The error names the collection and the variant,
+  or the named path that only one of its variants offers.
+- **The data is restricted.** The error names the dataset, says that it is
+  restricted and how or where to obtain it, as far as the catalogue records
+  that, and how to register a copy once you have one. `--meta` prints the
+  dataset's full description.
+- **The name is not found.** A mistyped name and a dataset the catalogue does
+  not publish get the same answer: the dataset cannot be found.
+
+!!! warning "Gap: inputs can still be left out"
+    Under `skip_unavailable` the code leaves an unreachable named path out
+    of the mapping with a warning, and its refusal prints only the
+    `ethos:restriction` note. See [every input is
     required](architecture/decisions/0013-every-input-is-required.md).
 
-A test variant is not a bundle. A bundle is an offline copy of a selection,
-identified by resource keys and hashes, for tests that must run without the
-catalogue or dCache. A test variant is a live selection: it still needs the
-catalogue and, on a fresh machine, a download — a small one — and it offers the
-same handles as the full data, which a bundle does not promise. Bundle export
-takes a collection's full variant. Use both where they fit: a bundle for
-required offline tests, a test variant for examples and live-data tests that
-exercise the production code path.
+Test and full variants are not bundles. Both are selections from the
+catalogue, fetched through the caches; a bundle is data a package keeps in
+its own repository.
 
 The full data is the default and `test=True` / `--test` is opt-in. A forgotten
 flag then costs a large but visible download that can be interrupted. The other
@@ -75,28 +82,50 @@ wrong result that looks right.
 `allow_modified=True` permits intentional edits to an **existing** bundled
 resource and emits a warning. It retains the original hashes and does not allow
 missing resources. Strict verification continues to report the difference.
-Adding a file beside a bundle does not add it to the recorded collection.
+Adding a file beside a bundle does not record it. To keep a change, an added
+file included, record it with `bundle update` and return to strict checking;
+the dataset is then ahead of the catalogue.
 
 A new test using existing inputs needs only code. A new synthetic corner case
 can stay in the package. A new catalogued input needs a dataset proposal and an
-updated collection; staging lets a developer test it before acceptance.
+updated collection; staging, or the package's bundle, lets a developer use it
+before acceptance.
 
-Once changed data is accepted, update the catalogue pin, collection, bundle
-metadata, and bytes together. Return to strict checking. Never fix a mismatch
-by editing the generated hash to agree with an unexplained change.
+Propose what a bundle holds ahead of the catalogue. Once the catalogue has
+accepted it in a release, raise `min_version` to that release and run
+`bundle update` with the catalogue readable: it records the new alignment, and
+the warning stops. Never fix a mismatch by editing the recorded hash to agree
+with an unexplained change.
+
+!!! warning "Gap: a bundle cannot be ahead of the catalogue"
+    The code's bundles are copies exported from the catalogue, which stays
+    authoritative for them. There is no `bundle update`, nothing records a
+    change or warns about one, and a changed file is read only with
+    `allow_modified=True`.
 
 ## A metadata pin is only part of reproducibility
 
-An exact catalogue revision fixes the inventory. Its data paths must still
-provide the same bytes. Changing only `ethos:remote_prefix` leaves the local
-cache key `<dataset>/<resource path>` unchanged, so two revisions with changed
-bytes would compete for that entry. Use a new dataset identifier or versioned
-resource paths as well as new remote paths when versions must coexist.
+An exact catalogue release, such as `exact_version: v1.2.0`, fixes the
+inventory. A patch release changes metadata only, so `exact_version: v1.3`
+keeps the same bytes and takes corrected metadata. The bytes must still be
+there. Within a major release, dCache keeps every version it published, and a
+published object never changes: a revision puts its changed files under new
+remote paths and an entry of its own, `<dataset>@<r>`, so two revisions never
+compete for one cache entry. Withdrawn data may be purged only after a major
+release. Data that is only linked, and restricted installations, change with
+their source.
 
-Record the package revision, catalogue revision, collections, and any local
-overrides used by an experiment. A configured catalogue override replaces a
-package's pin; a staged dataset or per-dataset root can select local bytes.
-A successful in-place fetch establishes availability, while `verify --deep`
+!!! warning "Gap: a catalogue URL instead of release bounds, and no revisions"
+    The code takes a catalogue path or URL in `catalog:` and has no
+    revisions. Changing only `ethos:remote_prefix` leaves the cache path
+    `<dataset>/<resource path>` unchanged, so two versions with changed bytes
+    need a new dataset name or new resource paths.
+
+Record the package revision, catalogue release, collections, and any local
+overrides used by an experiment. A configured catalogue is read instead of the
+public release the bounds select, and its release must lie within them; a
+staged dataset, or a bundle ahead of the catalogue, selects local bytes. A
+successful in-place fetch establishes availability, while `verify --deep`
 checks those bytes against the recorded inventory.
 
 See [Keep data in the repository](../how-to/package-maintainers/keep-data-in-the-repository.md#update-data),

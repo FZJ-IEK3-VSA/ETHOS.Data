@@ -59,7 +59,9 @@ reach the cluster computer's file system.
   checkout: a reader that lists the index during the update can see
   inventories of the other release.
 - The cluster offers the latest release only, so packages that run there
-  bound with `min_version` and raise it deliberately.
+  bound with `min_version` only and raise it deliberately. A purge never
+  touches what the latest release describes, so these packages never notice a
+  major release ([0018](0018-numbered-catalogue-releases.md)).
 - A record reaches cluster users through a merge request, the next release
   and `update-checkout`.
 - The maintainer who releases needs push rights to a branch that is
@@ -71,11 +73,11 @@ reach the cluster computer's file system.
 
 ## Related
 
-- [0018. Number catalogue releases `vYYYY.MM.N` and let collections files bound them](0018-numbered-catalogue-releases.md)
+- [0018. Number catalogue releases `vMAJOR.MINOR.PATCH`, purge data only after a major release, and let collections files bound them](0018-numbered-catalogue-releases.md)
 - [0022. Record each dataset's state in a status file](0022-dataset-status-files.md)
 - [0023. Run every catalogue workflow that writes as a pipeline that plans before it acts](0023-maintenance-pipelines.md)
 - [0027. Release the public catalogue as a generated view, tagged on GitHub](0027-public-catalogue-releases-on-github.md)
-- [0028. Serve shared data on the cluster from a read-only shared cache](0028-read-only-shared-cache.md)
+- [0028. Share one public cache on the cluster](0028-one-public-cache-on-the-cluster.md)
 - [6. Runtime View](../runtime.md)
 - [7. Deployment View](../deployment.md)
 - [11. Risks and Technical Debt](../risks-and-technical-debt.md)

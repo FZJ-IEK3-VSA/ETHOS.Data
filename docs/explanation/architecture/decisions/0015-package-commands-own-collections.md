@@ -51,7 +51,7 @@ job and make the result depend on the working directory.
 - [0003. One catalogue describes the data; each package's collections file selects from it](0003-one-catalogue-many-collections.md)
 - [0014. Name workflow inputs in the collection and pair test and full variants](0014-named-inputs-and-test-full-variants.md)
 - [0017. Ship a self-test collection with the package](0017-self-test-collection.md)
-- [0020. Keep a package's test data in a repository bundle that the catalogue publishes](0020-repository-bundles.md)
+- [0020. Keep attributed data in bundles that are authoritative for their package](0020-repository-bundles.md)
 - [0025. Draft the handoffs between roles from templates](0025-handoff-templates.md)
 - [3. Context and Scope](../context.md)
 - [5. Building Block View](../building-blocks.md)

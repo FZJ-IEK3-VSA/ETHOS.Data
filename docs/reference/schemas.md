@@ -23,7 +23,7 @@ patterns, names for the inputs a workflow takes, a paired test and full
 selection, and a catalogue location.
 
 ```yaml
-catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/v2026.09/datacatalog.json
+catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/v1.0.0/datacatalog.json
 
 collections:
   landcover:
@@ -75,6 +75,17 @@ Both variants of `onshore_wind` offer the handles `clc` (inherited from
 | `collections.<name>.extends` | list of names | other collections in this file, composed transitively; a cycle is a `CollectionError` naming its chain. A `test=True` request passes down: a parent with variants contributes its `test` variant, a parent without is the same either way |
 | `collections.<name>.paths` | mapping | handle → catalogue key. A key is `<dataset>/<file>`, `<dataset>/<folder>`, `<dataset>` or a family name — what [`Catalog.path`][ethos_data.catalogs.Catalog.path] accepts. A file must be selected by the collection's `include`; a folder, dataset or family must have at least one selected file under it, and resolves to the directory holding the collection's files there. Handles are inherited through `extends`; the collection's own entry wins; two parents handing down the same handle with different keys is a `CollectionError` unless the collection defines that handle itself. Resolved by [`ethos_data.paths`][ethos_data.paths] and `<your-tool>-data fetch --paths`. Optional |
 | `collections.<name>.test`, `collections.<name>.full` | mapping | the collection's two variants — exactly these two names — each holding its own `extends`, `include` and `paths`. A collection with variants has no `extends`, `include` or `paths` at the top level; `title` stays there. `full` is what every request resolves unless `test=True` / `--test` is given; asking for a variant the collection does not define is a `CollectionError`. When both exist they must offer the same set of `paths` handles, or resolving the collection is a `CollectionError` listing the differences. A collection without variants resolves identically for both flags unless a collection it extends has variants — the flag propagates, so a plain `all` extending `onshore_wind` selects `onshore_wind`'s `full` variant by default and its `test` variant with `test=True`. Optional |
+
+!!! warning "Gap: `catalog` is to hold release bounds"
+    With [numbered catalogue
+    releases](../explanation/architecture/decisions/0018-numbered-catalogue-releases.md),
+    `catalog:` bounds the catalogue releases a package accepts, with
+    `min_version`, an optional `max_version`, or `exact_version`. A version
+    is a release `vMAJOR.MINOR.PATCH`, such as `v1.2.0`, or a prefix, such
+    as `v1.3`, that stands for every release starting with it. Which
+    catalogue is read comes from the settings. See [Declare the catalogue
+    versions](../how-to/package-maintainers/write-a-collections-file.md#catalog-version).
+    To be implemented separately.
 
 Glob semantics: `*` matches within one path segment, `**` matches any number of
 segments including zero. Shapefile companions are added automatically.
@@ -552,6 +563,13 @@ it can be hidden while colleagues use it daily. The one combination the build
 rejects is `access: public` with `visibility: hidden` — if the bytes are
 downloadable by anyone, list the dataset.
 
+!!! warning "Gap: `internal` is to be removed"
+    With [decision
+    0011](../explanation/architecture/decisions/0011-access-class-picks-the-root.md),
+    `ethos:access` is `public` or `restricted`. Data the institute holds
+    without publishing it is `restricted`, and its `ethos:restriction` says
+    who may obtain it, and how. To be implemented separately.
+
 **`ethos:embargo`** — *mapping `{until, reason, becomes}`; required when
 `visibility: hidden`.* `until` may be `"unspecified"`, but only with an explicit
 reason. Without this block a dataset stays hidden by accident forever. Stripped
@@ -579,14 +597,14 @@ licence forbids the mirror, and what they should do — buy a seat, ask a named
 colleague, point at an existing copy. A note that only says "restricted" tells
 them nothing they did not just learn from the line above it.
 
-!!! warning "Gap: the error is to print the whole description"
+!!! warning "Gap: the error is to say how to obtain and register a copy"
     With [every input is
     required](../explanation/architecture/decisions/0013-every-input-is-required.md),
-    the error also prints `title`, `description`, `version`, `homepage`,
-    `sources`, `licenses`, `ethos:attribution`, `ethos:upstream` and
-    `ethos:contact`, wherever a restricted dataset cannot be read on this
-    machine, not only when no restricted cache is configured. It no longer
-    offers `--skip-unavailable`. To be implemented separately.
+    the error names the dataset, says how to obtain it and how to register a
+    copy, wherever a restricted dataset cannot be read on this machine. It
+    prints no other part of the description, and offers neither
+    `--skip-unavailable` nor `config set-root`; `--meta` prints the full
+    description. To be implemented separately.
 
 ### Inventory control
 

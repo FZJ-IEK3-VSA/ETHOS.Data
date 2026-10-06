@@ -50,8 +50,8 @@ text carries its content.
 | You are | Start with | Then read |
 |---|---|---|
 | Data user | [3. Context and Scope](context.md) | [6](runtime.md): how a handle finds every file or refuses it; [7](deployment.md): workstations and the cluster computer |
-| Package maintainer | [3. Context and Scope](context.md) | [6](runtime.md): handles, repository bundles, staging and package CI; [8](crosscutting-concepts.md): release bounds and changed test data; decisions [0018](decisions/0018-numbered-catalogue-releases.md) and [0020](decisions/0020-repository-bundles.md) |
-| Catalogue maintainer | The [dataset lifecycle](runtime.md#dataset-lifecycle) | [5](building-blocks.md): the maintenance pipelines; [7](deployment.md): the cluster layout; decisions [0022](decisions/0022-dataset-status-files.md), [0023](decisions/0023-maintenance-pipelines.md), [0026](decisions/0026-internal-catalogue-on-the-cluster.md) and [0028](decisions/0028-read-only-shared-cache.md) |
+| Package maintainer | [3. Context and Scope](context.md) | [6](runtime.md): handles, bundles, staging and package CI; [8](crosscutting-concepts.md): release bounds and changed test data; decisions [0018](decisions/0018-numbered-catalogue-releases.md), [0020](decisions/0020-repository-bundles.md) and [0021](decisions/0021-bundles-ahead-of-the-catalogue.md) |
+| Catalogue maintainer | The [dataset lifecycle](runtime.md#dataset-lifecycle) | [5](building-blocks.md): the maintenance pipelines; [7](deployment.md): the cluster layout; decisions [0022](decisions/0022-dataset-status-files.md), [0023](decisions/0023-maintenance-pipelines.md), [0026](decisions/0026-internal-catalogue-on-the-cluster.md) and [0028](decisions/0028-one-public-cache-on-the-cluster.md) |
 | Reviewer or contributor | [4. Solution Strategy](solution-strategy.md) and [9. Architectural Decisions](decisions/index.md) | [5](building-blocks.md): the layers, where a bug hunt also starts; [10](quality-requirements.md) and [11](risks-and-technical-debt.md): the quality scenarios and the risks |
 
 The tasks of each role are in the [how-to guides](../../how-to/index.md), and

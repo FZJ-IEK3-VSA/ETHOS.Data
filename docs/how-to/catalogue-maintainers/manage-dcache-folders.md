@@ -51,9 +51,9 @@ rclone rmdir HIFIS:ethos-data/_practice
 
 ## Delete a file or an entire folder
 
-For an actual published withdrawal, first
-[remove the current catalogue entry](withdraw-a-dataset.md). For scratch data,
-inspect exactly what you will delete:
+A published dataset's folder goes only with its purge, after a major release;
+see [Remove a dataset](withdraw-a-dataset.md). For scratch data, inspect
+exactly what the commands below delete:
 
 ```bash
 rclone lsf -R HIFIS:ethos-data/_candidate-new

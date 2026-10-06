@@ -2,46 +2,103 @@
 
 Turn the reviewed source catalogue into a new release: the internal catalogue
 on the cluster computer, the public catalogue on GitHub and, for attribution,
-on dCache. You need a source checkout with every added dataset built and
-every upload verified. Today the steps are manual and the checks are
-commands; the intended state is a pipeline that does everything after the
-tag.
+on dCache. You need your own clone of the source catalogue at the merged state
+of JuGit, with every added dataset built and every public upload verified, and
+beside it your clone of the public catalogue. While any dataset is not frozen,
+run the release on the cluster computer, where its build input is readable.
 
-## 1. Build, check, commit, tag
+## 1. Release {#release}
 
 ```bash
-ethos-data catalog build
-ethos-data catalog build --check
-git diff
-git commit -am "Add <datasets>"
-git tag v2026.09.2
-git push origin main v2026.09.2
+ethos-data catalog release v1.2.0 --public ../ETHOS.Data-Catalogue --dry-run
+ethos-data catalog release v1.2.0 --public ../ETHOS.Data-Catalogue
+ethos-data catalog release v1.2.0 --public ../ETHOS.Data-Catalogue --push --upload
 ```
 
-Expect `--check` to pass and the diff to contain only the datasets you added.
-Releases are numbered `vYYYY.MM.N`, `N` counting the releases within the
-month, and the tag names the release for the internal and the public
-catalogue alike.
+The dry run prints the plan and writes nothing. Its `check` stage refuses an
+unclean checkout, a version that is not admissible (see below), a stale build,
+a public dataset without a verified upload, and a leak into the public
+catalogue. The release then stamps the version into `catalog.yaml`, commits
+and tags it, generates the public catalogue into `--public`, commits and tags
+that too, and drafts the release notice and the answers. `--push` pushes both
+tags, `--upload` puts the public catalogue beside the data on dCache. A rerun
+with the same version does only what is left; a merge that lands on JuGit
+before the push makes the push fail, and the release is rerun from the
+updated branch.
+
+!!! warning "Gap: releases are manual"
+    The code has no `catalog release`. Build, check and tag by hand, in the
+    source checkout:
+
+    ```bash
+    ethos-data catalog build
+    ethos-data catalog build --check
+    git diff
+    git commit -am "Add <datasets>"
+    git tag v1.2.0
+    git push origin main v1.2.0
+    ```
+
+    then generate, check and tag the public catalogue as in
+    [step 3](#public), and update the cluster's checkout as in
+    [step 2](#internal).
+
+### Choose the version {#version}
+
+A release is named `vMAJOR.MINOR.PATCH`: three numbers without leading zeros
+or a suffix, compared part by part, so `v1.10.0` follows `v1.9.0`. The first
+release is `v1.0.0`. Every release tags both catalogues, even when only
+restricted or hidden data changed. The level says what changed since the
+release before:
+
+| Level | After `v1.2.0` | Means |
+| --- | --- | --- |
+| Patch | `v1.2.1` | Metadata only: descriptions, attribution, contacts, homepages, licence notes or licence status. Every key of both catalogues resolves to the same bytes under the same access class. |
+| Minor | `v1.3.0` | Data changed: datasets added, revised, superseded, changed in place, withdrawn, reclassified, or made visible or hidden. |
+| Major | `v2.0.0` | A retention epoch that the catalogue maintainers plan and announce. Datasets withdrawn before it may be purged once it is recorded. |
+
+The version is the next patch, minor or major of the last release, at or
+above the smallest level your changes need. `ethos-data catalog status` and
+`ethos-data catalog release VERSION --dry-run` name the smallest admissible
+version: the release check works it out from the steps recorded since the
+last release, the index rows of both catalogues and a diff against the last
+tag. It refuses a smaller version, and a release that changes nothing.
+
+No change requires a major release. Data is purged only after one: until
+then, the uploads on dCache and the copies the caches own keep everything that
+any release of the current major describes. An urgent deletion, for example
+under a licence that forbids further distribution, needs an unplanned major
+release; see [Remove a dataset](withdraw-a-dataset.md).
+
+!!! warning "Gap: nothing checks the version"
+    The code has no `catalog status` and no `catalog release`. Work the level
+    out from the table above, and check that the tag follows the last one.
 
 ## 2. Update the internal catalogue {#internal}
 
-Cluster users read one checkout of the source catalogue on the cluster computer
+Cluster users read one checkout of the source catalogue on the cluster
 computer, see [Set up the shared machine](set-up-the-shared-machine.md). It
-holds one version, the latest release. Update it when no jobs are reading it
-and check it before announcing:
+holds one version, the latest release. Update it on the cluster computer when
+no jobs are reading it, and check it before announcing:
 
 ```bash
-cd /shared/ethos/catalogue
-git pull --ff-only
-ethos-data catalog build --check
+ethos-data catalog --catalog-root /shared/ethos/catalogue update-checkout
 ethos-data --catalog /shared/ethos/catalogue/datacatalog.json ls
 ```
 
-Never rebuild inside the served checkout while jobs read it: an index from
-one revision paired with inventories from another is exactly what an
-`IncompleteCatalog` error reports.
+`update-checkout` refuses local changes, fast-forwards to the newest release
+tag and runs `build --check`, which writes nothing. Never rebuild inside the
+served checkout while jobs read it: an index from one revision paired with
+inventories from another is exactly what an `IncompleteCatalog` error reports.
+
+!!! warning "Gap: no `update-checkout`"
+    The code has no `catalog update-checkout`. In the served checkout, run
+    `git pull --ff-only`, then `ethos-data catalog build --check`.
 
 ## 3. Generate the public catalogue {#public}
+
+`catalog release` generates the public catalogue with `catalog publish`; run
+it alone to look at the result before a release:
 
 ```bash
 ethos-data catalog publish ../ETHOS.Data-Catalogue
@@ -70,15 +127,21 @@ A hidden dataset must not be mentioned at all. Read the diff.
 
 ### Commit, tag, push
 
-```bash
-git commit -am "Release v2026.09.2: <what changed>"
-git tag v2026.09.2
-git push origin main v2026.09.2
-```
+`catalog release` commits and tags the public catalogue with the same version,
+and `--push` pushes it. Its check refuses a public dataset whose upload was
+not [verified](upload-a-dataset.md) after its last inventory change. Never
+move a released tag or change metadata behind an existing release.
 
-Release the public catalogue only after every downloadable entry it adds has
-been [uploaded and verified](upload-a-dataset.md). Never move a released tag
-or change metadata behind an existing release.
+!!! warning "Gap: the public catalogue is tagged by hand"
+    Without `catalog release`, commit, tag and push the public checkout
+    yourself, once every downloadable entry it adds has been uploaded and
+    verified:
+
+    ```bash
+    git commit -am "Release v1.2.0: <what changed>"
+    git tag v1.2.0
+    git push origin main v1.2.0
+    ```
 
 !!! danger "Never create the public repository by cloning the internal one"
     A public checkout that began as a copy of the source repository carries
@@ -96,10 +159,10 @@ or change metadata behind an existing release.
 ### Put the public catalogue beside the data on dCache
 
 Anyone who holds the published bytes should also hold their descriptors and
-licence documents, so the current public catalogue is uploaded next to the
-data under the publication root, `<publication root>/catalogue/`, replacing
-the previous one. Only the latest release lives there; the history stays on
-GitHub.
+licence documents, so `catalog release --upload` puts the current public
+catalogue next to the data under the publication root,
+`<publication root>/catalogue/`, replacing the previous one. Only the latest
+release lives there; the history stays on GitHub.
 
 ## 4. Release an embargoed dataset {#embargo}
 
@@ -112,13 +175,26 @@ ethos:visibility: public
 ```
 
 Rebuild, [upload](upload-a-dataset.md) if the bytes are not on dCache yet or
-verify the existing upload, then release as above. Resource keys and
-checksums stay unchanged; only readers of the new release see the dataset.
+verify the existing upload, then release as above; a change of access or
+visibility needs a minor release. Resource keys and checksums stay unchanged;
+only readers of the new release see the dataset. If it was restricted, then
+remove its entry from the restricted cache, where public data is never read;
+`verify` reports the entry until it is gone:
+
+```bash
+ethos-data --root <restricted cache> unlink <name>
+```
 
 ## 5. Tell the users
 
 Announce the release on the ICE-2 wiki and to the package maintainers whose
 datasets changed, so they can raise their minimum versions.
+
+Announce a major release before you make it, and name the withdrawn datasets
+that may be purged after it. A purge never touches what the latest release
+describes, so a package bounded with `min_version` only, as every package on
+the cluster is, does not notice a major release. A package whose bounds end
+before that major release loses the purged datasets.
 
 ## Automate it {#in-ci}
 
@@ -143,15 +219,10 @@ uploaded bytes are still served without transferring anything:
 ethos-data catalog upload <dataset> --verify-only --no-chmod
 ```
 
-The intended pipeline lives in the internal catalogue repository and runs on
-a tag: it generates the public catalogue, runs the leak check, commits, tags
-and pushes the public repository on GitHub, uploads the public catalogue to
-dCache, and updates the checkout on the cluster computer. A maintainer then
-only reviews and tags. Whether the internal Git host can push to GitHub and
-reach dCache from its runners, or whether the public half has to run on
-GitHub, is still to be established.
+A maintainer runs the release itself. Running it in CI is a feature request
+(GitHub issue #34): such a runner needs a token that does not depend on a
+person's oidc-agent session, and every build input that is not frozen.
 
-!!! warning "Gap: releases are manual"
-    Only the two check commands exist. No pipeline publishes, uploads the
-    catalogue to dCache or updates the cluster computer checkout, and the leak check
-    is not part of `publish --check`.
+!!! warning "Gap: the leak check is separate"
+    The leak check is not part of `publish --check`; run it as under
+    [Check for a leak before committing](#leak-check).

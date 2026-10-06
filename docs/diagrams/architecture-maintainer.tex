@@ -88,7 +88,7 @@
   {\elementshort{Checkout access}{Component: maintain}};
 
 \begin{scope}[on background layer]
-  \node[c4boundary, inner sep=1.2mm, fit={(sm1)(sm16)(pipes)(sm3)(sm2)(1.2,\top+1.2)(159.2,\top+1.2)}] (maint) {};
+  \node[c4boundary, inner sep=1.2mm, fit={(sm1)(sm16)(pipes)(sm3)(sm2)(1.2,\top+1.2)(160.7,\top+1.2)}] (maint) {};
 \end{scope}
 \node[c4boundarylabel, anchor=north west] at (maint.north west) {Catalogue maintenance [Service group: ethos\_data.maintain]};
 
@@ -99,22 +99,24 @@
 \node[used, text width=17.8mm] (git) at (53,\ru) {\elementshort{GitRepository}{Adapter: git}};
 \node[used, text width=18mm] (sa9) at (75,\ru) {\elementshort{Cache entries}{Component: linking, materialize}};
 \node[used, text width=14.4mm] (sa11) at (97.5,\ru) {\elementshort{Handoffs}{Component: handoffs}};
-\node[used, text width=14.4mm] (sa12) at (119.5,\ru) {\elementshort{Local files}{Component: files}};
+\node[used, text width=14.4mm] (sa12) at (120.2,\ru) {\elementshort{Local files}{Component: files}};
 \node[used, text width=20mm] (store) at (138.5,\ru) {\element{DcacheStore}{Adapter: rclone, REST, HTTPS}{copy, sync, purge; chmod, locality; read-back}};
 \node[c4port, anchor=south] (gitport) at (git.north) {Git};
 \node[c4port, anchor=south] (storeport) at (store.north) {Store};
 
 % -- stores -----------------------------------------------------------------------
 % \rj: the junctions under the used row; \rt: the stores' centres.
+% The caches are the cluster's: the public cache every cluster user shares, and
+% the restricted caches, one per access combination.
 \def\rj{-173.5}\def\rt{-187.5}
 \node[st=15] (d10) at (7.5,\rt) {\store{Status files}{YAML, in the clone}};
 \node[st=28] (d9) at (31,\rt) {\store{Maintainer's clone of the source catalogue}{git working tree, in the maintainer's own account}};
 \node[st=13] (d12) at (55,\rt) {\store{Public catalogue checkout}{git}};
-\node[st=15.5] (d11) at (72.25,\rt) {\store{Served checkout}{git, latest release}};
-\node[st=11] (d18) at (87.3,\rt) {\store{Shared cache}{cluster}};
-\node[st=13.6] (d4) at (101.4,\rt) {\store{Restricted cache}{licensed}};
-\node[st=15.4] (d17) at (117.7,\rt) {\store{Notices directory}{\texttt{-{}-notices}}};
-\node[st=16] (d15) at (135.2,\rt) {\store{Build inputs}{\texttt{source\_dir}}};
+\node[st=13.6] (d11) at (71,\rt) {\store{Served checkout}{git, latest release}};
+\node[st=17] (d18) at (87.7,\rt) {\store{The cluster's public cache}{shared directory}};
+\node[st=16.3] (d4) at (105.75,\rt) {\store{Restricted caches}{one per access combination}};
+\node[st=15.4] (d17) at (123,\rt) {\store{Notices directory}{\texttt{-{}-notices}}};
+\node[st=16.8] (d15) at (140.5,\rt) {\store{Build inputs}{\texttt{source\_dir}}};
 
 % -- systems ----------------------------------------------------------------------
 % \rk: the junctions under the stores; \rs: the systems' tops.
@@ -144,8 +146,8 @@
 \draw[c4rel] (pipes.south -| gitport) -- node[lbl, right, pos=\lp] {Release,\\Checkout\\updater} (gitport);
 \draw[c4rel] (pipes.south -| 78,0) -- node[lbl, right, pos=\lp] {Cache-copy\\recorder,\\Removal} (sa9.north -| 78,0);
 \draw[c4rel] (pipes.south -| 100.5,0) -- node[lbl, right, pos=\lp] {Public-view\\generator,\\Release,\\Removal} (sa11.north -| 100.5,0);
-\draw[c4rel] (pipes.south -| 117,0) -- node[lbl, right, pos=0.16] {Release,\\Removal} (d17.north -| 117,0);
-\draw[c4rel] (pipes.south -| 129.5,0) -- node[lbl, right, pos=\lp] {Inventory\\builder} (sa12.north -| 129.5,0);
+\draw[c4rel] (pipes.south -| 119,0) -- node[lbl, right, pos=0.16] {Release,\\Removal} (d17.north -| 119,0);
+\draw[c4rel] (pipes.south -| 131,0) -- node[lbl, right, pos=\lp] {Inventory\\builder} (sa12.north -| 131,0);
 \draw[c4rel] (pipes.south -| storeport) -- node[lbl, right, pos=\lp] {Uploader,\\Freeze,\\Release,\\Removal} (storeport);
 
 % -- arrows: to the stores and systems ---------------------------------------------
@@ -158,13 +160,13 @@
 \draw[c4rel] (git.south -| 63,0) -- (63,\rk-1.5) -| (s5.north);
 \draw[c4rel] (63,\rk-1.5) -- (s4.north -| 63,0);
 \node[lbl, anchor=west] at (63.4,\rk+1.4) {push; fetch};
-\draw[c4rel] (sa9.south -| 87.3,0) -- (d18.north);
-\draw[c4rel] (87.3,\rj) -| (d4.north);
-\node[lbl, anchor=south west] at (87.7,\rj+0.2) {links, copies};
-\draw[c4rel] (sa12.south -| 133,0) -- node[lbl, left] {walk, hash} (d15.north -| 133,0);
-\draw[c4maint] (store.south -| 152.5,0) -- (s2.north -| 152.5,0);
-\draw[c4download] (store.south -| 158.5,0) -- (s2.north -| 158.5,0);
-\draw[c4rel] (store.south -| 146,0) -- (146,\rk+0.5) -| (s3.north);
+\draw[c4rel] (sa9.south -| 87.7,0) -- (d18.north);
+\draw[c4rel] (87.7,\rj) -| (d4.north);
+\node[lbl, anchor=south west] at (88.1,\rj+0.2) {links, copies};
+\draw[c4rel] (sa12.south -| 135.5,0) -- node[lbl, left] {walk, hash} (d15.north -| 135.5,0);
+\draw[c4maint] (store.south -| 154.5,0) -- (s2.north -| 154.5,0);
+\draw[c4download] (store.south -| 158.6,0) -- (s2.north -| 158.6,0);
+\draw[c4rel] (store.south -| 150.4,0) -- (150.4,\rk+0.5) -| (s3.north);
 \node[lbl, anchor=south west] at (122,\rk+0.7) {token};
 
 % -- the key -----------------------------------------------------------------------

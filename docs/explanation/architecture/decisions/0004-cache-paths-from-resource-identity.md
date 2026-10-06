@@ -37,11 +37,10 @@ apart still agree.
 - `Resource.key`, entry names and object folders are contracts between
   independently developed packages. A change to them stops the sharing
   without failing anything.
-- Staging and per-dataset roots are keyed by the dataset's name, not by its
-  entry.
-- Every cache has this layout: each user's public cache, the cluster's shared
-  cache ([0028](0028-read-only-shared-cache.md)) and the restricted cache. The
-  lookup chain reads them all the same way
+- Staging is keyed by the dataset's name, not by its entry.
+- Every cache has this layout: the public cache, which on the cluster every
+  user shares ([0028](0028-one-public-cache-on-the-cluster.md)), and every
+  restricted cache. The lookup chain reads them all the same way
   ([0012](0012-one-lookup-chain.md)).
 - Two jobs that fetch the same file cost at most one redundant download.
 - See [What makes the sharing work](../../deduplication.md#what-makes-the-sharing-work).
@@ -52,6 +51,6 @@ apart still agree.
 - [0012. Find every file through one lookup chain](0012-one-lookup-chain.md)
 - [0019. Publish new versions as revisions or successors; published objects never change](0019-revisions-and-successors.md)
 - [0022. Record each dataset's state in a status file](0022-dataset-status-files.md)
-- [0028. Serve shared data on the cluster from a read-only shared cache](0028-read-only-shared-cache.md)
+- [0028. Share one public cache on the cluster](0028-one-public-cache-on-the-cluster.md)
 - [5. Building Block View](../building-blocks.md)
 - [8. Crosscutting Concepts](../crosscutting-concepts.md)

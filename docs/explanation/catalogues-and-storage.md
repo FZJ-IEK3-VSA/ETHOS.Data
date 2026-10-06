@@ -9,9 +9,9 @@ or a filesystem.
 |---|---|---|
 | Internal source catalogue | Handwritten YAML, generated index, descriptors and inventories for all registered datasets | Catalogue maintainer |
 | Generated public catalogue | Entries permitted by `ethos:visibility: public`, with private fields removed | Catalogue maintainer |
-| Package collections | Named selections from a catalogue, optionally pinned to a revision | Package maintainer |
-| Public cache | Downloaded files and links for public/internal inputs | User or cluster administrator |
-| Restricted cache | Authorised local copies or links for restricted inputs | Dataset custodian or cluster administrator |
+| Package collections | Named selections from a catalogue, optionally with release bounds | Package maintainer |
+| Public cache | Downloaded files, links and copies of public data; on the cluster, one directory every user shares | User or cluster administrator |
+| Restricted caches | Authorised local copies or links for restricted data, each cache for one access combination; only where someone sets them up | Dataset custodian or cluster administrator |
 | dCache | Published dataset bytes at stable remote paths | Catalogue/storage maintainer |
 
 The [public GitHub repository](https://github.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue)
@@ -21,22 +21,25 @@ internal catalogue on the cluster contain a superset of that metadata.
 is a dataset access class, not a second file format.
 
 A reader uses one catalogue at a time. Selecting the internal catalogue replaces
-the public catalogue or a package's pin; it does not merge independent catalogues.
-The administrator must therefore deploy the complete internal view, including
-the public entries that packages expect.
+the public catalogue, within a package's release bounds; it does not merge
+independent catalogues. The administrator must therefore deploy the complete
+internal view, including the public entries that packages expect.
 
 ## Access and visibility answer different questions
 
 Visibility controls publication of the description. Access controls how bytes
 are obtained. A publicly visible restricted dataset can explain how to request
-a licence without offering a download. A hidden internal dataset may be usable
-on the cluster before its description is released.
+a licence without offering a download. A hidden restricted dataset that the
+institute holds without publishing it may be usable on the cluster before its
+description is released.
 
-Filesystem permissions enforce local access. The directory called “public cache”
-can contain internal entries, so its name alone is no security boundary. The
-restricted root must retain the installation's permissions when files are copied.
+Filesystem permissions enforce local access. The public cache holds public data
+only, and on the cluster every user may write it. Each restricted cache admits
+one access combination, such as every member of the institute or one licence
+group, and must retain the installation's permissions when files are copied.
 Ordinary retrieval reads restricted data in place; explicit `link` and
-`materialize` operations can create its authorised local cache entries.
+`materialize` operations can create its authorised entries in a restricted
+cache.
 
 ## Availability has several independent checks
 
@@ -52,7 +55,9 @@ validity. The acceptance review and package tests address that separate question
 The normal release order is review, build, transfer and check bytes, then release
 metadata. Restricted inputs use verified local storage instead of a transfer.
 The inverse withdrawal order removes current metadata before any deliberate
-remote deletion; old pins and existing copies still need separate consideration.
+remote deletion, and that deletion waits for a major release, so releases of
+the current major keep resolving the dataset. Copies in caches on other
+machines still need separate consideration.
 
 See [Caches, classes and roots](caches-and-access.md),
 [The catalogue lifecycle](architecture/runtime.md#dataset-lifecycle), and

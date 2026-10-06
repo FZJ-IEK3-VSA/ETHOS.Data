@@ -1,6 +1,6 @@
 # 0006. Specify every file format once
 
-**Status:** proposed · **Date:** 2026-10-02 · **Implemented by:** #11, #12, #13, #27
+**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #11, #12, #13, #27
 
 ## Context
 
@@ -12,11 +12,11 @@ from the code.
 
 ## Decision
 
-`ethos_data.formats` holds one pydantic model per standardised file, thirteen
+`ethos_data.formats` holds one pydantic model per standardised file, twelve
 in all: `dataset.yaml` and a family's `dataset.yaml`, `catalog.yaml`,
 `status.yaml`, `collections.yaml`, the settings file, `datapackage.json`,
-`shards/<prefix>.json`, `datacatalog.json`, both kinds of `bundle.json`, the
-staging registry and the materialization record. Each field declares a type,
+`shards/<prefix>.json`, `datacatalog.json`, `bundle.json`, the staging
+registry and the materialization record. Each field declares a type,
 a default, whether it is required, a description and four properties, which
 the JSON Schema carries as `x-ethos`:
 
@@ -24,7 +24,7 @@ the JSON Schema carries as `x-ethos`:
 |---|---|
 | `published` | kept by `publish`; a field without it is stripped from the public catalogue, and the leak check looks for it |
 | `promoted` | copied into the index row, so reading it needs no descriptor |
-| `user_facing` | printed by `--meta` and by the refusal of a restricted dataset this machine cannot read ([0013](0013-every-input-is-required.md)) |
+| `user_facing` | printed by `--meta` ([0013](0013-every-input-is-required.md)) |
 | `inherited` | taken from the family's `dataset.yaml` when a member does not set it; only keys that cannot weaken a claim are inherited |
 
 Derived from the models:
@@ -44,7 +44,7 @@ Further rules:
 - The files people write have templates, each with a `yaml-language-server`
   schema line. A command that creates such a file starts from its template,
   and the docs include the templates.
-- The settings file has no template, because `config set-*` writes it.
+- The settings file has no template, because the `config` commands write it.
   Handoff texts are templates ([0025](0025-handoff-templates.md)), not formats.
 - The build's rules are errors. What the specifications add, a wrong type or a
   value outside a closed vocabulary, is a lint warning. Unknown keys pass; an
@@ -81,7 +81,7 @@ Further rules:
 
 - [0005. Read the index first and inventories on demand](0005-lazy-index-descriptors-and-shards.md)
 - [0007. Read every generated catalogue through one inventory reader](0007-one-inventory-reader.md)
-- [0013. Treat every input as required, and describe what is missing](0013-every-input-is-required.md)
+- [0013. Treat every input as required, and say what is missing](0013-every-input-is-required.md)
 - [0025. Draft the handoffs between roles from templates](0025-handoff-templates.md)
 - [0027. Release the public catalogue as a generated view, tagged on GitHub](0027-public-catalogue-releases-on-github.md)
 - [5. Building Block View](../building-blocks.md)

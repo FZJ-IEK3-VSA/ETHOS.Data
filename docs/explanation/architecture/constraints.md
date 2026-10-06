@@ -12,13 +12,13 @@ has to accept. The approaches chosen within them are in
 | 4 | dCache at DESY (HIFIS, VO `Helmholtz/FZJ-ICE2`) stores the published bytes | Readers download anonymously over HTTPS, which works only under world-readable folders, so an upload sets 0755. Maintainers write through the WebDAV door with rclone and use the REST frontend for permissions and locality, both with a bearer token from Helmholtz ID through oidc-agent. |
 | 5 | Identity, storage permissions and availability are operated by others: the storage operators at DESY and the ICE-2 cluster administrators | Credential provisioning, file system groups and service recovery are outside the package. |
 | 6 | Packages accept different catalogue releases | Resource identities and published objects never change their meaning. |
-| 7 | Required package tests must run without dCache | Repository bundles carry both the bytes and the metadata of their members. |
+| 7 | Required package tests must run without dCache | Bundles carry the bytes of their datasets together with their descriptions and licence documents. |
 | 8 | Python 3.10 or later; dependencies from conda-forge: PyYAML, platformdirs, pooch and `pydantic>=2`, with tqdm optional, and rclone and oidc-agent for maintainers | A dependency is acceptable only if conda-forge has it. ETHOS.Data itself has no release on a package index, so packages install it from GitHub. |
-| 9 | conda-forge has no oidc-agent for Windows | `catalog upload`, `catalog release --upload`, `catalog remove --purge` and `catalog check-store` run on Linux, macOS or WSL. Symbolic links on Windows need Developer Mode. |
+| 9 | conda-forge has no oidc-agent for Windows | `catalog upload`, `catalog release --upload`, `catalog remove --purge` and `catalog check-store` run on Linux, macOS or WSL. Symbolic links on Windows need Developer Mode. Without the right to create them, `link` refuses and offers `materialize NAME --from DIR`, a verified copy. |
 | 10 | A runner outside the cluster cannot reach the cluster computer's file system, and cluster users have no access to Git hosting | Cluster users read the internal catalogue from a checkout on that file system. `catalog update-checkout` runs there, and so does every command that reads a build input only the cluster holds. |
 | 11 | Public metadata is served by `raw.githubusercontent.com`, with request limits | A tag URL never changes, so it is cached forever. `main` moves, so it is never cached. |
 | 12 | The docs build has no LaTeX | TikZ sources are rendered locally into committed light and dark SVGs. |
 | 13 | Internal locations, groups and contacts must not appear in public pages | The ICE-2 wiki holds them; the docs use placeholders. |
-| 14 | On the cluster, much of the data already sits on shared storage, in project directories | Cluster users read it in place, through a shared cache that maintainers fill, instead of each downloading a copy. |
+| 14 | On the cluster, much of the data already sits on shared storage, in project directories | Cluster users read it in place through links: public data through the cluster's public cache, which every cluster user shares, and restricted data through restricted caches. A missing public file is downloaded into the cluster's public cache once, for everyone. |
 
 [Section 7](deployment.md) shows where these constraints place each command.

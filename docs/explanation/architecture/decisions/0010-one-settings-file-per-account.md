@@ -1,49 +1,52 @@
 # 0010. Read settings from one file per account, once per handle
 
-**Status:** proposed · **Date:** 2026-10-02 · **Implemented by:** #14, #15, a new PR (shared cache: the `shared_cache` setting), #19 (the bounds step inside the one resolver), a new PR (inventory reader: the metadata cache from the snapshot), #25 (the download switch in the snapshot)
+**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #14 (the settings file and the snapshot, with no per-dataset roots), #15, a new PR (caches: the `restricted_caches` list), #19 (the bounds step inside the one resolver), a new PR (inventory reader: the metadata cache from the snapshot), #25 (the download switch in the snapshot)
 
 ## Context
 
 Settings must resolve the same way however a script starts (from an editor, a
 terminal, a notebook or a batch job, in any folder) and however ETHOS.Data was
 installed (conda, a virtual environment, pip, pipx, `uv tool`). The cluster is
-configured per account, not per machine. CI jobs and test runs must be
-isolated from the account they run under. A script must be able to record
-which settings decided its inputs.
+configured per account, not per machine. An account may read restricted data
+from several caches, or from none. CI jobs and test runs must be isolated from
+the account they run under. A script must be able to record which settings
+decided its inputs.
 
 ## Decision
 
 - Settings say where data lies for one person on one machine. Which data a
   workflow needs, and which catalogue releases it accepts, come from the
   package's collections file.
-- Each setting is the first of four sources: an explicit argument (`root=` or
-  `--root`, `catalog=` or `--catalog`), an environment variable, the settings
-  file, the built-in default.
+- Every setting except the restricted caches is the first of four sources:
+  an explicit argument (`root=` or `--root` for the public cache, `catalog=`
+  or `--catalog`), an environment variable, the settings file, the built-in
+  default.
+- The restricted caches are a list with no explicit argument and no default.
+  `ETHOS_RESTRICTED_DIRS` replaces the file's list; nothing is merged.
 
 | Setting | Key in the settings file | Environment variable | Default |
 |---|---|---|---|
-| Public cache, personal | `public_cache` | `ETHOS_DATA_DIR` | the per-user cache directory: `~/.cache/ethos-data`, `%LOCALAPPDATA%\ethos-data\Cache`, `~/Library/Caches/ethos-data` |
-| Shared cache, on the cluster ([0028](0028-read-only-shared-cache.md)) | `shared_cache` | `ETHOS_SHARED_DIR` | none |
-| Restricted cache | `restricted_cache` | `ETHOS_RESTRICTED_DIR` | none |
+| Public cache; on the cluster, the shared directory the ICE-2 wiki names ([0028](0028-one-public-cache-on-the-cluster.md)) | `public_cache` | `ETHOS_DATA_DIR` | the per-user cache directory: `~/.cache/ethos-data`, `%LOCALAPPDATA%\ethos-data\Cache`, `~/Library/Caches/ethos-data` |
+| Restricted caches, in order ([0011](0011-access-class-picks-the-root.md)) | `restricted_caches`, a list | `ETHOS_RESTRICTED_DIRS`: paths separated by `:`, on Windows by `;` | none |
 | Staging root | `staging_cache` | `ETHOS_STAGING_DIR` | none |
 | Catalogue | `catalog` | `ETHOS_DATA_CATALOG` | chosen from the release bounds, else the public `main` index |
 | Publication URL | `publication_url` | `ETHOS_PUBLICATION_URL` | the URL the catalogue declares |
-| Per-dataset roots | `dataset_roots` | — | none |
 
-- `config set-…` writes a setting and `config unset-…` removes it, one pair
-  per setting: `public-cache`, `shared-cache`, `restricted-cache`,
-  `staging-cache`, `catalog` and `publication-url`, for example
-  `config set-shared-cache DIR` and `config unset-shared-cache`. A
-  per-dataset root is set with `config set-root DATASET DIR` and removed with
-  `config unset-root DATASET`.
+- `config set-…` writes a single value and `config unset-…` removes it:
+  `public-cache`, `staging-cache`, `catalog` and `publication-url`, for
+  example `config set-public-cache DIR` and `config unset-public-cache`.
+  `config add-restricted-cache DIR` appends a restricted cache and refuses one
+  that is already listed; `config remove-restricted-cache DIR` removes one.
+  `config` refuses a root that is, contains or lies inside another
+  ([0011](0011-access-class-picks-the-root.md)).
 - The settings file is the file `ETHOS_DATA_CONFIG` names, which replaces the
   account's file; nothing is merged. Otherwise it is the account's file:
   `~/.config/ethos-data/config.yaml` on Linux (`$XDG_CONFIG_HOME` respected),
   `%LOCALAPPDATA%\ethos-data\config.yaml` on Windows, and
   `~/Library/Application Support/ethos-data/config.yaml` on macOS.
-- Only `config set-*` creates a settings file. A file `ETHOS_DATA_CONFIG` names
-  must exist, and every other command stops and names it. Unsetting the last
-  value leaves the file empty.
+- Only `config set-…` and `config add-restricted-cache` create a settings
+  file. A file `ETHOS_DATA_CONFIG` names must exist, and every other command
+  stops and names it. Removing the last value leaves the file empty.
 - A handle or a command reads the settings once, into one snapshot that names
   each value's source. The snapshot also holds the download switch
   (`download=`, `ETHOS_DATA_DOWNLOAD`) and the metadata cache's policy and
@@ -59,8 +62,9 @@ which settings decided its inputs.
     3. with release bounds, the newest public release they admit, read from
        its tag ([0018](0018-numbered-catalogue-releases.md));
     4. the public `main` index.
-- `config show` prints the snapshot, the shared cache included, with
-  unreachable roots marked, then the precedence and the numbered lookup chain
+- `config show` prints the snapshot, with unreachable roots marked and the
+  restricted caches numbered; for an account that lists none, it says so, as
+  a normal state. Then it prints the precedence and the numbered lookup chain
   ([0012](0012-one-lookup-chain.md)).
 - Lessons name a lesson settings file in `ETHOS_DATA_CONFIG`, so they never
   touch the reader's own settings.
@@ -78,6 +82,10 @@ which settings decided its inputs.
   ETHOS_DATA_CONFIG=…` gives an environment its own file instead.
 - **Merging `ETHOS_DATA_CONFIG` over the account's file.** A CI job or a test
   run would inherit whatever the account has set.
+- **A root per dataset.** It is a table someone keeps per dataset, which goes
+  out of step with what is on disk ([0011](0011-access-class-picks-the-root.md)).
+  A local copy is linked into a cache instead
+  ([0016](0016-one-link-command-two-modes.md)).
 
 ## Consequences
 
@@ -87,12 +95,13 @@ which settings decided its inputs.
 - A results file can record every setting and where it came from.
 - A CI job or a test run names its own file in `ETHOS_DATA_CONFIG` and is
   isolated from its account.
-- On the cluster each user sets the served checkout, the shared cache and the
-  restricted cache in their own file, with the values the ICE-2 wiki gives,
-  and may move their public cache to a place the wiki recommends, such as
-  scratch storage. There is no machine-wide setting
+- On the cluster each user sets the served checkout, the cluster's public
+  cache and the restricted caches their groups admit in their own file, with
+  the values the ICE-2 wiki gives. There is no machine-wide setting
   ([0026](0026-internal-catalogue-on-the-cluster.md),
-  [0028](0028-read-only-shared-cache.md)).
+  [0028](0028-one-public-cache-on-the-cluster.md)).
+- An account that reads public data only lists no restricted cache, on the
+  cluster too, and every workflow that needs no restricted data runs.
 - See [Where the settings are stored](../../../how-to/data-users/set-up-your-machine.md#settings-file),
   [Use another settings file](../../../how-to/data-users/set-up-your-machine.md#another-settings-file)
   and [Configuration](../../../reference/configuration.md).
@@ -101,9 +110,10 @@ which settings decided its inputs.
 
 - [0011. Let the access class pick the root, and a link mean "read in place"](0011-access-class-picks-the-root.md)
 - [0012. Find every file through one lookup chain](0012-one-lookup-chain.md)
-- [0018. Number catalogue releases `vYYYY.MM.N` and let collections files bound them](0018-numbered-catalogue-releases.md)
+- [0016. Give one link command two modes](0016-one-link-command-two-modes.md)
+- [0018. Number catalogue releases `vMAJOR.MINOR.PATCH`, purge data only after a major release, and let collections files bound them](0018-numbered-catalogue-releases.md)
 - [0026. Serve the internal catalogue's latest release from one checkout on the cluster, and change it only through JuGit](0026-internal-catalogue-on-the-cluster.md)
-- [0028. Serve shared data on the cluster from a read-only shared cache](0028-read-only-shared-cache.md)
+- [0028. Share one public cache on the cluster](0028-one-public-cache-on-the-cluster.md)
 - [5. Building Block View](../building-blocks.md)
 - [6. Runtime View](../runtime.md)
 - [8. Crosscutting Concepts](../crosscutting-concepts.md)

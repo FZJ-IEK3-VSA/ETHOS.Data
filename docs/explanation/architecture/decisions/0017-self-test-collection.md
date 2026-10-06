@@ -45,13 +45,13 @@ three steps, stopping at the first that fails:
 - The file must keep naming published public data: a release that drops it
   makes the self-test fail.
 - On the cluster computer the files are usually read in place from the
-  shared cache ([0028](0028-read-only-shared-cache.md)).
+  cluster's public cache ([0028](0028-one-public-cache-on-the-cluster.md)).
 - See [Check that a download works](../../../how-to/data-users/set-up-your-machine.md#check-a-download).
 
 ## Related
 
 - [0015. Let each package's data command own its collection workflows](0015-package-commands-own-collections.md)
-- [0018. Number catalogue releases `vYYYY.MM.N` and let collections files bound them](0018-numbered-catalogue-releases.md)
+- [0018. Number catalogue releases `vMAJOR.MINOR.PATCH`, purge data only after a major release, and let collections files bound them](0018-numbered-catalogue-releases.md)
 - [0025. Draft the handoffs between roles from templates](0025-handoff-templates.md)
-- [0028. Serve shared data on the cluster from a read-only shared cache](0028-read-only-shared-cache.md)
+- [0028. Share one public cache on the cluster](0028-one-public-cache-on-the-cluster.md)
 - [6. Runtime View](../runtime.md)

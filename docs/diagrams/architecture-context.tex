@@ -22,7 +22,7 @@
 \node[person] (pmaint) at (14.5,-101) {\element{Package maintainer}{Person}{Wires a package to ETHOS.Data; keeps its test data; proposes datasets}};
 \node[sys]    (code)   at (14.5,-137) {\element{GitHub\\ETHOS.Data}{Software system: FZJ-IEK3-VSA; git, Actions, issues}{Code, docs and CI; tracker for the commands, API and docs}};
 \node[c4system, text width=30mm, minimum height=84mm] (sys) at (80,-72)
-  {\element{ETHOS.Data}{Software system: Python distribution \texttt{ethos\_data}}{Selects, locates, downloads and verifies dataset files; maintains and releases both catalogues; drafts the handoffs}\\[1.2ex]{\scriptsize\color{muted}On the cluster: a served checkout of the latest release, and a shared cache that only catalogue maintainers fill.}};
+  {\element{ETHOS.Data}{Software system: Python distribution \texttt{ethos\_data}}{Selects, locates, downloads and verifies dataset files; maintains and releases both catalogues; drafts the handoffs}\\[1.2ex]{\scriptsize\color{muted}On the cluster: a served checkout of the latest release; the cluster's public cache, which every cluster user shares; restricted caches, one per access combination.}};
 \node[sys, text width=27mm] (gh)   at (80,15)  {\element{GitHub\\ETHOS.Data-Catalogue}{Software system: FZJ-IEK3-VSA; git, raw files, issues}{The generated public catalogue, one tag per release}};
 \node[sys, text width=27mm] (prov) at (80,45)  {\element{Upstream data providers}{Software systems: HTTPS}{Publish the originals, sometimes checksums, and the licence terms}};
 \node[sys, text width=21mm] (wiki) at (145.5,40) {\element{ICE-2 wiki}{Software system: internal web wiki}{Real cluster locations, groups and contacts}};
@@ -78,9 +78,9 @@
 % the wiki line crosses the tracker line, which leaves a gap for it
 \fill[paper] (29.9,18.6) rectangle (32.1,21.4);
 \draw[c4manual] (wiki.north) -- (145.5,62) -| (31,6) -- (user.east |- 0,6);
-\node[lab=30mm, anchor=north west, align=left] at (32.5,60) {\rel{cluster locations, groups and contacts; the \texttt{config set-*} commands for the served checkout, the shared cache and the restricted cache; where to keep the public cache; release announcements}{wiki}};
+\node[lab=30mm, anchor=north west, align=left] at (32.5,60) {\rel{cluster locations, groups and contacts; the \texttt{config} commands for the served checkout, the cluster's public cache and the restricted caches; release announcements}{wiki}};
 % ---- note and key --------------------------------------------------------------------
-\node[note, text width=30mm, anchor=north west, align=left] at (-2.5,58) {Supporting roles act outside the package: catalogue maintainers escalate dCache problems to the storage operator; data users ask a dataset custodian for access; the cluster administrator grants group membership.};
+\node[note, text width=30mm, anchor=north west, align=left] at (-2.5,58) {Supporting roles act outside the package: catalogue maintainers escalate dCache problems to the storage operator; data users ask a dataset custodian for access; the cluster administrator grants group membership and sets the permissions of the cluster's public cache and the restricted caches.};
 \begin{scope}[shift={(86,-148)}]
   \keytitle{Key}
   \keynode{1}{c4personkey}{Person}

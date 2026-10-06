@@ -35,8 +35,11 @@ and a shared cache over them either corrupts files or duplicates them.
 
 ## Consequences
 
-- A package is told what a dataset contains. It cannot patch a checksum or
-  ship a slightly different copy.
+- A package is told what a dataset contains. Its collections file cannot
+  patch a checksum or ship a slightly different copy.
+- A package's bundle may hold bytes or descriptions the catalogue has not
+  accepted yet, until it is realigned
+  ([0021](0021-bundles-ahead-of-the-catalogue.md)).
 - Every package shares resource identity, and with it the places in a cache
   ([0004](0004-cache-paths-from-resource-identity.md)).
 - A new input starts with a proposal to the catalogue
@@ -49,7 +52,8 @@ and a shared cache over them either corrupts files or duplicates them.
 - [0004. Derive cache paths from resource identity, and never reuse a name](0004-cache-paths-from-resource-identity.md)
 - [0010. Read settings from one file per account, once per handle](0010-one-settings-file-per-account.md)
 - [0014. Name workflow inputs in the collection and pair test and full variants](0014-named-inputs-and-test-full-variants.md)
-- [0018. Number catalogue releases `vYYYY.MM.N` and let collections files bound them](0018-numbered-catalogue-releases.md)
+- [0018. Number catalogue releases `vMAJOR.MINOR.PATCH`, purge data only after a major release, and let collections files bound them](0018-numbered-catalogue-releases.md)
+- [0021. Let a bundle be ahead of the catalogue, and warn until it is realigned](0021-bundles-ahead-of-the-catalogue.md)
 - [0027. Release the public catalogue as a generated view, tagged on GitHub](0027-public-catalogue-releases-on-github.md)
 - [3. Context and Scope](../context.md)
 - [4. Solution Strategy](../solution-strategy.md)

@@ -45,7 +45,7 @@ forgotten flag must not produce a wrong result that looks right.
 ## Related
 
 - [0003. One catalogue describes the data; each package's collections file selects from it](0003-one-catalogue-many-collections.md)
-- [0013. Treat every input as required, and describe what is missing](0013-every-input-is-required.md)
+- [0013. Treat every input as required, and say what is missing](0013-every-input-is-required.md)
 - [0019. Publish new versions as revisions or successors; published objects never change](0019-revisions-and-successors.md)
-- [0020. Keep a package's test data in a repository bundle that the catalogue publishes](0020-repository-bundles.md)
+- [0020. Keep attributed data in bundles that are authoritative for their package](0020-repository-bundles.md)
 - [6. Runtime View](../runtime.md)

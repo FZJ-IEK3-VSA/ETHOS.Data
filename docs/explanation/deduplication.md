@@ -16,9 +16,10 @@ nobody told its maintainer. Now the two tools disagree about what
 "corine-land-cover" means, and there is no place where that disagreement is
 visible. Both still run. Both still produce numbers.
 
-Add a shared cache to save disk space and it gets worse, not better: two tools
-writing different bytes to the same path is a corruption, and two tools writing
-the same bytes to different paths is the disk usage you were trying to avoid.
+Let the tools share one cache to save disk space and it gets worse, not better:
+two tools writing different bytes to the same path is a corruption, and two
+tools writing the same bytes to different paths is the disk usage you were
+trying to avoid.
 
 ## The split
 
@@ -84,30 +85,44 @@ resolved — a difference that shows up as a missing file, far from its cause.
 
 ## Why the catalogue is versioned, not live
 
-A collections file pins its catalogue with a URL:
+A collections file names the catalogue releases it accepts:
 
 ```yaml
-catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/v2026.09/datacatalog.json
+catalog:
+  min_version: v1.2.0
 ```
 
-A **tag**, not a branch. A released version of a tool must resolve to the same
-bytes forever, or "reproducible" means nothing. `ethos-data` enforces the
-distinction where it matters — a pinned URL's contents cannot change, so the
-catalogue is cached on disk indefinitely; a URL naming `main`, `master`, `HEAD`,
-`latest`, `dev` or `develop` is recognised as moving and re-fetched every time.
+Each release is a **tag**, `vMAJOR.MINOR.PATCH`, not a branch. A released
+version of a tool must resolve to the same bytes, or "reproducible" means
+nothing. `ethos-data` enforces the distinction where it matters — a tag's
+contents cannot change, so its catalogue is cached on disk indefinitely; a URL
+naming `main`, `master`, `HEAD`, `latest`, `dev` or `develop` is recognised as
+moving and re-fetched every time.
 
-This is also why a withdrawn dataset does not break old pins. A collections file
-pointing at `v2026.09` keeps working after the dataset is unpublished; it breaks
-only when somebody repoints it at a newer catalogue that no longer describes
-what it asks for — and then the error says exactly that, and suggests pinning an
-older one.
+This is also why a withdrawal need not break a released tool. Within a major
+release, dCache keeps every version it published, so a collections file
+whose bounds stop before the withdrawal, `exact_version: v1.3` say, keeps
+working; the bytes go only after a major release. A collections file that
+admits a later release reads a catalogue without the dataset, and the error
+says plainly that the dataset cannot be found, as for a mistyped name. Release
+notices announce withdrawals.
+
+!!! warning "Gap: `catalog:` takes a URL"
+    The code takes only a catalogue path or URL in `catalog:`, such as a
+    release tag's `datacatalog.json` on GitHub, and has no release bounds.
+    Its error for an unknown dataset lists the datasets the catalogue has
+    and, for the public catalogue, suggests that the dataset was withdrawn
+    and that an older catalogue would still describe it.
 
 ## What a tool gives up
 
 Being told, rather than deciding, what a dataset contains. A tool cannot patch
 a checksum locally, or quietly ship a slightly different version of a shared
-raster. If a dataset needs to change, that change happens in the catalogue,
-once, where every consumer sees it.
+raster. A package's bundle may hold a change the catalogue has not accepted
+yet, but only for that package and never quietly: the package reads it in
+place, never through a cache, and warns until the bundle is realigned. If a
+dataset needs to change, that change happens in the catalogue, once, where
+every consumer sees it.
 
 That is a real constraint and it is the point of the exercise. The alternative
 is twelve tools that each believe they are using CORINE Land Cover 2018.

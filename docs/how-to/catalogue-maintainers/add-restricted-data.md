@@ -1,61 +1,78 @@
 # Add restricted data
 
-Describe a licensed dataset in the internal catalogue and register, or move,
-its authorised installation in the restricted cache. Restricted data is never
-downloaded, never uploaded and never written into the public cache; readers
-use it where it lies, if their group may. You need the terms of the licence,
-the custodian's agreement and a restricted cache root on the cluster computer.
+Describe restricted data in the internal catalogue and register its
+authorised installation in the restricted cache of its access combination.
+Restricted data is licensed data, or data the institute holds without
+publishing it. It is never downloaded, never uploaded and never written into
+a public cache; readers use it where it lies, if the cache admits them. You
+need the terms of the licence, the custodian's agreement and, on the cluster
+computer, the restricted cache of the people who may read the data, for
+example `/shared/ethos/restricted/<group>/`.
 
 ## 1. Describe it {#restricted-data}
 
 Follow [Add a dataset](add-a-dataset.md#restricted-installations)
 with `ethos:access: restricted` and, unless the custodian agreed to list it
-publicly, `ethos:visibility: hidden` with an embargo block. Record the actual
-agreement in `ethos:restriction` and `licenses` or `ethos:license_note`. A
-restricted dataset has no `ethos:remote_prefix` and is never marked
-`ethos:uploaded`. Build it.
+publicly, `ethos:visibility: hidden` with an embargo block. Say in
+`ethos:restriction` who may obtain it and how, with `homepage` and
+`ethos:contact`: a user without a copy sees them in the error. Record the
+terms in `licenses` or `ethos:license_note`. A restricted dataset has no
+`ethos:remote_prefix` and is never marked `ethos:uploaded`. Build it.
 
 ## 2. Register the installation
 
 ```bash
-ethos-data config set-restricted-cache /shared/ethos/restricted
-ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json \
-    link gadm-3.6 /projects/licensed/gadm36_levels_shp
+ethos-data config add-restricted-cache /shared/ethos/restricted/<group>
+ethos-data --catalog /shared/ethos/catalogue/datacatalog.json \
+    --root /shared/ethos/restricted/<group> \
+    link gadm-3.6 /projects/licensed/gadm36_levels_shp --catalog-root <your clone>
 ```
 
-Naming a restricted dataset puts its entry into the restricted cache; that is
-how one authorised installation is recorded, by somebody who knows it is
-authorised. `link --all` never does this.
+Naming a restricted dataset is how one authorised installation is
+registered, by somebody who knows it is authorised; `link --all` never does
+this. The entry goes into a restricted cache your account lists: the one
+`--root` names, or the only one listed. With several listed and no `--root`,
+or none listed, `link` refuses. `--catalog-root` records the installation in
+your own clone of the source catalogue.
+
+!!! warning "Gap: one restricted cache"
+    The code reads one restricted cache per account, set with
+    `config set-restricted-cache DIR` or `ETHOS_RESTRICTED_DIR`;
+    `config add-restricted-cache` does not exist. `link` and `materialize`
+    put a restricted dataset's entry into that cache whatever `--root` names,
+    so set it to the cache of the dataset's group first.
 
 ## 3. Or move it into the restricted cache
 
-If the terms allow a local copy, materialize into the restricted root instead
+If the terms allow a local copy, materialize into the restricted cache instead
 of linking:
 
 ```bash
-ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json \
+ethos-data --catalog /shared/ethos/catalogue/datacatalog.json \
+    --root /shared/ethos/restricted/<group> \
     materialize gadm-3.6 --from /projects/licensed/gadm36_levels_shp --dry-run
-ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json \
-    materialize gadm-3.6 --from /projects/licensed/gadm36_levels_shp
+ethos-data --catalog /shared/ethos/catalogue/datacatalog.json \
+    --root /shared/ethos/restricted/<group> \
+    materialize gadm-3.6 --from /projects/licensed/gadm36_levels_shp --catalog-root <your clone>
 ```
 
-The copy is verified against the catalogue's hashes. Set the directory's group
-to the licence group and remove read permission for everyone else before
-announcing it.
+The copy is verified against the catalogue's hashes. It inherits the group of
+the cache directory; check it with `ls -ld` before announcing it.
 
 ## 4. Check
 
 ```python
 import ethos_data
 
-catalog = ethos_data.load_catalog("/shared/ethos/catalogue/current/datacatalog.json")
+catalog = ethos_data.load_catalog("/shared/ethos/catalogue/datacatalog.json")
 resources = catalog.resources("gadm-3.6")
 findings = ethos_data.verify(catalog, resources, deep=True)
 assert all(finding.ok for finding in findings)
 ```
 
 Then, as a user outside the group, expect `ethos-data fetch gadm-3.6/<file>`
-to fail with an explanation and no copy.
+to be refused before anything is downloaded, with an error that names the
+dataset and how to obtain it.
 
 ## 5. Release
 

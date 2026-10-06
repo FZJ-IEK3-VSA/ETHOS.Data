@@ -1,15 +1,16 @@
 # 0023. Run every catalogue workflow that writes as a pipeline that plans before it acts
 
-**Status:** proposed · **Date:** 2026-10-02 · **Implemented by:** #20, #22, a new PR (pipelines: build, upload, publish and the cache copies), #23, #26
+**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #20, #22, a new PR (pipelines: build, upload, publish and the cache copies), #23, #26
 
 ## Context
 
 Accepting, releasing and removing a dataset take several steps, and their
 order must not depend on a maintainer's memory: bytes are deleted only after
-the release that drops their metadata, and a release waits for verified
-uploads. Each workflow needs a dry run, a refusal before its first side
-effect, and a way to resume after an interruption. Library code must be
-testable without the command line or the network.
+a major release recorded after their removal, a release waits for verified
+uploads, and its version must match what changed. Each workflow needs a dry
+run, a refusal before its first side effect, and a way to resume after an
+interruption. Library code must be testable without the command line or the
+network.
 
 ## Decision
 
@@ -35,10 +36,10 @@ pipeline of stages:
 | `catalog remove NAMES --purge` | check, cache, store, tombstone |
 
 S is a cache a maintainer names with `--root`, in practice the cluster's
-shared cache ([0016](0016-one-link-command-two-modes.md)), and C is the
-maintainer's own clone of the source catalogue. `catalog status`, `build --check` and
-`publish --check` only read and compare, `check-store` is a diagnostic script,
-and the one-time `catalog migrate` is not a pipeline.
+public cache or a restricted cache ([0016](0016-one-link-command-two-modes.md)),
+and C is the maintainer's own clone of the source catalogue. `catalog status`,
+`build --check` and `publish --check` only read and compare, `check-store` is
+a diagnostic script, and the one-time `catalog migrate` is not a pipeline.
 
 - Every stage plans before any stage acts. A plan may read anything, such as
   hashes or the store, and writes nothing; `--dry-run` prints the plan.
@@ -55,8 +56,22 @@ and the one-time `catalog migrate` is not a pipeline.
   commits and tags the release it makes ([0026](0026-internal-catalogue-on-the-cluster.md)).
 - Uploading bytes and releasing metadata are separate commands. The release's
   `check` stage refuses a public dataset whose upload was not verified after
-  its last inventory change. A release's `--push` and `--upload` are opt-in,
-  and a rerun with them finishes the release.
+  its last inventory change. It also computes the smallest level the changes
+  since the last release require, from the steps recorded in the status
+  files, the index rows of both catalogues compared with the last release
+  (access and visibility) and a git diff of the clone against the last tag
+  (metadata), and refuses a version that is not the next patch, minor or
+  major of the last release at or above that level
+  ([0018](0018-numbered-catalogue-releases.md)). A release's `--push` and
+  `--upload` are opt-in, and a rerun with them finishes the release.
+- The purge's `check` stage requires a major release recorded after the
+  removal ([0018](0018-numbered-catalogue-releases.md)). It also refuses,
+  before any deletion, when a recorded entry lies in a cache this account
+  cannot write, naming the dataset and the cache. Its `cache` stage deletes
+  the recorded links and copies in the cluster's public cache and in the
+  restricted caches. Entries nobody recorded, such as downloads, are
+  reported, not deleted, and public caches on other machines are never
+  touched.
 - The store settings come from `catalog.yaml`'s `ethos:store` (`remote`,
   `vo_path`, `oidc_profile`, `frontend`), are never published, and upload
   flags override them.
@@ -83,6 +98,7 @@ and the one-time `catalog migrate` is not a pipeline.
 
 - [0009. Reach dCache, downloads, metadata sources and git through ports with fakes](0009-ports-and-fakes-for-external-systems.md)
 - [0016. Give one link command two modes](0016-one-link-command-two-modes.md)
+- [0018. Number catalogue releases `vMAJOR.MINOR.PATCH`, purge data only after a major release, and let collections files bound them](0018-numbered-catalogue-releases.md)
 - [0019. Publish new versions as revisions or successors; published objects never change](0019-revisions-and-successors.md)
 - [0022. Record each dataset's state in a status file](0022-dataset-status-files.md)
 - [0026. Serve the internal catalogue's latest release from one checkout on the cluster, and change it only through JuGit](0026-internal-catalogue-on-the-cluster.md)

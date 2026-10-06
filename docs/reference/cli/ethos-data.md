@@ -89,6 +89,15 @@ variables, scopes and precedence. For setup steps, see
     [Check that a download works](../../how-to/data-users/set-up-your-machine.md#check-a-download).
     Both are to be implemented separately.
 
+!!! warning "Gap: `set-root` is to be removed, and the restricted cache to become a list"
+    With [one settings file per
+    account](../../explanation/architecture/decisions/0010-one-settings-file-per-account.md),
+    `config set-root` and `unset-root` go, and `config add-restricted-cache DIR`
+    and `remove-restricted-cache DIR` take the place of
+    `set-restricted-cache` and `unset-restricted-cache`. `config show`
+    numbers the restricted caches, marks one it cannot reach, and says when
+    the account lists none. To be implemented separately.
+
 ## `link [dataset] [directory]` {#link-dataset-directory}
 
 Point cache entries at data already on this machine — one dataset by name, or
@@ -99,7 +108,7 @@ ethos-data link global-wind-atlas /data/GWA_4.0     # this directory
 ethos-data link global-wind-atlas                   # its source_dir
 ethos-data link global-wind-atlas --force           # repoint an existing link
 ethos-data link --all                               # every source_dir there is
-ethos-data link --all --root /shared/ethos/public   # into a cache named here
+ethos-data link --all --root /shared/ethos/cache    # into a cache named here
 ethos-data link --all --prune --dry-run             # review a full rebuild first
 ```
 
@@ -162,8 +171,20 @@ while writing nothing. Read the destination there rather than from
 configured with and never sees a global `--root`. A namespace built in a
 directory nobody meant still reads as success from the terminal, so the line
 naming the root is the one worth checking. `--root` after `link` overrides all
-of this for this run alone, which is how a maintainer populates a shared cache
-from a machine configured to read its own.
+of this for this run alone, which is how a maintainer fills the cluster's
+public cache from a machine configured to read its own.
+
+!!! warning "Gap: where `link` puts an entry is to change"
+    With [decision
+    0016](../../explanation/architecture/decisions/0016-one-link-command-two-modes.md),
+    the global `--root` names the cache that `link`, `unlink` and
+    `materialize` write. A restricted dataset's entry goes only into a
+    restricted cache the settings list, and a public dataset's never into
+    one. Without `--root`, a public dataset's entry goes into the public
+    cache and a restricted dataset's into the only listed restricted cache;
+    with several listed, or none, the command refuses. `link --all` requires
+    its `--root`, links public data only, and refuses a listed restricted
+    cache. To be implemented separately.
 
 ### What `--prune` removes {#namespace-prune}
 
@@ -184,6 +205,13 @@ On Windows a symbolic link needs Developer Mode or an elevated shell. Without
 either, use `config set-root` instead. A junction (`mklink /J`) is **not** a
 substitute: it is reported as an ordinary directory, so the cache would treat
 borrowed data as a copy it owns and could write downloads into it.
+
+!!! warning "Gap: without symbolic links, `link` is to offer a copy"
+    With [decision
+    0016](../../explanation/architecture/decisions/0016-one-link-command-two-modes.md),
+    `config set-root` goes. Where no symbolic link can be made, `link`
+    refuses and offers `ethos-data materialize NAME --from DIR`, a verified
+    copy. To be implemented separately.
 
 ## `unlink <dataset>`
 
@@ -220,7 +248,7 @@ when no link was replaced.
 ## `catalog`
 
 Build, upload and publish catalogue metadata and dataset bytes, and probe storage
-access. Shared cache links are `ethos-data link`, not a `catalog` subcommand. See
+access. Cache links are `ethos-data link`, not a `catalog` subcommand. See
 the [`ethos-data catalog` reference](catalog.md).
 
 ## Exit status

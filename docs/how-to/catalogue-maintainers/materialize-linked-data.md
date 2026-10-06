@@ -7,17 +7,21 @@ filesystem. Paths are examples.
 
 ## 1. Prepare the destination
 
-Set the permissions and default ACLs of the cache root first: copying does not
-carry over the source's ownership. Keep the source unchanged while copying.
+Check the permissions and default ACLs of the cache root first; on the
+cluster computer the administrators set them. Copying does not carry over the
+source's ownership. Keep the source unchanged while copying.
 
 ## 2. Preview, then copy {#materialize-copies}
 
 ```bash
-ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json --root /shared/ethos/public \
+ethos-data --catalog /shared/ethos/catalogue/datacatalog.json --root /shared/ethos/cache \
     materialize climate-inputs --dry-run
-ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json --root /shared/ethos/public \
-    materialize climate-inputs
+ethos-data --catalog /shared/ethos/catalogue/datacatalog.json --root /shared/ethos/cache \
+    materialize climate-inputs --catalog-root <your clone>
 ```
+
+`--catalog-root` records the copy in your own clone of the source catalogue,
+in place of the link it replaces.
 
 Only the files the catalogue describes are copied, each is checked against its
 recorded size and hash, and the link is replaced only after the whole copy
@@ -36,8 +40,8 @@ used.
 ## 3. Check the result
 
 ```bash
-ls -ld /shared/ethos/public/climate-inputs
-cat /shared/ethos/public/climate-inputs/.ethos-data-materialized.json
+ls -ld /shared/ethos/cache/climate-inputs
+cat /shared/ethos/cache/climate-inputs/.ethos-data-materialized.json
 ```
 
 Expect a real directory and a provenance record naming the source and the
@@ -46,16 +50,26 @@ with `deep=True`.
 
 ## 4. Retire the original {#retire-the-original}
 
-While the original directory remains the dataset's `source_dir`, a rebuild
-reads it, so the original stays the authority and the copy may fail
-verification after an edit there. Before the original is removed:
+While the original directory is the dataset's build input (`source_dir` in
+its status file), a rebuild reads it, so the original stays the authority and
+the copy may fail verification after an edit there. Before the original is
+removed, freeze the dataset on its copy, in your own clone:
 
-1. In `dataset.yaml`, remove `source_dir` and set `ethos:frozen: true`.
-2. Rebuild. The recorded inventory is kept as it is; the copy is not rehashed,
-   so the independent baseline that detects later corruption survives.
-3. [Release](release-the-catalogue.md) the new internal version.
+```bash
+ethos-data catalog --catalog-root <your clone> record climate-inputs     --copy /shared/ethos/cache/climate-inputs
+```
 
-Ask the owner of the original to check for scripts, links and root overrides
-that still read the old path before deleting it. A public copy can afterwards
-be [uploaded](upload-a-dataset.md); a restricted copy stays local, see
-[Add restricted data](add-restricted-data.md).
+`catalog record` checks the copy file by file, makes it the authority and
+retires `source_dir`. The recorded inventory is kept as it is; the copy is not
+rehashed, so the independent baseline that detects later corruption survives.
+Commit the status file on a branch and merge it by merge request on JuGit.
+
+!!! warning "Gap: no `catalog record`"
+    The code keeps the state in `dataset.yaml`: remove `source_dir` there, set
+    `ethos:frozen: true` and rebuild. See [dataset status
+    files](../../explanation/architecture/decisions/0022-dataset-status-files.md).
+
+Ask the owner of the original to check for scripts and links that still read
+the old path before deleting it. A public copy can afterwards be
+[uploaded](upload-a-dataset.md); a restricted copy stays in its restricted
+cache, see [Add restricted data](add-restricted-data.md).

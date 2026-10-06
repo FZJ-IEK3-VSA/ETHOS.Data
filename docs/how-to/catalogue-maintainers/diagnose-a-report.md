@@ -22,7 +22,7 @@ Use the reporter's catalogue, collection and cache settings, not yours.
 | `IncompleteCatalog`, descriptor or shard missing | The served copy is stale or partial: an index from one revision beside inventories from another. [Release](release-the-catalogue.md#internal) the complete version again; copying only the index is not a fix. |
 | Unknown dataset or unresolvable collection | Spelling, revision, a hidden dataset seen through the public catalogue, or a staging entry gone. |
 | Cluster catalogue unreadable | Filesystem permissions, or a checkout that was moved or is half-way through an update. |
-| Data read from an unexpected place | A dataset-root override, a staging entry or a cache link on the reporter's machine. `config show` and the plan name them. |
+| Data read from an unexpected place | A staging entry, a bundle, or a link in one of the reporter's caches. `config show` and the plan name them. |
 | Download from an unexpected host | `ETHOS_PUBLICATION_URL` or `publication_url` in one of the configuration files `config show` lists. |
 | Hash mismatch | Compare with the recorded inventory and keep the evidence before repairing. A linked copy was edited at its source; a downloaded copy was damaged; or the published object was replaced, which must never happen. |
 | Public view misses an accepted dataset | Visibility, the generated diff, whether the public revision was released, and which revision the package pins. |
@@ -60,7 +60,6 @@ ethos-data catalog upload <dataset> --verify-only --no-chmod
 | Anonymous 401 or 403 on public data | The prefix lost its public mode; check the object permissions with the storage administrator. |
 | 404 or wrong size | Compare the manifest path, remote prefix, transfer summary and publication URL. |
 | Immutable-transfer conflict | Somebody tried to overwrite a released object. New paths; never delete to retry. |
-| Transfer succeeded, anonymous verification failed | An internal upload; verification is anonymous by design. |
 | Long first read, locality `NEARLINE` | Tape staging; report persistent failures with the path and time. |
 
 Rerun only the failed selection after fixing the cause; earlier transfers are
@@ -71,8 +70,8 @@ probes with temporary objects and cleans up.
 
 | Cause | Fix |
 | --- | --- |
-| Stale served copy | Release the complete internal version again. |
-| Broken or moved link | Repoint it with `link --force`, or materialize. |
+| Stale served copy | Run `catalog update-checkout` on the cluster computer, as under [Update the internal catalogue](release-the-catalogue.md#internal). |
+| Broken or moved link | Repoint it with `link --force`, or materialize, each with `--catalog-root <your clone>`. |
 | Damaged download on the reporter's machine | The reporter runs `verify --repair`. |
 | Wrong or missing metadata | Correct `dataset.yaml`, rebuild, release. |
 | Missing or unreadable bytes on dCache | Upload again or fix permissions, then verify. |

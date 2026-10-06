@@ -1,6 +1,6 @@
 # 0024. Let unresolved licensing block distribution, not development
 
-**Status:** proposed · **Date:** 2026-09-14 · **Implemented by:** #21
+**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #21, #25
 
 ## Context
 
@@ -23,6 +23,7 @@ licensing is unsettled:
 | `link --all` | skips the dataset and links the rest |
 | `materialize` into a cache | refuses |
 | `catalog upload` | refuses, except `--verify-only` |
+| `bundle update`, `bundle export`, and reading a bundle that holds the dataset | refuse ([0020](0020-repository-bundles.md)) |
 | `staging add` | proceeds |
 
 - The licence status is promoted into the index row, so a reader knows it
@@ -47,6 +48,7 @@ licensing is unsettled:
 
 - [0011. Let the access class pick the root, and a link mean "read in place"](0011-access-class-picks-the-root.md)
 - [0016. Give one link command two modes](0016-one-link-command-two-modes.md)
+- [0020. Keep attributed data in bundles that are authoritative for their package](0020-repository-bundles.md)
 - [0022. Record each dataset's state in a status file](0022-dataset-status-files.md)
 - [0027. Release the public catalogue as a generated view, tagged on GitHub](0027-public-catalogue-releases-on-github.md)
 - [8. Crosscutting Concepts](../crosscutting-concepts.md)

@@ -1,9 +1,9 @@
 % Dynamic view (arc42 6.3): from a proposal to a served release. One lane per
 % place a step runs or writes: the package maintainer's checkout, the
 % catalogue maintainer's own clone, GitHub, JuGit, dCache and the cluster
-% computer. Time runs down; the numbers give the order. A step's arrows run
-% sideways to what it writes, through lanes that are empty at that height.
-% Coordinates are millimetres; the lanes split 0..163.
+% computer. Time runs down; the numbers give the order, as in the chapter's
+% list. A step's arrows run sideways to what it writes, through lanes that are
+% empty at that height. Coordinates are millimetres; the lanes split 0..163.
 \begin{tikzpicture}[
   x=1mm, y=1mm,
   head/.style={anchor=north, minimum height=19mm, inner sep=1.2mm, font=\sffamily\footnotesize},
@@ -31,7 +31,7 @@
 \newcommand{\store}[2]{{\bfseries #1}\\[-0.2ex]{\color{muted}[#2]}}
 % lane borders; the lanes' centres are 13.5, 49.5, 83, 104.5, 125.5 and 149.5
 \def\la{27}\def\lb{72}\def\lc{94}\def\ld{115}\def\le{136}
-\def\ybot{-221}
+\def\ybot{-237.5}
 
 % -- lanes ----------------------------------------------------------------------
 \node[c4person, head, minimum width=0pt, text width=22mm] at (13.5,-3)
@@ -49,96 +49,95 @@
 \foreach \x in {\la,\lb,\lc,\ld,\le}
   \draw[lane] (\x,-23) -- (\x,\ybot);
 
-% -- 1-2: propose -------------------------------------------------------------------
+% -- 1: propose ---------------------------------------------------------------------
 \node[step=18.4mm] (s1) at (4.8,-26)
-  {\texttt{<tool>-data}\\\texttt{propose DIR}\\\desc{checks the draft, inventories the bytes, prints the proposal}};
+  {\texttt{<tool>-data}\\\texttt{propose DIR}\\\desc{checks the draft or the bundle, inventories the bytes, prints the proposal}};
 \node[stepno] at (2.4,-26 |- s1.center) {1};
 \node[item, text width=36.6mm] (issue) at (74,-26)
-  {{\bfseries Proposal, in an issue}\\\desc{on GitHub; on JuGit for internal or restricted data}};
+  {{\bfseries Proposal, in an issue}\\\desc{on GitHub; on JuGit for restricted data}};
 \draw[c4manual] (s1.east |- 0,-31) -- (issue.west |- 0,-31);
-\node[stepno] at (30.5,-31) {2};
-\node[lbl, above] at (51,-31) {posts the proposal};
+\node[lbl, above] at (49.5,-31) {posts the proposal};
 
-% -- 3-4: accept and build, in the own clone ----------------------------------------
-\node[step] (s3) at (31.5,-41)
-  {\texttt{catalog add DRAFT}\\\desc{checks and places the draft, then builds it}};
-\node[stepno] at (29.2,-41 |- s3.center) {3};
-\draw[then] (issue.south -| 77,0) |- node[lbl, right, pos=0.3] {reviews} (s3.east |- 0,-47);
-\node[step] (s4) at (31.5,-58)
+% -- 2-3: accept and build, in the own clone ----------------------------------------
+\node[step] (s2) at (31.5,-41)
+  {\texttt{catalog add DRAFT}\\\desc{checks and places the draft, then builds it}\\[0.5ex]
+   or \texttt{catalog add-bundle DIR}\\\desc{copies a bundle's ahead datasets into a build input}};
+\node[stepno] at (29.2,-41 |- s2.center) {2};
+\draw[then] (issue.south -| 77,0) |- node[lbl, right, pos=0.3] {reviews} (s2.east |- 0,-47);
+\node[step] (s3) at (31.5,-66)
   {\texttt{catalog build NAME}\\\desc{inventory, descriptor and index; review with \texttt{-{}-check} and \texttt{git~diff}}};
-\node[stepno] at (29.2,-58 |- s4.center) {4};
-\draw[then] (s3.south -| 50.5,0) -- (s4.north -| 50.5,0);
+\node[stepno] at (29.2,-66 |- s3.center) {3};
+\draw[then] (s2.south -| 50.5,0) -- (s3.north -| 50.5,0);
 
-% -- 5: make the bytes available, by access class -------------------------------------
-\draw[seqframe] (25,-74) rectangle (161,-137);
-\node[seqframelabel] at (25,-74) {alt};
-\node[guard] at (52.5,-74.3) {[by access class]};
-\draw[then] (s4.south -| 50.5,0) -- (50.5,-79);
+% -- 4: make the bytes available, by access class -------------------------------------
+\draw[seqframe] (25,-83) rectangle (162,-144.5);
+\node[seqframelabel] at (25,-83) {alt};
+\node[guard] at (52.5,-83.3) {[by access class]};
+\draw[then] (s3.south -| 50.5,0) -- (50.5,-88);
 
-\node[step] (s5a) at (31.5,-79)
+\node[step] (s4a) at (31.5,-88)
   {\textbf{public:} \texttt{catalog upload NAME}\\\desc{check, transfer, permissions, verify, record}};
-\node[stepno] at (29.2,-79 |- s5a.center) {5};
-\node[st=18] (root) at (125.5,-85.5) {\store{Publication root}{revision folders}};
-\draw[c4maint] (s5a.east |- root) -- node[lblbg, above, pos=0.42] {copy, \texttt{chmod}, read back} (root.west |- s5a.east |- root);
+\node[stepno] at (29.2,-88 |- s4a.center) {4};
+\node[st=18] (root) at (125.5,-88 |- s4a.center) {\store{Publication root}{revision folders}};
+\draw[c4maint] (s4a.east) -- node[lblbg, above, pos=0.42] {copy, \texttt{chmod}, read back} (root.west |- s4a.east);
 
-\draw[seqframe, dash pattern=on 2pt off 1.5pt] (25,-94.5) -- (161,-94.5);
-\node[step] (s5b) at (31.5,-97)
-  {\textbf{internal or linked:}\\\texttt{ethos-data link NAME DIR}\\or \texttt{materialize NAME},\\\texttt{-{}-root <shared cache>}\\\texttt{-{}-catalog-root <clone>}};
-\node[stepno] at (29.2,-97 |- s5b.center) {5};
-\node[st=20] (shared) at (149.5,-107) {\store{Shared cache}{read only for users}};
-\draw[c4rel] (s5b.east |- shared) -- node[lblbg, above] {links or copies} (shared.west |- s5b.east |- shared);
+\node[step] (s4b) at (31.5,-103)
+  {\textbf{and, on the cluster:}\\\texttt{ethos-data link NAME DIR}\\or \texttt{materialize NAME},\\\texttt{-{}-catalog-root <clone>}};
+\node[stepno] at (29.2,-103 |- s4b.center) {4};
+\node[st=22] (public) at (149.25,-103 |- s4b.center) {\store{The cluster's public cache}{shared by every cluster user}};
+\draw[c4rel] (s4b.east) -- node[lblbg, above] {links or copies} (public.west |- s4b.east);
 
-\draw[seqframe, dash pattern=on 2pt off 1.5pt] (25,-118) -- (161,-118);
-\node[step] (s5c) at (31.5,-120.5)
-  {\textbf{restricted:}\\\texttt{ethos-data link NAME DIR}\\\texttt{-{}-catalog-root <clone>}};
-\node[stepno] at (29.2,-120.5 |- s5c.center) {5};
-\node[st=20] (restricted) at (149.5,-127.5) {\store{Restricted cache}{one group per dataset}};
-\draw[c4rel] (s5c.east |- restricted) -- node[lblbg, above] {registers an installation} (restricted.west |- s5c.east |- restricted);
+\draw[seqframe, dash pattern=on 2pt off 1.5pt] (25,-121) -- (162,-121);
+\node[step] (s4c) at (31.5,-125.5)
+  {\textbf{restricted:} \texttt{ethos-data}\\\texttt{[-{}-root <restricted cache>]}\\\texttt{link NAME DIR}\\\texttt{-{}-catalog-root <clone>}};
+\node[stepno] at (29.2,-125.5 |- s4c.center) {4};
+\node[st=22] (restricted) at (149.25,-125.5 |- s4c.center) {\store{Restricted caches}{one per access combination}};
+\draw[c4rel] (s4c.east) -- node[lblbg, above] {registers an installation} (restricted.west |- s4c.east);
 
-% -- 6-8: record, merge, release ----------------------------------------------------
-\node[step] (s6) at (31.5,-141)
+% -- 5-7: record, merge, release ----------------------------------------------------
+\node[step] (s5) at (31.5,-148.5)
   {\texttt{catalog record NAME}\\\desc{checks the copy and freezes the dataset}};
-\node[stepno] at (29.2,-141 |- s6.center) {6};
-\draw[then] (50.5,-137) -- (s6.north -| 50.5,0);
+\node[stepno] at (29.2,-148.5 |- s5.center) {5};
+\draw[then] (50.5,-144.5) -- (s5.north -| 50.5,0);
 
-\node[hand] (s7) at (31.5,-158)
+\node[hand] (s6) at (31.5,-165.5)
   {reviews the diff, commits on a branch, opens a merge request};
-\node[stepno] at (29.2,-158 |- s7.center) {7};
-\draw[then] (s6.south -| 50.5,0) -- (s7.north -| 50.5,0);
-\node[item, text width=15.6mm] (mr) at (95.5,-158) {{\bfseries Merge request}\\\desc{reviewed, merged}};
-\draw[c4manual] (s7.east |- mr) -- node[lblbg, above] {pushes the branch} (mr.west);
+\node[stepno] at (29.2,-165.5 |- s6.center) {6};
+\draw[then] (s5.south -| 50.5,0) -- (s6.north -| 50.5,0);
+\node[item, text width=15.6mm] (mr) at (95.5,-165.5) {{\bfseries Merge request}\\\desc{reviewed, merged}};
+\draw[c4manual] (s6.east |- mr) -- node[lblbg, above] {pushes the branch} (mr.west);
 
-\node[step] (s8) at (31.5,-175)
-  {\texttt{catalog release vYYYY.MM.N}\\\texttt{-{}-public DIR}\\\texttt{-{}-push -{}-upload}\\\desc{from the merged state; also drafts the notices}};
-\node[stepno] at (29.2,-175 |- s8.center) {8};
-\draw[then] (s7.south -| 50.5,0) -- node[lbl, right] {once merged} (s8.north -| 50.5,0);
-\node[st=18] (cat) at (125.5,-179.5) {\store{\texttt{catalogue/}}{latest public catalogue}};
-\draw[c4maint] (s8.east |- cat) -- node[lblbg, above, pos=0.42] {sync} (cat.west);
-\node[st=19] (pub) at (83,-200) {\store{Public catalogue}{release commit, tag}};
-\node[st=19] (src) at (104.5,-200) {\store{Source catalogue}{release commit, tag}};
-\draw[c4rel] (s8.east |- 0,-189) -- (104.5,-189) -- (src.north);
-\draw[c4rel] (83,-189) -- (pub.north);
-\node[lbl, above] at (76.5,-189) {push};
+\node[step] (s7) at (31.5,-182.5)
+  {\texttt{catalog release vX.Y.Z}\\\texttt{-{}-public DIR}\\\texttt{-{}-push -{}-upload}\\\desc{the next patch, minor or major release; from the merged state; also drafts the notices}};
+\node[stepno] at (29.2,-182.5 |- s7.center) {7};
+\draw[then] (s6.south -| 50.5,0) -- node[lbl, right] {once merged} (s7.north -| 50.5,0);
+\node[st=18] (cat) at (125.5,-187) {\store{\texttt{catalogue/}}{latest public catalogue}};
+\draw[c4maint] (s7.east |- cat) -- node[lblbg, above, pos=0.42] {sync} (cat.west);
+\node[st=19] (pub) at (83,-207.5) {\store{Public catalogue}{release commit, tag}};
+\node[st=19] (src) at (104.5,-207.5) {\store{Source catalogue}{release commit, tag}};
+\draw[c4rel] (s7.east |- 0,-196.5) -- (104.5,-196.5) -- (src.north);
+\draw[c4rel] (83,-196.5) -- (pub.north);
+\node[lbl, above] at (76.5,-196.5) {push};
 
-% -- 9: the served checkout -----------------------------------------------------------
-\node[step=19.6mm] (s9) at (139,-186)
+% -- 8: the served checkout -----------------------------------------------------------
+\node[step=19.6mm] (s8) at (139,-196.5)
   {\texttt{catalog}\\\texttt{update-checkout}\\\desc{fetch, advance, check}};
-\node[stepno] at (137,-186 |- s9.center) {9};
-\draw[c4rel] (s9.west |- src) -- node[lblbg, above] {fetch tags} (src.east);
-\node[st=20] (served) at (149.5,-212) {\store{Served checkout}{latest release only}};
-\draw[c4rel] (s9.south -| served) -- (served.north);
-\node[note, anchor=north west, align=left, text width=20mm] at (138.3,-140.5)
+\node[stepno] at (137,-196.5 |- s8.center) {8};
+\draw[c4rel] (s8.west |- src) -- node[lblbg, above] {fetch tags} (src.east);
+\node[st=20] (served) at (149.5,-224) {\store{Served checkout}{latest release only}};
+\draw[c4rel] (s8.south -| served) -- (served.north);
+\node[note, anchor=north west, align=left, text width=20mm] at (138.3,-148.5)
   {Run while no job reads the served checkout; nothing else changes it. A collections file whose bounds exclude the latest release is refused on the cluster.};
 
-% -- 10: answer -----------------------------------------------------------------------
-\node[hand] (s10) at (31.5,-210)
-  {posts the answer in the issue; the package maintainer then raises \texttt{catalog.min\_version}};
-\node[stepno] at (29.2,-210 |- s10.center) {10};
-\node[item, text width=36.6mm] (answer) at (74,-212) {{\bfseries Answer, in the proposal's issue}};
-\draw[c4manual] (s10.east |- answer) -- (answer.west);
+% -- 9: answer ------------------------------------------------------------------------
+\node[hand] (s9) at (31.5,-217.5)
+  {posts the answer in the issue; the package maintainer then raises \texttt{catalog.min\_version} and realigns a bundle with \texttt{bundle update DIR}};
+\node[stepno] at (29.2,-217.5 |- s9.center) {9};
+\node[item, text width=36.6mm] (answer) at (74,-220.5) {{\bfseries Answer, in the proposal's issue}};
+\draw[c4manual] (s9.east |- answer) -- (answer.west);
 
 % -- the key ------------------------------------------------------------------------
-\begin{scope}[shift={(0,-227)}]
+\begin{scope}[shift={(0,-243.5)}]
   \keytitle{Key}
   \node[stepno] at (4.5,-6.5) {1};
   \node[keytext] at (11.5,-6.5) {a step, in order};
@@ -149,23 +148,23 @@
   \node[item, anchor=center, minimum width=9mm, minimum height=4.2mm, inner sep=0pt] at (4.5,-26) {};
   \node[keytext] at (11.5,-26) {an issue or a merge request};
 \end{scope}
-\begin{scope}[shift={(47,-227)}]
+\begin{scope}[shift={(47,-243.5)}]
   \keynode{1}{c4personkey}{a person, and where they work}
   \keynode{2}{c4systemext}{a system outside ETHOS.Data}
   \node[c4systemext, keysample, double=paper, double distance=0.7pt] at (4.5,-19.5) {};
   \node[keytext] at (11.5,-19.5) {a machine};
   \keystore{4}{brand}{fillbrand}{a data store}
 \end{scope}
-\begin{scope}[shift={(97,-227)}]
+\begin{scope}[shift={(97,-243.5)}]
   \keyline{1}{c4rel}{writes or reads}
   \keyline{2}{c4maint}{authenticated, to dCache}
   \keyline{3}{c4manual}{a handoff a person posts}
   \keyline{4}{then}{the next step}
 \end{scope}
-\begin{scope}[shift={(137,-227)}]
+\begin{scope}[shift={(137,-243.5)}]
   \draw[seqframe] (0,-4.5) rectangle (9,-8.5);
   \node[keytext, text width=13mm, align=left] at (11.5,-6.5) {one of, by\\access class};
 \end{scope}
-\node[note, anchor=north west, align=left, text width=158mm] at (0,-257)
+\node[note, anchor=north west, align=left, text width=158mm] at (0,-273.5)
   {Commands record their work only in the catalogue maintainer's own clone; no command commits or pushes a record, and only \texttt{catalog release} commits and tags.};
 \end{tikzpicture}

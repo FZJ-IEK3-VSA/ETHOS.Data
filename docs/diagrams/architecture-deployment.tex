@@ -1,19 +1,21 @@
 % Deployment view (C4): where ETHOS.Data runs and where its data lives.
 %
 % Three bands. Top: the machines outside the cluster (a package's CI runner,
-% a workstation, ETHOS.Data's own CI runner, an optional maintainer
-% workstation). Middle: the hosts every band talks to (dCache, GitHub,
-% Keycloak, JuGit). Bottom: the ICE-2 cluster computer, with the users'
-% environments on the left, the shared storage in the middle and the
-% maintainer environment on the right, so users' reads come in from the left
-% and maintainers' writes from the right without crossing.
+% a workstation with its public cache and optional restricted caches,
+% ETHOS.Data's own CI runner, an optional maintainer workstation). Middle: the
+% hosts every band talks to (dCache, GitHub, Keycloak, JuGit). Bottom: the ICE-2
+% cluster computer, with the users' environments on the left, the shared
+% storage in the middle and the maintainer environment on the right, so users'
+% reads come in from the left and maintainers' writes from the right without
+% crossing. The shared storage puts project storage between the two kinds of
+% cache, so both link into it without crossing an arrow.
 %
 % The hosts are ordered so that no arrow crosses another: dCache is under the
-% users and the package CI, JuGit under the maintainers. The cluster's arrows
-% to hosts further left run lower in the channel, so they nest; the users'
-% download jogs left under them, past the cluster's label. Arrows into a host
-% enter right of its label. Coordinates are millimetres; the picture is 162
-% wide.
+% users and the package CI, JuGit under the maintainers. The CI runner's
+% arrow jogs left to the repository. The cluster's arrows to hosts further
+% left run lower in the channel, so they nest; the users' download jogs left
+% under them, past the cluster's label. Arrows into a host enter right of its
+% label. Coordinates are millimetres; the picture is 162 wide.
 \begin{tikzpicture}[
   x=1mm, y=1mm,
   % The style's double rim takes TikZ's default white core, which shows as a
@@ -25,42 +27,48 @@
   % caps are flattened to the height a narrow store has.
   ds/.style={c4db, shape aspect=0.12},
   dsext/.style={c4dbext, shape aspect=0.12},
+  % Two stores side by side on the workstation: narrower than a store's
+  % default minimum width.
+  dsn/.style={ds, minimum width=0pt},
   lab/.style={c4rellabel},
   fs/.style={c4relmuted},
 ]
 
 % ==== top band: machines outside the cluster ================================
 % -- package CI runner
-\node[ds, text width=29mm] (pkgcis) at (19.5,-16)
-  {\elementshort{Repository bundles}{in the package checkout}};
-\node[c4container, text width=29mm] (pkgcic) at (19.5,-39)
-  {\element{\texttt{ethos\_data} library}{Container: in the package's tests}{required job: bundles only; live job: downloads}};
+\node[ds, text width=26mm] (pkgcis) at (17,-16)
+  {\elementshort{Bundles}{in the package checkout}};
+\node[c4container, text width=26mm] (pkgcic) at (17,-39.5)
+  {\element{\texttt{ethos\_data} library}{Container: in the package's tests}{required job:\\bundles only;\\live job: downloads}};
 \draw[fs] (pkgcic.north) -- node[lab, right]{reads first} (pkgcis.south);
-\node[depnode, fit={(0,0) (39,-52)}] (pkgci) {};
+\node[depnode, fit={(0,0) (34,-52)}] (pkgci) {};
 \node[nlabel] at (pkgci.north west) {Package CI runner\\{\mdseries\color{muted}[the provider's runner]}};
 
-% -- workstation or laptop
-\node[ds, text width=29mm] (wss) at (61.5,-16.5)
+% -- workstation or laptop: a public cache, and restricted caches if any
+\node[dsn, text width=18.5mm] (wss) at (49.85,-17)
   {\elementshort{Public cache}{personal, with the metadata cache}};
-\node[c4container, text width=29mm] (wsc) at (61.5,-39)
+\node[dsn, text width=18.5mm] (wsr) at (74.15,-17)
+  {\elementshort{Restricted caches}{optional: own licensed copies}};
+\node[c4container, text width=28mm] (wsc) at (62,-41)
   {\element{\texttt{ethos\_data} library}{Container: in the consuming package}{with \texttt{ethos-data} and \texttt{<tool>-data}}};
-\draw[fs] (wsc.north) -- node[lab, right]{downloads} (wss.south);
-\node[depnode, fit={(42,0) (81,-52)}] (ws) {};
+\draw[fs] (49.85,0 |- wsc.north) -- node[lab, right]{reads,\\downloads} (49.85,0 |- wss.south);
+\draw[fs] (74.15,0 |- wsc.north) -- node[lab, right]{reads} (74.15,0 |- wsr.south);
+\node[depnode, fit={(37,0) (87,-52)}] (ws) {};
 \node[nlabel] at (ws.north west) {Workstation or laptop\\{\mdseries\color{muted}[public installation]}};
 
 % -- ETHOS.Data CI runner
-\node[c4container, text width=19mm] (cic) at (97,-39)
+\node[c4container, text width=16mm] (cic) at (102,-39)
   {\element{Test suite}{Container: pytest}{reaches loopback only}};
-\node[depnode, fit={(84,0) (110,-52)}] (ci) {};
+\node[depnode, fit={(90,0) (114,-52)}] (ci) {};
 \node[nlabel] at (ci.north west) {ETHOS.Data\\CI runner\\{\mdseries\color{muted}[GitHub Actions,}\\{\mdseries\color{muted}self-hosted]}};
 
 % -- maintainer workstation (optional)
-\node[c4container, text width=40mm] (mwsc) at (137.5,-19.5)
+\node[c4container, text width=39mm] (mwsc) at (139.5,-16)
   {\element{\texttt{ethos-data catalog}}{Container: git, rclone, oidc-agent}{\texttt{status}, \texttt{publish -{}-check}, uploads of data it can read}};
-\node[ds, text width=40mm] (mwss) at (137.5,-43)
+\node[ds, text width=39mm] (mwss) at (139.5,-42)
   {\elementshort{Maintainer's clones}{of the source and the public catalogue}};
 \draw[fs] (mwsc.south) -- node[lab, right]{records} (mwss.north);
-\node[depnode, fit={(113,0) (162,-52)}] (mws) {};
+\node[depnode, fit={(117,0) (162,-52)}] (mws) {};
 \node[nlabel] at (mws.north west) {Maintainer workstation\\{\mdseries\color{muted}[optional: Linux, macOS or WSL]}};
 
 % ==== middle band: hosts ===================================================
@@ -87,84 +95,83 @@
 \node[nlabel] at (jgn.north west) {JuGit};
 
 % -- top band to hosts
-\draw[c4download] (20,0 |- pkgcic.south) -- (20,0 |- dcs.north);
-\node[lab, anchor=east] at (18.5,-58.5) {\rel{downloads}{HTTPS}};
-\draw[c4download] (48,0 |- wsc.south) -- (48,-59.5) -- (29,-59.5) -- (29,0 |- dcs.north);
-\node[lab, anchor=south] at (38.5,-59) {\rel{downloads}{HTTPS}};
-\draw[c4rel] (68,0 |- wsc.south) -- (68,0 |- ghs.north);
-\node[lab, anchor=east] at (66.5,-58.5) {\rel{public\\catalogue}{HTTPS}};
-\draw[c4rel] (92,0 |- cic.south) -- (92,0 |- ghr.north);
-\node[lab, anchor=west] at (93.5,-58.5) {\rel{jobs on push}{GitHub Actions}};
-\draw[c4manual] (148,0 |- mwss.south) -- (148,0 |- jg.north);
-\node[lab, anchor=east] at (146.5,-58.5) {\rel{branches,\\merge requests}{git}};
+\draw[c4download] (20.5,0 |- pkgcic.south) -- (20.5,0 |- dcs.north);
+\node[lab, anchor=east] at (19,-58.5) {\rel{downloads}{HTTPS}};
+\draw[c4download] (53,0 |- wsc.south) -- (53,-59.5) -- (29,-59.5) -- (29,0 |- dcs.north);
+\node[lab, anchor=south] at (41,-59) {\rel{downloads}{HTTPS}};
+\draw[c4rel] (71,0 |- wsc.south) -- (71,0 |- ghs.north);
+\node[lab, anchor=east] at (69.5,-58.5) {\rel{public\\catalogue}{HTTPS}};
+\draw[c4rel] (cic.south) -- (102,-57.5) -- (89,-57.5) -- (ghr.north);
+\node[lab, anchor=west] at (103.5,-58.5) {\rel{jobs on push}{GitHub Actions}};
+\draw[c4manual] (150,0 |- mwss.south) -- (150,0 |- jg.north);
+\node[lab, anchor=east] at (148.5,-58.5) {\rel{branches,\\merge requests}{git}};
 
 % ==== bottom band: the ICE-2 cluster computer ===============================
 % -- users' environments
-\node[c4container, text width=24mm] (uc) at (20.5,-167)
+\node[c4container, text width=26mm] (uc) at (20.25,-167)
   {\element{\texttt{ethos\_data} library}{Container: in each user's package}{with \texttt{ethos-data} and \texttt{<tool>-data}; batch jobs}};
-\node[ds, text width=24mm] (us) at (20.5,-197)
-  {\element{Public cache}{personal, with the metadata cache}{the per-user cache directory, or scratch storage}};
-\draw[fs] (uc.south) -- node[lab, right]{downloads} (us.north);
-\node[ds, text width=24mm] (uf) at (20.5,-227.5)
-  {\element{Settings file}{personal, in the shared home}{names the served checkout, the shared and the restricted cache}};
-\node[depnode, fit={(4,-143) (37,-243)}] (users) {};
+\node[ds, text width=26mm] (uf) at (20.25,-201.5)
+  {\element{Settings file}{personal, in the shared home}{names the served checkout, the cluster's public cache and any restricted caches the user's groups admit}};
+\draw[fs] (uc.south) -- node[lab, right]{reads} (uf.north);
+\node[depnode, fit={(3.5,-143) (37,-221)}] (users) {};
 \node[nlabel] at (users.north west) {Users'\\environments\\{\mdseries\color{muted}[conda environments]}};
 
-% -- shared storage
-\node[ds, text width=31mm] (sc) at (72,-163)
+% -- shared storage: project storage sits between the two kinds of cache
+\node[ds, text width=30mm] (sc) at (75.5,-163)
   {\elementshort{Served checkout}{\texttt{catalogue/}, the latest release}};
-\node[ds, text width=31mm] (rc) at (72,-180)
-  {\elementshort{Restricted cache}{\texttt{restricted/}, one group per dataset}};
-\node[ds, text width=31mm] (sh) at (72,-197)
-  {\elementshort{Shared cache}{\texttt{cache/}, read only for users}};
-\node[dsext, text width=31mm] (ps) at (72,-217)
+\node[ds, text width=30mm] (pc) at (75.5,-183.5)
+  {\elementshort{The cluster's\\public cache}{\texttt{cache/}, shared, written by every user}};
+\node[dsext, text width=30mm] (ps) at (75.5,-205.5)
   {\elementshort{Project storage}{build inputs, link targets}};
-\node[ds, text width=31mm] (vf) at (72,-234)
+\node[ds, text width=30mm] (rc) at (75.5,-227.5)
+  {\elementshort{Restricted caches}{\texttt{restricted/<group>/}, one per access combination}};
+\node[ds, text width=30mm] (vf) at (75.5,-247)
   {\elementshort{Validation folder}{\texttt{validation/}, re-downloads}};
-\draw[fs] (sh.south) -- node[lab, right]{links into} (ps.north);
-\node[depnode, fit={(51,-143) (93,-244)}] (storage) {};
+\draw[fs] (pc.south) -- node[lab, right, xshift=1mm]{links into} (ps.north);
+\draw[fs] (rc.north) -- node[lab, right, xshift=1mm]{links into} (ps.south);
+\node[depnode, fit={(55,-143) (96,-258)}] (storage) {};
 \node[nlabel] at (storage.north west) {Shared storage\\{\mdseries\color{muted}[groups; example paths}\\{\mdseries\color{muted}under \texttt{/shared/ethos/}]}};
 
 % -- maintainer environment
 \node[c4container, text width=27mm] (mc) at (139,-166)
-  {\element{\texttt{ethos-data catalog}}{Container: git, rclone, oidc-agent}{and \texttt{link}, \texttt{materialize} with \texttt{-{}-root}}};
-\node[ds, text width=25mm] (ms) at (139,-196)
+  {\element{\texttt{ethos-data catalog}}{Container: git, rclone, oidc-agent}{and \texttt{link}, \texttt{materialize}}};
+\node[ds, text width=25mm] (ms) at (139,-194)
   {\element{Maintainer's clones}{git working trees}{of the source and the public catalogue; records reach JuGit by merge request}};
 \draw[fs] (mc.south) -- node[lab, right]{records} (ms.north);
-\node[depnode, fit={(120,-143) (158,-210)}] (maint) {};
+\node[depnode, fit={(120,-143) (158,-221)}] (maint) {};
 \node[nlabel] at (maint.north west) {Maintainer\\environment\\{\mdseries\color{muted}[own account]}};
 
 % -- proposed catalogue release CI
-\node[lab, anchor=north west, align=left] (relcit) at (122,-223)
+\node[lab, anchor=north west, align=left] (relcit) at (122,-234)
   {\texttt{catalog release} on a tag;\\\texttt{build -{}-check} and\\\texttt{publish -{}-check} on each\\merge request; needs the\\build inputs and a\\non-interactive token};
-\node[propnode, fit={(120,-214) (158,-244)}] (relci) {};
+\node[propnode, fit={(120,-225) (158,-258)}] (relci) {};
 \node[nlabel] at (relci.north west) {Catalogue release CI\\{\mdseries\color{muted}[proposed: GitHub issue \#34]}};
 
-\node[depnode, fit={(0,-132) (162,-248)}] (cluster) {};
+\node[depnode, fit={(0,-132) (162,-262)}] (cluster) {};
 \node[nlabel] at (cluster.north west) {ICE-2 cluster computer\\{\mdseries\color{muted}[Linux]}};
 
-% -- users read the shared storage
+% -- users read the shared storage and download into the cluster's public cache
 \draw[fs] (uc.east |- sc) -- (sc.west);
-\node[lab, anchor=south] at (46,0 |- sc) {reads};
-\draw[fs] (41,0 |- sc) |- (rc.west);
-\node[lab, anchor=south] at (46,0 |- rc) {reads};
-\draw[fs] (41,0 |- sc) |- (sh.west);
-\node[lab, anchor=south] at (46,0 |- sh) {reads};
+\node[lab, anchor=south] at (47.5,0 |- sc) {reads};
+\draw[fs] (40,0 |- sc) |- (pc.west);
+\node[lab, anchor=south] at (47.5,0 |- pc) {reads,\\downloads};
+\draw[fs] (40,0 |- sc) |- (rc.west);
+\node[lab, anchor=south] at (47.5,0 |- rc) {reads if\\admitted};
 
 % -- maintainers' commands on the shared storage
 \draw[fs] (mc.west |- sc) -- (sc.east);
-\node[lab, anchor=south] at (105,0 |- sc) {\texttt{update-checkout}};
-\draw[fs] (117,0 |- sc) |- (rc.east);
-\node[lab, anchor=south] at (105,0 |- rc) {links, copies};
-\draw[fs] (117,0 |- sc) |- (sh.east);
-\node[lab, anchor=south] at (105,0 |- sh) {links, copies};
-\draw[fs] (117,0 |- sc) |- (ps.east);
-\node[lab, anchor=south] at (105,0 |- ps) {reads};
-\draw[fs] (117,0 |- sc) |- (vf.east);
-\node[lab, anchor=south] at (105,0 |- vf) {compares};
+\node[lab, anchor=south] at (107,0 |- sc) {\texttt{update-checkout}};
+\draw[fs] (118,0 |- sc) |- (pc.east);
+\node[lab, anchor=south] at (107,0 |- pc) {links, copies};
+\draw[fs] (118,0 |- sc) |- (ps.east);
+\node[lab, anchor=south] at (107,0 |- ps) {reads};
+\draw[fs] (118,0 |- sc) |- (rc.east);
+\node[lab, anchor=south] at (107,0 |- rc) {links, copies};
+\draw[fs] (118,0 |- sc) |- (vf.east);
+\node[lab, anchor=south] at (107,0 |- vf) {compares};
 
 % -- cluster to hosts
-\draw[c4download] (32.5,0 |- uc.north) -- (32.5,-129.5) -- (18,-129.5) -- (18,0 |- dcs.south);
+\draw[c4download] (31,0 |- uc.north) -- (31,-129.5) -- (18,-129.5) -- (18,0 |- dcs.south);
 \node[lab, anchor=east] at (16.5,-114) {\rel{downloads}{HTTPS}};
 \draw[c4maint] (140,0 |- mc.north) -- (140,-126) -- (26,-126) -- (26,0 |- dcs.south);
 \node[lab, anchor=south west] at (28,-125.5) {\rel{copy, sync, purge; chmod, locality; read-back}{WebDAV door, rclone; REST frontend; token; HTTPS HEAD}};
@@ -177,23 +184,23 @@
 \draw[c4manual] (ms.east) -- (155.5,0 |- ms.east) -- (155.5,0 |- jg.south);
 
 % ==== key ====================================================================
-\begin{scope}[shift={(0,-256)}]
+\begin{scope}[shift={(0,-270)}]
   \keytitle{Key}
   \keynode{1}{depnode}{Deployment node}
   \keynode{2}{propnode}{Proposed node}
   \keynode{3}{c4systemext}{External system}
 \end{scope}
-\begin{scope}[shift={(39,-256)}]
+\begin{scope}[shift={(39,-270)}]
   \keynode{1}{c4container}{Container}
   \keystore{2}{brand}{fillbrand}{Data store}
   \keystore{3}{muted}{fillsoft}{External data store}
 \end{scope}
-\begin{scope}[shift={(76,-256)}]
+\begin{scope}[shift={(76,-270)}]
   \keyline{1}{c4rel}{Request [protocol]}
   \keyline{2}{c4relmuted}{File system access}
   \keyline{3}{c4manual}{Handoff a person makes}
 \end{scope}
-\begin{scope}[shift={(117,-256)}]
+\begin{scope}[shift={(117,-270)}]
   \keyline{1}{c4download}{Anonymous download}
   \keyline{2}{c4maint}{Authenticated maintenance}
 \end{scope}

@@ -76,8 +76,8 @@ authoritative copy.
 ## 4. Release and connect readers
 
 Commit each repository separately. Connect the source repository to the
-internal Git host and the generated repository to the public host, then
-release the first internal version and the first public revision as under
+internal Git host and the generated repository to the public host, then make
+the first release, `v1.0.0`, of both catalogues as under
 [Release the catalogue](release-the-catalogue.md).
 
 On the cluster computer, follow [Set up the shared machine](set-up-the-shared-machine.md)

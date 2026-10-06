@@ -28,6 +28,24 @@ network drive that is not connected, is marked `NOT REACHABLE` with the reason.
     `unset-skip-unavailable` and `ETHOS_SKIP_UNAVAILABLE` go. To be
     implemented separately.
 
+!!! warning "Gap: `dataset_roots` is to be removed"
+    With [one settings file per
+    account](../explanation/architecture/decisions/0010-one-settings-file-per-account.md),
+    the `dataset_roots` key, `config set-root` and `unset-root` go. A local
+    copy of a dataset is linked into a cache with `ethos-data link NAME DIR`,
+    or copied into one with `ethos-data materialize NAME --from DIR`. To be
+    implemented separately.
+
+!!! warning "Gap: the restricted cache is to become a list"
+    With [one settings file per
+    account](../explanation/architecture/decisions/0010-one-settings-file-per-account.md),
+    `restricted_cache` becomes `restricted_caches`, an ordered list with no
+    default, changed with `config add-restricted-cache DIR` and
+    `config remove-restricted-cache DIR`. `ETHOS_RESTRICTED_DIRS` takes the
+    place of `ETHOS_RESTRICTED_DIR`: it lists directories separated by `:`,
+    on Windows by `;`, and overrides the list in the settings file; nothing
+    is merged. To be implemented separately.
+
 ## Precedence
 
 First match wins:
@@ -90,10 +108,10 @@ public_cache: /data/my-analysis/ethos-data
 A fuller one:
 
 ```yaml title="ethos-data.yaml"
-public_cache: /shared/ethos/public
+public_cache: /shared/ethos/cache
 restricted_cache: /shared/ethos/restricted
 skip_unavailable: false
-catalog: /shared/ethos/catalogue/current/datacatalog.json
+catalog: /shared/ethos/catalogue/datacatalog.json
 dataset_roots:
   submarine-cables: /benchtop/shared_data/SubmarineCables
 ```
@@ -124,6 +142,17 @@ under that name because it is in scripts, job files and people's shell profiles.
 Which root a dataset comes from follows from its access class; whether it is
 read in place follows from whether its entry is a symbolic link. See
 [Caches, classes and roots](../explanation/caches-and-access.md).
+
+!!! warning "Gap: the public cache is to hold public data only"
+    With [decision
+    0011](../explanation/architecture/decisions/0011-access-class-picks-the-root.md),
+    there is no `internal` class. Data the institute holds without
+    publishing it is restricted data, read in place from a restricted cache
+    whose file permissions admit its readers. `config` refuses a root that
+    is, contains or lies inside another. On the cluster every user sets the
+    same public cache; see [one public cache on the
+    cluster](../explanation/architecture/decisions/0028-one-public-cache-on-the-cluster.md).
+    To be implemented separately.
 
 ## Catalogue resolution
 

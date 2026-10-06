@@ -37,9 +37,17 @@ uses anonymous HTTP HEAD requests, not a remote SHA-256 read. For end-to-end
 content verification, fetch the selected files into an independent cache and
 run consumer `verify --deep`.
 
-The command refuses restricted data and unresolved licensing. If `--immutable`
-reports a conflict, assign new published paths; do not delete and overwrite a
-released object.
+The command refuses restricted data, which never has a copy on dCache, and
+unresolved licensing. If `--immutable` reports a conflict, assign new
+published paths; do not delete and overwrite a released object.
+
+!!! warning "Gap: `--allow-internal`"
+    The code knows a third access class, `internal`, and
+    `catalog upload --allow-internal` uploads such a dataset below the
+    publication root. It skips the step that makes the dataset
+    world-readable, sets no private permissions, and checks anonymously. Do
+    not use it: data the institute holds without publishing it is restricted
+    data, which stays off dCache.
 
 ## 3. Recheck without transferring or changing permissions
 
@@ -67,18 +75,6 @@ ethos-data catalog publish ../ETHOS.Data-Catalogue
 [Release the catalogue](release-the-catalogue.md).
 `upload` does not mark the dataset uploaded automatically, and `publish` does
 not push or deploy it.
-
-## Internal uploads
-
-`--allow-internal` permits an internal dataset and skips automatic public chmod.
-It does **not** establish private permissions, add authenticated consumer
-downloads, or switch verification to authenticated requests. The current command
-still checks anonymously and can report failure for correctly private bytes.
-
-Use a separate protected storage location agreed with the administrator; never
-assume `--allow-internal` makes a public parent private. Prefer the
-[local internal-data workflow](add-a-dataset.md#restricted-installations) until an
-authenticated transfer/read procedure is established.
 
 See [Upload options](../../reference/cli/catalog.md#upload-dataset-dataset) for the
 complete reference.

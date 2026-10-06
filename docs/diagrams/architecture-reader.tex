@@ -1,9 +1,9 @@
 % C4 level 3, data access (arc42 5.3.1). The collections handle answers which
 % resources: it reads the catalogue view and lays bundles and staging over it.
 % Retrieval asks the lookup chain where each file is read, and downloads the
-% rest through the Downloader port. The eight locators are chips on the chain,
-% each pointing at what it reads; the refusing ones (3, 4, 8) have a heavy rim.
-% Chips 2 and 3 point left, at the staging root and the bundles; 4 to 8 point
+% rest through the Downloader port. The five locators are chips on the chain,
+% each pointing at what it reads; the refusing ones (2, 3, 5) have a heavy rim.
+% Chips 1 and 2 point left, at the staging root and the bundles; 3 to 5 point
 % right, at the caches. Cylinders are placed by their centre.
 \begin{tikzpicture}[
   x=1mm, y=1mm,
@@ -45,8 +45,7 @@
 \node[comp=18mm] (staging) at (42,-60) {\elementshort{Staging}{\mod{staging}}};
 \node[st=20] (stagingroot) at (68,-60) {\store{Staging root}{personal}};
 \node[comp=18mm] (bundles) at (42,-78) {\elementshort{Bundles}{\mod{bundles}}};
-\node[st=20] (repobundle) at (42,-97) {\store{Repository bundle}{in the package}};
-\node[st=20] (expbundle) at (68,-97) {\store{Exported bundle}{in the package}};
+\node[st=20] (bundlestore) at (42,-97) {\store{Bundles}{\mod{bundle.json}, in the package}};
 
 % -- the catalogue reader, its inventories and metadata sources ------------------
 \node[comp=26mm] (catalogs) at (102,-22) {\elementshort{Catalogue reader}{\mod{catalogs}}};
@@ -63,9 +62,8 @@
 \node[c4component, minimum width=30mm, minimum height=117mm, anchor=north] (access) at (102,-32) {};
 \node[font=\sffamily\scriptsize, anchor=north, align=center, text=ink] at (access.north)
   {\elementshort{Lookup chain}{\mod{access}}};
-\foreach \i/\name/\y/\s in {1/dataset roots/-48/locator, 2/staging/-60/locator,
-    3/bundles/-78/refuser, 4/restricted cache/-96/refuser, 5/shared cache/-112/locator,
-    6/public-cache link/-127/locator, 7/public-cache copy/-135/locator, 8/download/-143/refuser}
+\foreach \i/\name/\y/\s in {1/staging/-60/locator, 2/bundles/-78/refuser,
+    3/restricted caches/-98/refuser, 4/public cache/-117/locator, 5/download/-133/refuser}
   \node[\s] (l\i) at (102,\y) {\textbf{\i}\enspace \name};
 \node[comp=22mm, minimum height=12mm] (retrieval) at (13,-113)
   {\elementshort{Retrieval}{\mod{retrieval}}};
@@ -73,9 +71,10 @@
 \node[portchip] (poochport) at (pooch.north) {Downloader};
 \node[stx=22] (dcache) at (13,-159) {\store{Publication root}{dCache}};
 
-\node[st=24] (restricted) at (139,-96) {\store{Restricted cache}{licensed}};
-\node[st=24] (shared) at (139,-112) {\store{Shared cache}{cluster, read only}};
-\node[st=24, minimum height=24mm] (public) at (139,-135) {\store{Public cache}{personal}};
+\node[st=26] (restricted) at (139,-98)
+  {\store{Restricted caches}{optional; one per access combination}};
+\node[st=26, minimum height=26mm] (public) at (139,-125)
+  {\store{Public cache}{personal; shared on the cluster}};
 
 % -- integrity, cache entries and the rest ---------------------------------------------
 \node[comp=24mm] (verify) at (50,-135) {\elementshort{Integrity}{\mod{verify}}};
@@ -102,8 +101,7 @@
 \node[lab, anchor=east] at (21.3,-100) {\mod{fetch}, \mod{paths},};
 \node[lab, anchor=east] at (21.3,-103.3) {\mod{plan}};
 \draw[c4rel] (staging) -- (stagingroot);
-\draw[c4rel] (bundles.south -| repobundle) -- (repobundle);
-\draw[c4rel] (bundles.south -| 48,0) |- (68,-87) -- (expbundle);
+\draw[c4rel] (bundles) -- (bundlestore);
 
 % -- relationships: the catalogue reader ----------------------------------------------------
 \draw[c4rel] (catalogs) -- (inventory);
@@ -115,11 +113,10 @@
 % -- relationships: the lookup chain ------------------------------------------------------------
 \draw[c4rel] (access.north) -- node[lab, left, xshift=-0.6mm] {index-row facts} (catalogs);
 \draw[c4rel] (access.west |- config) -- node[lab, above, pos=0.45] {roots} (config);
-\draw[c4rel] (l2.west) -- (stagingroot);
-\draw[c4rel] (l3.west) -- node[labbg, pos=0.52] {checked files} (bundles);
-\draw[c4rel] (l4.east) -- (restricted);
-\draw[c4rel] (l5.east) -- (shared);
-\foreach \i in {6,7,8} \draw[c4rel] (l\i.east) -- (l\i.east -| public.west);
+\draw[c4rel] (l1.west) -- (stagingroot);
+\draw[c4rel] (l2.west) -- node[labbg, pos=0.52] {checked files} (bundles);
+\draw[c4rel] (l3.east) -- (restricted);
+\foreach \i in {4,5} \draw[c4rel] (l\i.east) -- (l\i.east -| public.west);
 \draw[c4rel] (retrieval.east |- 0,-109.5) -- node[lab, above, pos=0.45] {locate every file first} (access.west |- 0,-109.5);
 \draw[c4rel] (retrieval.south |- 0,-119) -- (poochport);
 \draw[c4download] (pooch) -- node[lab, right] {anonymous HTTPS} (dcache);
@@ -129,12 +126,11 @@
 \draw[c4rel] (verify.north -| 42,0) |- node[lab, pos=0.75, below] {repair} (retrieval.east |- 0,-116);
 \draw[c4rel] (selftest.north -| 40,0) -- node[lab, right] {checks} (verify.south -| 40,0);
 \draw[c4rel] (handoffs) -- node[lab, above, yshift=0.4mm] {report} (selftest);
-\draw[c4rel] (linking) -- node[lab, right] {which root} (access);
-\draw[c4rel] (linking.east) -| (157,-96) -- (restricted.east);
-\draw[c4rel] (157,-112) -- (shared.east);
-\draw[c4rel] (157,-135) -- (public.east);
+\draw[c4rel] (linking) -- node[lab, right] {which cache} (access);
+\draw[c4rel] (linking.east) -| (157,-98) -- (restricted.east);
+\draw[c4rel] (157,-125) -- (public.east);
 \node[lab, anchor=south east, align=right] at (156.3,-160.6)
-  {links, copies; into the shared cache\\only maintainers, with \mod{-{}-root}};
+  {links, copies, into a cache\\of the dataset's access class};
 
 % -- local files and the model components the services use ------------------------------------
 \node[comp=26mm] (files) at (70,-182)
@@ -172,5 +168,9 @@
 \begin{scope}[shift={(0,-213)}]
   \node[c4boundary, inner sep=0pt, minimum width=9mm, minimum height=4.2mm] at (4.5,-6.5) {};
   \node[keytext] at (11.5,-6.5) {Another service group};
+\end{scope}
+\begin{scope}[shift={(42,-213)}]
+  \node[layerband, inner sep=0pt, minimum width=9mm, minimum height=4.2mm] at (4.5,-6.5) {};
+  \node[keytext] at (11.5,-6.5) {Layer};
 \end{scope}
 \end{tikzpicture}

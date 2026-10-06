@@ -1,6 +1,6 @@
 # 0027. Release the public catalogue as a generated view, tagged on GitHub
 
-**Status:** proposed · **Date:** 2026-09-10 · **Implemented by:** #12, #19, #23, #26; implemented with the first versioned release
+**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #12, #19, #23, #26; implemented with the first versioned release
 
 ## Context
 
@@ -21,9 +21,10 @@ published bytes should also hold their descriptors and licence documents.
 - The leak check refuses a tree that names a withheld dataset, as a word or as
   `datasets/<name>/`, or holds an unpublished key. A name counts only on its
   own: a withheld `era5` does not match `era5-land`.
-- Each release is a tag `vYYYY.MM.N` of the public catalogue, made by
-  `catalog release` and listed in `ethos:releases` of the index on `main`
-  ([0018](0018-numbered-catalogue-releases.md)).
+- Each release is a tag `vMAJOR.MINOR.PATCH` of the public catalogue, made
+  by `catalog release` and listed in `ethos:releases` of the index on `main`
+  ([0018](0018-numbered-catalogue-releases.md)). Every release tags it, even
+  one that changes only restricted or hidden data.
 - `publish` writes the public tracker's issue templates
   ([0025](0025-handoff-templates.md)).
 - `catalog release --upload` puts the latest public catalogue beside the data,
@@ -59,7 +60,7 @@ published bytes should also hold their descriptors and licence documents.
 
 - [0006. Specify every file format once](0006-every-file-format-specified-once.md)
 - [0011. Let the access class pick the root, and a link mean "read in place"](0011-access-class-picks-the-root.md)
-- [0018. Number catalogue releases `vYYYY.MM.N` and let collections files bound them](0018-numbered-catalogue-releases.md)
+- [0018. Number catalogue releases `vMAJOR.MINOR.PATCH`, purge data only after a major release, and let collections files bound them](0018-numbered-catalogue-releases.md)
 - [0023. Run every catalogue workflow that writes as a pipeline that plans before it acts](0023-maintenance-pipelines.md)
 - [0025. Draft the handoffs between roles from templates](0025-handoff-templates.md)
 - [0026. Serve the internal catalogue's latest release from one checkout on the cluster, and change it only through JuGit](0026-internal-catalogue-on-the-cluster.md)

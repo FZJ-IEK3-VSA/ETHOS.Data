@@ -9,6 +9,16 @@ Every lookup returns a `Resolved` carrying both the value **and its
 provenance** — because "why is my data going there`" is the question people
 actually ask.
 
+!!! warning "Gap: per-dataset roots and the `internal` class are to be removed"
+    With [one settings file per
+    account](../../explanation/architecture/decisions/0010-one-settings-file-per-account.md),
+    `dataset_roots`, `set_dataset_root` and `unset_dataset_root` go, and the
+    restricted cache becomes `restricted_caches`, an ordered list with no
+    default. With [decision
+    0011](../../explanation/architecture/decisions/0011-access-class-picks-the-root.md),
+    the access classes are `public` and `restricted`. To be implemented
+    separately.
+
 ## Configuration
 
 ::: ethos_data.config

@@ -42,7 +42,8 @@
 \node[finalstate] (end) at (112,-80) {};
 
 \draw[transition] (in.east |- withdrawn) -- node[steplabel, above] {remove} (withdrawn);
-\draw[transition] (withdrawn) -- node[steplabel, right] {purge \guard{[after a release]}} (purged);
+\draw[transition] (withdrawn) -- node[steplabel, right]
+  {purge \guard{[after a}\\\relax\guard{major release]}} (purged);
 \draw[transition] (purged) -- (end);
 
 % -- the key -------------------------------------------------------------
@@ -61,5 +62,6 @@
   {Each command checks its step against the state in \texttt{status.yaml} before it acts, and records it there after.
    Not drawn, because they keep the state: \texttt{build} again, \texttt{change} in built, \texttt{upload} in available,
    \texttt{verify}, \texttt{link} and \texttt{materialize} in available or frozen, \texttt{record} in frozen (a new authority),
-   \texttt{check-source}, and \texttt{release}, which adds a step to every dataset that changed since the last release.};
+   \texttt{check-source}, and \texttt{release}, which adds a step to every dataset that changed since the last release;
+   a major release also adds one to every withdrawn dataset.};
 \end{tikzpicture}

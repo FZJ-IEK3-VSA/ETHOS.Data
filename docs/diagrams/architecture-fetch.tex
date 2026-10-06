@@ -14,7 +14,7 @@
 % A name on two lines; a line break inside \elementshort's group would end the node.
 \newcommand{\elementtwo}[3]{{\bfseries #1}\\[-0.3ex]{\bfseries #2}\\[-0.3ex]{\scriptsize\color{muted}[#3]}}
 \def\xP{11}\def\xS{32}\def\xH{54}\def\xC{76}\def\xR{95}\def\xL{113}\def\xD{131}\def\xG{152}
-\def\yend{-207}
+\def\yend{-211.5}
 
 % -- participants ------------------------------------------------------
 \node[c4systemext, head] at (\xP,0) {\elementtwo{Consuming}{package}{via the facade}};
@@ -37,9 +37,9 @@
 \draw[act] ({\xH-1},-79.5) rectangle ({\xH+1},{\yend+5});
 \draw[act] ({\xC-1},-83.5) rectangle ({\xC+1},-90.5);
 \draw[act] ({\xR-1},-96.5) rectangle ({\xR+1},{\yend+7.5});
-\draw[act] ({\xL-1},-106)  rectangle ({\xL+1},-134);
-\draw[act] ({\xD-1},-169.5) rectangle ({\xD+1},-189.5);
-\draw[act] ({\xG-1},-173.5) rectangle ({\xG+1},-178.5);
+\draw[act] ({\xL-1},-106)  rectangle ({\xL+1},-138.5);
+\draw[act] ({\xD-1},-174)  rectangle ({\xD+1},-194);
+\draw[act] ({\xG-1},-178)  rectangle ({\xG+1},-183);
 
 % -- 1-4: build the handle ---------------------------------------------
 \node[stepno] at ({\xP-4.5},-11) {1};
@@ -48,11 +48,12 @@
 
 \node[stepno] at ({\xP-4.5},-27) {2};
 \draw[message] ({\xP+1},-27) -- node[labbg, align=center]
-  {\texttt{load\_collections(file)}\\\relax{\color{muted}reads it, its release bounds}\\\relax{\color{muted}and the listed bundles}} ({\xH-1},-27);
+  {\texttt{load\_collections(file)}\\\relax{\color{muted}reads it and its release bounds,}\\\relax{\color{muted}and loads the listed bundles}} ({\xH-1},-27);
+\node[sidebg, anchor=north west, inner sep=1pt] at ({\xH+2.5},-17.3) {a bundle ahead of the catalogue\\warns once when it is read\strut};
 
 \draw[seqframe] (23,-29.5) rectangle (87,-64);
 \node[seqframelabel] at (23,-29.5) {opt};
-\node[guardlabel, anchor=north east, align=right] at (86.5,-29.8) {[first need for a dataset\\no bundle holds]};
+\node[guardlabel, anchor=north east, align=right] at (86.5,-29.8) {[a dataset no bundle holds,\\or the download switch]};
 
 \node[stepno] at ({\xH+4.5},-38) {3};
 \draw[message] ({\xH-1},-38) -- node[lab] {\texttt{choose\_catalog}} ({\xS+1},-38);
@@ -83,62 +84,62 @@
 
 \node[stepno] at ({\xR-4.5},-106) {8};
 \draw[message] ({\xR+1},-106) -- node[lab, align=center] {\texttt{locate}\\every file} ({\xL-1},-106);
-\node[sidebg, anchor=north west] at ({\xL+2},-99.5) {eight locators:\\see the lookup flow};
+\node[sidebg, anchor=north west] at ({\xL+2},-99.5) {five locators:\\see the lookup flow};
 
-\draw[seqframe] (3,-108.5) rectangle (127,-136.5);
+\draw[seqframe] (3,-108.5) rectangle (127,-141);
 \node[seqframelabel] at (3,-108.5) {alt};
 \node[guardlabel] at (11.5,-108.8) {[a locator refuses]};
 \draw[refusal] ({\xL-1},-117) -- ({\xP+1},-117);
 \node[labbg] at (32.5,-117) {restricted data: \textbf{AccessError}};
-\draw[refusal] ({\xL-1},-121.5) -- ({\xP+1},-121.5);
-\node[labbg] at (32.5,-121.5) {altered bundled file: \textbf{BundleError}};
-\draw[refusal] ({\xL-1},-126) -- ({\xP+1},-126);
-\node[labbg] at (32.5,-126) {internal data: \textbf{AccessError}};
-\draw[seqframe, dash pattern=on 2pt off 1.5pt] (3,-128.5) -- (127,-128.5);
-\node[guardlabel] at (4,-128.8) {[else]};
-\draw[reply] ({\xL-1},-133.5) -- node[lab] {locations} ({\xR+1},-133.5);
-\node[sidebg, anchor=north east] at ({\xR-2},-129.5) {checks in-place files are there;\\a missing one: \textbf{AccessError}};
+\draw[refusal] ({\xL-1},-125) -- ({\xP+1},-125);
+\node[labbg, align=center] at (32.5,-125) {a missing file or unrecorded\\change in a bundle: \textbf{BundleError}};
+\draw[refusal] ({\xL-1},-130.5) -- ({\xP+1},-130.5);
+\node[labbg] at (32.5,-130.5) {no publication URL: \textbf{AccessError}};
+\draw[seqframe, dash pattern=on 2pt off 1.5pt] (3,-133) -- (127,-133);
+\node[guardlabel] at (4,-133.3) {[else]};
+\draw[reply] ({\xL-1},-138) -- node[lab] {locations} ({\xR+1},-138);
+\node[sidebg, anchor=north east] at ({\xR-2},-134) {checks in-place files are there;\\a missing one: \textbf{AccessError}};
 
-\draw[seqframe] (3,-139.5) rectangle (127,-152);
-\node[seqframelabel] at (3,-139.5) {opt};
-\node[guardlabel] at (11.5,-139.8) {[\texttt{fetch=False}, files to download]};
-\draw[refusal] ({\xR-1},-150) -- ({\xP+1},-150);
-\node[labbg, align=center] at (32.5,-150) {\textbf{NotFetched}: where each file\\belongs; no store contacted};
+\draw[seqframe] (3,-144) rectangle (127,-156.5);
+\node[seqframelabel] at (3,-144) {opt};
+\node[guardlabel] at (11.5,-144.3) {[\texttt{fetch=False}, files to download]};
+\draw[refusal] ({\xR-1},-154.5) -- ({\xP+1},-154.5);
+\node[labbg, align=center] at (32.5,-154.5) {\textbf{NotFetched}: where each file\\belongs; no store contacted};
 
-\draw[seqframe] (79,-155) rectangle (161,-192);
-\node[seqframelabel] at (79,-155) {loop};
-\node[guardlabel] at ({\xR+2},-155.3) {[each dataset and revision folder]};
-\node[sidebg, anchor=north west] at ({\xR+2},-159.2)
-  {into the user's own public cache, never through a link;\\seeds revision entries from earlier ones};
-\node[stepno] at ({\xR-4.5},-169.5) {9};
-\draw[message] ({\xR+1},-169.5) -- node[labbg, pos=0.46] {\texttt{fetch(url, \{path: hash\})}} ({\xD-1},-169.5);
-\draw[message] ({\xD+1},-174) -- node[lab, align=center, pos=0.45] {anonymous\\HTTPS GET} ({\xG-1},-174);
-\draw[reply] ({\xG-1},-178.5) -- node[lab] {bytes} ({\xD+1},-178.5);
-\node[sidebg, anchor=north west] at ({\xD+2},-180) {keeps a file whose\\hash matches};
-\draw[reply] ({\xD-1},-189.5) -- node[labbg, align=center] {\texttt{\{path: Path\}}\\or \textbf{DownloadError}} ({\xR+1},-189.5);
+\draw[seqframe] (79,-159.5) rectangle (161,-196.5);
+\node[seqframelabel] at (79,-159.5) {loop};
+\node[guardlabel] at ({\xR+2},-159.8) {[each dataset and revision folder]};
+\node[sidebg, anchor=north west] at ({\xR+2},-163.7)
+  {into the public cache, never through a link;\\seeds revision entries from earlier ones};
+\node[stepno] at ({\xR-4.5},-174) {9};
+\draw[message] ({\xR+1},-174) -- node[labbg, pos=0.46] {\texttt{fetch(url, \{path: hash\})}} ({\xD-1},-174);
+\draw[message] ({\xD+1},-178.5) -- node[lab, align=center, pos=0.45] {anonymous\\HTTPS GET} ({\xG-1},-178.5);
+\draw[reply] ({\xG-1},-183) -- node[lab] {bytes} ({\xD+1},-183);
+\node[sidebg, anchor=north west] at ({\xD+2},-184.5) {keeps a file whose\\hash matches};
+\draw[reply] ({\xD-1},-194) -- node[labbg, align=center] {\texttt{\{path: Path\}}\\or \textbf{DownloadError}} ({\xR+1},-194);
 
-\draw[reply] ({\xR-1},-197.5) -- node[labbg] {\texttt{DataFiles}} ({\xH+1},-197.5);
-\draw[reply] ({\xH-1},-202.5) -- node[lab] {\texttt{NamedPaths}} ({\xP+1},-202.5);
+\draw[reply] ({\xR-1},-202) -- node[labbg] {\texttt{DataFiles}} ({\xH+1},-202);
+\draw[reply] ({\xH-1},-207) -- node[lab] {\texttt{NamedPaths}} ({\xP+1},-207);
 
 % -- the key -------------------------------------------------------------
-\begin{scope}[shift={(2,-212)}]
+\begin{scope}[shift={(2,-216.5)}]
   \keytitle{Key}
   \keynode{1}{c4component}{a component of ETHOS.Data}
   \keynode{2}{c4systemext}{a system outside it}
 \end{scope}
-\begin{scope}[shift={(48,-212)}]
+\begin{scope}[shift={(47.5,-216.5)}]
   \node[stepno] at (4.5,-6.5) {1};
   \node[keytext] at (11.5,-6.5) {a step, in time order};
   \draw[act] (3.5,-11.5) rectangle (5.5,-14.5);
   \node[keytext] at (11.5,-13) {active};
 \end{scope}
-\begin{scope}[shift={(86,-212)}]
+\begin{scope}[shift={(85,-216.5)}]
   \keyline{1}{message}{a call}
   \keyline{2}{reply}{its return}
 \end{scope}
-\begin{scope}[shift={(116,-212)}]
+\begin{scope}[shift={(110.5,-216.5)}]
   \keyline{1}{refusal}{a refusal: the call ends}
   \draw[seqframe] (0,-11) rectangle (9,-15);
-  \node[keytext] at (11.5,-13) {a frame: only if, or for each};
+  \node[keytext] at (11.5,-13) {a frame: only if, one of, or for each};
 \end{scope}
 \end{tikzpicture}

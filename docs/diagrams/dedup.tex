@@ -21,7 +21,7 @@
 
 % -- both derive the SAME path, so the second one finds the file there
 \node[store, below=18mm of cat, minimum width=64mm, minimum height=16mm]
-  (cache) {\textbf{shared cache}\\[0.3mm]\texttt{\textless dataset\textgreater/\textless path\textgreater}};
+  (cache) {\textbf{public cache}\\[0.3mm]\texttt{\textless dataset\textgreater/\textless path\textgreater}};
 
 \draw[flowaccent] (rk.south)    -- node[edgelabel, sloped, above]{resolves to} (cache.west);
 \draw[flowaccent] (other.south) -- node[edgelabel, sloped, above]{resolves to} (cache.east);

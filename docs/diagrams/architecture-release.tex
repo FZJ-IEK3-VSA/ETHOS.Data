@@ -35,7 +35,7 @@
 \newcommand{\store}[2]{{\bfseries #1}\\[-0.2ex]{\color{muted}[#2]}}
 % lane borders; the lanes' centres are 44, 96.5, 113.5, 130.5 and 151
 \def\la{88}\def\lb{105}\def\lc{122}\def\ld{139}
-\def\ybot{-181}
+\def\ybot{-203}
 
 % -- lanes ----------------------------------------------------------------------
 \node[c4person, head, minimum width=0pt, text width=46mm] at (44,-3)
@@ -52,78 +52,78 @@
   \draw[lane] (\x,-23) -- (\x,\ybot);
 
 % -- 1: plan -----------------------------------------------------------------------
-\node[step] (s1) at (5,-26)
+\node[step=51.4mm] (s1) at (5,-26)
   {\texttt{catalog release VERSION}\\\texttt{-{}-public DIR [-{}-push]}\\\texttt{[-{}-upload] [-{}-notices DIR]}\\[0.6ex]
-   \textbf{plan}: every stage plans, reading only, before any acts; \texttt{-{}-dry-run} stops here.\\[0.6ex]
-   \stg{check} refuses unless the build check and the publish check with its leak check pass, every public dataset has an upload verified after its last inventory change, the version follows the last release, and both checkouts are clean.};
+   \textbf{plan}: every stage plans, reading only, before any acts; \texttt{-{}-dry-run} stops here and names the smallest admissible version.\\[0.6ex]
+   \stg{check} computes the smallest level the changes since the last release require: patch for metadata only, minor for changed data; no change requires a major release. It refuses unless \texttt{VERSION} is the next patch, minor or major release at or above that level, the release changes something, the build check and the publish check with its leak check pass, every public dataset has an upload verified after its last inventory change, and both checkouts are clean.};
 \node[stepno] at (2.6,-26 |- s1.center) {1};
-\node[stop, text width=24mm, anchor=west] (refused) at (58,-50) {refused before any write};
+\node[stop, text width=19mm, anchor=west] (refused) at (64,-62) {refused before any write};
 \draw[refusal] (s1.east |- refused) -- (refused.west);
 
 % -- 2-4: stamp, commit, public, in the maintainer's account -------------------------
-\node[step] (s2) at (5,-63)
-  {\stg{stamp} writes the version into \texttt{catalog.yaml} and the index, and a release entry into the status files};
-\node[stepno] at (2.6,-63 |- s2.center) {2};
-\node[step] (s3) at (5,-77)
+\node[step] (s2) at (5,-79.5)
+  {\stg{stamp} writes the version into \texttt{catalog.yaml} and the index, and a release step into the status file of every dataset that changed and, in a major release, of every withdrawn dataset};
+\node[stepno] at (2.6,-79.5 |- s2.center) {2};
+\node[step] (s3) at (5,-97.5)
   {\stg{commit} commits the release and tags it, through the Git port};
-\node[stepno] at (2.6,-77 |- s3.center) {3};
-\node[st=29, minimum height=24mm] (clone) at (71.5,-74)
+\node[stepno] at (2.6,-97.5 |- s3.center) {3};
+\node[st=29, minimum height=24mm] (clone) at (71.5,-93.5)
   {\store{Maintainer's clone of the source catalogue}{\texttt{catalog.yaml}, index, status files}};
 \draw[c4rel] (s2.east) -- (clone.west |- s2.east);
 \draw[c4rel] (s3.east) -- (clone.west |- s3.east);
 
-\node[step] (s4) at (5,-89)
+\node[step] (s4) at (5,-109.5)
   {\stg{public} generates the public view into the public catalogue checkout, commits and tags it};
-\node[stepno] at (2.6,-89 |- s4.center) {4};
-\node[st=27] (public) at (71.5,-94.5) {\store{Public catalogue checkout}{git}};
+\node[stepno] at (2.6,-109.5 |- s4.center) {4};
+\node[st=27] (public) at (71.5,-115) {\store{Public catalogue checkout}{git}};
 \draw[c4rel] (s4.east) -- (public.west |- s4.east);
 
 % -- 5-7: push, store, notices -------------------------------------------------------
-\node[step] (s5) at (5,-103)
+\node[step] (s5) at (5,-123.5)
   {\stg{push} with \texttt{-{}-push}: both checkouts and their tags};
-\node[stepno] at (2.6,-103 |- s5.center) {5};
-\node[st=15] (pub) at (113.5,-117.5) {\store{Public catalogue}{release tag}};
-\node[st=15] (src) at (130.5,-117.5) {\store{Source catalogue}{release tag}};
-\draw[c4rel] (s5.east |- 0,-106) -- (130.5,-106) -- (src.north);
-\draw[c4rel] (113.5,-106) -- (pub.north);
-\node[lblbg, above] at (96.5,-106) {\rel{push}{Git port}};
+\node[stepno] at (2.6,-123.5 |- s5.center) {5};
+\node[st=15] (pub) at (113.5,-138) {\store{Public catalogue}{release tag}};
+\node[st=15] (src) at (130.5,-138) {\store{Source catalogue}{release tag}};
+\draw[c4rel] (s5.east |- 0,-126.5) -- (130.5,-126.5) -- (src.north);
+\draw[c4rel] (113.5,-126.5) -- (pub.north);
+\node[lblbg, above] at (96.5,-126.5) {\rel{push}{Git port}};
 
-\node[step] (s6) at (5,-114)
+\node[step] (s6) at (5,-134.5)
   {\stg{store} with \texttt{-{}-upload}: the public catalogue beside the data, through the Store port};
-\node[stepno] at (2.6,-114 |- s6.center) {6};
-\node[st=15] (cat) at (96.5,-133) {\store{\texttt{catalogue/}}{latest public catalogue}};
-\draw[c4maint] (s6.east |- 0,-117.5) -| (cat.north);
-\node[lblbg, above] at (71.5,-117.5) {sync, \texttt{chmod}, read back};
+\node[stepno] at (2.6,-134.5 |- s6.center) {6};
+\node[st=15] (cat) at (96.5,-153.5) {\store{\texttt{catalogue/}}{latest public catalogue}};
+\draw[c4maint] (s6.east |- 0,-138) -| (cat.north);
+\node[lblbg, above] at (71.5,-138) {sync, \texttt{chmod}, read back};
 
-\node[step] (s7) at (5,-128)
+\node[step] (s7) at (5,-148.5)
   {\stg{notices} drafts the release notice and one answer per added dataset};
-\node[stepno] at (2.6,-128 |- s7.center) {7};
-\node[st=24] (notices) at (71.5,-134) {\store{Notices directory}{\texttt{-{}-notices}}};
+\node[stepno] at (2.6,-148.5 |- s7.center) {7};
+\node[st=24] (notices) at (71.5,-154.5) {\store{Notices directory}{\texttt{-{}-notices}}};
 \draw[c4rel] (s7.east) -- (notices.west |- s7.east);
 
 % -- 8: the served checkout ------------------------------------------------------------
-\node[note, anchor=north west, align=left, text width=19mm] at (139.6,-109)
+\node[note, anchor=north west, align=left, text width=19mm] at (139.6,-129.5)
   {Nothing else changes the served checkout. Run step 8 while no job reads it.};
-\node[step=19mm] (s8) at (139.6,-131)
+\node[step=19.6mm] (s8) at (139.3,-151.5)
   {\texttt{catalog}\\\texttt{update-checkout}\\[0.4ex]\stg{fetch}\,\stg{advance}\\[0.2ex]\stg{check}\\[0.2ex]\desc{fast-forward to the newest release tag}};
 \node[stepno] at (s8.north west) {8};
-\draw[c4rel] (s8.west |- 0,-146) -| node[lblbg, above, pos=0.25] {fetch} (src.south);
-\node[st=20] (served) at (151,-171) {\store{Served checkout}{latest release only}};
+\draw[c4rel] (s8.west |- 0,-166.5) -| node[lblbg, above, pos=0.25] {fetch} (src.south);
+\node[st=20] (served) at (151,-193) {\store{Served checkout}{latest release only}};
 \draw[c4rel] (s8.south -| served) -- (served.north);
 
 % -- removal ---------------------------------------------------------------------------
-\def\yr{-196}
+\def\yr{-218}
 \node[step=36.4mm] (r1) at (2.5,\yr)
   {\texttt{catalog remove NAMES}\\\texttt{-{}-reason TEXT}\\[0.4ex]
    \stg{withdraw}\,\stg{index}\,\stg{notices}\\[0.4ex]
    \desc{state withdrawn; the index leaves it out; a removal notice; files and entries stay}};
 \node[hand=21.4mm] (r2) at (46,\yr)
   {merge request; a later release (1--8) leaves the dataset out};
-\node[step=43.4mm] (r3) at (74.5,\yr)
+\node[step=50.4mm] (r3) at (74.5,\yr)
   {\texttt{catalog remove NAMES -{}-purge}\\[0.4ex]
    \stg{check}\,\stg{cache}\,\stg{store}\,\stg{tombstone}\\[0.4ex]
-   \desc{withdrawn and released since; unlinks and deletes its entries in the shared and restricted caches; purges every revision folder on dCache, then probes; deletes its directory, keeping \texttt{status.yaml}}};
-\node[hand=19.4mm] (r4) at (127,\yr)
+   \desc{needs a major release recorded after the removal, and write access to every cache with a recorded entry; deletes the recorded links and copies in the cluster's public cache and the restricted caches, and reports unrecorded entries; purges every revision folder on dCache, then probes; deletes its directory, keeping \texttt{status.yaml}}};
+\node[hand=21.4mm] (r4) at (132,\yr)
   {merge request for the tombstone; \texttt{catalog add} refuses the name};
 \draw[then] (r1.east |- r2) -- (r2.west);
 \draw[then] (r2.east) -- (r3.west |- r2.east);
@@ -133,10 +133,10 @@
 \begin{scope}[on background layer]
   \node[c4boundary, inner sep=2mm, fit=(r1)(r2)(r3)(r4)(nr1)] (removal) {};
 \end{scope}
-\node[c4boundarylabel] at (removal.north west) {Removal, then purge};
+\node[c4boundarylabel] at (removal.north west) {Removal, then purge after a major release};
 
 % -- the key ------------------------------------------------------------------------
-\begin{scope}[shift={(0,-230)}]
+\begin{scope}[shift={(0,-259)}]
   \keytitle{Key}
   \node[stepno] at (4.5,-6.5) {1};
   \node[keytext] at (11.5,-6.5) {a step, in order};
@@ -145,20 +145,20 @@
   \node[hand=6.4mm, anchor=center, minimum height=4.2mm, inner sep=0pt] at (4.5,-19.5) {};
   \node[keytext] at (11.5,-19.5) {done by hand};
 \end{scope}
-\begin{scope}[shift={(37,-230)}]
+\begin{scope}[shift={(37,-259)}]
   \node[stagekey] at (4.5,-6.5) {stage};
   \node[keytext] at (11.5,-6.5) {a stage of a pipeline};
   \keystore{2}{brand}{fillbrand}{a data store}
   \node[stop, anchor=center, minimum width=9mm, minimum height=4.2mm, inner sep=0pt] at (4.5,-19.5) {};
   \node[keytext] at (11.5,-19.5) {an outcome};
 \end{scope}
-\begin{scope}[shift={(73,-230)}]
+\begin{scope}[shift={(73,-259)}]
   \keynode{1}{c4personkey}{a person}
   \keynode{2}{c4systemext}{a system outside ETHOS.Data}
   \node[c4systemext, keysample, double=paper, double distance=0.7pt] at (4.5,-19.5) {};
   \node[keytext] at (11.5,-19.5) {a machine};
 \end{scope}
-\begin{scope}[shift={(121,-230)}]
+\begin{scope}[shift={(121,-259)}]
   \keyline{1}{c4rel}{writes or reads}
   \keyline{2}{c4maint}{authenticated, to dCache}
   \keyline{3}{refusal}{a refusal}

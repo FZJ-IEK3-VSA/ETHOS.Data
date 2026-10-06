@@ -1,6 +1,6 @@
 # 0002. Make a clean break during the beta; `catalog migrate` converts the internal catalogue once
 
-**Status:** proposed · **Date:** 2026-10-05 · **Implemented by:** #10–#27, each removing the compatibility code of its area, and #21 (`catalog migrate`); implemented once `catalog migrate` is removed, after the internal catalogue is converted
+**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #10–#27, each removing the compatibility code of its area, and #21 (`catalog migrate`); implemented once `catalog migrate` is removed, after the internal catalogue is converted
 
 ## Context
 
@@ -22,10 +22,16 @@ once, in a diff that a maintainer can review.
       `dataset.yaml` ([0022](0022-dataset-status-files.md));
     - no string `catalog:` location in a collections file, and no stripping of
       an `@ref` suffix ([0018](0018-numbered-catalogue-releases.md));
+    - no per-dataset root (`dataset_roots`, `config set-root`)
+      ([0011](0011-access-class-picks-the-root.md));
+    - no `internal` access class ([0011](0011-access-class-picks-the-root.md)),
+      which no dataset has, so `catalog migrate` rewrites no access class;
+    - no second bundle format and no bundle version
+      ([0020](0020-repository-bundles.md));
     - no second spelling: no `config set-cache` or `unset-cache`, no
       `materialize --force`, no hint for a command name outside the target,
-      no `locate(dataset_roots=)`, no `resolve_cache_dir`, and no import of an
-      error class or of `Resource` from a service module;
+      no `resolve_cache_dir`, and no import of an error class or of
+      `Resource` from a service module;
     - no `config show` row about a file or a key outside the target;
     - no test marker, and no test, for behaviour outside the target.
 - `Catalog.role` is `None` when `ethos:catalog_role` is absent.
@@ -75,6 +81,8 @@ once, in a diff that a maintainer can review.
 - [0001. Describe the target architecture in arc42, with C4 views and one file per decision](0001-arc42-c4-one-file-per-decision.md)
 - [0006. Specify every file format once](0006-every-file-format-specified-once.md)
 - [0010. Read settings from one file per account, once per handle](0010-one-settings-file-per-account.md)
-- [0018. Number catalogue releases `vYYYY.MM.N` and let collections files bound them](0018-numbered-catalogue-releases.md)
+- [0011. Let the access class pick the root, and a link mean "read in place"](0011-access-class-picks-the-root.md)
+- [0018. Number catalogue releases `vMAJOR.MINOR.PATCH`, purge data only after a major release, and let collections files bound them](0018-numbered-catalogue-releases.md)
+- [0020. Keep attributed data in bundles that are authoritative for their package](0020-repository-bundles.md)
 - [0022. Record each dataset's state in a status file](0022-dataset-status-files.md)
 - [0026. Serve the internal catalogue's latest release from one checkout on the cluster, and change it only through JuGit](0026-internal-catalogue-on-the-cluster.md)

@@ -6,9 +6,8 @@ below and its command `your-tool-data`; replace both with your names. Dataset
 identifiers and the catalogue version are examples.
 
 The package contributes configuration only: its one collections file, its
-repository bundles, its name. Every behaviour, fetching, verifying, staging,
-bundles, the command line, comes from ETHOS.Data, so a fix there reaches every
-package.
+bundles, its name. Every behaviour, fetching, verifying, staging, bundles, the
+command line, comes from ETHOS.Data, so a fix there reaches every package.
 
 ## 1. Add the dependency
 
@@ -165,9 +164,10 @@ the same for every package. The command already includes `staging`, `bundle`
 and `config`.
 
 Two groups of commands stay with `ethos-data` and never appear in
-`your-tool-data`. `link`, `unlink` and `materialize` act on the shared cache,
-which serves every package on the machine. `ethos-data catalog` acts on a
-maintainer's source-catalogue checkout, which your users do not have.
+`your-tool-data`. `link`, `unlink` and `materialize` act on the public cache
+and the restricted caches, which serve every package on the machine.
+`ethos-data catalog` acts on a maintainer's source-catalogue checkout, which
+your users do not have.
 
 ## See also
 

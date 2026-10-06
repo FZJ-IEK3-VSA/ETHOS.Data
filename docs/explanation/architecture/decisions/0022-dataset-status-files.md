@@ -1,6 +1,6 @@
 # 0022. Record each dataset's state in a status file
 
-**Status:** proposed · **Date:** 2026-10-02 · **Implemented by:** #21, #22, #23
+**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #21, #22, #23
 
 ## Context
 
@@ -36,21 +36,26 @@ what the step read or made.
   descriptor, such as settled licensing and the access class, are part of the
   step.
 - A release changes no state: it adds a `release` step to every dataset with
-  steps since its last release, tombstones included.
+  steps since its last release, tombstones included. A major release also
+  adds one to every withdrawn dataset, because the purge needs a major release
+  recorded after the `remove` step ([0018](0018-numbered-catalogue-releases.md)).
 - `catalog status` shows each dataset's state, access class, last release
-  with the steps since (for example `v2026.10.1 +1`) and next step.
-  `catalog status --check` compares every record with its evidence: the
-  descriptor a build would write, a draft's `source_dir`, and every copy,
-  file by file.
+  with the steps since (for example `v1.2.0 +1`) and next step, and names the
+  smallest admissible next version. `catalog status --check` compares every
+  record with its evidence: the descriptor a build would write, a draft's
+  `source_dir`, and every copy, file by file.
 - `dataset.yaml` only describes. `source_dir` is a key of a draft, and
   `catalog add` moves it into `status.yaml`.
 - `link` and `materialize` record a copy only when given `--catalog-root`, a
   maintainer's own clone of the source catalogue. A user's installation is
-  not a catalogue record.
+  not a catalogue record. For a built restricted dataset, `catalog status`
+  names the next step: register its installation by name in a restricted
+  cache, with `--catalog-root`.
 - `catalog record` freezes a dataset: it checks a copy file by file, makes it
   the authority and retires `source_dir` into the history. An upload, a copy
-  a cache owns, or for restricted data the registered installation can be
-  frozen; a link to public or internal data only when named with `--copy`.
+  a cache owns, or for restricted data the registered installation (a link in
+  a restricted cache) can be the authority; a link to public data only when
+  named with `--copy`.
 - Withdrawn datasets are left out of builds, the index, `publish` and
   `link --all`.
 
@@ -77,6 +82,7 @@ what the step read or made.
 
 ## Related
 
+- [0018. Number catalogue releases `vMAJOR.MINOR.PATCH`, purge data only after a major release, and let collections files bound them](0018-numbered-catalogue-releases.md)
 - [0019. Publish new versions as revisions or successors; published objects never change](0019-revisions-and-successors.md)
 - [0023. Run every catalogue workflow that writes as a pipeline that plans before it acts](0023-maintenance-pipelines.md)
 - [0024. Let unresolved licensing block distribution, not development](0024-licensing-gates-distribution.md)

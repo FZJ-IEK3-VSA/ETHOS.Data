@@ -23,13 +23,14 @@ visible when it is a problem.
 
 A warning is the right answer for somebody who already has the data in front of
 them. It is the wrong answer at the moment the data is handed to other people,
-so the two operations that do that **refuse**:
+so the operations that do that **refuse**:
 
 | Operation | With unresolved licensing |
 |---|---|
 | `ethos-data link <dataset>` | refused — the command fails, nothing is linked |
 | `ethos-data link --all` | refused — the dataset is left out of the namespace, the rest of the catalogue is still linked |
 | `catalog upload` | refused — nothing is transferred (`--verify-only` still works) |
+| `<your-tool>-data bundle update`, `bundle export`, and reading a bundle | refused — a repository hands its bundles to everyone who clones it |
 | `<your-tool>-data staging add` | **allowed** |
 | `fetch`, `verify` on data already here | allowed, with the warning |
 
@@ -44,6 +45,10 @@ Staging is the deliberate exception, and the refusals name it. A staged dataset
 is one person's, on one machine; it shadows nothing for anybody else, it is
 never uploaded, and it verifies as `unverifiable` by construction. Development
 does not have to wait for a legal answer — publication does.
+
+!!! warning "Gap: bundles do not check licensing"
+    The code refuses a bundle that holds data that is not public, but not
+    one whose licensing is unsettled, and it has no `bundle update`.
 
 A dataset counts as settled when it carries a `licenses:` entry, or an explicit
 `ethos:license_status: resolved`. Nothing else does, including silence: the
@@ -123,22 +128,26 @@ no files is how a dataset ends up published under terms nobody applied.
 
 ## Restricted data is read in place {#restricted-data-is-never-copied}
 
-`ethos:access: restricted` means the licence forbids redistribution. The tooling
-enforces that structurally rather than by convention:
+`ethos:access: restricted` means the bytes are not published: the licence
+forbids redistribution, or the institute holds the data without publishing it.
+The tooling enforces that structurally rather than by convention:
 
 - it is never downloaded, under any configuration;
 - it is never written into the public cache;
 - the [staging root](../how-to/package-maintainers/stage-development-data.md#stage-development-data) never shadows it —
-  licence terms are not a development concern;
-- `ethos-data catalog upload` refuses it outright;
-- repository test-bundle export rejects it.
+  access terms are not a development concern;
+- `ethos-data catalog upload` refuses it outright, so dCache holds no copy;
+- no bundle holds it: reading a bundle refuses it, and so does every bundle
+  command.
 
-It is read in place from a root somebody deliberately configured, or asking for
-it fails with an explanation. An administrator may relocate an installation only
-where its terms permit that local copy, preserving access restrictions. Explicit
-`materialize <dataset>` supports this for a link in the restricted root; ordinary
-retrieval continues to read in place. See
-[Link existing data into the cache](../how-to/catalogue-maintainers/materialize-linked-data.md#materialize-copies) and
+It is read in place from a restricted cache that somebody deliberately set up
+and whose file permissions admit the reader, or asking for it fails with an
+explanation of how to obtain it. An account that lists no restricted cache is a
+normal set-up. An administrator may relocate an installation only where its
+terms permit that local copy, preserving access restrictions. Explicit
+`materialize <dataset>` supports this for a link in a restricted cache;
+ordinary retrieval reads in place. See
+[Materialize linked data](../how-to/catalogue-maintainers/materialize-linked-data.md#materialize-copies) and
 [Work with restricted data](../how-to/data-users/set-up-your-machine.md#public-installation-users).
 
 ## Access and visibility are two questions
@@ -147,12 +156,13 @@ They are separate keys because they are separate decisions:
 
 | | Asks | Values |
 |---|---|---|
-| `ethos:access` | who may read the bytes | `public` · `internal` · `restricted` |
+| `ethos:access` | who may read the bytes | `public` · `restricted` |
 | `ethos:visibility` | is the dataset listed in the public catalogue | `public` · `hidden` |
 
 A dataset can be perfectly redistributable and still not ready to publish —
-pending a paper, say. That is `access: internal, visibility: hidden`, and it
-requires an embargo block:
+pending a paper, say. Until then the institute holds it without publishing it.
+That is `access: restricted, visibility: hidden`, with an `ethos:restriction`
+note on who may read it meanwhile, and it requires an embargo block:
 
 ```yaml
 ethos:embargo:
@@ -160,6 +170,9 @@ ethos:embargo:
   reason: "Pending publication of the accompanying paper"
   becomes: public
 ```
+
+`becomes` names only the visibility it then takes; to publish the bytes, its
+access changes to `public` as well, and they are uploaded.
 
 The block is **required** so that nothing stays hidden by accident. Hiding
 something is easy; remembering to un-hide it a year later is not, and a
@@ -199,7 +212,14 @@ And when it is genuinely a withdrawal, the order matters and is the opposite of
 publishing: **unpublish the catalogue entry first, then delete the bytes**. The
 other way round leaves a public catalogue pointing at a path that 404s, and
 anyone resolving it mid-way gets a broken reference instead of a clean "not
-published". See [Remove a dataset](../how-to/catalogue-maintainers/withdraw-a-dataset.md).
+published".
+
+The bytes also wait for a major release. Within a major release, dCache keeps
+every version it published, so a package bounded to an earlier release of the
+same major still reads the withdrawn dataset; its bytes may be purged once a
+major release is recorded after the withdrawal. A licence that forbids further
+distribution therefore needs an unplanned major release. See
+[Remove a dataset](../how-to/catalogue-maintainers/withdraw-a-dataset.md).
 
 ## What this does not cover
 

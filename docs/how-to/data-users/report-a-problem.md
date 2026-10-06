@@ -13,8 +13,9 @@ that fixes it. The common ones:
 | --- | --- | --- |
 | `CatalogUnavailable` | The catalogue location cannot be read: wrong path or URL, no network, or a version that does not exist yet. | Run `ethos-data config show`; check the location and, on the cluster computer, your read permission. |
 | `IncompleteCatalog` | The catalogue index lists a dataset whose descriptor is missing from the served copy. | Not yours to fix: report it. A copy of only the index is not a catalogue. |
-| `UnknownDataset`, unknown key | The selected catalogue does not describe that name. | Check the spelling and which catalogue is selected. An internal dataset is invisible through the public catalogue. |
-| `AccessError` | A licensed dataset has no copy on this machine that you may read. The error describes the dataset and how to obtain it. | Obtain a copy under its terms and [register it](set-up-your-machine.md#public-installation-users); on the cluster computer, ask the dataset's custodian for access. |
+| `UnknownDataset`, unknown key | The dataset or key cannot be found: the name is mistyped, or the catalogue in use does not publish it. | Check the spelling and which catalogue is selected. A hidden dataset is not in the public catalogue. |
+| `CollectionError` | The collection has no test (or full) variant, or a named path is in one variant only; the message names the collection and the variant or the named path. | Ask for a variant the collection defines; otherwise report it to the package maintainer. |
+| `AccessError` | A restricted dataset has no copy this account may read: the error says how to obtain and register one. Or a file read in place is missing, for example behind a broken link. | Obtain a copy under its terms and [register it](set-up-your-machine.md#public-installation-users); on the cluster computer, ask the dataset's custodian for access and [add your group's restricted cache](set-up-your-machine.md#cluster-users). Report a broken link. |
 | Hash mismatch, `wrong checksum` | The downloaded or linked bytes differ from the catalogue. | [Verify and repair](verify-and-repair.md). If a repair fails again, report it. |
 | Download error, 404, 403 | The published store does not serve a file the catalogue lists. | Report it with the URL from the error. |
 | Unresolved-licence warning | The dataset's terms have not been reviewed yet. | Not an error. Tell the catalogue maintainer if you know the terms. |
@@ -74,7 +75,7 @@ Output of `ethos-data selftest`:
 Catalogue location and version (from `config show` and `show`):
 Collection or catalogue key:
 Cache settings and their origins (from `config show`):
-Staging entries, dataset-root overrides or bundles in use:
+Staging entries or bundles in use:
 Output of `fetch --plan` and `verify`:
 When it last worked and what changed since:
 ```
@@ -89,7 +90,7 @@ internal tracker only.
 | --- | --- |
 | The `ethos-data` command, the Python API or this documentation | [ETHOS.Data issues](https://github.com/FZJ-IEK3-VSA/ETHOS.Data/issues) |
 | A public dataset's contents, licence or published catalogue entry, from a public installation | [ETHOS.Data-Catalogue issues](https://github.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/issues) |
-| Anything about the internal catalogue, restricted data or the shared caches, from a cluster installation | [ethos-data-catalog-internal on JuGit](https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data-catalog-internal) |
+| Restricted data, from any installation; the internal catalogue, the cluster's public cache or a restricted cache, from a cluster installation | [ethos-data-catalog-internal on JuGit](https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data-catalog-internal) |
 | A package's collection or workflow | That package's issue tracker |
 
 If ownership is unclear, start with the catalogue maintainer named on the

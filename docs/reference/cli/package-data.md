@@ -26,9 +26,9 @@ to expose the wrapper.
 !!! warning "Gap: `--skip-unavailable` is to be removed"
     With [every input is
     required](../../explanation/architecture/decisions/0013-every-input-is-required.md),
-    unreachable data always stops `fetch`, with an error that describes the
-    dataset; `fetch --plan` and `show` still list it as not available here.
-    To be implemented separately.
+    unreachable data always stops `fetch`, with an error that names the
+    dataset and says how to obtain and register a copy; `fetch --plan` and
+    `show` list it as not available here. To be implemented separately.
 
 Place global options before the subcommand, except `--test`, which works in
 either position. A package may supply an environment override such as
@@ -216,6 +216,13 @@ incomplete catalogue copy, a faulty definition — and verifies the rest. It
 exits `1` if anything was skipped, even when every checked file matches: the
 check was not complete, and a CI job must not read it as one.
 
+!!! warning "Gap: `--repair` is to leave links alone"
+    With [one public cache on the
+    cluster](../../explanation/architecture/decisions/0028-one-public-cache-on-the-cluster.md),
+    `--repair` downloads a damaged copy again into the public cache and
+    never removes or replaces a link; a broken link is only reported. To be
+    implemented separately.
+
 See [Check and repair the cache](../../how-to/data-users/verify-and-repair.md).
 
 ## Reaching past the collections {#keys}
@@ -265,7 +272,7 @@ metadata. dCache remains authoritative. Bundle reads use only local files and
 never overwrite fixtures or fall back to downloads.
 
 ```bash
-<tool>-data bundle export tests/data-bundle test_suite --source-revision v2026.09
+<tool>-data bundle export tests/data-bundle test_suite --source-revision v1.0.0
 <tool>-data bundle verify tests/data-bundle test_suite
 <tool>-data bundle fetch tests/data-bundle test_suite
 <tool>-data bundle fetch tests/data-bundle test_suite --allow-modified
@@ -283,6 +290,22 @@ never overwrite fixtures or fall back to downloads.
 Global cache, staging, and skip-unavailable settings do not redirect bundle reads.
 The package's collections file and `--catalog` select inputs for export only. Invalid bundle inputs exit 2.
 See [Keep data in the repository](../../how-to/package-maintainers/keep-data-in-the-repository.md).
+
+!!! warning "Gap: a bundle is to be authoritative for its package"
+    With [decision
+    0020](../../explanation/architecture/decisions/0020-repository-bundles.md)
+    and [bundles ahead of the
+    catalogue](../../explanation/architecture/decisions/0021-bundles-ahead-of-the-catalogue.md),
+    the package reads what its bundles hold, in place and before the
+    caches, even where a bundle is ahead of the catalogue; such a read warns
+    once per bundle until the bundle is realigned. One `bundle.json` format
+    holds public, visible data with settled licensing only, with each
+    dataset's description and licence documents. `bundle create` starts a
+    bundle, `bundle update` records a change or, with `--from-catalog`,
+    takes the catalogue's version, and `propose` drafts the proposal to the
+    catalogue. `bundle export` reads through the package's handle, takes
+    `--test`, and has no `--source-root`. To be implemented separately.
+
 ## `config`
 
 The wrapper exposes the same shared [configuration commands](../configuration.md)
