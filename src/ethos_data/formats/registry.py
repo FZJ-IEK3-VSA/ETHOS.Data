@@ -1,4 +1,9 @@
-"""Every format by name, its JSON Schema, and the templates of the files people write."""
+"""Every format by name, its JSON Schema, and the templates of the files people write.
+
+Two kinds of template, filled in by one engine: the files people write,
+``templates/<name>.yaml``, and the handoffs between roles,
+``templates/handoffs/<name>.md``.
+"""
 
 from __future__ import annotations
 
@@ -24,6 +29,8 @@ from .status_file import StatusFile
 __all__ = [
     "FORMATS",
     "Format",
+    "handoff",
+    "handoff_names",
     "placeholders",
     "schema",
     "schema_text",
@@ -134,19 +141,27 @@ class _Template(string.Template):
     """
 
 
-def template_names() -> list[str]:
-    """The templates the package ships, without their ``.yaml`` suffix."""
-    folder = resources.files(__package__) / "templates"
+def _names(folder: str, suffix: str) -> list[str]:
+    found = resources.files(__package__).joinpath(*folder.split("/"))
     return sorted(
-        entry.name.removesuffix(".yaml")
-        for entry in folder.iterdir()
-        if entry.name.endswith(".yaml")
+        entry.name.removesuffix(suffix)
+        for entry in found.iterdir()
+        if entry.name.endswith(suffix)
     )
 
 
+def _text(folder: str, name: str, suffix: str) -> str:
+    found = resources.files(__package__).joinpath(*folder.split("/"))
+    return (found / f"{name}{suffix}").read_text(encoding="utf-8")
+
+
+def template_names() -> list[str]:
+    """The templates the package ships, without their ``.yaml`` suffix."""
+    return _names("templates", ".yaml")
+
+
 def _template_text(name: str) -> str:
-    folder = resources.files(__package__) / "templates"
-    return (folder / f"{name}.yaml").read_text(encoding="utf-8")
+    return _text("templates", name, ".yaml")
 
 
 def template(template_name: str, /, **values: str) -> str:
@@ -156,6 +171,18 @@ def template(template_name: str, /, **values: str) -> str:
     be written with a ``${...}`` left in it is a bug in the caller.
     """
     return _Template(_template_text(template_name)).substitute(values)
+
+
+def handoff_names() -> list[str]:
+    """The handoffs there are templates for, without their ``.md`` suffix."""
+    return _names("templates/handoffs", ".md")
+
+
+def handoff(handoff_name: str, /, **values: str) -> str:
+    """A handoff's text with its ``${placeholders}`` filled in; every one must be given."""
+    return _Template(_text("templates/handoffs", handoff_name, ".md")).substitute(
+        values
+    )
 
 
 def placeholders(template_name: str) -> set[str]:

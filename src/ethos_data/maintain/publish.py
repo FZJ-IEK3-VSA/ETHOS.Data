@@ -246,6 +246,15 @@ def render(catalog_root: Path, earlier: list[str] | None = None) -> dict[Path, s
     )
     files[Path("README.md")] = GENERATED_README.format(table=table)
     files[Path(".gitignore")] = GENERATED_GITIGNORE
+    # The handoffs a public user starts, as the repository's issue templates:
+    # the same templates the commands fill in, so the two never ask for
+    # different things.
+    from ..handoffs import ISSUES, issue_template
+
+    for issue in ISSUES:
+        files[Path(".github") / "ISSUE_TEMPLATE" / f"{issue}.md"] = issue_template(
+            issue
+        )
     # The source catalogue's line-ending rules travel with the tree. A public
     # checkout is used from Windows too, and without them core.autocrlf=true
     # would rewrite the licence documents whose sha256 the descriptors record.

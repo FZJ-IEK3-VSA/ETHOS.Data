@@ -307,6 +307,38 @@ first, after staging: see [Keep data in the repository](../../how-to/package-mai
 A bundle ahead of the catalogue is read with a `BundleAlignmentWarning`, once
 per bundle and process. Invalid bundle inputs exit 2.
 
+## `propose <directory>` {#propose}
+
+Check a candidate dataset, the directory holding its draft `dataset.yaml`
+with its `source_dir`, or a bundle, and print the proposal to submit.
+
+```bash
+<tool>-data propose /projects/shared/candidates/my-dataset
+<tool>-data propose your_tool/data/test_data
+```
+
+A draft is checked as the catalogue's build would check it, and refused
+where the build would refuse it; its bytes are inventoried and every file
+still writable is named. For a bundle, the proposal covers the datasets that
+are ahead of the catalogue; a bundle that holds data it may not hold, or a
+file that differs from `bundle.json`, is refused. The proposal names the dataset, its kind (new, a revision of a
+catalogued dataset, or a successor), the bytes, the package's collections
+that already name it, and the tracker to submit it to, by access class.
+
+## `report [collection]` {#report}
+
+Draft a problem report: run `ethos-data selftest`, `config show`, `show` and,
+for a collection, `fetch <collection> --plan` and `verify <collection>` by
+size, and print their output in the report template, with tokens,
+credentials in URLs, the home directory and the account name removed. The
+plan gives the state of every listed restricted cache for the collection's
+restricted data, and the report names the tracker to post it at.
+
+| Flag | |
+|---|---|
+| `--test` | the collection's test variant |
+| `--no-selftest` | leave out the self-test's download |
+
 ## `config`
 
 The wrapper exposes the same shared [configuration commands](../configuration.md)

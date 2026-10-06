@@ -13,6 +13,9 @@ first half takes two stages:
 ``withdraw``   record every dataset named -- a family stands for its members --
                as withdrawn, with the reason
 ``index``      rebuild the index, and the families above them, without them
+``notices``    draft the removal notice of each dataset withdrawn, for the
+               packages that read it: printed, and with ``--notices DIR``
+               written there
 
 A withdrawn dataset is left out of every later build and of the public
 catalogue. Its description, inventory and status file stay where they are,
@@ -79,6 +82,10 @@ class Removal:
     purging: list[tuple[str, Path, StatusFile]] = field(default_factory=list)
     settings: StoreSettings = field(default_factory=StoreSettings)
     publication_url: str = ""
+    #: The datasets this run withdraws, for their notices: set by ``withdraw``.
+    withdrawn: list[str] = field(default_factory=list)
+    #: Where the removal notices are written, besides being printed.
+    notices: Path | None = None
 
 
 class Withdraw:
@@ -97,6 +104,7 @@ class Withdraw:
             if status.state == lifecycle.WITHDRAWN:
                 continue
             lifecycle.step("remove", status.state, name)
+            removal.withdrawn.append(name)
             actions.append(
                 Action(
                     f"withdraw {name}, {status.state}", self._withdraw(removal, name)
@@ -417,7 +425,50 @@ def _forget_family(family: Path) -> None:
         (family / generated).unlink(missing_ok=True)
 
 
-PIPELINE: Pipeline[Removal] = Pipeline("remove", [Withdraw(), Index()])
+class Notices:
+    name = "notices"
+
+    def plan(self, removal: Removal) -> list[Action]:
+        where = f", into {removal.notices}" if removal.notices is not None else ""
+        return [
+            Action(
+                f"draft the removal notice of {name}{where}",
+                self._draft(removal, name),
+                subject=name,
+            )
+            for name in removal.withdrawn
+        ]
+
+    @staticmethod
+    def _draft(removal: Removal, name: str):
+        def draft() -> None:
+            from .. import handoffs
+
+            directory = dataset_status.dataset_dir_in(removal.catalog_root, name)
+            status = dataset_status.read(directory)
+            package = directory / k.PACKAGE_FILE
+            replacement = (
+                json.loads(package.read_text(encoding="utf-8")).get(k.SUPERSEDED_BY, [])
+                if package.is_file()
+                else []
+            )
+            text = handoffs.removal_notice(
+                name,
+                removal.reason,
+                dataset_status.releases(status)[0] if status is not None else None,
+                replacement,
+            )
+            if removal.notices is not None:
+                removal.notices.mkdir(parents=True, exist_ok=True)
+                (removal.notices / f"removal-{name.replace('/', '-')}.md").write_text(
+                    text, encoding="utf-8", newline="\n"
+                )
+            report.info("\n" + text.rstrip())
+
+        return draft
+
+
+PIPELINE: Pipeline[Removal] = Pipeline("remove", [Withdraw(), Index(), Notices()])
 PURGE: Pipeline[Removal] = Pipeline(
     "purge", [Released(), CacheEntries(), StoreBytes(), Tombstone()]
 )
@@ -446,10 +497,12 @@ def run(
     dry_run: bool = False,
     store: Store | None = None,
     roots: Roots | None = None,
+    notices: str | Path | None = None,
 ) -> RemoveResult:
     """Withdraw ``names`` -- datasets or families -- or, with ``purge``, delete them.
 
-    Withdrawing rebuilds the index without them. Purging deletes their cache
+    Withdrawing rebuilds the index without them and drafts the removal notice
+    of each, written into ``notices`` as well when it names a directory. Purging deletes their cache
     entries, their bytes on ``store`` -- the one catalog.yaml names by default
     -- and their directories, once a major release is recorded after their
     removal. It reports the entries in the caches ``roots`` names, the
@@ -463,6 +516,7 @@ def run(
         except ConfigurationError:
             roots = None
     removal = Removal(catalog_root, list(names), reason, store, roots)
+    removal.notices = Path(notices).expanduser() if notices is not None else None
     (PURGE if purge else PIPELINE).run(removal, dry_run=dry_run)
     if purge and not dry_run:
         report.info(
@@ -474,6 +528,7 @@ def run(
             "\nCommit the withdrawal, merge it and release the catalogue: a "
             "withdrawal needs a minor release. Their cache entries and their bytes "
             "on dCache stay until a major release is recorded after the removal; "
-            "then --purge deletes them."
+            "then --purge deletes them. Send the removal notices to the packages "
+            "that read them."
         )
     return RemoveResult([name for name, _ in removal.datasets], not dry_run)

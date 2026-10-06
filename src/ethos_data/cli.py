@@ -175,9 +175,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _build_tool_parser(prog: str, source: _ToolSource) -> argparse.ArgumentParser:
-    """A tool's collection, bundle, staging and config commands, no ``-c``.
+    """A tool's collection, bundle, staging, config and handoff commands, no ``-c``.
 
-    Six commands, and the two that carry the work are ``show`` and ``fetch``:
+    Eight commands, and the two that carry the work are ``show`` and ``fetch``:
     whatever a tool's user wants out of the catalogue, they ask for it through
     one of the collections the tool ships. Access by catalogue key
     (``ethos-data ls``, ``ethos-data fetch``) and cache maintenance
@@ -213,6 +213,34 @@ def _build_tool_parser(prog: str, source: _ToolSource) -> argparse.ArgumentParse
     _add_bundle_commands(sub)
     _add_config_commands(sub)
     _add_staging_commands(sub)
+    proposer = sub.add_parser(
+        "propose",
+        help="check a candidate dataset or bundle and print its proposal",
+        description="Check a draft dataset.yaml as the catalogue's build would, "
+        "inventory its bytes and warn about files still writable, or take the "
+        "datasets of a bundle that are ahead of the catalogue, and print the "
+        "proposal to submit.",
+    )
+    proposer.add_argument(
+        "directory", help="the draft's dataset.yaml or its directory, or a bundle"
+    )
+    reporter = sub.add_parser(
+        "report",
+        help="draft a problem report: versions, the self-test, the settings, a plan",
+        description="Run the self-test, show the settings and the package's "
+        "collections and, for a collection, what a fetch would do and what verify "
+        "finds by size, and print them in the report template, with tokens, "
+        "credentials, the home directory and the account name removed.",
+    )
+    reporter.add_argument(
+        "collection", nargs="?", default=None, help="the collection that fails"
+    )
+    reporter.add_argument(
+        "--test", action="store_true", help="the collection's test variant"
+    )
+    reporter.add_argument(
+        "--no-selftest", action="store_true", help="leave out the self-test's download"
+    )
     parser.set_defaults(prog=prog)
     return parser
 
@@ -407,6 +435,20 @@ def _add_key_commands(sub) -> None:
         description="Fetch the small public collections ETHOS.Data ships, under 200 KB, "
         "and check every file against the catalogue. Give an empty --root to force a "
         "download where the files are already cached.",
+    )
+    reporter = sub.add_parser(
+        "report",
+        help="draft a problem report: versions, the self-test, the settings, a plan",
+        description="Run the self-test, show the settings and, for a key, what a "
+        "fetch would do and what verify finds by size, and print them in the report "
+        "template, with tokens, credentials, the home directory and the account "
+        "name removed.",
+    )
+    reporter.add_argument(
+        "key", nargs="?", default=None, help="the catalogue key that fails"
+    )
+    reporter.add_argument(
+        "--no-selftest", action="store_true", help="leave out the self-test's download"
     )
 
 
@@ -829,6 +871,66 @@ def _readable_catalog(source, args):
         return None
 
 
+def _report_command(args) -> int:
+    """``ethos-data report [KEY]``: the report :func:`ethos_data.handoffs.report` drafts."""
+    from . import __version__
+    from .handoffs import report
+
+    print(
+        report(
+            args.key,
+            catalog=args.catalog,
+            root=args.root,
+            selftest=not args.no_selftest,
+            version=__version__,
+        )
+    )
+    return 0
+
+
+def _tool_report_command(args, source) -> int:
+    """``<tool>-data report [COLLECTION]``: the same, with the package's collections.
+
+    A handle that cannot be built is said on stderr, and the report goes
+    without the package: it is drafted most of all when something fails.
+    """
+    from . import __version__
+    from .handoffs import report
+
+    try:
+        loaded = source.load(args)
+    except EthosDataError as error:
+        print(
+            f"warning: the package's collections are left out: {error.message}",
+            file=sys.stderr,
+            flush=True,
+        )
+        loaded = None
+    print(
+        report(
+            args.collection if loaded is not None else None,
+            collections=loaded,
+            catalog=args.catalog or source.catalog,
+            root=args.root,
+            test=args.test,
+            selftest=not args.no_selftest,
+            version=__version__,
+        )
+    )
+    return 0
+
+
+def _propose_command(args, source) -> int:
+    """``<tool>-data propose DIR``: check the candidate, print the proposal."""
+    from .handoffs import propose
+
+    proposal = propose(args.directory, source.load(args))
+    for finding in proposal.findings:
+        print(f"warning: {finding}", file=sys.stderr, flush=True)
+    print(proposal.text)
+    return 0
+
+
 def _main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if args.command == "config":
@@ -837,6 +939,8 @@ def _main(argv: list[str] | None = None) -> int:
         return _catalog_dispatch(args)
     if args.command == "selftest":
         return _selftest_command(args)
+    if args.command == "report":
+        return _report_command(args)
 
     if args.command in ("materialize", "link", "unlink"):
         # Here --root names the cache that holds the entry, not the public cache.
@@ -859,6 +963,11 @@ def _dispatch(args, source) -> int:
     """Run a package command against its shipped collections file."""
     if args.command == "bundle":
         return _bundle_command(args, source)
+    if args.command == "propose":
+        return _propose_command(args, source)
+    if args.command == "report":
+        args.test = bool(args.test or args.test_global)
+        return _tool_report_command(args, source)
     if args.command == "config":
         return _config_command(args)
     if args.command == "staging":

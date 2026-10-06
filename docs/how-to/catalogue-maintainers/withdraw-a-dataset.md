@@ -70,8 +70,8 @@ ethos-data --catalog /shared/ethos/catalogue/datacatalog.json ls | grep <name>
 
 Expect `404` and no listing. Then tell the maintainers of every package whose
 collections name the dataset: the removed name, the reason, the last release
-that describes it, and the replacement. Releases before the major release
-still describe the dataset, but its bytes are gone, and copies on users' own
-machines remain; removal notifies nobody by itself and corrects no earlier
-result.
+that describes it, and the replacement. `catalog remove` drafted that notice
+in step 1. Releases before the major release still describe the dataset, but
+its bytes are gone, and copies on users' own machines remain; removal
+notifies nobody by itself and corrects no earlier result.
 

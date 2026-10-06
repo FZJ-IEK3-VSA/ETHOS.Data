@@ -172,11 +172,6 @@ and licence documents, and records the alignment.
 
 A later change makes the bundle ahead again and goes the same way.
 
-!!! warning "Gap: no `propose`"
-    The code has no `<your-tool>-data propose`. Write the proposal by hand,
-    as under [Propose a dataset](propose-a-dataset.md), naming the bundle's
-    ahead datasets, which `bundle verify` lists.
-
 ## 5. Export it to another repository
 
 `bundle export` writes a new bundle of what your package reads for some of

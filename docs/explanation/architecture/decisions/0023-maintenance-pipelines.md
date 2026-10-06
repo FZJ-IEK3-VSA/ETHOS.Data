@@ -1,6 +1,6 @@
 # 0023. Run every catalogue workflow that writes as a pipeline that plans before it acts
 
-**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #20, #22, #42 (pipelines: build, upload, publish and the cache copies), #23, #26
+**Status:** implemented · **Date:** 2026-10-06 · **Implemented by:** #20, #22, #42 (pipelines: build, upload, publish and the cache copies), #23, #26
 
 ## Context
 

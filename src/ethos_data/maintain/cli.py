@@ -318,7 +318,8 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         description="Record each dataset as withdrawn -- a family stands for its "
         "members -- and rebuild the index without them. Their description, status "
         "file, cache entries and bytes stay until a major release is recorded after "
-        "the removal.",
+        "the removal. Each dataset withdrawn gets a removal notice drafted for the "
+        "packages that read it.",
     )
     remover.add_argument("datasets", nargs="+", help="dataset or family names")
     remover.add_argument(
@@ -330,6 +331,12 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         help="once a major release is recorded after their removal: delete their "
         "cache entries, their bytes on the store and their directories but "
         "status.yaml",
+    )
+    remover.add_argument(
+        "--notices",
+        default=None,
+        metavar="DIR",
+        help="also write the removal notices into DIR",
     )
     remover.add_argument(
         "--dry-run", action="store_true", help="check and plan; write nothing"
@@ -385,6 +392,12 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     )
     releaser.add_argument(
         "--remote", default="origin", help="the git remote to push to (default: origin)"
+    )
+    releaser.add_argument(
+        "--notices",
+        default=None,
+        metavar="DIR",
+        help="also write the release notice and the answers into DIR",
     )
     releaser.add_argument(
         "--dry-run", action="store_true", help="check and plan; write nothing"
@@ -554,6 +567,7 @@ def dispatch(args) -> int:
                 reason=args.reason,
                 purge=args.purge,
                 dry_run=args.dry_run,
+                notices=args.notices,
             )
         )
 
@@ -569,6 +583,7 @@ def dispatch(args) -> int:
                 upload=args.upload,
                 remote=args.remote,
                 dry_run=args.dry_run,
+                notices=args.notices,
             )
         )
 
