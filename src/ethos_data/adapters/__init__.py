@@ -49,7 +49,6 @@ class Store(Protocol):
         paths: list[str],
         *,
         transfers: int,
-        dry_run: bool,
     ) -> None:
         """Copy ``paths`` under ``source`` to ``destination``; never overwrite."""
         ...

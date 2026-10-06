@@ -56,7 +56,6 @@ class TestDcache:
             "ethos-data/fam/a",
             ["x.csv", "sub/y.csv"],
             transfers=4,
-            dry_run=True,
         )
 
         command = seen["command"]
@@ -66,7 +65,7 @@ class TestDcache:
             str(tmp_path),
             "HIFIS:ethos-data/fam/a",
         ]
-        assert "--immutable" in command and "--dry-run" in command
+        assert "--immutable" in command
         assert command[command.index("--transfers") + 1] == "4"
         assert seen["listing"] == b"x.csv\nsub/y.csv\n", "LF, whatever the platform"
         assert not Path(command[command.index("--files-from") + 1]).exists()
@@ -79,9 +78,7 @@ class TestDcache:
         )
 
         with pytest.raises(UploadError, match="rclone exited 7 copying to HIFIS:d"):
-            dcache.DcacheStore("HIFIS").copy(
-                tmp_path, "d", ["x.csv"], transfers=1, dry_run=False
-            )
+            dcache.DcacheStore("HIFIS").copy(tmp_path, "d", ["x.csv"], transfers=1)
 
     def test_the_read_back_is_anonymous_and_names_what_is_not_served(self, store):
         store.put("ethos-data/flat", "a.csv", "1\n")
@@ -212,7 +209,7 @@ class TestTheFakeStore:
         (tmp_path / "a.csv").write_bytes(b"1\n")
         fake = FakeStore()
 
-        fake.copy(tmp_path, "root/flat", ["a.csv"], transfers=1, dry_run=False)
+        fake.copy(tmp_path, "root/flat", ["a.csv"], transfers=1)
 
         assert fake.served("https://store.invalid/root/flat/a.csv") == 2
         with pytest.raises(UploadError, match="HTTP 404"):
@@ -222,11 +219,9 @@ class TestTheFakeStore:
         (tmp_path / "a.csv").write_bytes(b"1\n")
 
         with pytest.raises(UploadError, match="rclone exited 7"):
-            FakeStore(copy_status=7).copy(
-                tmp_path, "root/flat", ["a.csv"], transfers=1, dry_run=False
-            )
+            FakeStore(copy_status=7).copy(tmp_path, "root/flat", ["a.csv"], transfers=1)
         closed = FakeStore(readable=False)
-        closed.copy(tmp_path, "root/flat", ["a.csv"], transfers=1, dry_run=False)
+        closed.copy(tmp_path, "root/flat", ["a.csv"], transfers=1)
         with pytest.raises(UploadError, match="HTTP 401"):
             closed.served("https://store.invalid/root/flat/a.csv")
 

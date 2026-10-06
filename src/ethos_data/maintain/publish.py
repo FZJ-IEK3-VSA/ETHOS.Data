@@ -10,8 +10,16 @@ Fields that only make sense to a maintainer are stripped on the way out --
 crucially the embargo block, which would otherwise announce the existence and
 release date of data nobody outside is supposed to know about.
 
+    ethos-data catalog publish ../ETHOS.Data-Catalogue --dry-run
     ethos-data catalog publish ../ETHOS.Data-Catalogue
     ethos-data catalog publish ../ETHOS.Data-Catalogue --check   # CI: is it current?
+
+It runs as a pipeline (see :mod:`.pipeline`), and ``--dry-run`` prints its plan:
+
+``render``  the public tree, in memory
+``check``   the leak check: no unpublished key, and no withheld dataset named
+``write``   the generated files that differ, and the removal of every file the
+            target holds that is not generated, ``.git`` left alone
 
 Publishing an embargoed dataset is then two edits in dataset.yaml
 (visibility: public, access: public), a rebuild, an upload, and a re-run of this.
@@ -43,12 +51,12 @@ from . import (
     iter_dataset_dirs,
     read_catalog_meta,
 )
+from .pipeline import Action, Pipeline
 
 #: Maintainer-only, never in the public catalogue: the keys the dataset.yaml
 #: specification marks unpublished. ``ethos:embargo`` would leak that unpublished
 #: data exists and when it lands, ``ethos:license_note`` is an internal review
-#: note, ``source_dir`` a path on somebody's workstation, ``ethos:uploaded`` and
-#: ``ethos:frozen`` bookkeeping about where the inventory came from.
+#: note, and a draft's ``source_dir`` a path on one machine.
 STRIP_FROM_PACKAGE = dataset_format.STRIPPED
 
 #: What the leak check looks for as a JSON key: every key any format's
@@ -306,6 +314,8 @@ class PublishResult:
     @property
     def ok(self) -> bool:
         return not (self.stale or self.orphans or self.leaks)
+
+
 def _releases(names: list[str]) -> list[str]:
     """Distinct releases, oldest first; anything not of the form vMAJOR.MINOR.PATCH dropped."""
     from ..model.versions import releases
@@ -328,116 +338,200 @@ def _published_releases(destination_root: Path) -> list[str]:
     return names
 
 
-@report.reported
-def run(catalog_root: Path, target: str, check: bool = False) -> PublishResult:
-    """Write the public catalogue into ``target``, or with ``check`` compare it."""
-    destination_root = Path(target).expanduser().resolve()
-    # Publishing deletes everything in its target but .git, so a source
-    # checkout, which holds catalog.yaml, is never one.
-    if (destination_root / "catalog.yaml").is_file():
-        raise PublishError(
-            f"{destination_root} holds a catalog.yaml, so it is a source catalogue, "
-            "not the public one; nothing was written. Point publish at the public "
-            "catalogue's checkout."
-        )
-    files = render(catalog_root, _published_releases(destination_root))
+@dataclass
+class Publication:
+    """What ``catalog publish`` was asked for, and what its stages found."""
 
-    root = datasets_dir(catalog_root)
-    all_datasets = [
-        d for d in iter_dataset_dirs(root) if (d / "datapackage.json").is_file()
-    ]
-    published = {
-        Path(*p.parts[1:-1]).as_posix()
-        for p in files
-        if len(p.parts) > 2 and p.parts[0] == "datasets"
-    }
-    withheld = [
-        dataset_name_for(root, d)
-        for d in all_datasets
-        if dataset_name_for(root, d) not in published
-    ]
+    catalog_root: Path
+    target: Path
+    #: Compare only, as ``--check`` does: a leak is reported, not refused.
+    comparing: bool = False
+    #: The public tree, by path relative to the target: set by ``render``.
+    files: dict[Path, str | bytes] = field(default_factory=dict)
+    withheld: list[str] = field(default_factory=list)
+    #: What the leak check found: set by ``check``.
+    leaked: list[str] = field(default_factory=list)
+    #: Generated files that differ or are missing, and files the target holds
+    #: that are not generated: set by ``write``.
+    stale: list[str] = field(default_factory=list)
+    orphans: list[str] = field(default_factory=list)
 
-    # Before anything is compared or written: a tree that would leak is refused
-    # whatever the target holds, and in both modes, so CI's --check fails on
-    # exactly what would stop a publish.
-    leaked = leaks(files, withheld)
 
-    if check:
-        stale = [
-            rel
-            for rel, content in files.items()
-            if _differs(destination_root / rel, content)
-        ]
-        # Anything in the target that we no longer generate is also staleness --
-        # a dataset withdrawn from publication must actually disappear.
-        generated = {str(rel) for rel in files}
-        orphans = [
-            str(p.relative_to(destination_root))
-            for p in destination_root.rglob("*")
-            if p.is_file()
-            and ".git" not in p.parts
-            and str(p.relative_to(destination_root)) not in generated
-        ]
-        for problem in leaked:
-            report.warning(f"  LEAK: {problem}")
-        if stale or orphans or leaked:
-            if stale or orphans:
-                report.warning("Public catalogue is out of date:")
-            for rel in stale:
-                report.warning(f"  changed/missing: {rel}")
-            for rel in orphans:
-                report.warning(f"  should be removed: {rel}")
-            return PublishResult(
-                withheld=withheld,
-                stale=[str(rel) for rel in stale],
-                orphans=orphans,
-                leaks=leaked,
+class Render:
+    """Render the public tree in memory."""
+
+    name = "render"
+
+    def plan(self, publication: Publication) -> list[Action]:
+        target = publication.target
+        # Publishing removes every file in its target but .git, so a source
+        # checkout, which holds catalog.yaml, is never one.
+        if (target / "catalog.yaml").is_file():
+            raise PublishError(
+                f"{target} holds a catalog.yaml, so it is a source catalogue, not the "
+                "public one; nothing was written. Point publish at the public "
+                "catalogue's checkout."
             )
+        files = render(publication.catalog_root, _published_releases(target))
+        publication.files = files
 
-        report.info(f"Public catalogue is current ({len(files)} files).")
-        return PublishResult(withheld=withheld)
+        root = datasets_dir(publication.catalog_root)
+        published = {
+            Path(*p.parts[1:-1]).as_posix()
+            for p in files
+            if len(p.parts) > 2 and p.parts[0] == "datasets"
+        }
+        publication.withheld = [
+            dataset_name_for(root, directory)
+            for directory in iter_dataset_dirs(root)
+            if (directory / k.PACKAGE_FILE).is_file()
+            and dataset_name_for(root, directory) not in published
+        ]
+        return []
 
-    if leaked:
-        raise PublishError(
-            "the public catalogue would leak, so nothing was written:\n"
-            + "".join(f"  {problem}\n" for problem in leaked)
-            + "Fix the source descriptor or its visibility, rebuild, and publish again."
+
+class Check:
+    """Refuse a tree that would leak, before anything is compared or written."""
+
+    name = "check"
+
+    def plan(self, publication: Publication) -> list[Action]:
+        # In both modes, so CI's --check fails on exactly what would stop a
+        # publish.
+        publication.leaked = leaks(publication.files, publication.withheld)
+        if publication.comparing:
+            return []
+        if publication.leaked:
+            raise PublishError(
+                "the public catalogue would leak, so nothing was written:\n"
+                + "".join(f"  {problem}\n" for problem in publication.leaked)
+                + "Fix the source descriptor or its visibility, rebuild, and publish "
+                "again."
+            )
+        if not publication.target.exists():
+            raise PublishError(
+                f"target does not exist: {publication.target}\n"
+                "Clone the public repo there first."
+            )
+        return []
+
+
+class Write:
+    """Write the generated files that differ, and remove the ones not generated."""
+
+    name = "write"
+
+    def plan(self, publication: Publication) -> list[Action]:
+        target = publication.target
+        generated = {str(relative) for relative in publication.files}
+        # Anything in the target that is not generated goes: a dataset withdrawn
+        # from publication must actually disappear. Symbolic links are removed
+        # without following them, so a dangling one does not survive.
+        orphans = sorted(
+            path
+            for path in (target.rglob("*") if target.is_dir() else [])
+            if (path.is_file() or path.is_symlink())
+            and ".git" not in path.relative_to(target).parts
+            and str(path.relative_to(target)) not in generated
         )
-
-    if not destination_root.exists():
-        raise PublishError(
-            f"target does not exist: {destination_root}\nClone the public repo there first."
+        publication.orphans = [str(path.relative_to(target)) for path in orphans]
+        changed = sorted(
+            (
+                relative
+                for relative, content in publication.files.items()
+                if _differs(target / relative, content)
+            ),
+            key=str,
         )
+        publication.stale = [str(relative) for relative in changed]
+        actions = [
+            Action(f"remove {path.relative_to(target)}", self._remove(target, path))
+            for path in orphans
+        ]
+        actions += [
+            Action(
+                f"write {relative}",
+                self._write(target / relative, publication.files[relative]),
+            )
+            for relative in changed
+        ]
+        return actions
 
-    # Remove previously generated content so withdrawn datasets really go away.
-    # Symlinks are unlinked without following them: a dangling one is neither a
-    # file nor a directory, and would otherwise survive every publish forever.
-    for path in sorted(destination_root.rglob("*"), reverse=True):
-        if ".git" in path.parts:
-            continue
-        if path.is_symlink() or path.is_file():
+    @staticmethod
+    def _remove(target: Path, path: Path):
+        def remove() -> None:
             path.unlink()
-        elif path.is_dir() and not any(path.iterdir()):
-            path.rmdir()
+            parent = path.parent
+            while parent != target and not any(parent.iterdir()):
+                parent.rmdir()
+                parent = parent.parent
 
-    for rel, content in files.items():
-        destination = destination_root / rel
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        # Licence documents are carried verbatim and may be PDFs, so the rendered
-        # tree is not text-only. Everything else is generated text, and both
-        # arguments below are load-bearing: this README says "Jülich", which
-        # write_text left to its defaults would encode with the locale codec and
-        # line-end as CRLF on Windows, so the public catalogue would differ byte
-        # for byte depending on who published it.
-        if isinstance(content, bytes):
-            destination.write_bytes(content)
-        else:
-            destination.write_text(content, encoding="utf-8", newline="\n")
+        return remove
 
-    report.info(f"Published to {destination_root}")
-    for rel in sorted(files, key=str):
-        report.info(f"  + {rel}")
-    if withheld:
-        report.info(f"\nWithheld (visibility: hidden): {', '.join(withheld)}")
-    report.info("\nReview and commit in the public repo, then push.")
-    return PublishResult(files=sorted(str(rel) for rel in files), withheld=withheld)
+    @staticmethod
+    def _write(destination: Path, content: str | bytes):
+        def write() -> None:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            # Licence documents are carried verbatim and may be PDFs, so the
+            # rendered tree is not text-only. Everything else is generated text,
+            # and both arguments below are load-bearing: the README says
+            # "Jülich", which write_text left to its defaults would encode with
+            # the locale codec and line-end as CRLF on Windows, so the public
+            # catalogue would differ byte for byte depending on who published it.
+            if isinstance(content, bytes):
+                destination.write_bytes(content)
+            else:
+                destination.write_text(content, encoding="utf-8", newline="\n")
+
+        return write
+
+
+PIPELINE: Pipeline[Publication] = Pipeline("publish", [Render(), Check(), Write()])
+
+
+@report.reported
+def run(
+    catalog_root: Path, target: str, check: bool = False, *, dry_run: bool = False
+) -> PublishResult:
+    """Write the public catalogue into ``target``, or with ``check`` compare it.
+
+    ``dry_run`` prints the plan: the files publish would write and remove.
+    """
+    publication = Publication(
+        catalog_root, Path(target).expanduser().resolve(), comparing=check
+    )
+    if check:
+        PIPELINE.plan(publication)
+        for problem in publication.leaked:
+            report.warning(f"  LEAK: {problem}")
+        if publication.stale or publication.orphans:
+            report.warning("Public catalogue is out of date:")
+            for relative in publication.stale:
+                report.warning(f"  changed/missing: {relative}")
+            for relative in publication.orphans:
+                report.warning(f"  should be removed: {relative}")
+        if not (publication.leaked or publication.stale or publication.orphans):
+            report.info(
+                f"Public catalogue is current ({len(publication.files)} files)."
+            )
+        return PublishResult(
+            withheld=publication.withheld,
+            stale=publication.stale,
+            orphans=publication.orphans,
+            leaks=publication.leaked,
+        )
+
+    outcome = PIPELINE.run(publication, dry_run=dry_run)
+    if publication.withheld:
+        report.info(
+            f"\nWithheld (visibility: hidden): {', '.join(publication.withheld)}"
+        )
+    if outcome.planned and not dry_run:
+        report.info(
+            f"\nPublished to {publication.target}. Review and commit in the public "
+            "repo, then push."
+        )
+    return PublishResult(
+        files=sorted(str(relative) for relative in publication.files),
+        withheld=publication.withheld,
+    )

@@ -64,8 +64,15 @@ from each `dataset.yaml`, plus the catalogue-wide `datacatalog.json`.
 ```bash
 ethos-data catalog build my-dataset      # one
 ethos-data catalog build                 # all
+ethos-data catalog build --dry-run       # what a build would write and record
 ethos-data catalog build --check         # CI: fail if any manifest is out of date
 ```
+
+Four stages, each planned before any acts: `check` reads `catalog.yaml` and
+the state of every dataset named before anything is hashed; `render` renders
+every generated file in memory; `write` writes the files that differ from the
+ones on disk, and the index; `record` records what the build changed. A build
+that changes nothing writes nothing.
 
 Walks `source_dir`, computes a SHA-256 per file, applies
 `ethos:include`/`ethos:exclude`, pulls in shapefile companions, and excludes VCS
@@ -87,6 +94,7 @@ only.
 
 | Flag | |
 |---|---|
+| `--dry-run` | print the plan; write nothing |
 | `--check` | report staleness and exit non-zero; write nothing |
 
 ## `publish <target>`
@@ -95,9 +103,14 @@ Generate the public catalogue from this source one, into a checkout of the
 public repository.
 
 ```bash
+ethos-data catalog publish ../ETHOS.Data-Catalogue --dry-run
 ethos-data catalog publish ../ETHOS.Data-Catalogue
 ethos-data catalog publish ../ETHOS.Data-Catalogue --check
 ```
+
+Three stages: `render` renders the public tree in memory, `check` runs the
+leak check below, and `write` writes the files that differ and removes the
+files the target holds that are not generated.
 
 Emits `datacatalog.json`, each public `datasets/<name>/datapackage.json` with
 the keys the dataset.yaml format marks unpublished stripped (`source_dir`,
@@ -116,6 +129,7 @@ written, in both modes. Licence documents are copied verbatim and not searched.
 
 | Flag | |
 |---|---|
+| `--dry-run` | print the plan: the files it would write and remove; write nothing |
 | `--check` | fail if the target is out of date or the tree would leak; write nothing |
 
 ## `upload <dataset> [<dataset> ...]`
@@ -130,8 +144,10 @@ ethos-data catalog upload my-dataset --verify-only
 ```
 
 Name one dataset, or any subset of the catalogue. A family name stands for every
-member beneath it, since the family itself has no files. Each dataset is uploaded
-and verified in turn, in the order given, and a run ends with a per-dataset summary:
+member beneath it, since the family itself has no files. Five stages, each
+planned before any acts, handle the datasets in the order given: `check`,
+`transfer`, `permissions`, `verify` and `record`. A run of several ends with a
+per-dataset summary:
 
 ```bash
 ethos-data catalog upload global-wind-atlas-v4 global-solar-atlas
@@ -143,13 +159,15 @@ Every dataset named is loaded and checked **before any of them is uploaded**, so
 a restricted dataset, an unbuilt manifest or a mistyped name stops the run while
 nothing has been published yet. That is the difference from a shell loop, which
 would upload the first dataset and only then discover the problem with the
-second.
+second. A dataset that fails later, in its transfer or its read-back, does not
+stop the others, and what was uploaded stays. A dataset whose upload of its
+current inventory is verified and recorded is not uploaded again, so running
+the command again finishes the batch.
 
 | Flag | Default | |
 |---|---|---|
-| `--dry-run` | | preview rclone transfers; may contact storage; do not combine with `--verify-only` |
-| `--verify-only` | | skip transfer; public chmod still runs unless `--no-chmod` is supplied |
-| `--allow-internal` | | permit internal data without public chmod; verification remains anonymous |
+| `--dry-run` | | print the plan; contact no store |
+| `--verify-only` | | skip the transfer; the chmod runs unless `--no-chmod` is given too |
 | `--no-chmod` | | do not set `0755` on the dataset prefix |
 | `--transfers N` | `8` | parallel transfers |
 | `--remote NAME` | `HIFIS` | rclone remote name |
@@ -174,9 +192,6 @@ reports anything unreadable or the wrong size, plus the storage locality
 (`ONLINE` / `ONLINE_AND_NEARLINE` / `NEARLINE`).
 
 HEAD checks establish readability and size, not remote SHA-256 identity.
-An internal upload can succeed in transfer yet fail anonymous verification.
-`--allow-internal` does not establish private storage permissions or configure
-authenticated consumer downloads.
 
 The dataset's state must allow the step: a built dataset is uploaded, a frozen
 one is refused and only rechecked with `--verify-only`. A verified upload, and
@@ -186,19 +201,10 @@ freezes it afterwards. A dataset without a status file is refused, naming
 [`migrate`](#migrate-datasets). The guards of the step refuse restricted data
 and unresolved licensing with `TransitionError`.
 
-!!! warning "Gap: `--allow-internal` is to be removed"
-    With [decision
-    0011](../../explanation/architecture/decisions/0011-access-class-picks-the-root.md),
-    there is no `internal` class, so the option has nothing left to permit.
-    Data the institute holds without publishing it is restricted data, which
-    `upload` refuses: it never has a copy on dCache. To be implemented
-    separately.
-
 Use `--verify-only --no-chmod` to recheck without changing permissions.
 
-With a single dataset the exit code is rclone's own on a transfer failure, or
-`1` on a verification miss. With several it is `1` if any dataset failed, and
-the summary says which.
+The exit code is `1` if any dataset failed; with several, the summary says
+which.
 
 Full runbook: [Upload a dataset](../../how-to/catalogue-maintainers/upload-a-dataset.md).
 

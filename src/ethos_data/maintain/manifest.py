@@ -27,11 +27,20 @@ also what makes a dataset build-able again after its ``source_dir`` has
 genuinely disappeared. A dataset without a status file is not built:
 ``ethos-data catalog migrate`` writes one.
 
-The build records in the status file what it changed: a draft's first build,
-and an inventory that differs from the one before, which returns a dataset
-whose bytes were made available to built, because what was checked is no
-longer what the inventory describes. A withdrawn dataset is not built and not
-in the index, and nor is a family whose members are all withdrawn.
+The build runs as a pipeline (see :mod:`.pipeline`), and ``--dry-run`` prints
+its plan:
+
+``check``   the catalogue's ``catalog.yaml``, and every dataset's state, before
+            anything is hashed
+``render``  every generated file, in memory
+``write``   the generated files that differ from the ones on disk, and the index
+``record``  in each status file what the build changed: a draft's first build,
+            and an inventory that differs from the one before, which returns a
+            dataset whose bytes were made available to built, because what was
+            checked is not what the inventory describes
+
+A build that changes nothing writes nothing. A withdrawn dataset is not built
+and not in the index, and nor is a family whose members are all withdrawn.
 
 Provenance and licensing are checked here rather than left to a reviewer's eye.
 ``ethos:origin`` says whether the data was downloaded, derived or created, and an
@@ -53,9 +62,9 @@ of gigabytes on shared storage -- so each dataset directory keeps a
 map of relative path to the size/mtime last seen and the digest that went with
 them. A rebuild re-hashes a file only when its size or mtime has moved; the rest
 is a stat call. It is not a Data Package property (a maintainer's disk paths and
-timestamps mean nothing to a consumer) and it is not written at all under
-``--check``, which promises to write nothing. Whatever still needs hashing is
-read through a small thread pool: the cost is waiting on shared storage, not
+timestamps mean nothing to a consumer) and it is written by the ``write``
+stage only, so neither ``--check`` nor ``--dry-run`` writes it. Whatever needs
+hashing is read through a small thread pool: the cost is waiting on shared storage, not
 CPU, and hashlib releases the GIL while it works a chunk, so concurrent reads
 actually overlap.
 
@@ -70,6 +79,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from .. import report
+from ..adapters.metadata import MemorySource
 from ..errors import DescriptorError
 from ..files import build_resource, iter_data_files, select, slugify
 from ..formats import catalogue as catalogue_format
@@ -78,9 +88,16 @@ from ..formats import keys as k
 from ..formats.derived import index_row
 from ..model import lifecycle
 from ..model.digest import matches, of_file
-from ..model.inventory import ROOT_SHARD, SHARD_DIR, shard_path, split_into_shards
+from ..model.inventory import (
+    ROOT_SHARD,
+    SHARD_DIR,
+    Inventory,
+    shard_path,
+    split_into_shards,
+)
 from ..model.patterns import path_matches
 from . import (
+    DESCRIPTOR,
     dataset_name_for,
     datasets_dir,
     inventory_of,
@@ -90,6 +107,7 @@ from . import (
     read_descriptor,
 )
 from . import status as dataset_status
+from .pipeline import Action, Pipeline
 
 # Per-dataset, maintainer-local, never published -- see the module docstring.
 HASH_CACHE_NAME = k.HASH_CACHE_FILE
@@ -314,6 +332,7 @@ def render_dataset(
     inherited: dict | None = None,
     namespace: bool = False,
     member_totals: tuple[int, int] | None = None,
+    cache: dict | None = None,
 ) -> dict[str, str]:
     """Build every generated file for one dataset.
 
@@ -323,8 +342,10 @@ def render_dataset(
     what lets ``--check`` detect a stale *shard* as readily as a stale index.
 
     ``check`` gates only the hash cache write at the end -- ``--check`` promises
-    to write nothing, but it may still *read* an existing cache to skip hashing
-    files that have not changed.
+    to write nothing, but it may *read* an existing cache to skip hashing files
+    that have not changed. ``cache`` is the dataset's hash cache, read and added
+    to in place and never written; without it, the cache on disk is read, and
+    written back unless ``check``.
 
     ``name`` is the dataset's catalogue name, which for a nested dataset is its
     path below ``datasets/`` rather than its directory name. It defaults to the
@@ -387,9 +408,11 @@ def render_dataset(
                 f"{len(found)} files under {source_dir}"
             )
 
-        cache = load_hash_cache(dataset_dir)
+        owned = cache is None
+        if owned:
+            cache = load_hash_cache(dataset_dir)
         hashes = resolve_hashes(selected, source_dir, cache)
-        if not check:
+        if owned and not check:
             save_hash_cache(dataset_dir, cache)
         resources = [build_resource(p, source_dir, *hashes[p]) for p in selected]
 
@@ -543,40 +566,6 @@ def _inventory(name: str, dataset_dir: Path) -> set[tuple] | None:
     }
 
 
-def _record_build(
-    dataset_dir: Path, name: str, before: set[tuple] | None, package: dict
-) -> None:
-    """Record in the status file what this build changed, if anything.
-
-    A draft's first build makes it built. A rebuild that found other files
-    than the inventory before is recorded as a change, and returns a dataset
-    whose bytes were made available to built. A rebuild that changed nothing,
-    which is most of them, records nothing.
-    """
-    status = dataset_status.read(dataset_dir)
-    size = {"files": package[k.FILE_COUNT], "bytes": package[k.TOTAL_BYTES]}
-    if status.state == lifecycle.DRAFT:
-        dataset_status.take(dataset_dir, status, "build", dataset=name, **size)
-        return
-    changed = before is not None and before != _inventory(name, dataset_dir)
-    if not changed or status.state not in lifecycle.STEPS["change"].leads:
-        return
-    if status.state == lifecycle.AVAILABLE:
-        report.warning(
-            f"warning: {name}: its inventory changed since its bytes were made "
-            "available, so it is recorded as built again; make the new bytes "
-            "available before releasing it"
-        )
-    dataset_status.take(
-        dataset_dir,
-        status,
-        "change",
-        dataset=name,
-        note="the inventory changed",
-        **size,
-    )
-
-
 def catalog_meta(catalog_root: Path) -> dict:
     """Read and validate catalog.yaml.
 
@@ -611,15 +600,21 @@ def left_out(dataset_dir: Path) -> bool:
     return bool(members) and all(dataset_status.withdrawn(m) for m in members)
 
 
-def index_text(catalog_root: Path) -> str:
-    """The ``datacatalog.json`` the descriptors on disk make, without those left out."""
+def index_text(catalog_root: Path, packages: dict[Path, dict] | None = None) -> str:
+    """The ``datacatalog.json`` the descriptors make, without those left out.
+
+    ``packages`` are descriptors rendered and not written yet, by dataset
+    directory; every other one is read from disk.
+    """
+    packages = packages or {}
     root = datasets_dir(catalog_root)
     listed = [
         directory
         for directory in iter_dataset_dirs(root)
-        if (directory / "datapackage.json").exists() and not left_out(directory)
+        if (directory in packages or (directory / k.PACKAGE_FILE).exists())
+        and not left_out(directory)
     ]
-    return dumps(build_catalog(catalog_root, listed))
+    return dumps(build_catalog(catalog_root, listed, packages))
 
 
 def write_index(catalog_root: Path) -> Path:
@@ -629,13 +624,18 @@ def write_index(catalog_root: Path) -> Path:
     return path
 
 
-def build_catalog(catalog_root: Path, dataset_dirs: list[Path]) -> dict:
+def build_catalog(
+    catalog_root: Path,
+    dataset_dirs: list[Path],
+    packages: dict[Path, dict] | None = None,
+) -> dict:
+    """The index of ``dataset_dirs``, from ``packages`` where given, else from disk."""
     meta = catalog_meta(catalog_root)
     datasets_root = datasets_dir(catalog_root)
     datasets = []
     for dataset_dir in sorted(dataset_dirs):
-        package = json.loads(
-            (dataset_dir / "datapackage.json").read_text(encoding="utf-8")
+        package = (packages or {}).get(dataset_dir) or json.loads(
+            (dataset_dir / k.PACKAGE_FILE).read_text(encoding="utf-8")
         )
         relative = dataset_dir.relative_to(datasets_root).as_posix()
         datasets.append(index_row(package, f"datasets/{relative}/datapackage.json"))
@@ -668,126 +668,297 @@ def inherited_for(root: Path, dataset_dir: Path) -> dict:
 
 
 @dataclass
+class Build:
+    """What ``catalog build`` was asked for, and what its stages found."""
+
+    catalog_root: Path
+    names: list[str]
+    #: The dataset directories to build, members before the families above
+    #: them: set by ``check``.
+    selected: list[Path] = field(default_factory=list)
+    #: Each one's rendered files and descriptor: set by ``render``.
+    files: dict[Path, dict[str, str]] = field(default_factory=dict)
+    packages: dict[Path, dict] = field(default_factory=dict)
+    #: Each one's hash cache, and the directories whose cache gained entries.
+    caches: dict[Path, dict] = field(default_factory=dict)
+    grown: set[Path] = field(default_factory=set)
+    #: One line per dataset, for the report.
+    rows: list[str] = field(default_factory=list)
+    #: The generated files the build changes: set by ``write``.
+    stale: list[Path] = field(default_factory=list)
+
+    @property
+    def root(self) -> Path:
+        return datasets_dir(self.catalog_root)
+
+    def name(self, dataset_dir: Path) -> str:
+        return dataset_name_for(self.root, dataset_dir)
+
+
+class Check:
+    """Check the catalogue and the state of every dataset before hashing anything."""
+
+    name = "check"
+
+    def plan(self, build: Build) -> list[Action]:
+        catalog_meta(build.catalog_root)
+        root = build.root
+        selected = (
+            [root / name for name in build.names]
+            if build.names
+            else iter_dataset_dirs(root)
+        )
+        # Members before the namespaces that contain them: a namespace reports
+        # the totals of everything beneath it, so it cannot be rendered until
+        # they are known. Deepest first does that with no graph to walk.
+        for dataset_dir in sorted(
+            selected, key=lambda p: (-len(p.relative_to(root).parts), p)
+        ):
+            if not (dataset_dir / DESCRIPTOR).exists():
+                raise DescriptorError(f"no dataset.yaml in {dataset_dir}")
+            name = build.name(dataset_dir)
+            if left_out(dataset_dir):
+                build.rows.append(f"  {name:<34} withdrawn, left out of the index")
+                continue
+            if not is_namespace(dataset_dir):
+                meta = read_descriptor(dataset_dir)
+                status = dataset_status.build_input(dataset_dir, meta, name).status
+                lifecycle.step("build", status.state, name)
+            build.selected.append(dataset_dir)
+        return []
+
+
+class Render:
+    """Render every generated file in memory, hashing what changed since the last build."""
+
+    name = "render"
+
+    def plan(self, build: Build) -> list[Action]:
+        for dataset_dir in build.selected:
+            namespace = is_namespace(dataset_dir)
+            cache = load_hash_cache(dataset_dir)
+            known = dict(cache)
+            files = render_dataset(
+                dataset_dir,
+                name=build.name(dataset_dir),
+                inherited=inherited_for(build.root, dataset_dir),
+                namespace=namespace,
+                member_totals=self._totals(build, dataset_dir) if namespace else None,
+                cache=cache,
+            )
+            build.files[dataset_dir] = files
+            package = build.packages[dataset_dir] = json.loads(files[k.PACKAGE_FILE])
+            if cache != known:
+                build.caches[dataset_dir] = cache
+                build.grown.add(dataset_dir)
+            build.rows.append(_row(package))
+        for row in sorted(build.rows):
+            report.info(row)
+        return []
+
+    @staticmethod
+    def _totals(build: Build, dataset_dir: Path) -> tuple[int, int]:
+        """The ``(bytes, files)`` of a family's members, rendered now or on disk.
+
+        A namespace built by name reports the family's real size too, so a
+        member not rendered in this run counts as built before.
+        """
+        total_bytes = file_count = 0
+        for member in iter_dataset_dirs(dataset_dir):
+            if member == dataset_dir or dataset_status.withdrawn(member):
+                continue
+            package = build.packages.get(member)
+            if package is None:
+                on_disk = member / k.PACKAGE_FILE
+                if not on_disk.is_file():
+                    continue
+                package = json.loads(on_disk.read_text(encoding="utf-8"))
+            if package.get(k.NAMESPACE):
+                continue
+            total_bytes += package.get(k.TOTAL_BYTES, 0)
+            file_count += package.get(k.FILE_COUNT, 0)
+        return total_bytes, file_count
+
+
+def _row(package: dict) -> str:
+    """One dataset's line in the build's report."""
+    if package.get(k.NAMESPACE):
+        klass, shards = "namespace", ""
+    else:
+        klass = f"{package[k.ACCESS]}/{package[k.VISIBILITY]}"
+        shards = f"  {len(package[k.SHARDS]):>4} shards" if k.SHARDS in package else ""
+    return (
+        f"  {package[k.NAME]:<34} {package[k.FILE_COUNT]:>5} files  "
+        f"{package[k.TOTAL_BYTES] / 1e9:8.3f} GB  {klass}{shards}"
+    )
+
+
+class Write:
+    """Write the generated files that differ from the ones on disk, then the index."""
+
+    name = "write"
+
+    def plan(self, build: Build) -> list[Action]:
+        actions = []
+        for dataset_dir, files in build.files.items():
+            stale = stale_files(dataset_dir, files)
+            build.stale += stale
+            if stale:
+                listed = [path.relative_to(dataset_dir).as_posix() for path in stale]
+                shown = ", ".join(listed[:3])
+                if len(listed) > 3:
+                    shown += f" and {len(listed) - 3} more"
+                text = f"write datasets/{build.name(dataset_dir)}/: {shown}"
+            elif dataset_dir in build.grown:
+                text = f"update the hash cache of {build.name(dataset_dir)}"
+            else:
+                continue
+            actions.append(Action(text, self._write(build, dataset_dir)))
+
+        index = build.catalog_root / k.INDEX_FILE
+        text = index_text(build.catalog_root, build.packages)
+        if not index.is_file() or index.read_text(encoding="utf-8") != text:
+            build.stale.append(index)
+            listed = len(json.loads(text)[k.DATASETS])
+            actions.append(
+                Action(
+                    f"write {k.INDEX_FILE}: {listed} datasets",
+                    lambda: index.write_text(text, encoding="utf-8", newline="\n"),
+                )
+            )
+        return actions
+
+    @staticmethod
+    def _write(build: Build, dataset_dir: Path):
+        def write() -> None:
+            write_dataset(dataset_dir, build.files[dataset_dir])
+            if dataset_dir in build.grown:
+                save_hash_cache(dataset_dir, build.caches[dataset_dir])
+
+        return write
+
+
+class Record:
+    """Record in each status file what the build changed: a first build, or a change."""
+
+    name = "record"
+
+    def plan(self, build: Build) -> list[Action]:
+        actions = []
+        for dataset_dir, package in build.packages.items():
+            if package.get(k.NAMESPACE):
+                continue
+            name = build.name(dataset_dir)
+            status = dataset_status.read(dataset_dir)
+            if status.state == lifecycle.DRAFT:
+                actions.append(
+                    Action(
+                        f"{name} becomes built",
+                        self._take(dataset_dir, name, package, "build"),
+                    )
+                )
+                continue
+            before = _inventory(name, dataset_dir)
+            after = _rendered_inventory(name, dataset_dir, build.files[dataset_dir])
+            if before is None or before == after:
+                continue
+            if status.state not in lifecycle.STEPS["change"].leads:
+                continue
+            actions.append(
+                Action(
+                    f"{name} becomes built: its inventory changed",
+                    self._take(dataset_dir, name, package, "change"),
+                )
+            )
+        return actions
+
+    @staticmethod
+    def _take(dataset_dir: Path, name: str, package: dict, step: str):
+        def take() -> None:
+            status = dataset_status.read(dataset_dir)
+            if step == "change" and status.state == lifecycle.AVAILABLE:
+                report.warning(
+                    f"warning: {name}: its inventory changed since its bytes were made "
+                    "available, so it is recorded as built again; make the new bytes "
+                    "available before releasing it"
+                )
+            details = {"note": "the inventory changed"} if step == "change" else {}
+            dataset_status.take(
+                dataset_dir,
+                status,
+                step,
+                dataset=name,
+                files=package[k.FILE_COUNT],
+                bytes=package[k.TOTAL_BYTES],
+                **details,
+            )
+
+        return take
+
+
+def _rendered_inventory(
+    name: str, dataset_dir: Path, files: dict[str, str]
+) -> set[tuple]:
+    """The files the rendered descriptor lists, by path, size and hash."""
+    base = dataset_dir.as_posix()
+    source = MemorySource(
+        {f"{base}/{relative}": text for relative, text in files.items()}
+    )
+    inventory = Inventory(name, source, f"{base}/{k.PACKAGE_FILE}")
+    return {
+        (resource.path, resource.bytes, resource.hash)
+        for resource in inventory.resources().values()
+    }
+
+
+PIPELINE: Pipeline[Build] = Pipeline("build", [Check(), Render(), Write(), Record()])
+
+
+@dataclass
 class BuildResult:
     """What ``catalog build`` did: the datasets it rendered, and what is stale.
 
-    ``stale`` is filled by ``check`` only: the files a build would change.
+    ``stale`` names the generated files a build changes, or with ``check``
+    would change.
     """
 
     built: list[str] = field(default_factory=list)
     stale: list[Path] = field(default_factory=list)
+    check: bool = False
 
     @property
     def ok(self) -> bool:
-        return not self.stale
+        return not (self.check and self.stale)
 
 
 @report.reported
-def run(catalog_root: Path, names: list[str], check: bool = False) -> BuildResult:
+def run(
+    catalog_root: Path,
+    names: list[str],
+    check: bool = False,
+    *,
+    dry_run: bool = False,
+) -> BuildResult:
     """Build the named datasets, or every one, and the catalogue index.
 
     With ``check`` nothing is written: the result names the files a build would
-    change.
+    change, and is not ok when there are any. ``dry_run`` prints the plan.
     """
-    catalog_meta(catalog_root)  # fail on a bad catalog.yaml before hashing anything
-    root = datasets_dir(catalog_root)
-    selected = [root / name for name in names] if names else iter_dataset_dirs(root)
-
-    # Members before the namespaces that contain them: a namespace reports the
-    # totals of everything beneath it, so it cannot be rendered until they are
-    # known. Deepest first does that with no graph to walk.
-    selected = sorted(selected, key=lambda p: (-len(p.relative_to(root).parts), p))
-
-    result = BuildResult()
-    stale = result.stale
-    rendered: dict[Path, dict] = {}
-    rows: list[str] = []
-    for dataset_dir in selected:
-        if not (dataset_dir / "dataset.yaml").exists():
-            raise DescriptorError(f"no dataset.yaml in {dataset_dir}")
-        name = dataset_name_for(root, dataset_dir)
-        namespace = is_namespace(dataset_dir)
-        if left_out(dataset_dir):
-            rows.append(f"  {name:<34} withdrawn, left out of the index")
-            continue
-        totals = None
-        if namespace:
-            # Sum over every member already rendered in this run, plus any whose
-            # descriptor is on disk from an earlier one -- building a single
-            # namespace by name must still report the family's real size.
-            total_bytes = file_count = 0
-            for member in iter_dataset_dirs(dataset_dir):
-                if member == dataset_dir or dataset_status.withdrawn(member):
-                    continue
-                package = rendered.get(member)
-                if package is None:
-                    on_disk = member / "datapackage.json"
-                    if not on_disk.is_file():
-                        continue
-                    package = json.loads(on_disk.read_text(encoding="utf-8"))
-                if package.get(k.NAMESPACE):
-                    continue
-                total_bytes += package.get("ethos:total_bytes", 0)
-                file_count += package.get("ethos:file_count", 0)
-            totals = (total_bytes, file_count)
-
-        files = render_dataset(
-            dataset_dir,
-            check=check,
-            name=name,
-            inherited=inherited_for(root, dataset_dir),
-            namespace=namespace,
-            member_totals=totals,
-        )
-        package = json.loads(files["datapackage.json"])
-        rendered[dataset_dir] = package
-        result.built.append(name)
-
-        if check:
-            stale += stale_files(dataset_dir, files)
-            continue
-
-        before = None if namespace else _inventory(name, dataset_dir)
-        write_dataset(dataset_dir, files)
-        if not namespace:
-            _record_build(dataset_dir, name, before, package)
-        size_gb = package["ethos:total_bytes"] / 1e9
-        if package.get(k.NAMESPACE):
-            klass = "namespace"
-            shards = ""
-        else:
-            klass = f"{package['ethos:access']}/{package['ethos:visibility']}"
-            shards = (
-                f"  {len(package['ethos:shards']):>4} shards"
-                if "ethos:shards" in package
-                else ""
-            )
-        rows.append(
-            f"  {package['name']:<34} {package['ethos:file_count']:>5} files  "
-            f"{size_gb:8.3f} GB  {klass}{shards}"
-        )
-
-    for row in sorted(rows):
-        report.info(row)
-
-    catalog_path = catalog_root / "datacatalog.json"
-    catalog_text = index_text(catalog_root)
-
+    build = Build(catalog_root, list(names))
     if check:
-        if (
-            not catalog_path.exists()
-            or catalog_path.read_text(encoding="utf-8") != catalog_text
-        ):
-            stale.append(catalog_path)
-        if stale:
+        PIPELINE.plan(build)
+    else:
+        PIPELINE.run(build, dry_run=dry_run)
+    result = BuildResult(
+        [build.name(directory) for directory in build.selected],
+        build.stale,
+        check,
+    )
+    if check:
+        if build.stale:
             report.warning("Out of date (re-run `ethos-data catalog build`):")
-            for path in stale:
+            for path in build.stale:
                 report.warning(f"  {path.relative_to(catalog_root)}")
-            return result
-        report.info("All manifests up to date.")
-        return result
-
-    catalog_path.write_text(catalog_text, encoding="utf-8", newline="\n")
-    listed = len(json.loads(catalog_text)[k.DATASETS])
-    report.info(f"  {'datacatalog.json':<22} {listed:>5} datasets")
+        else:
+            report.info("All manifests up to date.")
     return result

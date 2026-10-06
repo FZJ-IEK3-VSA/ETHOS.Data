@@ -1,9 +1,9 @@
 """The ``ethos-data catalog ...`` subcommands.
 
-``build``, ``publish``, ``upload`` and ``check-store``; the maintainer
-pipelines ``add``, ``record``, ``remove`` and ``check-source``, which plan
-every stage before any of them acts; and ``status`` and ``migrate``, which
-show and write each dataset's ``status.yaml``.
+The pipelines ``add``, ``build``, ``upload``, ``record``, ``remove``,
+``check-source`` and ``publish``, which plan every stage before any of them
+acts, so ``--dry-run`` prints the plan; ``status`` and ``migrate``, which show
+and write each dataset's ``status.yaml``; and ``check-store``.
 
 The maintainer group owns source metadata and publication operations. Local
 configuration, staging, and cache management also write files, but remain at the
@@ -115,13 +115,16 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         "build",
         help="regenerate datapackage.json and datacatalog.json from dataset.yaml",
     )
-    builder.add_argument(
-        "datasets", nargs="*", help="dataset directory names (default: all)"
-    )
+    builder.add_argument("datasets", nargs="*", help="dataset names (default: all)")
     builder.add_argument(
         "--check",
         action="store_true",
         help="fail if any manifest is out of date; write nothing",
+    )
+    builder.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show what the build would write and record; write nothing",
     )
 
     publisher = catalog_sub.add_parser(
@@ -129,18 +132,23 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     )
     publisher.add_argument(
         "target",
-        help="dedicated generated public checkout; replaces everything except .git",
+        help="dedicated generated public checkout; every file but .git is generated",
     )
     publisher.add_argument(
         "--check",
         action="store_true",
         help="fail if the target is out of date; write nothing",
     )
+    publisher.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show what publish would write and remove; write nothing",
+    )
 
     uploader = catalog_sub.add_parser(
         "upload",
         help="upload dataset bytes and check anonymous readability and sizes",
-        description="Upload built, licensed, non-restricted datasets. Checks use anonymous "
+        description="Upload built, licensed, public datasets. Checks use anonymous "
         "HTTP HEAD, not remote SHA-256. A verified upload is recorded in the dataset's "
         "status.yaml; `catalog record` then freezes the dataset.",
     )
@@ -172,17 +180,12 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     uploader.add_argument(
         "--dry-run",
         action="store_true",
-        help="preview rclone transfers; may contact storage; do not combine with --verify-only",
+        help="check and print the plan; contact no store",
     )
     uploader.add_argument(
         "--verify-only",
         action="store_true",
-        help="skip transfer; public chmod still runs unless --no-chmod is also given",
-    )
-    uploader.add_argument(
-        "--allow-internal",
-        action="store_true",
-        help="permit internal data without public chmod; verification is still anonymous",
+        help="skip the transfer; the chmod runs unless --no-chmod is given too",
     )
     uploader.add_argument(
         "--no-chmod", action="store_true", help="do not set 0755 on the dataset prefix"
@@ -325,12 +328,16 @@ def dispatch(args) -> int:
     if args.catalog_command == "build":
         from . import manifest
 
-        return _status(manifest.run(root, args.datasets, check=args.check))
+        return _status(
+            manifest.run(root, args.datasets, check=args.check, dry_run=args.dry_run)
+        )
 
     if args.catalog_command == "publish":
         from . import publish
 
-        return _status(publish.run(root, args.target, check=args.check))
+        return _status(
+            publish.run(root, args.target, check=args.check, dry_run=args.dry_run)
+        )
 
     if args.catalog_command == "upload":
         from . import upload

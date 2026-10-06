@@ -347,7 +347,7 @@ class TestUpload:
         assert copy["verified"].endswith("Z")
         assert status["source_dir"] == str(catalogue.bytes / "flat")
         assert status["history"][-1]["step"] == "upload"
-        assert "recorded     flat is available" in out
+        assert "flat becomes available, its copy on dCache verified" in out
 
     def test_an_upload_that_does_not_verify_records_nothing(self, uploading):
         catalogue, dcache = uploading
@@ -363,6 +363,19 @@ class TestUpload:
         assert catalogue.catalog("upload", "flat", "--dry-run")[0] == 0
 
         assert catalogue.status("flat")["state"] == "built"
+
+    def test_a_recorded_upload_is_not_uploaded_again(self, uploading, store):
+        """A rerun finishes the job: what is verified and recorded is left alone."""
+        catalogue, dcache = uploading
+        assert catalogue.catalog("upload", "flat")[0] == 0
+        history = catalogue.status("flat")["history"]
+
+        code, out, _ = catalogue.catalog("upload", "flat")
+
+        assert code == 0
+        assert len(dcache.copies) == 1
+        assert "its upload is verified and recorded already" in out
+        assert catalogue.status("flat")["history"] == history
 
     def test_a_frozen_dataset_is_only_rechecked(self, uploading):
         catalogue, _ = uploading
@@ -420,7 +433,43 @@ class TestLinkAndMaterialize:
                 "target": str(source.bytes / "shared"),
             }
         ]
-        assert "recorded    shared is available" in out
+        assert "shared becomes available, the link recorded" in out
+
+    def test_a_dry_run_link_given_the_checkout_is_the_plan(self, linking):
+        source, cache, cli = linking
+
+        code, out, err = cli(
+            "link", "shared", "--catalog-root", str(source.root), "--dry-run"
+        )
+
+        assert code == 0, err
+        assert f"link         link {cache / 'shared'} -> " in out
+        assert "record       shared becomes available" in out
+        assert not (cache / "shared").exists()
+        assert source.status("shared")["state"] == "built"
+
+    def test_a_copy_given_the_checkout_is_checked_in_place_and_recorded(self, linking):
+        source, cache, cli = linking
+
+        code, out, err = cli(
+            "materialize",
+            "shared",
+            "--from",
+            str(source.bytes / "shared"),
+            "--catalog-root",
+            str(source.root),
+        )
+
+        assert code == 0, err
+        assert "verify       check that" in out
+        assert not (cache / "shared").is_symlink()
+        status = source.status("shared")
+        assert status["state"] == "available"
+        (copy,) = status["copies"]
+        assert (copy["kind"], copy["location"]) == (
+            "materialized",
+            str(cache / "shared"),
+        )
 
     def test_without_the_checkout_nothing_is_recorded(self, linking):
         source, _, cli = linking
@@ -455,7 +504,7 @@ class TestLinkAndMaterialize:
 
         code, out, err = run_cli(argv)
         assert code == 0, err
-        assert "recorded 1 link(s)" in out
+        assert "shared becomes available, the link recorded" in out
         history = source.status("shared")["history"]
 
         assert run_cli(argv)[0] == 0

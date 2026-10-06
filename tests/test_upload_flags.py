@@ -28,16 +28,30 @@ def uploading(tmp_path, monkeypatch):
     return catalogue, dcache
 
 
-def test_a_dry_run_transfers_nothing_and_checks_nothing(uploading):
+def test_a_dry_run_is_the_plan_and_contacts_no_store(uploading):
     catalogue, dcache = uploading
 
     code, out, _ = catalogue.catalog("upload", "flat", "--dry-run")
 
     assert code == 0
-    assert [copy["dry_run"] for copy in dcache.copies] == [True]
-    assert dcache.chmods == []
-    assert dcache.reads == []
-    assert "Dry run only; nothing was uploaded." in out
+    assert dcache.copies == [] and dcache.chmods == [] and dcache.reads == []
+    assert dcache.tokens == []
+    assert "transfer     copy 2 files" in out
+    assert "permissions  chmod 0755 Helmholtz/FZJ-ICE2/ethos-data/flat" in out
+    assert "verify       read the 2 files of flat back anonymously" in out
+    assert "record       flat becomes available" in out
+    assert "Nothing was written." in out
+
+
+def test_a_verify_only_dry_run_changes_no_permissions(uploading):
+    catalogue, dcache = uploading
+
+    code, out, _ = catalogue.catalog("upload", "flat", "--verify-only", "--dry-run")
+
+    assert code == 0
+    assert dcache.chmods == [] and dcache.reads == []
+    assert "transfer" not in out
+    assert "permissions  chmod 0755" in out
 
 
 def test_an_upload_transfers_the_inventory_opens_it_and_reads_it_back(uploading):
@@ -101,7 +115,7 @@ def test_a_dataset_without_a_prefix_goes_to_the_folder_named_after_it(
     dcache = FakeStore()
     monkeypatch.setattr(upload, "DcacheStore", lambda remote: dcache)
 
-    code, _, err = catalogue.catalog("upload", "plain", "--dry-run")
+    code, _, err = catalogue.catalog("upload", "plain")
 
     assert code == 0, err
     assert dcache.copies[0]["destination"] == "ethos-data/plain"

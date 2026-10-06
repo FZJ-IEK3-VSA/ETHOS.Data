@@ -65,7 +65,6 @@ class DcacheStore:
         paths: list[str],
         *,
         transfers: int,
-        dry_run: bool,
     ) -> None:
         """``rclone copy`` of exactly ``paths``: the inventory, not the directory.
 
@@ -99,7 +98,7 @@ class DcacheStore:
             # rewrite. --immutable makes rclone fail loudly if a published file
             # differs, instead of silently republishing under the same path.
             "--immutable",
-            "--progress" if not dry_run else "--dry-run",
+            "--progress",
         ]
         report.info(f"  ({len(paths)} files listed in {listing})")
         report.info("  $ " + " ".join(command) + "\n")

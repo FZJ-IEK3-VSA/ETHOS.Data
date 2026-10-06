@@ -9,17 +9,25 @@ One dataset, or a subset of the catalogue -- naming them by name or by path:
     ethos-data catalog upload global-wind-atlas-v4 global-solar-atlas
     ethos-data catalog upload datasets/global-wind-atlas-v4
 
-The verify step is the point of this tool. Uploading is one rclone call; knowing
-that an anonymous user on the other side of the internet can actually read what
-you uploaded is the part that goes wrong, and it goes wrong quietly.
+The verify stage is the point of this tool. Uploading is one rclone call;
+knowing that an anonymous user on the other side of the internet can actually
+read what you uploaded is the part that goes wrong, and it goes wrong quietly.
+
+It runs as a pipeline (see :mod:`.pipeline`), and a dry run is its plan:
+
+``check``        load and check every dataset named, before any byte moves
+``transfer``     copy each dataset's inventory to dCache
+``permissions``  make each dataset's folder world-readable
+``verify``       read every file back anonymously, as any reader does
+``record``       record each verified upload in the dataset's ``status.yaml``
 
 Requires:
   * oidc-agent with a profile (default "HIFIS") -- `oidc-token HIFIS` must work
   * an rclone remote (default "HIFIS") pointing at /Helmholtz/<VO>
 
 Guard rails:
-  * restricted datasets are never uploaded -- that is what "restricted" means
-  * internal datasets need --allow-internal, and are NOT made world-readable
+  * only public data is uploaded: a restricted dataset is refused, and its
+    installation is registered by name in a restricted cache instead
   * paths are immutable: an upload that would overwrite an existing, differing
     file is refused, because published paths must never change under consumers
   * every dataset named is loaded and checked before any of them is uploaded,
@@ -32,7 +40,10 @@ Guard rails:
     frozen one only rechecked with ``--verify-only``
 
 A verified upload, or a recheck that passes, is recorded in the dataset's
-``status.yaml`` as a copy on dCache, and makes a built dataset available.
+``status.yaml`` as a copy on dCache, and makes a built dataset available. A
+dataset whose upload of its current inventory is verified and recorded is
+not uploaded again, so a run interrupted half-way is finished by running it
+again; a failed dataset does not stop the others.
 """
 
 from __future__ import annotations
@@ -63,6 +74,7 @@ from . import (
     read_descriptor,
 )
 from . import status as dataset_status
+from .pipeline import Action, Pipeline
 
 
 @dataclass(frozen=True)
@@ -76,7 +88,6 @@ class UploadOptions:
     root: str | None = None
     dry_run: bool = False
     verify_only: bool = False
-    allow_internal: bool = False
     no_chmod: bool = False
     transfers: int = 8
 
@@ -113,12 +124,14 @@ def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path | None
 
 
 def preflight(
-    name: str,
-    package: dict,
-    source_dir: Path | None,
-    allow_internal: bool,
-    verify_only: bool,
+    name: str, package: dict, source_dir: Path | None, verify_only: bool
 ) -> str:
+    """The dataset's folder on the store, after the checks of the step.
+
+    Raises :class:`~ethos_data.errors.TransitionError` for data that is not
+    public or whose licensing is not settled, and
+    :class:`~ethos_data.errors.UploadError` when nothing is left to upload.
+    """
     access = package.get(k.ACCESS, k.PUBLIC)
     # The documented default, and the folder the reader downloads from: the
     # dataset's own name unless it declares a prefix.
@@ -135,12 +148,6 @@ def preflight(
         settled=verify_only or license_settled(package),
         note=package.get(k.LICENSE_NOTE, ""),
     )
-    if access == "internal" and not allow_internal:
-        raise UploadError(
-            f"{name} is internal (not published). Upload it only if the VO-only "
-            "prefix is really where you want it, and pass --allow-internal.\n"
-            "It will NOT be made world-readable."
-        )
 
     if source_dir is None:
         if not verify_only:
@@ -273,96 +280,281 @@ class Plan(NamedTuple):
     status: StatusFile
 
 
-def upload_one(
-    options: UploadOptions,
-    plan: Plan,
-    base_url: str,
-    root: str,
-    bearer,
-    store: Store,
-) -> None:
-    """Upload and verify a single dataset; raises UploadError saying what failed."""
-    namespace_path = f"{options.vo_path}/{root}/{plan.prefix}"
-    destination = f"{options.remote}:{root}/{plan.prefix}"
-    dataset_url = resource_url(base_url, plan.prefix)
+@dataclass
+class Upload:
+    """What ``catalog upload`` was asked for, and what its stages found."""
 
-    report.info(
-        f"dataset      {plan.name}  ({plan.package['ethos:file_count']} files, "
-        f"{plan.package['ethos:total_bytes'] / 1e6:,.1f} MB)"
+    catalog_root: Path
+    arguments: list[str]
+    options: UploadOptions
+    store: Store
+    #: The publication URL and the folder under the VO it serves: set by ``check``.
+    base_url: str = ""
+    root: str = ""
+    #: Each dataset cleared for upload, in the order asked for: set by ``check``.
+    plans: list[Plan] = field(default_factory=list)
+    _token: list[str] = field(default_factory=list)
+
+    def bearer(self) -> str:
+        """One token for the whole run, asked for when an action first needs it."""
+        if not self._token:
+            self._token.append(self.store.token(self.options.oidc_profile))
+        return self._token[0]
+
+    def url(self, plan: Plan) -> str:
+        return resource_url(self.base_url, plan.prefix)
+
+    def namespace_path(self, plan: Plan) -> str:
+        return f"{self.options.vo_path}/{self.root}/{plan.prefix}"
+
+
+def _uploaded(status: StatusFile, location: str) -> bool:
+    """Whether the status file records a verified upload of the current inventory."""
+    return status.state == lifecycle.AVAILABLE and any(
+        copy.kind == k.COPY_UPLOADED
+        and copy.location == location
+        and copy.verified is not None
+        for copy in status.copies
     )
-    report.info(
-        f"from         {plan.source_dir or '(no source_dir: the inventory is final)'}"
-    )
-    report.info(f"to           {destination}")
-    report.info(f"public URL   {dataset_url}\n")
 
-    resources = inventory_of(plan.name, plan.dataset_dir).records()
 
-    if not options.verify_only:
-        store.copy(
-            plan.source_dir,
-            f"{root}/{plan.prefix}",
-            [resource["path"] for resource in resources],
-            transfers=options.transfers,
-            dry_run=options.dry_run,
-        )
-        if options.dry_run:
-            report.info("\nDry run only; nothing was uploaded.")
-            return
+class Check:
+    """Load and check every dataset named before any byte moves."""
 
-    if not options.no_chmod and plan.package.get(k.ACCESS, k.PUBLIC) == k.PUBLIC:
-        try:
-            store.chmod(namespace_path, MODE_0755, bearer())
-            report.info(f"\nchmod 0755 {namespace_path}")
-        except UploadError as error:
-            report.warning(
-                f"{error.message}; anonymous reads fail without it."
+    name = "check"
+
+    def plan(self, upload: Upload) -> list[Action]:
+        options = upload.options
+        catalog_meta = read_catalog_meta(upload.catalog_root)
+        upload.base_url = catalog_meta[k.PUBLICATION_URL].rstrip("/")
+        # The upload destination and the URL read back afterwards name the same
+        # folder, so the default comes from the catalogue. Were they to differ,
+        # the bytes would go to one folder and every read-back would 404
+        # against the other, which reads like a permissions problem and is not
+        # one.
+        published_root = upload.base_url.rsplit("/", 1)[-1]
+        upload.root = options.root or published_root
+        if options.root and options.root != published_root:
+            raise UploadError(
+                f"--root {options.root!r} does not match the catalogue's publication "
+                f"root {published_root!r} (from ethos:publication_url in catalog.yaml).\n"
+                f"Uploading to {options.root!r} would publish bytes that "
+                f"{upload.base_url}/... never serves.\n"
+                "Fix ethos:publication_url, or drop --root to use the catalogue's own "
+                "value."
             )
 
-    report.info(
-        "\nverifying anonymous access (no credentials, exactly what a public user gets)"
-    )
-    ok, missing, wrong = read_back(store, resources, dataset_url)
-    report.info(f"  readable       {len(ok)}/{plan.package['ethos:file_count']}")
-    if wrong:
-        report.info(f"  WRONG SIZE     {len(wrong)}")
-        for resource, length in wrong[:5]:
+        # Deduplicated, because naming a dataset twice should cost one upload,
+        # and ordered, so the run reads in the order it was asked for.
+        names = dict.fromkeys(
+            expand_families(
+                upload.catalog_root,
+                [resolve_name(upload.catalog_root, each) for each in upload.arguments],
+            )
+        )
+        step = "verify" if options.verify_only else "upload"
+        for name in names:
+            meta, package, source_dir, dataset_dir = load(upload.catalog_root, name)
+            prefix = preflight(name, package, source_dir, options.verify_only)
+            status = dataset_status.build_input(dataset_dir, meta, name).status
+            plan = Plan(name, package, source_dir, dataset_dir, prefix, status)
+            if not options.verify_only and _uploaded(status, upload.url(plan)):
+                report.info(
+                    f"  {self.name:<12} {name}: its upload is verified and recorded "
+                    "already; --verify-only rechecks it"
+                )
+                continue
+            lifecycle.step(step, status.state, name)
+            upload.plans.append(plan)
+
+        if len(upload.plans) > 1:
+            files = sum(plan.package[k.FILE_COUNT] for plan in upload.plans)
+            size = sum(plan.package[k.TOTAL_BYTES] for plan in upload.plans)
             report.info(
-                f"    {resource['path']}: {length} on server, {resource['bytes']} in manifest"
+                f"{len(upload.plans)} datasets, {files:,} files, {size / 1e9:,.2f} GB"
             )
-    if missing:
-        report.info(f"  NOT READABLE   {len(missing)}")
-        for _resource, why in missing[:5]:
-            report.info(f"    {why}")
-        report.info("\n  A 401 here means the directory is not world-readable yet.")
-        report.info(
-            f'    curl -H "Authorization: Bearer $(oidc-token {options.oidc_profile})" \\'
-        )
-        report.info("      -H 'Content-Type: application/json' -X POST \\")
-        report.info(
-            f'      \'{FRONTEND}/namespace/{namespace_path}\' -d \'{{"action":"chmod","mode":493}}\''
-        )
+        return []
 
-    sample = resources[0]["path"]
-    try:
-        where = store.locality(f"{namespace_path}/{sample}", bearer())
-    except UploadError as error:
-        where = f"unknown ({error.message})"
-    report.info(f"\n  storage locality of {sample}: {where}")
-    if where == "NEARLINE":
-        report.info(
-            "    NEARLINE means tape only -- the first read will block on staging."
-        )
-    elif where == "ONLINE":
-        report.info(
-            "    ONLINE means disk. Large files may also gain a tape copy after ~1 week."
-        )
 
-    if missing or wrong:
-        raise UploadError(
-            f"{len(missing)} file(s) of {plan.name} are not readable and "
-            f"{len(wrong)} have the wrong size at {dataset_url}"
-        )
+class Transfer:
+    """Copy each dataset's inventory, and nothing else, to the store."""
+
+    name = "transfer"
+
+    def plan(self, upload: Upload) -> list[Action]:
+        if upload.options.verify_only:
+            return []
+        return [
+            Action(
+                f"copy {plan.package[k.FILE_COUNT]:,} files "
+                f"({plan.package[k.TOTAL_BYTES] / 1e6:,.1f} MB) of {plan.name} from "
+                f"{plan.source_dir} to {upload.options.remote}:{upload.root}/"
+                f"{plan.prefix}",
+                self._copy(upload, plan),
+                subject=plan.name,
+            )
+            for plan in upload.plans
+        ]
+
+    @staticmethod
+    def _copy(upload: Upload, plan: Plan):
+        def copy() -> None:
+            records = inventory_of(plan.name, plan.dataset_dir).records()
+            upload.store.copy(
+                plan.source_dir,
+                f"{upload.root}/{plan.prefix}",
+                [record[k.PATH] for record in records],
+                transfers=upload.options.transfers,
+            )
+
+        return copy
+
+
+class Permissions:
+    """Make each dataset's folder world-readable."""
+
+    name = "permissions"
+
+    def plan(self, upload: Upload) -> list[Action]:
+        if upload.options.no_chmod:
+            return []
+        return [
+            Action(
+                f"chmod 0755 {upload.namespace_path(plan)}",
+                self._chmod(upload, plan),
+                subject=plan.name,
+            )
+            for plan in upload.plans
+        ]
+
+    @staticmethod
+    def _chmod(upload: Upload, plan: Plan):
+        def chmod() -> None:
+            try:
+                upload.store.chmod(
+                    upload.namespace_path(plan), MODE_0755, upload.bearer()
+                )
+            except UploadError as error:
+                # The read-back that follows says whether it mattered.
+                report.warning(f"{error.message}; anonymous reads fail without it.")
+
+        return chmod
+
+
+class Verify:
+    """Read every file back anonymously, as a reader on the internet does."""
+
+    name = "verify"
+
+    def plan(self, upload: Upload) -> list[Action]:
+        return [
+            Action(
+                f"read the {plan.package[k.FILE_COUNT]:,} files of {plan.name} back "
+                f"anonymously from {upload.url(plan)}",
+                self._verify(upload, plan),
+                subject=plan.name,
+            )
+            for plan in upload.plans
+        ]
+
+    @staticmethod
+    def _verify(upload: Upload, plan: Plan):
+        def verify() -> None:
+            resources = inventory_of(plan.name, plan.dataset_dir).records()
+            dataset_url = upload.url(plan)
+            namespace_path = upload.namespace_path(plan)
+            ok, missing, wrong = read_back(upload.store, resources, dataset_url)
+            report.info(f"\n{plan.name}, read back anonymously from {dataset_url}")
+            report.info(f"  readable       {len(ok)}/{plan.package[k.FILE_COUNT]}")
+            if wrong:
+                report.info(f"  WRONG SIZE     {len(wrong)}")
+                for resource, length in wrong[:5]:
+                    report.info(
+                        f"    {resource[k.PATH]}: {length} on server, "
+                        f"{resource[k.BYTES]} in manifest"
+                    )
+            if missing:
+                report.info(f"  NOT READABLE   {len(missing)}")
+                for _resource, why in missing[:5]:
+                    report.info(f"    {why}")
+                report.info("\n  A 401 here means the directory is not world-readable.")
+                report.info(
+                    f'    curl -H "Authorization: Bearer $(oidc-token '
+                    f'{upload.options.oidc_profile})" \\'
+                )
+                report.info("      -H 'Content-Type: application/json' -X POST \\")
+                report.info(
+                    f"      '{FRONTEND}/namespace/{namespace_path}' "
+                    """-d '{"action":"chmod","mode":493}'"""
+                )
+
+            sample = resources[0][k.PATH]
+            try:
+                where = upload.store.locality(
+                    f"{namespace_path}/{sample}", upload.bearer()
+                )
+            except UploadError as error:
+                where = f"unknown ({error.message})"
+            report.info(f"  storage locality of {sample}: {where}")
+            if where == "NEARLINE":
+                report.info(
+                    "    NEARLINE means tape only -- the first read will block on staging."
+                )
+            elif where == "ONLINE":
+                report.info(
+                    "    ONLINE means disk. Large files may also gain a tape copy after "
+                    "~1 week."
+                )
+
+            if missing or wrong:
+                raise UploadError(
+                    f"{len(missing)} file(s) of {plan.name} are not readable and "
+                    f"{len(wrong)} have the wrong size at {dataset_url}"
+                )
+
+        return verify
+
+
+class Record:
+    """Record each verified upload as a copy on dCache in the status file."""
+
+    name = "record"
+
+    def plan(self, upload: Upload) -> list[Action]:
+        step = "verify" if upload.options.verify_only else "upload"
+        return [
+            Action(
+                f"{plan.name} becomes {lifecycle.step(step, plan.status.state)}, its "
+                "copy on dCache verified",
+                self._record(upload, plan, step),
+                subject=plan.name,
+            )
+            for plan in upload.plans
+        ]
+
+    @staticmethod
+    def _record(upload: Upload, plan: Plan, step: str):
+        def record() -> None:
+            dataset_status.take(
+                plan.dataset_dir,
+                dataset_status.read(plan.dataset_dir),
+                step,
+                dataset=plan.name,
+                copy=Copy(
+                    kind=k.COPY_UPLOADED,
+                    location=upload.url(plan),
+                    verified=dataset_status.now(),
+                ),
+                files=plan.package[k.FILE_COUNT],
+                bytes=plan.package[k.TOTAL_BYTES],
+            )
+
+        return record
+
+
+PIPELINE: Pipeline[Upload] = Pipeline(
+    "upload", [Check(), Transfer(), Permissions(), Verify(), Record()]
+)
 
 
 @dataclass
@@ -377,26 +569,6 @@ class UploadResult:
         return not self.failed
 
 
-def _record(plan: Plan, options: UploadOptions, base_url: str) -> None:
-    """Record a verified upload, or a recheck that passed, in the status file."""
-    taken = dataset_status.take(
-        plan.dataset_dir,
-        dataset_status.read(plan.dataset_dir),
-        "verify" if options.verify_only else "upload",
-        dataset=plan.name,
-        copy=Copy(
-            kind=k.COPY_UPLOADED,
-            location=resource_url(base_url, plan.prefix),
-            verified=dataset_status.now(),
-        ),
-        files=plan.package[k.FILE_COUNT],
-        bytes=plan.package[k.TOTAL_BYTES],
-    )
-    report.info(
-        f"\nrecorded     {plan.name} is {taken.state}, its copy on dCache verified"
-    )
-
-
 @report.reported
 def run(
     catalog_root: Path,
@@ -407,99 +579,21 @@ def run(
 ) -> UploadResult:
     """Upload ``datasets`` -- names, paths or families -- and verify each anonymously.
 
-    Every dataset is loaded and checked before any of them is uploaded.
-    ``options`` are the command's flags; ``store`` is the publication store,
-    dCache through ``options.remote`` by default; ``reporter=`` takes the
-    progress.
+    Every dataset is loaded and checked before any of them is uploaded, and a
+    dry run is the plan: it contacts no store. ``options`` are the command's
+    flags; ``store`` is the publication store, dCache through
+    ``options.remote`` by default; ``reporter=`` takes the progress.
     """
     options = options or UploadOptions()
     store = store if store is not None else DcacheStore(options.remote)
-    catalog_meta = read_catalog_meta(catalog_root)
-    base_url = catalog_meta[k.PUBLICATION_URL].rstrip("/")
-
-    # The upload destination and the URL we verify afterwards have to name the
-    # same folder, so derive the default from the catalogue rather than repeating
-    # it. Were they to differ, the bytes would go to one folder and every
-    # verification HEAD would 404 against the other, which reads like a
-    # permissions problem and is not one.
-    published_root = base_url.rstrip("/").rsplit("/", 1)[-1]
-    root = options.root or published_root
-    if options.root and options.root != published_root:
-        raise UploadError(
-            f"--root {options.root!r} does not match the catalogue's publication root "
-            f"{published_root!r} (from ethos:publication_url in catalog.yaml).\n"
-            f"Uploading to {options.root!r} would publish bytes that {base_url}/... never serves.\n"
-            "Fix ethos:publication_url, or drop --root to use the catalogue's own value."
+    upload = Upload(catalog_root, list(datasets), options, store)
+    outcome = PIPELINE.run(upload, dry_run=options.dry_run)
+    result = UploadResult([plan.name for plan in upload.plans], outcome.failed)
+    if len(upload.plans) > 1 and not options.dry_run:
+        report.info("\n" + "=" * 72)
+        report.info(
+            f"{len(upload.plans) - len(result.failed)}/{len(upload.plans)} datasets ok"
         )
-
-    # Deduplicated, because naming a dataset twice should cost one upload, and
-    # ordered, so the run reads in the order it was asked for.
-    names = dict.fromkeys(
-        expand_families(
-            catalog_root,
-            [resolve_name(catalog_root, argument) for argument in datasets],
-        )
-    )
-
-    # Load and check EVERY dataset before uploading ANY of them. The checks that
-    # matter here -- restricted data, an unbuilt manifest, a vanished source_dir
-    # -- are exactly the ones you want to hear about before bytes start moving,
-    # and a subset upload that dies on its fourth dataset has already published
-    # three. Nothing below this loop can raise UploadError for a reason that was
-    # knowable up here.
-    plans = []
-    for name in names:
-        _meta, package, source_dir, dataset_dir = load(catalog_root, name)
-        prefix = preflight(
-            name, package, source_dir, options.allow_internal, options.verify_only
-        )
-        status = dataset_status.build_input(dataset_dir, _meta, name).status
-        lifecycle.step("verify" if options.verify_only else "upload", status.state, name)
-        plans.append(Plan(name, package, source_dir, dataset_dir, prefix, status))
-
-    # One token for the whole run, fetched only if something actually needs it:
-    # a --dry-run never talks to dCache, and asking oidc-agent for a token it
-    # will not use turns a rehearsal into a login prompt.
-    cached: list[str] = []
-
-    def bearer() -> str:
-        if not cached:
-            cached.append(store.token(options.oidc_profile))
-        return cached[0]
-
-    if len(plans) > 1:
-        files = sum(plan.package["ethos:file_count"] for plan in plans)
-        size = sum(plan.package["ethos:total_bytes"] for plan in plans)
-        report.info(f"{len(plans)} datasets, {files:,} files, {size / 1e9:,.2f} GB")
-        report.info(f"  {', '.join(plan.name for plan in plans)}\n")
-
-    failed: dict[str, str] = {}
-    for index, plan in enumerate(plans, start=1):
-        if len(plans) > 1:
-            report.info(
-                f"---- [{index}/{len(plans)}] {plan.name} "
-                + "-" * max(0, 50 - len(plan.name))
-            )
-        # One dataset that fails does not stop the others: each was checked
-        # before any byte moved, so what fails here is the transfer or the
-        # read-back, and the summary names it.
-        try:
-            upload_one(options, plan, base_url, root, bearer, store)
-        except UploadError as error:
-            failed[plan.name] = error.message
-            report.warning(error.message)
-        else:
-            if not options.dry_run:
-                _record(plan, options, base_url)
-        if len(plans) > 1:
-            report.info()
-
-    result = UploadResult([plan.name for plan in plans], failed)
-    if len(plans) == 1:
-        return result
-
-    report.info("=" * 72)
-    report.info(f"{len(plans) - len(failed)}/{len(plans)} datasets ok")
-    for name, why in failed.items():
-        report.info(f"  FAILED   {name}: {why.splitlines()[0]}")
+        for name, why in result.failed.items():
+            report.info(f"  FAILED   {name}: {why.splitlines()[0]}")
     return result

@@ -195,7 +195,7 @@ def run(
 
         store = DcacheStore()
     freeze = Freeze(catalog_root, dataset, copy, store)
-    written = bool(PIPELINE.run(freeze, dry_run=dry_run)) and not dry_run
+    written = bool(PIPELINE.run(freeze, dry_run=dry_run).planned) and not dry_run
     if written:
         report.info(
             f"\nrecorded     {freeze.name} is frozen; a rebuild keeps its inventory "

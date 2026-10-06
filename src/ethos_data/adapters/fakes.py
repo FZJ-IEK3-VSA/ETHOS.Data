@@ -57,7 +57,6 @@ class FakeStore:
         paths: list[str],
         *,
         transfers: int,
-        dry_run: bool,
     ) -> None:
         self.copies.append(
             {
@@ -65,15 +64,12 @@ class FakeStore:
                 "destination": destination,
                 "paths": list(paths),
                 "transfers": transfers,
-                "dry_run": dry_run,
             }
         )
         if self.copy_status:
             raise UploadError(
                 f"rclone exited {self.copy_status} copying to {destination}."
             )
-        if dry_run:
-            return
         for path in paths:
             data = (Path(source) / path).read_bytes()
             self.objects[f"{destination}/{path}"] = data

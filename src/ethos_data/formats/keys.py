@@ -165,6 +165,13 @@ UNSPECIFIED = "unspecified"
 DATAPACKAGE_PROFILE = "https://datapackage.org/profiles/2.0/datapackage.json"
 DATACATALOG_PROFILE = "https://datapackage.org/profiles/2.0/datacatalog.json"
 
+# -- the generated catalogue files ----------------------------------------------
+
+#: A dataset's generated descriptor, beside its dataset.yaml.
+PACKAGE_FILE = "datapackage.json"
+#: The catalogue's generated index, at the catalogue's root.
+INDEX_FILE = "datacatalog.json"
+
 # -- records the tools write beside data -----------------------------------------
 
 #: In the staging root: who staged which directory under which name, and why.

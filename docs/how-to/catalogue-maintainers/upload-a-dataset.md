@@ -18,9 +18,9 @@ ethos-data catalog build my-dataset --check
 ethos-data catalog upload my-dataset --dry-run
 ```
 
-Check the selected files, source, destination, and public URL. A dry run can
-contact storage through rclone but does not transfer files or change permissions.
-Do not combine it with `--verify-only`.
+Check the plan: the files each stage would transfer, the folder it would make
+world-readable, the URL it would read them back from, and the record. A dry
+run contacts no store.
 
 ## 2. Upload and inspect the result
 
@@ -30,7 +30,9 @@ ethos-data catalog upload my-dataset
 
 For several datasets, name them in one invocation; naming a family such as
 `reskit-test-data` uploads every member beneath it. Every named dataset is checked
-before transfer; uploads then run per dataset without rollback of earlier successes.
+before transfer. A dataset that fails afterwards does not stop the others, and
+earlier successes stay; run the command again to finish, since a dataset whose
+upload is verified and recorded is not uploaded again.
 
 Require `readable N/N`, no wrong sizes, and a successful exit. The final check
 uses anonymous HTTP HEAD requests, not a remote SHA-256 read. For end-to-end
@@ -42,20 +44,15 @@ The command refuses restricted data, which never has a copy on dCache, and
 unresolved licensing. If `--immutable` reports a conflict, assign new
 published paths; do not delete and overwrite a released object.
 
-!!! warning "Gap: `--allow-internal`"
-    The code offers `catalog upload --allow-internal`, for an access class
-    that no dataset can have. Do not use it: data the institute holds
-    without publishing it is restricted data, which stays off dCache.
-
 ## 3. Recheck without transferring or changing permissions
 
 ```bash
 ethos-data catalog upload my-dataset --verify-only --no-chmod
 ```
 
-`--verify-only` alone still attempts to chmod a public prefix. Pair it with
-`--no-chmod` for a diagnostic that does not change permissions. Storage-locality
-lookup still requires authentication. A recheck that passes is recorded as
+`--verify-only` alone sets the permissions of the dataset's folder as well.
+Pair it with `--no-chmod` for a diagnostic that does not change permissions.
+The storage-locality lookup requires authentication. A recheck that passes is recorded as
 well, and a frozen dataset can only be rechecked.
 
 For failures, use [Diagnose a report](diagnose-a-report.md).
