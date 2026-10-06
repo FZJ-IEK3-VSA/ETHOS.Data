@@ -11,7 +11,7 @@ has no existing test data to replace. Allow about 20 minutes. Create the directo
 tree before adding the files below:
 
 ```bash
-python -c "from pathlib import Path; Path('catalogue/datasets/lesson/input').mkdir(parents=True)"
+python -c "from pathlib import Path; Path('catalogue').mkdir(); Path('lesson/input').mkdir(parents=True)"
 export ETHOS_DATA_CONFIG="$PWD/lesson-settings.yaml"
 ```
 
@@ -29,7 +29,8 @@ ethos:catalog_role: source
 ethos:publication_url: https://example.invalid/data
 ```
 
-Create `catalogue/datasets/lesson/dataset.yaml`:
+Create `lesson/input/value.txt` containing `3`, and the draft description
+`lesson/dataset.yaml` beside it:
 
 ```yaml
 name: lesson
@@ -42,17 +43,19 @@ licenses:
   - name: CC0-1.0
 ```
 
-Create `catalogue/datasets/lesson/input/value.txt` containing `3`, then build:
+Take the draft into the teaching catalogue, which builds it:
 
 ```bash
 cd catalogue
-ethos-data catalog build
+ethos-data catalog add ../lesson
 cd ..
 ethos-data config set-catalog "$PWD/catalogue/datacatalog.json"
 ```
 
-The last command names the teaching catalogue in the lesson's settings file,
-so the catalogue configured for your normal work is not read. Create
+`catalog add` writes `catalogue/datasets/lesson/dataset.yaml` without
+`source_dir`, which goes into the dataset's `status.yaml`. The last command
+names the teaching catalogue in the lesson's settings file, so the catalogue
+configured for your normal work is not read. Create
 `collections.yaml`:
 
 ```yaml
@@ -83,7 +86,7 @@ exposes through `tool_main`, without needing RESKit installed for this lesson.
 
 ```bash
 python data_cli.py bundle export tests/data-bundle tiny_test \
-  --source-root lesson=catalogue/datasets/lesson/input --source-revision lesson-1
+  --source-root lesson=lesson/input --source-revision lesson-1
 ```
 
 The local source is verified against the built manifest. The deliberately
@@ -134,7 +137,7 @@ Restore the fixture to its original bytes and restore the strict test to finish
 the lesson:
 
 ```bash
-python -c "from pathlib import Path; import shutil; shutil.copyfile('catalogue/datasets/lesson/input/value.txt', 'tests/data-bundle/data/lesson/value.txt')"
+python -c "from pathlib import Path; import shutil; shutil.copyfile('lesson/input/value.txt', 'tests/data-bundle/data/lesson/value.txt')"
 python data_cli.py bundle verify tests/data-bundle tiny_test
 pytest -q tests/test_value.py
 ```

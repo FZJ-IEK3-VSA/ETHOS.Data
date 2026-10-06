@@ -37,6 +37,7 @@ __all__ = [
     "Upstream",
     "apply_defaults",
     "check",
+    "check_draft",
     "check_namespace",
     "lint",
 ]
@@ -329,6 +330,23 @@ def check(meta: dict) -> None:
     )
     if problem:
         raise DescriptorError(problem)
+
+
+def check_draft(meta: dict) -> list[str]:
+    """Check a draft ``dataset.yaml`` as the build would; returns its lint warnings.
+
+    A draft names its bytes with ``source_dir``, which the catalogue keeps in
+    the dataset's status file, so the checks leave it out. Raises
+    :class:`~ethos_data.errors.DescriptorError` for the first rule the draft
+    breaks; the message and every warning start with the dataset's name.
+    """
+    name = meta.get(k.NAME)
+    rest = {key: value for key, value in meta.items() if key != k.SOURCE_DIR}
+    try:
+        check(rest)
+    except DescriptorError as error:
+        raise DescriptorError(f"{name}: {error.message}") from None
+    return [f"{name}: {warning}" for warning in lint(rest)]
 
 
 def check_namespace(meta: dict) -> None:

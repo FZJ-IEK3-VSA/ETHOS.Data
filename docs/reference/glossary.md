@@ -5,10 +5,10 @@ Key concepts used across `ethos-data`.
 !!! warning "Gap: some terms describe the target"
     These terms describe the [target architecture](../explanation/architecture/glossary.md),
     which the code does not have yet: one **bundle** format and a bundle
-    **ahead of the catalogue**, **release** and **withdraw** with
-    `catalog release` and `catalog remove`, **status files** and **dataset
-    states**, **pipelines** and **handoffs**. The code has only bundles
-    exported from the catalogue, and none of those commands.
+    **ahead of the catalogue**, **release** with `catalog release`, and
+    **handoffs**. The code has only bundles exported from the catalogue, and
+    of the **pipelines** only `catalog add`, `record`, `remove` and
+    `check-source`.
 
 ## Data
 

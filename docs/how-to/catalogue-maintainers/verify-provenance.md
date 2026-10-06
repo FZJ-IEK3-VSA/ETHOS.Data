@@ -35,7 +35,21 @@ check is done; the folder is a scratch area, not a third cache.
 
 ## 3. Compare against the catalogue's inventory
 
-Print the recorded hashes and sizes:
+Lay the re-downloaded files out by the paths the inventory records. Then, in
+your own clone of the source catalogue:
+
+```bash
+ethos-data catalog check-source global-wind-atlas-v4 /shared/ethos/validation/global-wind-atlas-v4 \
+    --note "against the 2026-09 release on the provider's site"
+```
+
+It hashes every file under the folder whose path the inventory lists,
+compares its size and SHA-256 with the recorded ones, names each file that
+differs and each one the inventory does not list, and exits `1` if a file
+differs. `--dry-run` compares without recording.
+
+If the source publishes checksums rather than files, print the recorded
+hashes and sizes instead:
 
 ```python
 import ethos_data
@@ -45,31 +59,18 @@ for resource in catalog.dataset("global-wind-atlas-v4").resources.values():
     print(resource.hash, resource.bytes, resource.path)
 ```
 
-=== "The source publishes checksums"
-
-    Compare them line by line with the output above. Note the algorithm: the
-    catalogue records SHA-256; a source that publishes MD5 or SHA-1 has to be
-    re-downloaded for a byte comparison.
-
-=== "The source publishes files only"
-
-    Hash the re-downloaded files and compare:
-
-    ```bash
-    sha256sum /shared/ethos/validation/global-wind-atlas-v4/*.tif
-    ```
+Compare them line by line with the published checksums. Note the algorithm:
+the catalogue records SHA-256; a source that publishes MD5 or SHA-1 has to be
+re-downloaded for a byte comparison.
 
 ## 4. Record the outcome
 
-Write the date, the source version compared against, the sample checked and
-the result into the dataset's issue. If the check was part of a proposal, it
-belongs in that proposal's thread.
-
-!!! warning "Gap: no provenance check in the tooling"
-    Nothing in `ethos-data` re-downloads a source into the validation folder
-    or compares hashes against it, and `dataset.yaml` has no key for "last
-    verified against the source". A `catalog check-source <dataset>` and a
-    recorded verification date are candidates for the architecture review.
+`check-source` records the date, the sample compared and the result, with
+the `--note`, in the dataset's `status.yaml`; `ethos-data catalog status
+<dataset>` lists the dataset, and its history the checks. Write the same into
+the dataset's issue. If the check was part of a proposal, it belongs in that
+proposal's thread. Commit the status file on a branch and merge it by merge
+request on JuGit.
 
 ## 5. If it does not match
 
