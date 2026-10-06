@@ -34,15 +34,13 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
-import tempfile
-import urllib.error
-import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
 
 from .. import report
+from ..adapters import Store
+from ..adapters.dcache import FRONTEND, MODE_0755, DcacheStore
 from ..errors import UploadError
 from ..formats import keys as k
 from ..formats.derived import license_settled, remote_prefix_of, resource_url
@@ -74,30 +72,6 @@ class UploadOptions:
     allow_internal: bool = False
     no_chmod: bool = False
     transfers: int = 8
-
-
-FRONTEND = "https://hifis-storage-web.desy.de/api/v1"
-MODE_0755 = 493  # dCache wants the mode as a decimal integer, not octal
-
-
-def _capture(command: list[str], **kwargs) -> subprocess.CompletedProcess:
-    return subprocess.run(command, text=True, capture_output=True, **kwargs)
-
-
-def token(profile: str) -> str:
-    result = _capture(["oidc-token", profile])
-    if result.returncode != 0 or not result.stdout.strip():
-        raise UploadError(
-            f"could not get a token from `oidc-token {profile}`.\n"
-            f"  {result.stderr.strip()}\n"
-            "Start the agent and register the profile:\n"
-            "    eval $(oidc-agent-service use)\n"
-            f"    oidc-gen {profile} --flow=code --client-id=desy-public \\\n"
-            "        --scope='openid profile offline_access' \\\n"
-            "        --iss=https://keycloak.desy.de/auth/realms/production/ \\\n"
-            "        --redirect-uri=http://localhost:4242"
-        )
-    return result.stdout.strip()
 
 
 def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path | None, Path]:
@@ -185,54 +159,25 @@ def preflight(
     return prefix
 
 
-def remote_manifest_check(
-    resources: list[dict], base_url: str
+def read_back(
+    store: Store, resources: list[dict], base_url: str
 ) -> tuple[list, list, list]:
-    """HEAD every resource anonymously. Returns (ok, missing, wrong_size).
+    """Read every resource back anonymously: ``(ok, unreadable, wrong_size)``.
 
-    ``base_url`` is the dataset's folder on the published store.
+    ``base_url`` is the dataset's folder on the published store. ``ok`` and
+    ``wrong_size`` hold ``(resource, size the server reports)``,
+    ``unreadable`` holds ``(resource, why)``.
     """
-    ok, missing, wrong = [], [], []
+    ok, unreadable, wrong = [], [], []
     for resource in resources:
         url = f"{base_url.rstrip('/')}/{resource[k.PATH]}"
-        request = urllib.request.Request(url, method="HEAD")
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                length = int(response.headers.get("Content-Length", -1))
-            (ok if length == resource["bytes"] else wrong).append((resource, length))
-        except urllib.error.HTTPError as error:
-            missing.append((resource, error.code))
-        except Exception as error:  # noqa: BLE001 - network shapes vary
-            missing.append((resource, str(error)))
-    return ok, missing, wrong
-
-
-def locality(path: str, bearer: str) -> str:
-    """ONLINE (disk) / NEARLINE (tape only) / ONLINE_AND_NEARLINE (both)."""
-    url = f"{FRONTEND}/namespace/{path.lstrip('/')}?locality=true"
-    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {bearer}"})
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return json.load(response).get("fileLocality", "unknown")
-    except Exception as error:  # noqa: BLE001
-        return f"unknown ({error})"
-
-
-def chmod(path: str, mode: int, bearer: str) -> int:
-    request = urllib.request.Request(
-        f"{FRONTEND}/namespace/{path.lstrip('/')}",
-        data=json.dumps({"action": "chmod", "mode": mode}).encode(),
-        headers={
-            "Authorization": f"Bearer {bearer}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return response.status
-    except urllib.error.HTTPError as error:
-        return error.code
+            size = store.served(url)
+        except UploadError as error:
+            unreadable.append((resource, error.message))
+            continue
+        (ok if size == resource[k.BYTES] else wrong).append((resource, size))
+    return ok, unreadable, wrong
 
 
 def resolve_name(catalog_root: Path, argument: str) -> str:
@@ -333,9 +278,14 @@ class Plan(NamedTuple):
 
 
 def upload_one(
-    options: UploadOptions, plan: Plan, base_url: str, root: str, bearer
-) -> int:
-    """Upload and verify a single dataset. Returns a process-style exit code."""
+    options: UploadOptions,
+    plan: Plan,
+    base_url: str,
+    root: str,
+    bearer,
+    store: Store,
+) -> None:
+    """Upload and verify a single dataset; raises UploadError saying what failed."""
     namespace_path = f"{options.vo_path}/{root}/{plan.prefix}"
     destination = f"{options.remote}:{root}/{plan.prefix}"
     dataset_url = resource_url(base_url, plan.prefix)
@@ -353,78 +303,30 @@ def upload_one(
     resources = resources_of(plan.package, plan.dataset_dir)
 
     if not options.verify_only:
-        # Upload the manifest, not the directory. They are the same thing only
-        # when nothing else lives under source_dir; with ethos:include or
-        # ethos:exclude in play they are not, and `rclone copy <dir>` would
-        # publish the strays the manifest deliberately leaves out -- silently,
-        # since verification only ever looks for files it knows about.
-
-        # A nested dataset's name is `reskit-test-data/era5`, and a slash is a
-        # directory separator in a filename on every platform -- on Windows not
-        # a legal character in one at all. Flatten it, or naming such a dataset
-        # fails in mkstemp before a single byte is uploaded.
-        stem = plan.name.replace("/", "-").replace(os.sep, "-")
-        handle, listing_path = tempfile.mkstemp(
-            prefix=f"ethos-data-upload-{stem}-", suffix=".txt"
+        store.copy(
+            plan.source_dir,
+            f"{root}/{plan.prefix}",
+            [resource["path"] for resource in resources],
+            transfers=options.transfers,
+            dry_run=options.dry_run,
         )
-        # rclone reads --files-from as UTF-8, one path per line. Written as bytes
-        # because a text-mode write on Windows would end every line CRLF, and
-        # rclone would then look for files whose names end in a carriage return.
-        with open(handle, "wb") as listing_file:
-            listing_file.writelines(
-                f"{resource['path']}\n".encode() for resource in resources
-            )
-        listing = Path(listing_path)
-        command = [
-            "rclone",
-            "copy",
-            str(plan.source_dir),
-            destination,
-            "--files-from",
-            str(listing),
-            "--transfers",
-            str(options.transfers),
-            "--checksum",
-            # dCache cannot modify a file in place -- a changed file is delete +
-            # rewrite. --immutable makes rclone fail loudly if a published file
-            # differs, instead of silently republishing under the same path.
-            "--immutable",
-            "--progress" if not options.dry_run else "--dry-run",
-        ]
-        report.info(f"  ({len(resources)} files listed in {listing})")
-        report.info("  $ " + " ".join(command) + "\n")
-        try:
-            result = subprocess.run(command)
-        finally:
-            listing.unlink(missing_ok=True)
-        if result.returncode != 0:
-            report.warning("\nrclone failed. Common causes:")
-            report.warning(
-                "  * no rclone remote called "
-                f"{options.remote!r} -- check ~/.config/rclone/rclone.conf"
-            )
-            report.warning(
-                "  * oidc-agent not running, so bearer_token_command returned nothing"
-            )
-            report.warning(
-                "  * --immutable tripped: a published file changed. Publish it at a "
-                "NEW path rather than overwriting."
-            )
-            return result.returncode
         if options.dry_run:
             report.info("\nDry run only; nothing was uploaded.")
-            return 0
+            return
 
     if not options.no_chmod and plan.package.get(k.ACCESS, k.PUBLIC) == k.PUBLIC:
-        status = chmod(namespace_path, MODE_0755, bearer())
-        report.info(f"\nchmod 0755 {namespace_path} -> HTTP {status}")
-        if status not in (200, 204):
-            report.info("  chmod failed; anonymous reads will 401 until it succeeds.")
+        try:
+            store.chmod(namespace_path, MODE_0755, bearer())
+            report.info(f"\nchmod 0755 {namespace_path}")
+        except UploadError as error:
+            report.warning(
+                f"{error.message}; anonymous reads fail without it."
+            )
 
     report.info(
         "\nverifying anonymous access (no credentials, exactly what a public user gets)"
     )
-    ok, missing, wrong = remote_manifest_check(resources, dataset_url)
+    ok, missing, wrong = read_back(store, resources, dataset_url)
     report.info(f"  readable       {len(ok)}/{plan.package['ethos:file_count']}")
     if wrong:
         report.info(f"  WRONG SIZE     {len(wrong)}")
@@ -434,8 +336,8 @@ def upload_one(
             )
     if missing:
         report.info(f"  NOT READABLE   {len(missing)}")
-        for resource, why in missing[:5]:
-            report.info(f"    {resource['path']}: {why}")
+        for _resource, why in missing[:5]:
+            report.info(f"    {why}")
         report.info("\n  A 401 here means the directory is not world-readable yet.")
         report.info(
             f'    curl -H "Authorization: Bearer $(oidc-token {options.oidc_profile})" \\'
@@ -446,7 +348,10 @@ def upload_one(
         )
 
     sample = resources[0]["path"]
-    where = locality(f"{namespace_path}/{sample}", bearer())
+    try:
+        where = store.locality(f"{namespace_path}/{sample}", bearer())
+    except UploadError as error:
+        where = f"unknown ({error.message})"
     report.info(f"\n  storage locality of {sample}: {where}")
     if where == "NEARLINE":
         report.info(
@@ -457,15 +362,19 @@ def upload_one(
             "    ONLINE means disk. Large files may also gain a tape copy after ~1 week."
         )
 
-    return 1 if (missing or wrong) else 0
+    if missing or wrong:
+        raise UploadError(
+            f"{len(missing)} file(s) of {plan.name} are not readable and "
+            f"{len(wrong)} have the wrong size at {dataset_url}"
+        )
 
 
 @dataclass
 class UploadResult:
-    """The datasets an upload handled, and those that failed with rclone's status."""
+    """The datasets an upload handled, and why each one that failed did."""
 
     datasets: list[str] = field(default_factory=list)
-    failed: dict[str, int] = field(default_factory=dict)
+    failed: dict[str, str] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -474,14 +383,21 @@ class UploadResult:
 
 @report.reported
 def run(
-    catalog_root: Path, datasets: list[str], options: UploadOptions | None = None
+    catalog_root: Path,
+    datasets: list[str],
+    options: UploadOptions | None = None,
+    *,
+    store: Store | None = None,
 ) -> UploadResult:
     """Upload ``datasets`` -- names, paths or families -- and verify each anonymously.
 
     Every dataset is loaded and checked before any of them is uploaded.
-    ``options`` are the command's flags; ``reporter=`` takes the progress.
+    ``options`` are the command's flags; ``store`` is the publication store,
+    dCache through ``options.remote`` by default; ``reporter=`` takes the
+    progress.
     """
     options = options or UploadOptions()
+    store = store if store is not None else DcacheStore(options.remote)
     catalog_meta = read_catalog_meta(catalog_root)
     base_url = catalog_meta[k.PUBLICATION_URL].rstrip("/")
 
@@ -530,7 +446,7 @@ def run(
 
     def bearer() -> str:
         if not cached:
-            cached.append(token(options.oidc_profile))
+            cached.append(store.token(options.oidc_profile))
         return cached[0]
 
     if len(plans) > 1:
@@ -539,16 +455,21 @@ def run(
         report.info(f"{len(plans)} datasets, {files:,} files, {size / 1e9:,.2f} GB")
         report.info(f"  {', '.join(plan.name for plan in plans)}\n")
 
-    failed: dict[str, int] = {}
+    failed: dict[str, str] = {}
     for index, plan in enumerate(plans, start=1):
         if len(plans) > 1:
             report.info(
                 f"---- [{index}/{len(plans)}] {plan.name} "
                 + "-" * max(0, 50 - len(plan.name))
             )
-        status = upload_one(options, plan, base_url, root, bearer)
-        if status:
-            failed[plan.name] = status
+        # One dataset that fails does not stop the others: each was checked
+        # before any byte moved, so what fails here is the transfer or the
+        # read-back, and the summary names it.
+        try:
+            upload_one(options, plan, base_url, root, bearer, store)
+        except UploadError as error:
+            failed[plan.name] = error.message
+            report.warning(error.message)
         if len(plans) > 1:
             report.info()
 
@@ -558,6 +479,6 @@ def run(
 
     report.info("=" * 72)
     report.info(f"{len(plans) - len(failed)}/{len(plans)} datasets ok")
-    for name, status in failed.items():
-        report.info(f"  FAILED   {name} (exit {status})")
+    for name, why in failed.items():
+        report.info(f"  FAILED   {name}: {why.splitlines()[0]}")
     return result

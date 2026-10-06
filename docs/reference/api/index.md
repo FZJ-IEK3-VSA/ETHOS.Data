@@ -12,6 +12,7 @@ key. The rest is here for completeness.
 | [Integrity and staging](integrity.md) | `verify`, `repair`, `Finding`, `run_selftest`, `materialize`, the staging root |
 | [Shared model](model.md) | `ethos_data.model` — digests, dataset names and families, resource records |
 | [Maintainer tooling](maintain.md) | `ethos_data.maintain` — building, publishing, uploading |
+| [Adapters](adapters.md) | `ethos_data.adapters` — dCache, downloads and git behind ports, each with a fake |
 | [Errors](errors.md) | `EthosDataError` and every refusal the library raises, with the exit status the command line gives each |
 
 Consumers usually need no `ethos_data.maintain` imports. The public API includes
@@ -67,7 +68,10 @@ dataset, how to obtain it as far as the catalogue records that, and the
 commands that register a copy. `plan()` and `verify()` only describe, and
 report such data as not available here, with the state of every listed
 restricted cache; they report a file with no publication URL to download it
-from the same way.
+from the same way. A file that cannot be downloaded, or whose bytes do not
+match the recorded hash, raises
+[`DownloadError`][ethos_data.errors.DownloadError], an `AccessError` that
+names the URL.
 
 ::: ethos_data.retrieval
     options:
