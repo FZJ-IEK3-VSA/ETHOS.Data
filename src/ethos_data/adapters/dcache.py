@@ -2,7 +2,9 @@
 
 The real :class:`~ethos_data.adapters.Store`. Every call here leaves the
 machine -- an ``oidc-token`` subprocess, an rclone transfer, an HTTP request to
-the DESY frontend -- which is why tests pass a :class:`FakeStore` instead.
+the DESY frontend or to the public door -- which is why tests pass a
+:class:`~ethos_data.adapters.fakes.FakeStore` instead. Every failure raises
+:class:`~ethos_data.errors.UploadError`.
 """
 
 from __future__ import annotations
@@ -48,10 +50,11 @@ class DcacheStore:
                 f"  {result.stderr.strip()}\n"
                 "Start the agent and register the profile:\n"
                 "    eval $(oidc-agent-service use)\n"
-                f"    oidc-gen {profile} --flow=code --client-id=desy-public \\\n"
-                "        --scope='openid profile offline_access' \\\n"
+                f"    oidc-gen {profile} --flow=code --client-id=desy-public "
+                "--client-secret='' \\\n"
+                '        --scope="openid profile offline_access" \\\n'
                 "        --iss=https://keycloak.desy.de/auth/realms/production/ \\\n"
-                "        --redirect-uri=http://localhost:4242"
+                "        --redirect-uri=http://localhost:8080"
             )
         return result.stdout.strip()
 
@@ -63,7 +66,7 @@ class DcacheStore:
         *,
         transfers: int,
         dry_run: bool,
-    ) -> int:
+    ) -> None:
         """``rclone copy`` of exactly ``paths``: the inventory, not the directory.
 
         They are the same thing only when nothing else lives under the source;
@@ -101,11 +104,18 @@ class DcacheStore:
         report.info(f"  ({len(paths)} files listed in {listing})")
         report.info("  $ " + " ".join(command) + "\n")
         try:
-            return _run(command).returncode
+            status = _run(command).returncode
         finally:
             listing.unlink(missing_ok=True)
+        if status != 0:
+            raise UploadError(
+                f"rclone exited {status} copying to {self.remote}:{destination}. "
+                f"Check that the rclone remote {self.remote!r} exists and that "
+                "oidc-agent runs. If a published file changed, --immutable refused "
+                "to overwrite it: publish the change at a new path."
+            )
 
-    def chmod(self, path: str, mode: int, bearer: str) -> int:
+    def chmod(self, path: str, mode: int, bearer: str) -> None:
         request = urllib.request.Request(
             f"{self.frontend}/namespace/{path.lstrip('/')}",
             data=json.dumps({"action": "chmod", "mode": mode}).encode(),
@@ -116,10 +126,12 @@ class DcacheStore:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                return response.status
-        except urllib.error.HTTPError as error:
-            return error.code
+            with urllib.request.urlopen(request, timeout=60):
+                return
+        except (OSError, ValueError) as error:
+            raise UploadError(
+                f"chmod {mode:o} {path} failed: {_reason(error)}"
+            ) from None
 
     def locality(self, path: str, bearer: str) -> str:
         """ONLINE (disk) / NEARLINE (tape only) / ONLINE_AND_NEARLINE (both)."""
@@ -130,5 +142,23 @@ class DcacheStore:
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
                 return json.load(response).get("fileLocality", "unknown")
-        except Exception as error:  # noqa: BLE001 - network shapes vary
-            return f"unknown ({error})"
+        except (OSError, ValueError) as error:
+            raise UploadError(
+                f"cannot ask where {path} is stored: {_reason(error)}"
+            ) from None
+
+    def served(self, url: str) -> int:
+        """HEAD ``url`` without credentials; the Content-Length it answers."""
+        request = urllib.request.Request(url, method="HEAD")
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return int(response.headers.get("Content-Length", -1))
+        except (OSError, ValueError) as error:
+            raise UploadError(f"{url} is not readable: {_reason(error)}") from None
+
+
+def _reason(error: Exception) -> str:
+    """An HTTP status as ``HTTP 401 Unauthorized``; any other failure as it reads."""
+    if isinstance(error, urllib.error.HTTPError):
+        return f"HTTP {error.code} {error.reason}"
+    return str(getattr(error, "reason", None) or error)

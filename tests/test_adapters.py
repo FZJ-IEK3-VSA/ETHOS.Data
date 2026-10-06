@@ -1,9 +1,10 @@
 """The external systems behind their ports, and the fakes that stand in for them.
 
 Characterisation tests for the adapter layer of the four-layer decision: each
-real adapter and its fake satisfy the same port, the dCache adapter builds the
-transfer it always built, downloads check their hashes, and git commits, tags
-and pushes a real checkout.
+real adapter and its fake satisfy the same port and fail with the typed error
+it names, the dCache adapter copies exactly the inventory and reads it back
+anonymously, downloads check their hashes, and git commits, tags and pushes a
+real checkout.
 """
 
 from __future__ import annotations
@@ -21,7 +22,12 @@ from ethos_data.adapters.downloads import PoochDownloader
 from ethos_data.adapters.fakes import FakeDownloader, FakeGit, FakeStore
 from ethos_data.adapters.git import GitRepository
 from ethos_data.catalogs import load_catalog
-from ethos_data.errors import MaintenanceError, UploadError
+from ethos_data.errors import (
+    AccessError,
+    DownloadError,
+    MaintenanceError,
+    UploadError,
+)
 
 
 def test_each_adapter_and_its_fake_satisfy_the_port():
@@ -45,7 +51,7 @@ class TestDcache:
 
         monkeypatch.setattr(dcache, "_run", run)
 
-        status = dcache.DcacheStore("HIFIS").copy(
+        dcache.DcacheStore("HIFIS").copy(
             tmp_path,
             "ethos-data/fam/a",
             ["x.csv", "sub/y.csv"],
@@ -54,7 +60,6 @@ class TestDcache:
         )
 
         command = seen["command"]
-        assert status == 0
         assert command[:4] == [
             "rclone",
             "copy",
@@ -65,6 +70,48 @@ class TestDcache:
         assert command[command.index("--transfers") + 1] == "4"
         assert seen["listing"] == b"x.csv\nsub/y.csv\n", "LF, whatever the platform"
         assert not Path(command[command.index("--files-from") + 1]).exists()
+
+    def test_a_failed_copy_names_rclones_status(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            dcache,
+            "_run",
+            lambda command, **kwargs: subprocess.CompletedProcess(command, 7),
+        )
+
+        with pytest.raises(UploadError, match="rclone exited 7 copying to HIFIS:d"):
+            dcache.DcacheStore("HIFIS").copy(
+                tmp_path, "d", ["x.csv"], transfers=1, dry_run=False
+            )
+
+    def test_the_read_back_is_anonymous_and_names_what_is_not_served(self, store):
+        store.put("ethos-data/flat", "a.csv", "1\n")
+        adapter = dcache.DcacheStore()
+
+        assert adapter.served(f"{store.url}/ethos-data/flat/a.csv") == 2
+        missing = f"{store.url}/ethos-data/flat/b.csv"
+        with pytest.raises(UploadError, match="b.csv is not readable: HTTP 404"):
+            adapter.served(missing)
+        assert store.requests[-1] == ("HEAD", "/ethos-data/flat/b.csv")
+
+    def test_the_login_hint_matches_the_guide(self, monkeypatch):
+        """The redirect port the guide forwards is the one the hint registers."""
+        monkeypatch.setattr(
+            dcache,
+            "_run",
+            lambda command, **kwargs: subprocess.CompletedProcess(
+                command, 1, stdout="", stderr=""
+            ),
+        )
+        guide = (
+            Path(__file__).resolve().parents[1]
+            / "docs/how-to/catalogue-maintainers/set-up-dcache-access.md"
+        ).read_text(encoding="utf-8")
+
+        with pytest.raises(UploadError) as refused:
+            dcache.DcacheStore().token("HIFIS")
+
+        assert "--redirect-uri=http://localhost:8080" in refused.value.message
+        assert "--redirect-uri=http://localhost:8080" in guide
 
     def test_a_token_that_cannot_be_had_says_how_to_get_one(self, monkeypatch):
         monkeypatch.setattr(
@@ -95,15 +142,38 @@ class TestDownloads:
 
         assert found["a.csv"].read_bytes() == b"1\n"
 
+    def test_a_recorded_hash_is_read_however_it_is_spelled(self, store, tmp_path):
+        store.put("flat", "a.csv", "1\n")
+        bare = digest(b"1\n").removeprefix("sha256:").upper()
+
+        found = PoochDownloader().fetch(
+            f"{store.url}/flat/", tmp_path / "flat", {"a.csv": bare}
+        )
+
+        assert found["a.csv"].read_bytes() == b"1\n"
+
     def test_pooch_refuses_bytes_that_do_not_match(self, store, tmp_path, monkeypatch):
         import pooch
 
         monkeypatch.setattr(pooch.core.time, "sleep", lambda seconds: None)
         store.put("flat", "a.csv", "changed\n")
 
-        with pytest.raises(ValueError):
+        with pytest.raises(DownloadError, match=f"{store.url}/flat/a.csv") as refused:
             PoochDownloader(retries=0).fetch(
                 f"{store.url}/flat/", tmp_path / "flat", {"a.csv": digest(b"1\n")}
+            )
+
+        assert isinstance(refused.value, AccessError)
+        assert refused.value.exit_code == 2
+
+    def test_a_missing_object_names_its_url(self, store, tmp_path, monkeypatch):
+        import pooch
+
+        monkeypatch.setattr(pooch.core.time, "sleep", lambda seconds: None)
+
+        with pytest.raises(DownloadError, match=f"{store.url}/flat/gone.csv"):
+            PoochDownloader(retries=0).fetch(
+                f"{store.url}/flat/", tmp_path / "flat", {"gone.csv": digest(b"1\n")}
             )
 
     def test_the_fake_serves_checks_and_keeps_what_is_there(self, tmp_path):
@@ -117,7 +187,7 @@ class TestDownloads:
 
         assert first["a.csv"].read_bytes() == b"1\n"
         assert fake.fetched == [url], "a file already there is not fetched again"
-        with pytest.raises(ValueError, match="does not match"):
+        with pytest.raises(DownloadError, match="does not match"):
             FakeDownloader({url: b"2\n"}).fetch(
                 "https://store.invalid/flat",
                 tmp_path / "other",
@@ -135,6 +205,30 @@ class TestDownloads:
 
         assert files["flat/a.csv"] == reader.cache / "flat" / "a.csv"
         assert files["flat/a.csv"].read_bytes() == b"1\n"
+
+
+class TestTheFakeStore:
+    def test_it_reads_back_what_it_was_sent(self, tmp_path):
+        (tmp_path / "a.csv").write_bytes(b"1\n")
+        fake = FakeStore()
+
+        fake.copy(tmp_path, "root/flat", ["a.csv"], transfers=1, dry_run=False)
+
+        assert fake.served("https://store.invalid/root/flat/a.csv") == 2
+        with pytest.raises(UploadError, match="HTTP 404"):
+            fake.served("https://store.invalid/root/flat/b.csv")
+
+    def test_it_rehearses_a_failed_copy_and_a_missing_chmod(self, tmp_path):
+        (tmp_path / "a.csv").write_bytes(b"1\n")
+
+        with pytest.raises(UploadError, match="rclone exited 7"):
+            FakeStore(copy_status=7).copy(
+                tmp_path, "root/flat", ["a.csv"], transfers=1, dry_run=False
+            )
+        closed = FakeStore(readable=False)
+        closed.copy(tmp_path, "root/flat", ["a.csv"], transfers=1, dry_run=False)
+        with pytest.raises(UploadError, match="HTTP 401"):
+            closed.served("https://store.invalid/root/flat/a.csv")
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="needs git")
@@ -162,18 +256,18 @@ class TestGit:
         (work / "catalog.yaml").write_bytes(b"name: t\n")
 
         assert not repository.is_clean()
-        commit = repository.commit("Release v2026.10.1")
-        repository.tag("v2026.10.1", "Release v2026.10.1")
-        repository.push("origin", "HEAD:refs/heads/main", "v2026.10.1")
+        commit = repository.commit("Release v1.0.0")
+        repository.tag("v1.0.0", "Release v1.0.0")
+        repository.push("origin", "HEAD:refs/heads/main", "v1.0.0")
 
         assert repository.is_clean() and repository.head() == commit
         tags = subprocess.run(
             ["git", "tag"], cwd=remote, check=True, capture_output=True, text=True
         )
-        assert tags.stdout.split() == ["v2026.10.1"]
+        assert tags.stdout.split() == ["v1.0.0"]
 
     def test_a_failing_command_says_what_git_said(self, checkout):
         work, _ = checkout
 
         with pytest.raises(MaintenanceError, match="git tag"):
-            GitRepository(work).tag("v2026.10.1", "no commit to tag yet")
+            GitRepository(work).tag("v1.0.0", "no commit to tag yet")

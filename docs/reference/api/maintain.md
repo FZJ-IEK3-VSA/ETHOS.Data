@@ -136,7 +136,7 @@ be a whole link tree built somewhere nobody named.
         - UploadOptions
         - preflight
         - resources_of
-        - remote_manifest_check
+        - read_back
         - load
       show_root_heading: false
       show_root_toc_entry: false

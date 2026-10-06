@@ -178,7 +178,8 @@ class TestUploadingTheSubset:
     def test_the_result_names_each_failure_with_rclones_status(self, workspace, store):
         make_catalog(workspace, {"a": {}})
         store.copy_status = 7
-        assert upload.run(workspace, *make_args(["a"])).failed == {"a": 7}
+        (why,) = upload.run(workspace, *make_args(["a"])).failed.values()
+        assert "rclone exited 7" in why
 
     def test_a_failure_is_reported_per_dataset_and_fails_the_run(
         self, workspace, store
@@ -187,7 +188,7 @@ class TestUploadingTheSubset:
         store.copy_status = 7
         result = upload.run(workspace, *make_args(["a", "b"]))
         assert not result.ok
-        assert result.failed == {"a": 7, "b": 7}
+        assert sorted(result.failed) == ["a", "b"]
 
 
 if __name__ == "__main__":

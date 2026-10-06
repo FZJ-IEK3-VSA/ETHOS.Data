@@ -12,7 +12,8 @@ Port           Real adapter                          Fake, for tests
 =============  ====================================  ===========================
 
 The ports are :class:`typing.Protocol` classes: an implementation needs the
-methods, not a base class. Nothing in this package reads settings.
+methods, not a base class. Nothing in this package reads settings. A port
+returns data and raises a typed error when it fails; none returns a status.
 """
 
 from __future__ import annotations
@@ -25,10 +26,10 @@ __all__ = ["Downloader", "Git", "Store"]
 
 @runtime_checkable
 class Store(Protocol):
-    """The publication store as a maintainer writes it: dCache through rclone.
+    """The publication store as a maintainer writes it, and reads it back.
 
-    Reading the published bytes back is not part of it: that is what any
-    anonymous reader does over HTTP, and the upload checks it that way.
+    Every failure raises :class:`~ethos_data.errors.UploadError`, naming what
+    failed and where.
     """
 
     def token(self, profile: str) -> str:
@@ -43,19 +44,24 @@ class Store(Protocol):
         *,
         transfers: int,
         dry_run: bool,
-    ) -> int:
-        """Copy ``paths`` under ``source`` to ``destination``; never overwrite.
-
-        Returns a process-style status: 0 when everything was copied.
-        """
+    ) -> None:
+        """Copy ``paths`` under ``source`` to ``destination``; never overwrite."""
         ...
 
-    def chmod(self, path: str, mode: int, bearer: str) -> int:
-        """Set ``mode`` on a store path; returns the HTTP status."""
+    def chmod(self, path: str, mode: int, bearer: str) -> None:
+        """Set ``mode`` on a store path."""
         ...
 
     def locality(self, path: str, bearer: str) -> str:
         """Where the store holds a file: ``ONLINE``, ``NEARLINE`` or both."""
+        ...
+
+    def served(self, url: str) -> int:
+        """The size the server reports for ``url``, read anonymously.
+
+        What any reader gets, without credentials: a file that is not
+        world-readable, or not there, raises.
+        """
         ...
 
 
@@ -73,8 +79,9 @@ class Downloader(Protocol):
     ) -> dict[str, Path]:
         """Make each ``{path: hash}`` of ``files`` available under ``destination``.
 
-        A file already there with the right hash is not fetched again. Raises
-        when a file cannot be fetched or does not match its hash.
+        A file already there with the right hash is not fetched again. A file
+        that cannot be fetched, or does not match its hash, raises
+        :class:`~ethos_data.errors.DownloadError`, naming its URL.
         """
         ...
 

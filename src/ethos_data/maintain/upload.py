@@ -34,8 +34,6 @@ from __future__ import annotations
 
 import json
 import os
-import urllib.error
-import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
@@ -161,26 +159,25 @@ def preflight(
     return prefix
 
 
-def remote_manifest_check(
-    resources: list[dict], base_url: str
+def read_back(
+    store: Store, resources: list[dict], base_url: str
 ) -> tuple[list, list, list]:
-    """HEAD every resource anonymously. Returns (ok, missing, wrong_size).
+    """Read every resource back anonymously: ``(ok, unreadable, wrong_size)``.
 
-    ``base_url`` is the dataset's folder on the published store.
+    ``base_url`` is the dataset's folder on the published store. ``ok`` and
+    ``wrong_size`` hold ``(resource, size the server reports)``,
+    ``unreadable`` holds ``(resource, why)``.
     """
-    ok, missing, wrong = [], [], []
+    ok, unreadable, wrong = [], [], []
     for resource in resources:
         url = f"{base_url.rstrip('/')}/{resource[k.PATH]}"
-        request = urllib.request.Request(url, method="HEAD")
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                length = int(response.headers.get("Content-Length", -1))
-            (ok if length == resource["bytes"] else wrong).append((resource, length))
-        except urllib.error.HTTPError as error:
-            missing.append((resource, error.code))
-        except Exception as error:  # noqa: BLE001 - network shapes vary
-            missing.append((resource, str(error)))
-    return ok, missing, wrong
+            size = store.served(url)
+        except UploadError as error:
+            unreadable.append((resource, error.message))
+            continue
+        (ok if size == resource[k.BYTES] else wrong).append((resource, size))
+    return ok, unreadable, wrong
 
 
 def resolve_name(catalog_root: Path, argument: str) -> str:
@@ -287,8 +284,8 @@ def upload_one(
     root: str,
     bearer,
     store: Store,
-) -> int:
-    """Upload and verify a single dataset. Returns a process-style exit code."""
+) -> None:
+    """Upload and verify a single dataset; raises UploadError saying what failed."""
     namespace_path = f"{options.vo_path}/{root}/{plan.prefix}"
     destination = f"{options.remote}:{root}/{plan.prefix}"
     dataset_url = resource_url(base_url, plan.prefix)
@@ -306,41 +303,30 @@ def upload_one(
     resources = resources_of(plan.package, plan.dataset_dir)
 
     if not options.verify_only:
-        status = store.copy(
+        store.copy(
             plan.source_dir,
             f"{root}/{plan.prefix}",
             [resource["path"] for resource in resources],
             transfers=options.transfers,
             dry_run=options.dry_run,
         )
-        if status != 0:
-            report.warning("\nrclone failed. Common causes:")
-            report.warning(
-                "  * no rclone remote called "
-                f"{options.remote!r} -- check ~/.config/rclone/rclone.conf"
-            )
-            report.warning(
-                "  * oidc-agent not running, so bearer_token_command returned nothing"
-            )
-            report.warning(
-                "  * --immutable tripped: a published file changed. Publish it at a "
-                "NEW path rather than overwriting."
-            )
-            return status
         if options.dry_run:
             report.info("\nDry run only; nothing was uploaded.")
-            return 0
+            return
 
     if not options.no_chmod and plan.package.get(k.ACCESS, k.PUBLIC) == k.PUBLIC:
-        status = store.chmod(namespace_path, MODE_0755, bearer())
-        report.info(f"\nchmod 0755 {namespace_path} -> HTTP {status}")
-        if status not in (200, 204):
-            report.info("  chmod failed; anonymous reads will 401 until it succeeds.")
+        try:
+            store.chmod(namespace_path, MODE_0755, bearer())
+            report.info(f"\nchmod 0755 {namespace_path}")
+        except UploadError as error:
+            report.warning(
+                f"{error.message}; anonymous reads fail without it."
+            )
 
     report.info(
         "\nverifying anonymous access (no credentials, exactly what a public user gets)"
     )
-    ok, missing, wrong = remote_manifest_check(resources, dataset_url)
+    ok, missing, wrong = read_back(store, resources, dataset_url)
     report.info(f"  readable       {len(ok)}/{plan.package['ethos:file_count']}")
     if wrong:
         report.info(f"  WRONG SIZE     {len(wrong)}")
@@ -350,8 +336,8 @@ def upload_one(
             )
     if missing:
         report.info(f"  NOT READABLE   {len(missing)}")
-        for resource, why in missing[:5]:
-            report.info(f"    {resource['path']}: {why}")
+        for _resource, why in missing[:5]:
+            report.info(f"    {why}")
         report.info("\n  A 401 here means the directory is not world-readable yet.")
         report.info(
             f'    curl -H "Authorization: Bearer $(oidc-token {options.oidc_profile})" \\'
@@ -362,7 +348,10 @@ def upload_one(
         )
 
     sample = resources[0]["path"]
-    where = store.locality(f"{namespace_path}/{sample}", bearer())
+    try:
+        where = store.locality(f"{namespace_path}/{sample}", bearer())
+    except UploadError as error:
+        where = f"unknown ({error.message})"
     report.info(f"\n  storage locality of {sample}: {where}")
     if where == "NEARLINE":
         report.info(
@@ -373,15 +362,19 @@ def upload_one(
             "    ONLINE means disk. Large files may also gain a tape copy after ~1 week."
         )
 
-    return 1 if (missing or wrong) else 0
+    if missing or wrong:
+        raise UploadError(
+            f"{len(missing)} file(s) of {plan.name} are not readable and "
+            f"{len(wrong)} have the wrong size at {dataset_url}"
+        )
 
 
 @dataclass
 class UploadResult:
-    """The datasets an upload handled, and those that failed with rclone's status."""
+    """The datasets an upload handled, and why each one that failed did."""
 
     datasets: list[str] = field(default_factory=list)
-    failed: dict[str, int] = field(default_factory=dict)
+    failed: dict[str, str] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -462,16 +455,21 @@ def run(
         report.info(f"{len(plans)} datasets, {files:,} files, {size / 1e9:,.2f} GB")
         report.info(f"  {', '.join(plan.name for plan in plans)}\n")
 
-    failed: dict[str, int] = {}
+    failed: dict[str, str] = {}
     for index, plan in enumerate(plans, start=1):
         if len(plans) > 1:
             report.info(
                 f"---- [{index}/{len(plans)}] {plan.name} "
                 + "-" * max(0, 50 - len(plan.name))
             )
-        status = upload_one(options, plan, base_url, root, bearer, store)
-        if status:
-            failed[plan.name] = status
+        # One dataset that fails does not stop the others: each was checked
+        # before any byte moved, so what fails here is the transfer or the
+        # read-back, and the summary names it.
+        try:
+            upload_one(options, plan, base_url, root, bearer, store)
+        except UploadError as error:
+            failed[plan.name] = error.message
+            report.warning(error.message)
         if len(plans) > 1:
             report.info()
 
@@ -481,6 +479,6 @@ def run(
 
     report.info("=" * 72)
     report.info(f"{len(plans) - len(failed)}/{len(plans)} datasets ok")
-    for name, status in failed.items():
-        report.info(f"  FAILED   {name} (exit {status})")
+    for name, why in failed.items():
+        report.info(f"  FAILED   {name}: {why.splitlines()[0]}")
     return result

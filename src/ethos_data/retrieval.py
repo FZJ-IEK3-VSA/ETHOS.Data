@@ -177,12 +177,14 @@ def download(
 ) -> DataFiles:
     """Make every resource available locally and return where each one is.
 
-    Resources resolved in place -- a link in the public cache, the restricted
-    cache or a staging entry -- are used where they lie and never copied; the
-    rest are downloaded into the public cache, skipping anything already
-    present and hash-verified. Every resource is required: restricted data
-    this machine cannot read raises AccessError, describing the dataset,
-    before anything is downloaded.
+    Resources resolved in place -- a link in the public cache, a listed
+    restricted cache or a staging entry -- are used where they lie and never
+    copied; the rest are downloaded into the public cache through
+    ``downloader``, skipping anything already present and hash-verified. Every
+    resource is required: restricted data this machine cannot read raises
+    AccessError, describing the dataset, before anything is downloaded, and a
+    file that cannot be downloaded raises
+    :class:`~ethos_data.errors.DownloadError`, naming its URL.
 
     With ``fetch=False`` nothing is downloaded and no store is contacted: a
     copy already in the public cache is returned as it is, and a file that

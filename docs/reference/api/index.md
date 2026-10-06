@@ -68,7 +68,10 @@ dataset, how to obtain it as far as the catalogue records that, and the
 commands that register a copy. `plan()` and `verify()` only describe, and
 report such data as not available here, with the state of every listed
 restricted cache; they report a file with no publication URL to download it
-from the same way.
+from the same way. A file that cannot be downloaded, or whose bytes do not
+match the recorded hash, raises
+[`DownloadError`][ethos_data.errors.DownloadError], an `AccessError` that
+names the URL.
 
 ::: ethos_data.retrieval
     options:

@@ -30,6 +30,7 @@ __all__ = [
     "CollectionError",
     "ConfigurationError",
     "DescriptorError",
+    "DownloadError",
     "EthosDataError",
     "IncompleteCatalog",
     "LinkError",
@@ -128,6 +129,14 @@ class NotFetched(AccessError):
 
     The message names each file and the path it belongs at, which is where the
     same call with ``fetch=True`` puts it.
+    """
+
+
+class DownloadError(AccessError):
+    """A file could not be downloaded, or what arrived does not match its hash.
+
+    The message names the URL, so a missing object, an unreachable store and
+    a damaged transfer each say where to look.
     """
 
 
