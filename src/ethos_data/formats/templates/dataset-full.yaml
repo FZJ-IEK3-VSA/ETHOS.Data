@@ -59,11 +59,9 @@ ethos:provenance: >-
   How this copy was obtained or restored, where sources and retrieval do not say.
 ethos:verified: "2026-09-10"                   # last checked against its source
 
-# ---- where the bytes are -----------------------------------------------
-source_dir: /projects/shared/MyDataset         # required, unless frozen below
+# ---- the draft's files and the store folder -----------------------------------------------
+source_dir: /projects/shared/MyDataset         # a draft's; status.yaml keeps it once catalogued
 ethos:remote_prefix: my-dataset                # default: the value of `name`
-ethos:uploaded: false                          # dCache holds it; drop source_dir
-ethos:frozen: false                            # inventory final; drop source_dir
 
 # ---- classification ----------------------------------------------------
 ethos:access: public                           # default: public | restricted

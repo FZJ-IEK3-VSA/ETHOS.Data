@@ -165,7 +165,6 @@ BROKEN = [
     ({"ethos:include": "*.tif"}, "ethos:include must be a list of patterns, got str"),
     ({"ethos:exclude": []}, "ethos:exclude is an empty list, which would select nothing."),
     ({"ethos:shard_depth": -1}, "ethos:shard_depth must not be negative"),
-    ({"ethos:uploaded": True}, "declares ethos:uploaded: true and still has source_dir"),
 ]  # fmt: skip
 
 
@@ -180,10 +179,9 @@ def test_each_rule_says_what_is_wrong_in_the_words_maintainers_know(meta, messag
     assert raised.value.message.startswith(message)
 
 
-def test_a_frozen_dataset_needs_no_source_and_a_built_one_does():
-    formats.dataset.check({"ethos:frozen": True})
-    with pytest.raises(DescriptorError, match="source_dir is required"):
-        formats.dataset.check({})
+def test_where_the_bytes_are_is_not_a_rule_of_the_description():
+    """status.yaml says it; a dataset.yaml without source_dir is complete."""
+    formats.dataset.check({})
 
 
 def test_defaults_are_written_in_the_fixed_key_order():
@@ -217,8 +215,6 @@ def test_publish_strips_what_the_specification_marks_unpublished():
 
     assert set(STRIP_FROM_PACKAGE) == {
         "source_dir",
-        "ethos:uploaded",
-        "ethos:frozen",
         "ethos:embargo",
         "ethos:license_note",
     }

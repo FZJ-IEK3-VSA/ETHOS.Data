@@ -1,6 +1,6 @@
 # 0010. Read settings from one file per account, once per handle
 
-**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #14 (the settings file and the snapshot, with no per-dataset roots), #15, #39 (the `restricted_caches` list), #19 (the bounds step inside the one resolver), a new PR (inventory reader: the metadata cache from the snapshot), #25 (the download switch in the snapshot)
+**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #14 (the settings file and the snapshot, with no per-dataset roots), #15, #39 (the `restricted_caches` list), #19 (the bounds step inside the one resolver), #40 (the metadata cache from the snapshot), #25 (the download switch in the snapshot)
 
 ## Context
 

@@ -6,8 +6,9 @@ Two halves, like the package:
   index, one ``datapackage.json`` per dataset, and the bytes, in the public
   cache, on the published store, or both.
 * :class:`SourceCatalogue` writes what a catalogue maintainer works on:
-  ``catalog.yaml`` and ``dataset.yaml`` files with their source directories. It
-  drives the real ``ethos-data catalog`` commands against them.
+  ``catalog.yaml``, and per dataset a ``dataset.yaml`` and the ``status.yaml``
+  naming its source directory. It drives the real ``ethos-data catalog``
+  commands against them.
 
 :class:`Store` serves a directory over HTTP on the loopback interface, which is
 the one place the network guard in ``conftest.py`` lets a test connect to. A
@@ -49,6 +50,29 @@ def as_bytes(content: bytes | str) -> bytes:
 def digest(content: bytes | str) -> str:
     """The catalogue's spelling of a file's hash."""
     return "sha256:" + hashlib.sha256(as_bytes(content)).hexdigest()
+
+
+def write_descriptor(
+    dataset_dir: Path, meta: dict | str, encoding: str = "utf-8"
+) -> Path:
+    """Write a ``dataset.yaml`` as a catalogue keeps it, from a mapping or YAML text.
+
+    Its ``source_dir`` goes into a ``status.yaml`` saying the dataset is a
+    draft; every other line stays as written.
+    """
+    from ethos_data.formats.edit import without_keys
+
+    text = meta if isinstance(meta, str) else yaml.safe_dump(meta, sort_keys=False)
+    source = (yaml.safe_load(text) or {}).get("source_dir")
+    if source is not None:
+        text = without_keys(text, ["source_dir"])
+        (dataset_dir / "status.yaml").write_text(
+            yaml.safe_dump({"state": "draft", "source_dir": str(source)}),
+            encoding="utf-8",
+        )
+    path = dataset_dir / "dataset.yaml"
+    path.write_text(text, encoding=encoding)
+    return path
 
 
 def run_cli(argv: list[str]) -> tuple[int, str, str]:
@@ -309,6 +333,9 @@ class SourceCatalogue:
         Keyword arguments are descriptor keys, with ``ethos_access`` meaning
         ``ethos:access``: an underscore after a leading ``ethos`` is the colon.
         ``documents`` are archived licence files written beside ``dataset.yaml``.
+
+        The ``source_dir`` goes into a ``status.yaml`` saying the dataset is a
+        draft, as a catalogue keeps it.
         """
         descriptor: dict = {"title": f"The {name} dataset"}
         descriptor["licenses"] = DEFAULT_LICENSES
@@ -323,13 +350,42 @@ class SourceCatalogue:
             descriptor["source_dir"] = str(source)
         for key in [k for k, v in descriptor.items() if v is None]:
             del descriptor[key]
+        source_dir = descriptor.pop("source_dir", None)
         directory = self.directory(name)
         for relative, content in (documents or {}).items():
             target = directory / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(as_bytes(content))
         self._write_yaml(directory / "dataset.yaml", descriptor)
+        if source_dir is not None:
+            self._write_yaml(
+                directory / "status.yaml", {"state": "draft", "source_dir": source_dir}
+            )
         return directory
+
+    def status(self, name: str) -> dict:
+        """The dataset's ``status.yaml``, as its keys and values."""
+        return yaml.safe_load(
+            (self.directory(name) / "status.yaml").read_text(encoding="utf-8")
+        )
+
+    def freeze(self, name: str, *, location: str | None = None) -> str:
+        """Record a built dataset as frozen, its upload the authoritative copy.
+
+        What ``catalog record`` writes, without the upload and the check that
+        come before it. ``location`` defaults to the dataset's folder under the
+        publication URL; it is returned.
+        """
+        location = location or f"{self.catalog_yaml['ethos:publication_url']}/{name}/"
+        self._write_yaml(
+            self.directory(name) / "status.yaml",
+            {
+                "state": "frozen",
+                "authority": location,
+                "copies": [{"kind": "uploaded", "location": location}],
+            },
+        )
+        return location
 
     def edit(self, name: str, **changes: object) -> None:
         """Change keys of a ``dataset.yaml``; a value of ``None`` removes the key."""

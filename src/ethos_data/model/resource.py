@@ -71,17 +71,21 @@ def extras_of(record: Mapping) -> dict:
 
 
 def to_record(resource: Resource, extras: Mapping | None = None) -> dict:
-    """The record a descriptor keeps for ``resource``, with ``extras`` after it."""
+    """The record a descriptor keeps for ``resource``, with ``extras`` after it.
+
+    The build writes every record through here, in this key order, so a
+    rebuild of unchanged files writes the same bytes.
+    """
     record = {
         k.NAME: resource.name,
         k.PATH: resource.path,
         k.BYTES: resource.bytes,
         k.HASH: resource.hash,
         k.MEDIATYPE: resource.mediatype,
-        **(extras or {}),
     }
     if resource.sidecars:
         record[k.SIDECARS] = list(resource.sidecars)
+    record.update(extras or {})
     return record
 
 

@@ -15,15 +15,22 @@ and ``ethos:exclude``.  Both are lists of glob patterns matched against the path
 relative to ``source_dir``, by the same rule a tool's ``collections.yaml`` uses,
 imported from the reader so the two can never diverge.
 
-``source_dir`` is not forever, though: once a dataset has been uploaded (see
-``ethos-data catalog upload``) and verified, dCache -- not somebody's workstation
-or a shared-storage mount that may get cleaned up or reorganised -- is the
-authoritative copy. Setting ``ethos:uploaded: true`` in ``dataset.yaml`` says so,
-and ``source_dir`` must be removed at the same time: a rebuild then freezes the
-existing inventory (paths, sizes, hashes) exactly as last recorded, re-deriving
-only the metadata that never depended on the bytes -- title, licence,
-provenance, access. This is also what makes a dataset build-able again after
-its ``source_dir`` has genuinely disappeared.
+``source_dir`` lives in the dataset's ``status.yaml`` beside it, with the
+dataset's state (see :mod:`.status`), and it is not forever: once the bytes
+are uploaded and verified, dCache -- not somebody's workstation or a
+shared-storage mount that may get cleaned up or reorganised -- is the
+authoritative copy. ``ethos-data catalog record`` freezes the dataset and
+retires ``source_dir``: a rebuild then keeps the existing inventory (paths,
+sizes, hashes) exactly as last recorded, re-deriving only the metadata that
+never depended on the bytes -- title, licence, provenance, access. This is
+also what makes a dataset build-able again after its ``source_dir`` has
+genuinely disappeared. A dataset without a status file is not built:
+``ethos-data catalog migrate`` writes one.
+
+The build records in the status file what it changed: a draft's first build,
+and an inventory that differs from the one before, which returns a dataset
+whose bytes were made available to built, because what was checked is no
+longer what the inventory describes.
 
 Provenance and licensing are checked here rather than left to a reviewer's eye.
 ``ethos:origin`` says whether the data was downloaded, derived or created, and an
@@ -57,62 +64,31 @@ Spec: https://datapackage.org/standard/data-package/
 from __future__ import annotations
 
 import json
-import mimetypes
-import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from .. import report
-from ..catalogs import ROOT_SHARD, shard_key
 from ..errors import DescriptorError
+from ..files import build_resource, iter_data_files, select, slugify
 from ..formats import catalogue as catalogue_format
 from ..formats import dataset as dataset_format
 from ..formats import keys as k
 from ..formats.derived import index_row
-from ..model.digest import matches, of_file, recorded
-from ..selection import path_matches
+from ..model import lifecycle
+from ..model.digest import matches, of_file
+from ..model.inventory import ROOT_SHARD, SHARD_DIR, shard_path, split_into_shards
+from ..model.patterns import path_matches
 from . import (
-    LEGACY_SHARD_DIR,
-    SHARD_DIR,
     dataset_name_for,
     datasets_dir,
+    inventory_of,
     is_namespace,
     iter_dataset_dirs,
     read_catalog_meta,
     read_descriptor,
-    resources_of,
-    source_dir_of,
 )
-
-# Scientific formats that ``mimetypes`` does not know about.
-EXTRA_MEDIATYPES = {
-    ".nc": "application/x-netcdf",
-    ".nc4": "application/x-netcdf",
-    ".tif": "image/tiff",
-    ".tiff": "image/tiff",
-    ".shp": "application/octet-stream",
-    ".shx": "application/octet-stream",
-    ".dbf": "application/octet-stream",
-    ".prj": "text/plain",
-    ".qpj": "text/plain",
-    ".cpg": "text/plain",
-    ".qmd": "application/xml",
-}
-
-# An ESRI shapefile is several files that are useless apart.  Selecting the .shp
-# must drag the rest along, or GDAL fails at read time with a confusing error.
-SHAPEFILE_SIDECAR_EXTS = [
-    ".shx",
-    ".dbf",
-    ".prj",
-    ".cpg",
-    ".qpj",
-    ".qmd",
-    ".sbn",
-    ".sbx",
-    ".xml",
-]
+from . import status as dataset_status
 
 # Per-dataset, maintainer-local, never published -- see the module docstring.
 HASH_CACHE_NAME = k.HASH_CACHE_FILE
@@ -121,15 +97,6 @@ HASH_CACHE_NAME = k.HASH_CACHE_FILE
 # rather than core count. High enough to hide per-file latency, low enough that
 # one build does not monopolise a filesystem other people are using too.
 HASH_WORKERS = 8
-
-# Never published: VCS plumbing, editor droppings, dataset-local docs.
-EXCLUDE_NAMES = {".git", ".datalad", ".gitattributes", ".gitignore", "__pycache__"}
-EXCLUDE_SUFFIXES = {".pyc"}
-# Matched against the path relative to the dataset root, so a data file that
-# happens to be called README.md deeper in the tree is still published.
-# A dataset.yaml at the top describes the data beside it -- `staging add`
-# writes one -- and is never one of its files.
-EXCLUDE_ROOT_GLOBS = ("README*", "LICENSE*", "CHANGELOG*", "dataset.yaml")
 
 
 def load_hash_cache(dataset_dir: Path) -> dict:
@@ -203,177 +170,6 @@ def resolve_hashes(
     return {path: (stats[path].st_size, digests[path]) for path in paths}
 
 
-def slugify(relative_path: str) -> str:
-    """Turn a relative path into a Data Package resource name.
-
-    The spec requires lowercase alphanumerics plus ``.``, ``-`` and ``_``, and
-    the name must stay stable across rebuilds -- it is half of the logical
-    identity that lets two tools recognise the same file.
-    """
-    slug = relative_path.replace("/", "-").lower()
-    slug = re.sub(r"[^a-z0-9._-]+", "-", slug)
-    return re.sub(r"-{2,}", "-", slug).strip("-")
-
-
-def mediatype_of(path: Path) -> str:
-    suffix = path.suffix.lower()
-    if suffix in EXTRA_MEDIATYPES:
-        return EXTRA_MEDIATYPES[suffix]
-    guessed, _ = mimetypes.guess_type(path.name)
-    return guessed or "application/octet-stream"
-
-
-def iter_data_files(root: Path):
-    """Every publishable file under ``root``, relative paths in sorted order.
-
-    ``rglob`` descends when ``root`` itself is a symbolic link -- which is what
-    lets a source_dir point into the curated namespace -- but it does **not**
-    descend into symbolic links found *inside* the tree. Such a directory would
-    therefore be silently absent from the manifest, so it is reported rather
-    than skipped in silence.
-    """
-    for path in sorted(root.rglob("*")):
-        if path.is_symlink() and path.is_dir():
-            report.warning(
-                f"warning: {path} is a symbolic link to a directory; its contents are "
-                f"NOT in the manifest. Point source_dir at the real tree, or replace "
-                f"the link with the files themselves."
-            )
-            continue
-        if not path.is_file():
-            continue
-        if any(part in EXCLUDE_NAMES for part in path.relative_to(root).parts):
-            continue
-        if path.suffix in EXCLUDE_SUFFIXES:
-            continue
-        relative = path.relative_to(root)
-        if len(relative.parts) == 1 and any(
-            relative.match(g) for g in EXCLUDE_ROOT_GLOBS
-        ):
-            continue
-        yield path
-
-
-def expand_pattern(pattern: str) -> list[str]:
-    """The glob patterns one ``ethos:include`` / ``ethos:exclude`` entry stands for.
-
-    Wildcard patterns are used as written, with the reader's rule: ``*`` inside
-    one path segment, ``**`` across any number of them.
-
-    A pattern with no wildcard is a literal path, and naming a folder is the
-    obvious way to say "this folder" -- so it stands for the path itself *and*
-    everything under it.  ``"test"`` therefore excludes the directory's whole
-    contents, not just a file that happens to be called ``test``.  Purely
-    syntactic: it does not look at the disk, so the descriptor means the same
-    thing on a machine where that directory has already been cleaned up.
-
-    A trailing slash asks for the subtree only, for the rare case where a file
-    and a directory share a name.
-    """
-    pattern = pattern.strip()
-    if not pattern:
-        raise DescriptorError(f"{k.INCLUDE}/{k.EXCLUDE}: empty pattern")
-    if pattern.startswith("/"):
-        raise DescriptorError(
-            f"{k.INCLUDE}/{k.EXCLUDE}: {pattern!r} starts with '/'. Patterns are "
-            "relative to source_dir; drop the leading slash."
-        )
-    if pattern.endswith("/"):
-        return [pattern.rstrip("/") + "/**"]
-    if any(character in pattern for character in "*?["):
-        return [pattern]
-    return [pattern, pattern + "/**"]
-
-
-def select(name: str, root: Path, paths: list[Path], meta: dict) -> list[Path]:
-    """Narrow an inventory to what ``ethos:include`` / ``ethos:exclude`` ask for.
-
-    Exists because ``source_dir`` is frequently somebody else's download
-    directory -- a shared tree holding the dataset *and* the zip it was
-    extracted from, a wget log, a colleague's test clip -- that we have neither
-    the write access nor the standing to tidy up.  Without this the only way to
-    publish five rasters out of eighteen files was to move the other thirteen.
-
-    Two guard rails, because a silently smaller manifest is the failure mode
-    that matters here:
-
-    * an ``ethos:include`` pattern that matches nothing is an error, named.  A
-      typo, or a file renamed upstream, must not quietly shrink the dataset.
-    * an ``ethos:exclude`` pattern that matches nothing is only a warning -- the
-      stray it named may simply have been cleaned up since, and failing the
-      build for a cleanup that actually happened would be perverse.
-
-    Shapefile companions are added back after filtering, mirroring what the
-    reader does when a collection selects a ``.shp``: a ``.shp`` without its
-    ``.dbf`` and ``.shx`` is unreadable, and an include list is exactly where
-    somebody would forget them.
-    """
-    # Their shape is checked with the rest of the descriptor, before this runs.
-    include = meta.get(k.INCLUDE)
-    exclude = meta.get(k.EXCLUDE)
-    if include is None and exclude is None:
-        return paths
-
-    relative = {path: path.relative_to(root).as_posix() for path in paths}
-
-    def matched_by(patterns: list[str]) -> dict[str, set[str]]:
-        """Which source patterns each path matched, keyed by the pattern as written."""
-        hits: dict[str, set[str]] = {pattern: set() for pattern in patterns}
-        for pattern in patterns:
-            globs = expand_pattern(pattern)
-            for path, rel in relative.items():
-                if any(path_matches(rel, glob) for glob in globs):
-                    hits[pattern].add(rel)
-        return hits
-
-    kept = set(paths)
-
-    if include is not None:
-        hits = matched_by(include)
-        empty = [pattern for pattern, found in hits.items() if not found]
-        if empty:
-            raise DescriptorError(
-                f"{name}: {k.INCLUDE} pattern(s) match no file under {root}:\n"
-                + "".join(f"    {pattern}\n" for pattern in empty)
-                + "Fix the pattern, or drop it if the file is gone. An include list that\n"
-                "silently matches nothing would publish a smaller dataset than intended."
-            )
-        wanted = set().union(*hits.values())
-        kept = {path for path in paths if relative[path] in wanted}
-
-    if exclude is not None:
-        hits = matched_by(exclude)
-        for pattern, found in hits.items():
-            if not found:
-                report.warning(
-                    f"warning: {name}: {k.EXCLUDE} pattern {pattern!r} matches nothing "
-                    f"under {root} -- already cleaned up, or a typo?"
-                )
-        unwanted = set().union(*hits.values()) if hits else set()
-        kept = {path for path in kept if relative[path] not in unwanted}
-
-    # Drag shapefile companions back in, the same way the reader does.
-    for path in list(kept):
-        if path.suffix.lower() != ".shp":
-            continue
-        for extension in SHAPEFILE_SIDECAR_EXTS:
-            companion = path.with_suffix(extension)
-            if companion in relative and companion not in kept:
-                report.warning(
-                    f"note: {name}: keeping {relative[companion]} -- companion of "
-                    f"{relative[path]}, which a filter would otherwise have dropped"
-                )
-                kept.add(companion)
-
-    skipped = len(paths) - len(kept)
-    if skipped:
-        report.warning(
-            f"  {name}: {len(kept)} of {len(paths)} files under {root} "
-            f"selected, {skipped} filtered out"
-        )
-    return [path for path in paths if path in kept]
-
-
 def frozen_resources(name: str, dataset_dir: Path) -> list[dict]:
     """The inventory already on disk, for a dataset that will not be re-read.
 
@@ -389,40 +185,14 @@ def frozen_resources(name: str, dataset_dir: Path) -> list[dict]:
     if not package_file.is_file():
         raise DescriptorError(
             f"{name}: the inventory is declared final but there is no datapackage.json to "
-            f"freeze. Build once with source_dir set, check the result, and only then set "
-            f"{k.FROZEN}: true (or {k.UPLOADED}: true) and remove source_dir."
+            f"freeze. Build it once from its source_dir and check the result before "
+            "freezing it."
         )
-    resources = resources_of(
-        json.loads(package_file.read_text(encoding="utf-8")), dataset_dir
-    )
+    resources = inventory_of(name, dataset_dir).records()
     return [
         {key: value for key, value in resource.items() if key != k.LICENSES}
         for resource in resources
     ]
-
-
-def build_resource(path: Path, root: Path, size: int, digest: str) -> dict:
-    relative = path.relative_to(root).as_posix()
-    # The record ethos_data.model.resource reads back into a Resource, key for
-    # key and in this order; a test holds the two together.
-    resource = {
-        k.NAME: slugify(relative),
-        k.PATH: relative,
-        k.BYTES: size,
-        k.HASH: recorded(digest),
-        k.MEDIATYPE: mediatype_of(path),
-    }
-    if path.suffix.lower() == ".shp":
-        sidecars = [
-            (path.with_suffix(ext)).relative_to(root).as_posix()
-            for ext in SHAPEFILE_SIDECAR_EXTS
-            if path.with_suffix(ext).exists()
-        ]
-        if sidecars:
-            # Custom property -- the spec permits these, and the resolver uses it
-            # to pull companion files in automatically.
-            resource[k.SIDECARS] = sidecars
-    return resource
 
 
 def record_license_documents(
@@ -531,19 +301,6 @@ def _checked(name: str, rule, meta: dict) -> None:
         raise DescriptorError(f"{name}: {error.message}") from None
 
 
-def shard_path(prefix: str) -> str:
-    """Where one shard's inventory lives, relative to the dataset directory."""
-    return f"{SHARD_DIR}/{prefix}.json"
-
-
-def split_into_shards(resources: list[dict], depth: int) -> dict[str, list[dict]]:
-    """Group an inventory by shard prefix, in a stable order."""
-    shards: dict[str, list[dict]] = {}
-    for resource in resources:
-        shards.setdefault(shard_key(resource["path"], depth), []).append(resource)
-    return {prefix: shards[prefix] for prefix in sorted(shards)}
-
-
 def dumps(payload: dict) -> str:
     return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
 
@@ -600,6 +357,10 @@ def render_dataset(
     if namespace:
         return _render_namespace(dataset_dir, name, meta, member_totals or (0, 0))
 
+    # Where the bytes are is the status file's to say -- see the module
+    # docstring -- and none of it is published.
+    built_from = dataset_status.build_input(dataset_dir, meta, name)
+    lifecycle.step("build", built_from.status.state, name)
     _checked(name, dataset_format.check, meta)
     for warning in dataset_format.lint(meta):
         report.warning(f"warning: {name}: {warning}")
@@ -607,12 +368,7 @@ def render_dataset(
     licenses = meta.get(k.LICENSES) or []
     record_license_documents(name, dataset_dir, licenses)
 
-    # All local to the maintainer, never published -- see the module docstring.
-    # Uploading implies freezing; freezing does not imply uploading.
-    uploaded = bool(meta.pop(k.UPLOADED, False))
-    frozen = bool(meta.pop(k.FROZEN, False)) or uploaded
-    source_dir = source_dir_of(dataset_dir, meta)
-    meta.pop(k.SOURCE_DIR, None)
+    frozen, source_dir = built_from.frozen, built_from.source_dir
 
     if frozen:
         resources = frozen_resources(name, dataset_dir)
@@ -754,17 +510,8 @@ def write_dataset(dataset_dir: Path, files: dict[str, str]) -> None:
 
 
 def shard_roots(dataset_dir: Path) -> list[Path]:
-    """The build-owned shard directories that exist for this dataset.
-
-    Normally ``shards/`` or nothing. A catalogue built before the rename also
-    has ``manifests/``, which nothing generates any more: every file in it is
-    left over, so a rebuild deletes it and ``--check`` reports it as stale.
-    """
-    return [
-        dataset_dir / name
-        for name in (SHARD_DIR, LEGACY_SHARD_DIR)
-        if (dataset_dir / name).is_dir()
-    ]
+    """The build-owned shard directory of this dataset, if it has one."""
+    return [dataset_dir / SHARD_DIR] if (dataset_dir / SHARD_DIR).is_dir() else []
 
 
 def stale_files(dataset_dir: Path, files: dict[str, str]) -> list[Path]:
@@ -783,6 +530,50 @@ def stale_files(dataset_dir: Path, files: dict[str, str]) -> list[Path]:
             if p.is_file() and p not in generated
         ]
     return stale
+
+
+def _inventory(name: str, dataset_dir: Path) -> set[tuple] | None:
+    """The files the dataset's descriptor lists, by path, size and hash; None unbuilt."""
+    if not (dataset_dir / "datapackage.json").is_file():
+        return None
+    return {
+        (resource.path, resource.bytes, resource.hash)
+        for resource in inventory_of(name, dataset_dir).resources().values()
+    }
+
+
+def _record_build(
+    dataset_dir: Path, name: str, before: set[tuple] | None, package: dict
+) -> None:
+    """Record in the status file what this build changed, if anything.
+
+    A draft's first build makes it built. A rebuild that found other files
+    than the inventory before is recorded as a change, and returns a dataset
+    whose bytes were made available to built. A rebuild that changed nothing,
+    which is most of them, records nothing.
+    """
+    status = dataset_status.read(dataset_dir)
+    size = {"files": package[k.FILE_COUNT], "bytes": package[k.TOTAL_BYTES]}
+    if status.state == lifecycle.DRAFT:
+        dataset_status.take(dataset_dir, status, "build", dataset=name, **size)
+        return
+    changed = before is not None and before != _inventory(name, dataset_dir)
+    if not changed or status.state not in lifecycle.STEPS["change"].leads:
+        return
+    if status.state == lifecycle.AVAILABLE:
+        report.warning(
+            f"warning: {name}: its inventory changed since its bytes were made "
+            "available, so it is recorded as built again; make the new bytes "
+            "available before releasing it"
+        )
+    dataset_status.take(
+        dataset_dir,
+        status,
+        "change",
+        dataset=name,
+        note="the inventory changed",
+        **size,
+    )
 
 
 def catalog_meta(catalog_root: Path) -> dict:
@@ -820,7 +611,7 @@ def build_catalog(catalog_root: Path, dataset_dirs: list[Path]) -> dict:
     }
 
 
-def _inherited_for(root: Path, dataset_dir: Path) -> dict:
+def inherited_for(root: Path, dataset_dir: Path) -> dict:
     """Keys a nested dataset takes from the namespaces enclosing it.
 
     Outermost first, so a nearer namespace overrides a farther one, and the
@@ -906,7 +697,7 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> BuildResul
             dataset_dir,
             check=check,
             name=name,
-            inherited=_inherited_for(root, dataset_dir),
+            inherited=inherited_for(root, dataset_dir),
             namespace=namespace,
             member_totals=totals,
         )
@@ -918,7 +709,10 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> BuildResul
             stale += stale_files(dataset_dir, files)
             continue
 
+        before = None if namespace else _inventory(name, dataset_dir)
         write_dataset(dataset_dir, files)
+        if not namespace:
+            _record_build(dataset_dir, name, before, package)
         size_gb = package["ethos:total_bytes"] / 1e9
         if package.get(k.NAMESPACE):
             klass = "namespace"

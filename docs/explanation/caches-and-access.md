@@ -157,13 +157,6 @@ independent baseline that detects a corrupted copy; rehashing the copy would
 erase it. A frozen inventory does not back up bytes: the storage owner still
 needs retention and recovery arrangements.
 
-!!! warning "Gap: the state is kept in `dataset.yaml`"
-    The code reads the build input from `source_dir` in `dataset.yaml`, marks
-    a frozen or uploaded dataset with `ethos:frozen: true` or
-    `ethos:uploaded: true` there, and offers `materialize --force`. See
-    [dataset status files](architecture/decisions/0022-dataset-status-files.md)
-    and [the clean break](architecture/decisions/0002-clean-break-during-the-beta.md).
-
 Size checks detect some damage cheaply but miss changes of equal length. A deep
 verification reads every byte and compares SHA-256. In-place reads do not
 automatically perform that check. See [Check and repair](../how-to/data-users/verify-and-repair.md).

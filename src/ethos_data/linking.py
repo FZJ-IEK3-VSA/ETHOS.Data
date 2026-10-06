@@ -32,6 +32,11 @@ records "these bytes are borrowed": retrieval reads them in place, refuses to
 write through them, and ``ethos-data materialize`` knows there is something to
 copy. A real directory means the opposite -- data the cache owns -- so neither
 mode of ``ethos-data link`` will ever replace one with a link.
+
+A catalogue maintainer who links a dataset into a shared cache, or registers
+an installation, passes ``--catalog-root``: the command line then takes the
+link as a step of the dataset in that checkout, through
+:mod:`ethos_data.maintain.namespace`. This module records nothing.
 """
 
 from __future__ import annotations
@@ -41,12 +46,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .access import entry_for
-from .catalogs import LICENSE_RESOLVED, Catalog
+from .catalogs import Catalog
 from .config import Roots
-from .errors import AccessError, CatalogueRootError, LinkError
+from .errors import AccessError, CatalogUnavailable, IncompleteCatalog, LinkError
 from .formats import keys as k
+from .model import lifecycle
 
-__all__ = ["LinkReport", "link", "source_dir_for", "unlink"]
+__all__ = ["LinkReport", "link", "unlink"]
 
 
 @dataclass
@@ -70,51 +76,6 @@ class LinkReport:
         # printing the spelling the person used is what makes the line checkable.
         target = str(self.target).removeprefix("\\\\?\\")
         return f"{self.verb:<11} {self.dataset}  {self.entry} -> {target}"
-
-
-def source_dir_for(name: str, catalog_root: str | Path | None = None) -> Path:
-    """The ``source_dir`` a source catalogue records for this dataset.
-
-    ``source_dir`` is popped out of the descriptor when it is built, so it lives
-    in the hand-written ``datasets/<name>/dataset.yaml`` and nowhere else -- not
-    in ``datapackage.json``, not in any ``datacatalog.json``. Reading it means
-    reading the checkout, exactly as ``catalog build`` and ``catalog upload`` do;
-    ``catalog_root`` names it, or it is searched for upward from the current
-    directory.
-
-    The maintainer half of the package is imported here rather than at module
-    scope so that ``import ethos_data`` stays the read-only library it promises
-    to be: nothing is pulled in until somebody asks for a path only a checkout
-    can answer.
-    """
-    from .maintain import (
-        datasets_dir,
-        read_descriptor,
-        resolve_catalog_root,
-        source_dir_of,
-    )
-
-    try:
-        root = resolve_catalog_root(
-            str(catalog_root) if catalog_root is not None else None
-        )
-    except CatalogueRootError as error:
-        # `resolve_catalog_root` is written for the maintainer commands, which
-        # exit on a missing checkout. Here it is one way of answering a question,
-        # so it becomes the same error every other failure in this module raises.
-        raise LinkError(error.message) from None
-    dataset_dir = datasets_dir(root) / name
-    descriptor = dataset_dir / "dataset.yaml"
-    if not descriptor.is_file():
-        raise LinkError(f"no dataset called {name!r} in {datasets_dir(root)}")
-    source = source_dir_of(dataset_dir, read_descriptor(dataset_dir))
-    if source is None:
-        raise LinkError(
-            f"{descriptor} has no source_dir, so there is nothing to link from.\n"
-            "An uploaded dataset has none by design -- dCache holds it. Name the "
-            f"directory instead:\n    ethos-data link {name} /path/to/{name}"
-        )
-    return source
 
 
 def _absolute(directory: str | Path) -> Path:
@@ -153,34 +114,28 @@ def _sample_missing(catalog: Catalog, name: str, target: Path) -> str:
 def _require_settled_licence(catalog: Catalog, name: str) -> None:
     """Refuse to put a dataset with unread terms into a cache other people read.
 
-    A cache entry is how a dataset reaches everybody sharing that cache, and an
-    absent licence is a question, not a permission. The reader has always warned
-    about this; a warning is the right answer when somebody already has the data
-    in front of them and the wrong one at the moment it is being handed out.
-
-    Staging is deliberately exempt, and named here because it is the answer to
-    "but I need to work with it now": a staging entry is one person's, shadows
-    nothing for anybody else, and is unverifiable by construction.
+    The guard of the ``link`` step (see :func:`ethos_data.model.lifecycle.refusal`),
+    which a link made by name takes whether or not it is recorded. Staging is
+    the answer to "but I need to work with it now": a staging entry is one
+    person's, and shadows nothing for anybody else.
     """
-    if catalog.dataset(name).license_status == LICENSE_RESOLVED:
+    raise_if_refused(catalog, name, "link", LinkError)
+
+
+def raise_if_refused(catalog: Catalog, name: str, step: str, error: type) -> None:
+    """Raise ``error`` when the guards of ``step`` refuse it for this dataset."""
+    dataset = catalog.dataset(name)
+    if dataset.license_status == k.RESOLVED:
         return
     try:
-        note = catalog.dataset(name).descriptor.get(k.LICENSE_NOTE, "")
-    except Exception:
-        # The status is promoted into the index precisely so that asking this
-        # costs no fetch. The note is a nicety on top -- and it is stripped from
-        # published catalogues anyway -- so not having the descriptor to hand
-        # must not turn a clear refusal into a crash.
+        note = dataset.descriptor.get(k.LICENSE_NOTE, "")
+    except (IncompleteCatalog, CatalogUnavailable):
+        # The status is promoted into the index so that asking costs no read.
+        # The note is a nicety on top, and must not turn the refusal into a crash.
         note = ""
-    raise LinkError(
-        f"{name!r} has unresolved licensing, so it is not linked into a cache other "
-        f"people read. {note}\n".rstrip()
-        + "\n"
-        "Record the terms in its dataset.yaml -- a `licenses:` entry, or "
-        "`ethos:license_status: resolved` once somebody has read them -- and rebuild.\n"
-        "To work with it meanwhile, stage it instead:\n"
-        f"    staging add {name} <directory>  (with your package's data command)"
-    )
+    reason = lifecycle.refusal(step, repr(name), settled=False, note=note)
+    if reason:
+        raise error(reason)
 
 
 def _on_windows() -> bool:
@@ -207,17 +162,16 @@ def _refusal(name: str, target: Path, error: OSError) -> str:
 def link(
     catalog: Catalog,
     name: str,
-    directory: str | Path | None = None,
+    directory: str | Path,
     roots: Roots | None = None,
     force: bool = False,
-    catalog_root: str | Path | None = None,
     cache: str | Path | None = None,
 ) -> LinkReport:
     """Make this dataset's cache entry a symbolic link to ``directory``.
 
-    Without a ``directory``, the source catalogue's ``source_dir`` for this
-    dataset is used -- see :func:`source_dir_for`, which is also what decides
-    where ``catalog_root`` is looked for.
+    ``ethos-data link NAME`` without a directory reads the dataset's build
+    input from a source checkout, with
+    :func:`ethos_data.maintain.source_dir_for`, and passes it here.
 
     ``cache`` is the cache that holds the entry, as the global ``--root`` names
     it. Without it, a public dataset's entry goes into the public cache and a
@@ -240,8 +194,6 @@ def link(
 
     _require_settled_licence(catalog, name)
 
-    if directory is None:
-        directory = source_dir_for(name, catalog_root)
     target = _absolute(directory)
     if not target.is_dir():
         raise LinkError(f"not a directory: {target}")

@@ -14,15 +14,17 @@ from pathlib import Path
 
 import pytest
 import yaml
+from support import write_descriptor
 
 from ethos_data.catalogs import Catalog, Dataset
 from ethos_data.config import Roots
-from ethos_data.errors import LinkError, UploadError
+from ethos_data.errors import LinkError, TransitionError
 from ethos_data.formats import license_settled
 from ethos_data.linking import link
 from ethos_data.maintain import namespace
 from ethos_data.maintain.manifest import render_dataset, write_dataset
 from ethos_data.maintain.upload import preflight
+from ethos_data.model.inventory import Inventory
 from ethos_data.model.resource import Resource
 
 PAYLOAD = b"first file"
@@ -67,8 +69,7 @@ def _catalog(status: str | None) -> Catalog:
         "example",
         "Example",
         entry=entry,
-        _descriptor={"resources": []},
-        _resources={"a.txt": resource},
+        inventory=Inventory.from_resources("example", {}, [resource]),
     )
     return Catalog("local", {}, {"example": dataset})
 
@@ -118,7 +119,7 @@ def _checkout(root: Path, extra: dict) -> Path:
         "ethos:remote_prefix": "example",
         **extra,
     }
-    (dataset_dir / "dataset.yaml").write_text(yaml.safe_dump(meta))
+    write_descriptor(dataset_dir, yaml.safe_dump(meta))
     write_dataset(dataset_dir, render_dataset(dataset_dir))
     return root
 
@@ -171,7 +172,7 @@ def _package(extra: dict) -> dict:
 def test_upload_refuses_it(tmp_path):
     source = tmp_path / "src"
     source.mkdir()
-    with pytest.raises(UploadError, match="unresolved licensing"):
+    with pytest.raises(TransitionError, match="unresolved licensing"):
         preflight(
             "example",
             _package({"ethos:license_status": "unresolved"}),
@@ -185,7 +186,7 @@ def test_upload_refuses_a_descriptor_that_says_nothing_at_all(tmp_path):
     """The default has to be "nobody has looked", not "nothing applies"."""
     source = tmp_path / "src"
     source.mkdir()
-    with pytest.raises(UploadError, match="unresolved licensing"):
+    with pytest.raises(TransitionError, match="unresolved licensing"):
         preflight(
             "example", _package({}), source, allow_internal=False, verify_only=False
         )

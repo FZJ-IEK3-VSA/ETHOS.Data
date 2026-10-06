@@ -1,15 +1,19 @@
 """The external systems ETHOS.Data talks to, each behind a port with a fake.
 
 The adapter layer of the four-layer decision. Code that needs dCache, a
-download or git asks for the port's methods and is handed an implementation:
+download, git or catalogue metadata asks for the port's methods and is handed
+an implementation:
 
-=============  ====================================  ===========================
-Port           Real adapter                          Fake, for tests
-=============  ====================================  ===========================
-``Store``      :class:`.dcache.DcacheStore`          :class:`.fakes.FakeStore`
-``Downloader`` :class:`.downloads.PoochDownloader`   :class:`.fakes.FakeDownloader`
-``Git``        :class:`.git.GitRepository`           :class:`.fakes.FakeGit`
-=============  ====================================  ===========================
+==================  =========================================  ===========================
+Port                Real adapters                              Fake, for tests
+==================  =========================================  ===========================
+``Store``           :class:`.dcache.DcacheStore`               :class:`.fakes.FakeStore`
+``Downloader``      :class:`.downloads.PoochDownloader`        :class:`.fakes.FakeDownloader`
+``Git``             :class:`.git.GitRepository`                :class:`.fakes.FakeGit`
+``MetadataSource``  :class:`.metadata.FileSource`,             :class:`.fakes.MemorySource`
+                    :class:`.metadata.HttpSource`,
+                    :class:`.metadata.CachedSource`
+==================  =========================================  ===========================
 
 The ports are :class:`typing.Protocol` classes: an implementation needs the
 methods, not a base class. Nothing in this package reads settings. A port
@@ -21,7 +25,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-__all__ = ["Downloader", "Git", "Store"]
+from ..model.inventory import PartReader
+
+__all__ = ["Downloader", "Git", "MetadataSource", "Store"]
 
 
 @runtime_checkable
@@ -108,4 +114,22 @@ class Git(Protocol):
 
     def push(self, remote: str, *refs: str) -> None:
         """Push ``refs`` to ``remote``."""
+        ...
+
+
+@runtime_checkable
+class MetadataSource(PartReader, Protocol):
+    """Where the files of a generated catalogue are read: the index, descriptors, shards.
+
+    The part reader the inventory reader is handed. A location with nothing
+    there raises :class:`~ethos_data.errors.IncompleteCatalog`; one that
+    cannot be reached raises :class:`~ethos_data.errors.CatalogUnavailable`.
+    """
+
+    def read(self, location: str) -> bytes:
+        """The bytes of the catalogue file at ``location``."""
+        ...
+
+    def join(self, base: str, relative: str) -> str:
+        """Where ``relative`` lies, relative to the file at ``base``."""
         ...

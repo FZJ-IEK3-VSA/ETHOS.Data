@@ -69,12 +69,18 @@ an author is named.
 
 ## 3. Build the inventory
 
+In a catalogue, the commands keep `source_dir` in a file of their own beside
+the description, the dataset's `status.yaml`. Move it there, then build:
+
 ```bash
 cd source-catalogue
+ethos-data catalog migrate station-temperatures
 ethos-data catalog build station-temperatures
 ```
 
-```title="Output"
+```title="Output (abridged)"
+  migrated       station-temperatures             draft      source_dir moved out of dataset.yaml
+…
   station-temperatures: 1 of 2 files under …/catalogue-lesson/incoming/station-temperatures selected, 1 filtered out
   station-temperatures                   1 files     0.000 GB  public/public
   datacatalog.json           1 datasets
@@ -83,6 +89,21 @@ ethos-data catalog build station-temperatures
 The log was filtered out. Open `datasets/station-temperatures/datapackage.json`:
 its one resource records the path, size and SHA-256 hash of `temperatures.csv`.
 The `datacatalog.json` next to `catalog.yaml` now lists the dataset.
+
+`datasets/station-temperatures/status.yaml` holds `source_dir` and the history
+of what the commands did to the dataset. Ask where the dataset stands:
+
+```bash
+ethos-data catalog status
+```
+
+```title="Output"
+  dataset               state      access      next
+  station-temperatures  built      public      ethos-data catalog upload station-temperatures
+```
+
+It is `built`: described and inventoried, with no copy of its bytes made
+available yet.
 
 Change the data behind the inventory, and ask whether the catalogue still
 describes it:
@@ -131,7 +152,7 @@ maintainer. It refuses to write a tree that still carries one, or that names
 a hidden dataset. To see for yourself that none of them leaked:
 
 ```bash
-grep -rn -E 'source_dir|ethos:uploaded|ethos:license_note|ethos:embargo' ../public-catalogue
+grep -rn -E 'source_dir|ethos:license_note|ethos:embargo' ../public-catalogue
 ```
 
 No output means no leak. You now have both views of the catalogue: the
@@ -246,7 +267,9 @@ than `used in place`. `incoming/station-temperatures` is still there;
 
 | You ran | It did |
 |---|---|
+| `ethos-data catalog migrate` | moved `source_dir` into the dataset's `status.yaml` |
 | `ethos-data catalog build` | inventoried `source_dir`, left out the excluded log, hashed the rest |
+| `ethos-data catalog status` | listed the dataset's state and its next step |
 | `ethos-data catalog build --check` | compared the inventory with the files, and wrote nothing |
 | `ethos-data catalog publish` | generated the public view without maintainer-only fields |
 | `ethos-data link --all` | linked data already on disk into the public cache |

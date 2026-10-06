@@ -20,6 +20,7 @@ import json
 import shutil
 
 import pytest
+from support import write_descriptor
 
 from ethos_data.access import ORIGIN_LINK, locate
 from ethos_data.catalogs import Catalog, Dataset
@@ -27,6 +28,8 @@ from ethos_data.cli import main
 from ethos_data.config import Roots
 from ethos_data.errors import LinkError, UnknownDataset
 from ethos_data.linking import link, unlink
+from ethos_data.maintain import source_dir_for
+from ethos_data.model.inventory import Inventory
 from ethos_data.model.resource import Resource
 
 CONTENT = {"a.txt": b"first file", "sub/b.txt": b"second file"}
@@ -53,8 +56,7 @@ def _catalog(access: str = "public") -> Catalog:
         "example",
         "Example",
         entry={"ethos:access": access, "ethos:license_status": "resolved"},
-        _descriptor={"resources": []},
-        _resources=resources,
+        inventory=Inventory.from_resources("example", {}, resources.values()),
     )
     return Catalog("local", {}, {"example": dataset})
 
@@ -274,11 +276,11 @@ def test_unlink_refuses_a_real_directory(workspace):
 
 
 def _checkout(tmp_path, datasets: dict[str, str]) -> pytest.TempPathFactory:
-    """A source catalogue: catalog.yaml and hand-written dataset.yaml files.
+    """A source catalogue: catalog.yaml, and each dataset's description and status.
 
-    source_dir lives here and nowhere else -- it is popped out of the descriptor
-    when the manifest is built -- so this is what `link` without a directory has
-    to read.
+    A dataset's source_dir lives in its status.yaml and nowhere else, so this
+    is what `link` without a directory has to read. Each dataset is built, so
+    linking it is a step its state allows.
     """
     root = tmp_path / "catalogue"
     (root / "datasets").mkdir(parents=True)
@@ -286,7 +288,13 @@ def _checkout(tmp_path, datasets: dict[str, str]) -> pytest.TempPathFactory:
     for name, body in datasets.items():
         directory = root / "datasets" / name
         directory.mkdir()
-        (directory / "dataset.yaml").write_text(body)
+        write_descriptor(directory, body)
+        status = directory / "status.yaml"
+        if status.is_file():
+            text = status.read_text(encoding="utf-8")
+            status.write_text(
+                text.replace("state: draft", "state: built"), encoding="utf-8"
+            )
     return root
 
 
@@ -297,7 +305,9 @@ def test_links_the_source_dir_when_no_directory_is_given(workspace, tmp_path):
         {"example": f"name: example\ntitle: Example\nsource_dir: {data.as_posix()}\n"},
     )
 
-    report = link(_catalog(), "example", roots=roots, catalog_root=checkout)
+    report = link(
+        _catalog(), "example", source_dir_for("example", checkout), roots=roots
+    )
 
     assert report.target == data
     assert (cache / "example").is_symlink()
@@ -305,23 +315,24 @@ def test_links_the_source_dir_when_no_directory_is_given(workspace, tmp_path):
 
 
 def test_a_dataset_with_no_source_dir_says_what_to_do_instead(workspace, tmp_path):
-    """An uploaded dataset has none by design: dCache holds it."""
-    cache, _, roots = workspace
-    checkout = _checkout(
-        tmp_path, {"example": "name: example\ntitle: Example\nethos:uploaded: true\n"}
+    """A frozen dataset has none by design: its authoritative copy is elsewhere."""
+    cache, _, _ = workspace
+    checkout = _checkout(tmp_path, {"example": "name: example\ntitle: Example\n"})
+    (checkout / "datasets" / "example" / "status.yaml").write_text(
+        "state: frozen\nauthority: https://store.invalid/example/\n"
+        "copies:\n- kind: uploaded\n  location: https://store.invalid/example/\n"
     )
 
     with pytest.raises(LinkError, match="no source_dir"):
-        link(_catalog(), "example", roots=roots, catalog_root=checkout)
+        source_dir_for("example", checkout)
     assert not (cache / "example").exists()
 
 
 def test_a_dataset_the_checkout_does_not_have(workspace, tmp_path):
-    _, _, roots = workspace
     checkout = _checkout(tmp_path, {})
 
     with pytest.raises(LinkError, match="no dataset called"):
-        link(_catalog(), "example", roots=roots, catalog_root=checkout)
+        source_dir_for("example", checkout)
 
 
 def test_cli_all_links_every_source_dir_into_the_named_cache(
@@ -531,8 +542,8 @@ def test_cli_all_skips_restricted_data_that_link_by_name_still_takes(
     link(
         _catalog("restricted"),
         "example",
+        source_dir_for("example", checkout),
         roots=Roots(public=cache, restricted=(restricted,)),
-        catalog_root=checkout,
     )
 
     assert (restricted / "example").is_symlink()

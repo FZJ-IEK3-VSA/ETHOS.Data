@@ -1,6 +1,6 @@
 # 0008. Build the package in four layers: model, adapters, services, presentation
 
-**Status:** proposed · **Date:** 2026-10-02 · **Implemented by:** #10, #13, #17, #20, a new PR (service groups)
+**Status:** implemented · **Date:** 2026-10-02 · **Implemented by:** #10, #13, #17, #20, #41
 
 ## Context
 

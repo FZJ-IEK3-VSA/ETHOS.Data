@@ -23,12 +23,12 @@ dash means that the decision is implemented and needs no pull request.
 | 0004 | [Derive cache paths from resource identity, and never reuse a name](0004-cache-paths-from-resource-identity.md) | implemented | — |
 | 0005 | [Read the index first and inventories on demand](0005-lazy-index-descriptors-and-shards.md) | implemented | — |
 | 0006 | [Specify every file format once](0006-every-file-format-specified-once.md) | proposed | #11, #12, #13, #27 |
-| 0007 | [Read every generated catalogue through one inventory reader](0007-one-inventory-reader.md) | proposed | a new PR (inventory reader) |
+| 0007 | [Read every generated catalogue through one inventory reader](0007-one-inventory-reader.md) | implemented | #40 |
 | | **Code structure** | | |
-| 0008 | [Build the package in four layers: model, adapters, services, presentation](0008-four-layers.md) | proposed | #10, #13, #17, #20, a new PR (service groups) |
-| 0009 | [Reach dCache, downloads, metadata sources and git through ports with fakes](0009-ports-and-fakes-for-external-systems.md) | proposed | #20, a new PR (inventory reader), #23 |
+| 0008 | [Build the package in four layers: model, adapters, services, presentation](0008-four-layers.md) | implemented | #10, #13, #17, #20, #41 |
+| 0009 | [Reach dCache, downloads, metadata sources and git through ports with fakes](0009-ports-and-fakes-for-external-systems.md) | proposed | #20, #40, #23 |
 | | **Reading data** | | |
-| 0010 | [Read settings from one file per account, once per handle](0010-one-settings-file-per-account.md) | proposed | #14, #15, #39, #19, a new PR (inventory reader), #25 |
+| 0010 | [Read settings from one file per account, once per handle](0010-one-settings-file-per-account.md) | proposed | #14, #15, #39, #19, #40, #25 |
 | 0011 | [Let the access class pick the root, and a link mean "read in place"](0011-access-class-picks-the-root.md) | proposed | #15, #39, a new PR (pipelines) |
 | 0012 | [Find every file through one lookup chain](0012-one-lookup-chain.md) | proposed | #15, #39, #16, #24, #25 |
 | 0013 | [Treat every input as required, and say what is missing](0013-every-input-is-required.md) | implemented | #16, #18 |

@@ -1,39 +1,31 @@
-"""Loading the ETHOS.Data catalogue and its Frictionless Data Packages.
+"""Loading the ETHOS.Data catalogue: its index, and each dataset's inventory on demand.
 
 Loading is **lazy**: ``load_catalog`` reads only ``datacatalog.json`` -- the
-small index -- and pulls a dataset's ``datapackage.json`` the first time
-something actually asks for its files.  That matters once a dataset is large:
-the ERA5 inventory alone is ~64 MB and 170k resources, and without laziness
-every ``ethos-data`` invocation would download and parse it just to answer a
-question about a different dataset.
+small index -- and a dataset's ``datapackage.json`` the first time something
+asks for its files. That matters once a dataset is large: the ERA5 inventory
+alone is ~64 MB and 170k resources, and without laziness every ``ethos-data``
+invocation would download and parse it just to answer a question about a
+different dataset.
 
-Everything the index already knows -- byte total, file count, access class,
-remote prefix, licence status -- is answered from the index and never triggers a
-fetch, so ``ethos-data ls`` and access checks stay free.
-
-A large dataset may additionally be **sharded**: its ``datapackage.json`` carries
-an ``ethos:shards`` index instead of a ``resources`` array, and the inventory is
-split across ``shards/<prefix>.json`` files, one per directory prefix of
-``ethos:shard_depth`` segments.  Selecting ``4/6/5/**`` then parses the 664
-resources of that one tile rather than all 170k.  Sharding is transparent: ask
-for ``.resources`` and every shard is pulled in, exactly as before.
+Everything the index row knows -- byte total, file count, access class,
+remote prefix, licence status -- is answered from the row and never triggers a
+read, so ``ethos-data ls`` and access checks stay free. The descriptor and the
+inventory, inline or in shards, are read by the one inventory reader,
+:class:`~ethos_data.model.inventory.Inventory`, through the metadata source
+the catalogue was loaded from.
 """
 
 from __future__ import annotations
 
-import fnmatch
-import gzip
 import json
 import os
-import re
-import urllib.error
-import urllib.parse
-import urllib.request
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
+from .adapters import MetadataSource
+from .adapters.metadata import CachedSource, FileSource, HttpSource
 from .errors import (
     AccessError,
     CatalogUnavailable,
@@ -43,242 +35,65 @@ from .errors import (
     UnknownKey,
 )
 from .formats import keys
-from .formats.derived import (
-    license_status_of,
-    remote_prefix_of,
-    resource_url,
-)
-from .model import digest, names
-from .model.resource import Resource, extras_of, from_record, to_record, with_sidecars
+from .formats.derived import resource_url
+from .model import names
+from .model.inventory import Inventory
+from .model.patterns import path_matches
+from .model.resource import Resource, with_sidecars
 from .model.versions import Bounds, Version, releases
 
 if TYPE_CHECKING:
     from .config import Roots, Settings
 
 __all__ = [
-    "LICENSE_RESOLVED",
+    "NO_CACHE_ENV",
     "Catalog",
     "Dataset",
     "catalog_for",
     "directory_of",
     "load_catalog",
+    "metadata_source",
     "select_key",
     "split_key",
 ]
 
-#: The one value of ``ethos:license_status`` that means somebody has read the
-#: upstream terms. Anything else -- "unresolved", "unknown", absent -- is a
-#: question nobody has answered yet. The rule itself, :func:`license_settled`,
-#: is the format's, shared with the half of the tooling that writes.
-LICENSE_RESOLVED = keys.RESOLVED
-
-
-#: Refs that move.  A catalogue fetched from one of these must not be cached
-#: forever, or development against the internal catalogue silently goes stale.
-_MOVING_REF = re.compile(r"/(?:refs/heads/)?(?:main|master|HEAD|latest|dev|develop)/")
-
+#: Set to read catalogue metadata over HTTPS without the metadata cache.
 NO_CACHE_ENV = "ETHOS_CATALOG_NO_CACHE"
 
 
-def _pinned(url: str) -> bool:
-    """Whether this URL names an immutable version, and may be cached forever."""
+def metadata_source(location: str, settings: Settings | None = None) -> MetadataSource:
+    """Where a catalogue at ``location`` is read from.
+
+    The files on disk for a path. For a URL, HTTPS with the metadata cache in
+    front, in the public cache of ``settings`` (read when not given), unless
+    ``ETHOS_CATALOG_NO_CACHE`` is set.
+    """
+    if not location.startswith(("http://", "https://")):
+        return FileSource()
     if os.environ.get(NO_CACHE_ENV):
-        return False
-    return not _MOVING_REF.search(url)
+        return HttpSource()
+    if settings is None:
+        from .config import read_settings
 
-
-def _cache_path(url: str) -> Path:
-    # Imported here: config pulls in platformdirs, and catalog.py is imported by
-    # tooling that only wants the dataclasses.
-    from .config import read_settings
-
-    folder = digest.of_bytes(url.encode())[:16]
-    public = read_settings().roots.public
-    return public / ".catalog" / folder / url.rsplit("/", 1)[-1]
-
-
-def _read(location: str) -> tuple[str, str]:
-    """Return (text, base location) for a local path or an http(s) URL.
-
-    Descriptors fetched from a version-pinned URL are cached on disk and reused,
-    and the request asks for gzip -- these files compress ~40x, and without the
-    header urllib sends ``Accept-Encoding: identity``.
-    """
-    if not location.startswith(("http://", "https://")):
-        path = Path(location).expanduser().resolve()
-        return path.read_text(encoding="utf-8"), path.parent.as_posix() + "/"
-
-    base = location.rsplit("/", 1)[0] + "/"
-    cacheable = _pinned(location)
-    cached = _cache_path(location) if cacheable else None
-
-    if cached is not None and cached.is_file():
-        return cached.read_text(encoding="utf-8"), base
-
-    request = urllib.request.Request(location, headers={"Accept-Encoding": "gzip"})
-    with urllib.request.urlopen(request, timeout=60) as response:
-        raw = response.read()
-        if response.headers.get("Content-Encoding") == "gzip":
-            raw = gzip.decompress(raw)
-    text = raw.decode("utf-8")
-
-    if cached is not None:
-        cached.parent.mkdir(parents=True, exist_ok=True)
-        # Write-then-rename: two processes racing must never see a half file.
-        temporary = cached.with_suffix(cached.suffix + f".{os.getpid()}.part")
-        # Both arguments are load-bearing: the descriptor came off the wire as
-        # UTF-8 with LF, and the cached copy has to be the same file. Left to its
-        # defaults write_text encodes with the locale codec and rewrites every
-        # newline as CRLF on Windows, so the same catalogue would cache
-        # differently depending on which machine fetched it.
-        temporary.write_text(text, encoding="utf-8", newline="\n")
-        temporary.replace(cached)
-    return text, base
-
-
-def _read_binary(location: str) -> bytes:
-    """The bytes at a local path or an http(s) URL, undecoded and uncached.
-
-    Separate from ``_read`` because not every file a descriptor points at is
-    text: an archived licence is whatever the licensor published, and the ESA
-    CCI terms sheet is a PDF. Nothing here is cached -- these are read once,
-    when a bundle is exported, not on the path any ordinary read takes.
-    """
-    if not location.startswith(("http://", "https://")):
-        return Path(location).expanduser().resolve().read_bytes()
-    # No Accept-Encoding: gzip here. These are already-compressed formats, so
-    # the header buys nothing and only adds a branch that has to be right.
-    with urllib.request.urlopen(location, timeout=60) as response:
-        return response.read()
-
-
-#: Shard holding files that sit at the dataset root, above any shard directory.
-ROOT_SHARD = "_root"
-
-#: Declares what kind of catalogue a descriptor is, so tools and error messages
-#: never have to infer it from which files happen to be lying around.
-ROLE_KEY = keys.CATALOG_ROLE
-#: Hand-written, holds dataset.yaml and source_dir; the thing you edit and upload from.
-ROLE_SOURCE = keys.ROLE_SOURCE
-#: Generated by `ethos-data catalog publish`; metadata only, overwritten on every publish.
-ROLE_PUBLISHED = keys.ROLE_PUBLISHED
-CATALOG_ROLES = keys.CATALOG_ROLES
-
-
-def _missing_part(
-    dataset: str, what: str, location: str, index_base: str
-) -> IncompleteCatalog:
-    return IncompleteCatalog(
-        f"dataset {dataset!r} is listed in the catalogue index under {index_base} but its "
-        f"{what} is missing: {location}\n"
-        f"The catalogue copy is incomplete or stale -- an index from one revision paired with "
-        f"descriptors from another. Deploy or republish the complete tree for that revision; "
-        f"copying the index alone is not enough. If you did not choose this catalogue, "
-        f"`ethos-data config show` says where the setting came from."
-    )
-
-
-def _read_part(dataset: str, what: str, location: str, index_base: str) -> str:
-    """``_read`` for a descriptor or shard, turning "not there" into a diagnosis."""
-    try:
-        return _read(location)[0]
-    except FileNotFoundError as error:
-        raise _missing_part(dataset, what, location, index_base) from error
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
-            raise _missing_part(dataset, what, location, index_base) from error
-        raise
-
-
-def shard_key(relative_path: str, depth: int) -> str:
-    """Which shard a resource path belongs to.
-
-    Keyed on the *directory* prefix, so every file in a directory lands in the
-    same shard as its neighbours -- which is what makes shapefile sidecars and
-    a tile's variables resolvable without touching a second shard.
-    """
-    directories = relative_path.split("/")[:-1]
-    return "/".join(directories[:depth]) or ROOT_SHARD
-
-
-def _shard_could_match(prefix: str, pattern: str) -> bool:
-    """Could any path under ``prefix`` match ``pattern``?
-
-    Conservative by construction: it may say yes for a shard that turns out to
-    contain nothing matching (the caller filters properly afterwards), but it
-    must never say no for a shard that does. Saying no wrongly would silently
-    drop files from a collection, which is far worse than one extra fetch.
-    """
-    parts = [] if prefix == ROOT_SHARD else prefix.split("/")
-    patterns = pattern.split("/")
-    if not parts:
-        # The root shard is the one whose files have no directory component at
-        # all, so only a single-segment pattern can name one -- or a pattern
-        # starting with ``**``, which absorbs zero segments. The general rule
-        # below cannot express this: it reasons about files sitting *below* a
-        # prefix directory, and these sit at the top instead. Without the
-        # distinction every selection drags the root shard in, whatever it asked
-        # for.
-        return len(patterns) == 1 or patterns[0] == "**"
-    while parts:
-        if not patterns:
-            # The pattern describes a shallower path than this shard's prefix.
-            return False
-        head = patterns[0]
-        if head == "**":
-            return True  # absorbs any number of segments, including these
-        if not fnmatch.fnmatchcase(parts[0], head):
-            return False
-        parts, patterns = parts[1:], patterns[1:]
-    # Files in a shard sit *below* its prefix directory, so a pattern that ran
-    # out exactly at the prefix is one segment too short to match any of them.
-    return bool(patterns)
-
-
-def _join(base: str, relative: str) -> str:
-    if base.startswith(("http://", "https://")):
-        return urllib.parse.urljoin(base, relative)
-    return (Path(base) / relative).as_posix()
+        settings = read_settings()
+    return CachedSource(HttpSource(), settings.roots.public / ".catalog")
 
 
 @dataclass
 class Dataset:
-    """A dataset in the catalogue, loaded on demand.
+    """A dataset in the catalogue: its row in the index, and its inventory.
 
-    ``entry`` is the cheap row from ``datacatalog.json``.  ``descriptor`` and
-    ``resources`` fetch the dataset's ``datapackage.json`` on first access; the
-    properties above them answer from ``entry`` and never do.
+    The properties answer from ``entry``, the row ``datacatalog.json`` carries,
+    and never read the descriptor. ``descriptor``, ``resources`` and the
+    lookups of ``inventory`` read it on first use.
     """
 
     name: str
     title: str
-    entry: dict = field(default_factory=dict)
-    base: str = ""
-    _descriptor: dict | None = field(default=None, repr=False)
-    _resources: dict[str, Resource] = field(default_factory=dict, repr=False)
-    # Keep licence/provenance extensions without retaining a duplicate full
-    # inventory: large shards can contain millions of ordinary Resource rows.
-    _resource_extras: dict[str, dict] = field(default_factory=dict, repr=False)
-    _shards: dict[str, dict] = field(default_factory=dict, repr=False)
-    _loaded_shards: set[str] = field(default_factory=set, repr=False)
-    _shard_depth: int = field(default=0, repr=False)
-    _package_base: str = field(default="", repr=False)
+    entry: dict
+    inventory: Inventory
 
-    # -- answered from the index; never triggers a fetch ---------------------
-
-    @property
-    def loaded(self) -> bool:
-        """Whether the complete inventory is in memory."""
-        return self._descriptor is not None and not self.pending_shards
-
-    @property
-    def sharded(self) -> bool:
-        return bool(self._shards)
-
-    @property
-    def pending_shards(self) -> list[str]:
-        """Shards described by the descriptor but not yet fetched."""
-        return sorted(set(self._shards) - self._loaded_shards)
+    # -- answered from the index row ---------------------------------------
 
     @property
     def namespace(self) -> bool:
@@ -286,7 +101,7 @@ class Dataset:
 
         A namespace has members -- ``reskit-test-data`` for
         ``reskit-test-data/era5`` and its siblings -- and nothing of its own to
-        download. Answered from the index row, so asking never costs a fetch.
+        download.
         """
         return bool(self.entry.get(keys.NAMESPACE, False))
 
@@ -300,141 +115,36 @@ class Dataset:
 
     @property
     def total_bytes(self) -> int:
-        if keys.TOTAL_BYTES in self.entry:
-            return self.entry[keys.TOTAL_BYTES]
-        return sum(r.bytes for r in self.resources.values())
+        return self.entry[keys.TOTAL_BYTES]
 
     @property
     def file_count(self) -> int:
-        if keys.FILE_COUNT in self.entry:
-            return self.entry[keys.FILE_COUNT]
-        return len(self.resources)
+        return self.entry[keys.FILE_COUNT]
 
     @property
     def remote_prefix(self) -> str:
-        if keys.REMOTE_PREFIX in self.entry:
-            return self.entry[keys.REMOTE_PREFIX]
-        return remote_prefix_of({**self.descriptor, keys.NAME: self.name})
+        return self.entry[keys.REMOTE_PREFIX]
 
     @property
     def license_status(self) -> str:
-        """ "resolved" once somebody has read the upstream terms.
+        """``resolved`` once somebody has read the upstream terms."""
+        return self.entry.get(keys.LICENSE_STATUS, keys.UNKNOWN)
 
-        Promoted into the index by the build so that listing a catalogue does
-        not have to load every descriptor to warn about licensing.
-        """
-        if keys.LICENSE_STATUS in self.entry:
-            return self.entry[keys.LICENSE_STATUS]
-        return license_status_of(self.descriptor)
-
-    # -- these pull the datapackage in --------------------------------------
+    # -- read through the inventory ----------------------------------------
 
     @property
     def descriptor(self) -> dict:
-        """The datapackage.json.  Cheap for a sharded dataset -- no inventory."""
-        if self._descriptor is None:
-            self.load()
-        return self._descriptor
+        """The ``datapackage.json``; for a sharded dataset, without the inventory."""
+        return self.inventory.descriptor
 
     @property
     def resources(self) -> dict[str, Resource]:
-        """The complete inventory.  For a sharded dataset this pulls every shard.
+        """The complete inventory, by path. For a sharded dataset, every shard.
 
-        Prefer :meth:`resources_matching` where the patterns are known -- that is
-        the whole reason sharding exists.
+        Prefer ``inventory.matching(patterns)`` where the patterns are known --
+        that is the whole reason sharding exists.
         """
-        self.load()
-        self._load_shards(self.pending_shards)
-        return self._resources
-
-    def load(self) -> None:
-        """Fetch and parse this dataset's datapackage.json.  Idempotent.
-
-        For a sharded dataset this reads only the shard index; the inventory
-        itself arrives shard by shard.
-        """
-        if self._descriptor is not None:
-            return
-        if not self.entry.get(keys.PATH):
-            raise ValueError(
-                f"dataset {self.name!r} has no 'path' in the catalogue index, so its "
-                "file inventory cannot be located."
-            )
-        location = _join(self.base, self.entry[keys.PATH])
-        package = json.loads(
-            _read_part(self.name, "descriptor (datapackage.json)", location, self.base)
-        )
-        # Shard paths are relative to the dataset directory, not the catalogue root.
-        self._package_base = location.rsplit("/", 1)[0] + "/"
-        self._shard_depth = int(package.get(keys.SHARD_DEPTH, 0))
-        self._shards = {
-            entry[keys.PREFIX]: entry for entry in package.get(keys.SHARDS, [])
-        }
-        self._descriptor = package
-        if not self._shards:
-            self._absorb(package.get(keys.RESOURCES, []))
-
-    def resources_matching(self, patterns: list[str]) -> dict[str, Resource]:
-        """Resources from the shards that could possibly match ``patterns``.
-
-        Returns a superset -- the caller still globs properly. On an unsharded
-        dataset this is just the whole inventory.
-        """
-        self.load()
-        if not self._shards:
-            return self._resources
-        wanted = [
-            prefix
-            for prefix in self._shards
-            if any(_shard_could_match(prefix, pattern) for pattern in patterns)
-        ]
-        self._load_shards(wanted)
-        return self._resources
-
-    def resource_at(self, path: str) -> Resource | None:
-        """One resource by path, loading only the shard that can hold it.
-
-        Used for shapefile sidecars, which live beside their .shp and therefore
-        always land in the same shard -- no second fetch in practice.
-        """
-        self.load()
-        if self._shards:
-            key = shard_key(path, self._shard_depth)
-            if key in self._shards:
-                self._load_shards([key])
-        return self._resources.get(path)
-
-    def resource_descriptor(self, path: str) -> dict | None:
-        """One original resource record, including licence/provenance overrides.
-
-        Loads only the shard that can contain this resource, as resource_at
-        does. Returning a copy lets snapshot exporters retain extension fields
-        without mutating the canonical inventory.
-        """
-        resource = self.resource_at(path)
-        if resource is None:
-            return None
-        return to_record(resource, self._resource_extras.get(path))
-
-    def _load_shards(self, prefixes: list[str]) -> None:
-        for prefix in prefixes:
-            if prefix in self._loaded_shards:
-                continue
-            entry = self._shards[prefix]
-            location = _join(self._package_base, entry[keys.PATH])
-            shard = json.loads(
-                _read_part(self.name, f"shard {prefix!r}", location, self.base)
-            )
-            self._absorb(shard.get(keys.RESOURCES, []))
-            self._loaded_shards.add(prefix)
-
-    def _absorb(self, items: list[dict]) -> None:
-        for item in items:
-            resource = from_record(self.name, item)
-            extras = extras_of(item)
-            if extras:
-                self._resource_extras[resource.path] = extras
-            self._resources[resource.path] = resource
+        return self.inventory.resources()
 
 
 @dataclass
@@ -476,9 +186,9 @@ class Catalog:
         return self.descriptor.get(keys.NAME, "")
 
     @property
-    def role(self) -> str:
-        """``source``, ``published``, or "" for a catalogue predating the key."""
-        return self.descriptor.get(keys.CATALOG_ROLE, "")
+    def role(self) -> str | None:
+        """``source`` or ``published``; None when the index does not say."""
+        return self.descriptor.get(keys.CATALOG_ROLE)
 
     @property
     def publication_url(self) -> str:
@@ -516,7 +226,7 @@ class Catalog:
         :func:`ethos_data.model.resource.with_sidecars`.
         """
         return with_sidecars(
-            resources, lambda dataset, path: self.dataset(dataset).resource_at(path)
+            resources, lambda dataset, path: self.dataset(dataset).inventory.at(path)
         )
 
     def matching_datasets(self, pattern: str) -> list[Dataset]:
@@ -527,8 +237,6 @@ class Catalog:
         is treated as a glob over dataset names, so ``reskit-test-data/*`` picks
         the members explicitly and ``*-landcover`` picks across families.
         """
-        from .selection import path_matches
-
         if pattern in self.datasets:
             found = self.members_of(pattern)
             if found:
@@ -564,11 +272,6 @@ class Catalog:
 
     def url_for(self, resource: Resource) -> str:
         return self.base_url_for(self.dataset(resource.dataset)) + resource.path
-
-    def load_all(self) -> None:
-        """Force every descriptor in.  For catalogue validation tooling only."""
-        for dataset in self.datasets.values():
-            dataset.load()
 
     # -- Access by key -----------------------------------------------------
     #
@@ -655,7 +358,7 @@ def catalog_for(settings: Settings, *, explicit: str | None = None) -> Catalog:
     follows :meth:`~ethos_data.config.Settings.choose_catalog` everywhere.
     """
     location, source = settings.choose_catalog(explicit=explicit)
-    loaded = load_catalog(location)
+    loaded = load_catalog(location, settings=settings)
     loaded._settings = settings.with_catalog(location, source, loaded.version)
     return loaded
 
@@ -668,11 +371,11 @@ def releases_of(catalog: Catalog) -> list[Version]:
     return releases(names)
 
 
-def public_releases() -> list[Version]:
+def public_releases(settings: Settings | None = None) -> list[Version]:
     """The releases the public catalogue's ``main`` index lists, oldest first."""
     from .config import DEFAULT_CATALOG
 
-    return releases_of(load_catalog(DEFAULT_CATALOG))
+    return releases_of(load_catalog(DEFAULT_CATALOG, settings=settings))
 
 
 def check_release(catalog: Catalog, bounds: Bounds, file_name: str) -> None:
@@ -701,39 +404,59 @@ def check_release(catalog: Catalog, bounds: Bounds, file_name: str) -> None:
         )
 
 
-def load_catalog(location: str) -> Catalog:
-    """Load a datacatalog.json.  Dataset inventories are fetched on first use.
+def load_catalog(
+    location: str,
+    *,
+    source: MetadataSource | None = None,
+    settings: Settings | None = None,
+) -> Catalog:
+    """Load a datacatalog.json. Each dataset's inventory is read on first use.
 
-    ``location`` is a local path or an http(s) URL pointing at datacatalog.json.
-    Raises :class:`CatalogUnavailable` when there is nothing to read there.
+    ``location`` is a local path or an http(s) URL pointing at datacatalog.json;
+    ``source`` is where it and every descriptor and shard are read from,
+    :func:`metadata_source` by default, with the metadata cache of
+    ``settings``. Raises :class:`CatalogUnavailable` when there is no index to
+    read there.
     """
+    index = location
+    if source is None:
+        source = metadata_source(location, settings)
+        if isinstance(source, FileSource):
+            # Absolute, so the inventories read later do not depend on the
+            # working directory of the moment.
+            index = Path(location).expanduser().resolve().as_posix()
     try:
-        text, base = _read(location)
-    except (FileNotFoundError, urllib.error.URLError) as error:
-        # HTTPError is a URLError: a 404 for a release tag nobody has cut
-        # arrives here too, and reads as "HTTP Error 404: Not Found" -- which
-        # says nothing about *which* URL.
-        reason = getattr(error, "reason", None) or error
-        if isinstance(error, urllib.error.HTTPError):
-            reason = f"HTTP {error.code} {error.reason}"
+        descriptor = json.loads(source.read(index))
+    except (IncompleteCatalog, CatalogUnavailable) as error:
+        # A 404 for a release tag nobody has cut arrives here too.
+        reason = error.message.removeprefix(f"{index}: ")
         raise CatalogUnavailable(
             f"cannot read the catalogue index at {location}: {reason}\n"
             f"Use another catalogue for this run with --catalog / catalog=, for this "
             f"shell with $ETHOS_DATA_CATALOG, or for good with "
             f"`ethos-data config set-catalog <datacatalog.json>`."
         ) from error
-    descriptor = json.loads(text)
 
     datasets = {
         entry[keys.NAME]: Dataset(
             name=entry[keys.NAME],
             title=entry.get(keys.TITLE, ""),
             entry=entry,
-            base=base,
+            inventory=Inventory(
+                entry[keys.NAME],
+                source,
+                source.join(index, entry[keys.PATH]) if entry.get(keys.PATH) else "",
+                where=index,
+            ),
         )
         for entry in descriptor.get(keys.DATASETS, [])
     }
-    return Catalog(location=location, descriptor=descriptor, datasets=datasets)
+    loaded = Catalog(location=location, descriptor=descriptor, datasets=datasets)
+    if settings is not None:
+        loaded._settings = settings.with_catalog(
+            location, "loaded directly", loaded.version
+        )
+    return loaded
 
 
 def not_found(name: str) -> str:
@@ -782,7 +505,7 @@ def select_key(
             raise UnknownKey(f"{key!r} has no files in the catalogue")
         return found, None
     dataset = catalog.dataset(name)
-    resource = dataset.resource_at(inner)
+    resource = dataset.inventory.at(inner)
     if resource is not None:
         # A sidecar the record names but the inventory lacks is left out, as
         # a collection leaves it out: the file is still the one asked for.
@@ -793,7 +516,7 @@ def select_key(
     prefix = inner + "/"
     under = [
         r
-        for p, r in dataset.resources_matching([prefix + "**"]).items()
+        for p, r in dataset.inventory.matching([prefix + "**"]).items()
         if p.startswith(prefix)
     ]
     if not under:

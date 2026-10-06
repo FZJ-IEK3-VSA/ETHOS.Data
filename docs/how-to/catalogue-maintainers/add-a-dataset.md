@@ -87,9 +87,9 @@ ethos:embargo:
   becomes: restricted
 ```
 
-A restricted dataset has no `ethos:remote_prefix` and is never marked
-`ethos:uploaded`. With the custodian's approval it may be listed publicly
-without offering bytes.
+A restricted dataset has no `ethos:remote_prefix`: its bytes are never
+uploaded. With the custodian's approval it may be listed publicly without
+offering bytes.
 
 A user whose workflow needs the dataset and who has no copy gets an error
 that names the dataset and prints its `ethos:restriction`, `homepage` and
@@ -150,12 +150,19 @@ becomes public.
 
 ## 5. Record the authoritative copy
 
-After a successful upload and verification, set `ethos:uploaded: true`,
-remove `source_dir`, and rebuild: the recorded inventory is now frozen and
-dCache is the authority. For linked data, keep `source_dir` as long as the
-original directory is the build input; when it is later
-[materialized](materialize-linked-data.md#retire-the-original), replace
-`source_dir` by `ethos:frozen: true`.
+After a successful upload and verification, freeze the dataset in your own
+clone:
+
+```bash
+ethos-data catalog --catalog-root <your clone> record my-dataset
+```
+
+`record` checks the copy on dCache again, makes it the authoritative copy and
+retires `source_dir`: the recorded inventory is frozen. For linked data, the
+original directory stays the build input until the dataset is
+[materialized](materialize-linked-data.md#retire-the-original), and the copy
+is recorded then. Commit the status file on a branch and merge it by merge
+request on JuGit.
 
 ## 6. Release and hand off
 

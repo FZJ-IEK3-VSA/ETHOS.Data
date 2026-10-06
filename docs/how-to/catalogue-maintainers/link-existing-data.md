@@ -30,7 +30,8 @@ every reader of that cache uses it in place. The link keeps the directory as
 given, not resolved. If the catalogue's first file is not found under it, the
 link is still made and a warning names the file; the usual cause is naming a
 level too high. `--catalog-root` records the link in your own clone of the
-source catalogue, so that a purge finds it later.
+source catalogue, so that a purge finds it later. Commit the dataset's status
+file on a branch and merge it by merge request on JuGit.
 
 Without a directory, `link` reads the dataset's `source_dir` from your clone:
 

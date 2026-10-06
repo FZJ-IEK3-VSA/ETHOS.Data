@@ -60,20 +60,6 @@ class TestClassification:
         assert code != 0
         assert "ethos:remote_prefix" in err
 
-    def test_restricted_data_is_frozen_rather_than_marked_uploaded(self, source):
-        source.dataset(
-            "licensed",
-            {"a.csv": "1"},
-            ethos_access="restricted",
-            ethos_visibility="hidden",
-            ethos_embargo=EMBARGO,
-        )
-        assert source.build()[0] == 0
-        source.edit("licensed", ethos_uploaded=True, source_dir=None)
-        code, _, err = source.build()
-        assert code != 0
-        assert "ethos:frozen" in err
-
 
 class TestStaleness:
     def test_check_reports_changed_source_bytes_and_writes_nothing(self, source):
@@ -114,11 +100,11 @@ class TestStaleness:
         assert source.index()["datasets"] == []
         assert source.build(check=True)[0] == 0
 
-    def test_an_uploaded_dataset_keeps_its_inventory_without_its_source(self, source):
+    def test_a_frozen_dataset_keeps_its_inventory_without_its_source(self, source):
         source.dataset("flat", {"a.csv": "1"})
         assert source.build()[0] == 0
         inventory = source.package("flat")["resources"]
-        source.edit("flat", ethos_uploaded=True, source_dir=None)
+        source.freeze("flat")
         (source.bytes / "flat" / "a.csv").unlink()
 
         assert source.build()[0] == 0
@@ -145,4 +131,4 @@ class TestWarnings:
         code, _, err = source.build()
 
         assert code == 1
-        assert "empty: source_dir is required" in err
+        assert "empty: it has no status.yaml" in err

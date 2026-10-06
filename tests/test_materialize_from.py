@@ -17,6 +17,7 @@ from ethos_data.catalogs import Catalog, Dataset
 from ethos_data.cli import main
 from ethos_data.config import Roots
 from ethos_data.materialize import PROVENANCE_FILE, materialize, plan_materialize
+from ethos_data.model.inventory import Inventory
 from ethos_data.model.resource import Resource
 
 CONTENT = {"a.txt": b"first file", "sub/b.txt": b"second file"}
@@ -41,8 +42,7 @@ def _catalog(access: str = "public") -> Catalog:
         "example",
         "Example",
         entry={"ethos:access": access, "ethos:license_status": "resolved"},
-        _descriptor={"resources": []},
-        _resources=resources,
+        inventory=Inventory.from_resources("example", {}, resources.values()),
     )
     return Catalog("local", {}, {"example": dataset})
 

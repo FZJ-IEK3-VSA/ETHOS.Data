@@ -35,7 +35,6 @@ against one runs unchanged against the other; the caller only flips ``test=``.
 
 from __future__ import annotations
 
-import fnmatch
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -61,6 +60,7 @@ from .errors import (
     UnknownKey,
 )
 from .formats import keys as k
+from .model.patterns import path_matches
 from .retrieval import DataFiles, NamedPaths
 
 if TYPE_CHECKING:
@@ -76,7 +76,6 @@ __all__ = [
     "VARIANT_TEST",
     "Collections",
     "load_collections",
-    "path_matches",
     "variant_name",
 ]
 
@@ -305,7 +304,7 @@ class Collections:
                 # patterns can reach; the glob below is still the real filter.
                 matched = [
                     resource
-                    for resource in list(dataset.resources_matching(patterns).values())
+                    for resource in list(dataset.inventory.matching(patterns).values())
                     if any(path_matches(resource.path, p) for p in patterns)
                 ]
                 # A sidecar the inventory lacks is left out: the files that are
@@ -543,7 +542,7 @@ class Collections:
                 targets.append(_NamedTarget(handle, file.key, dataset, inner, file, ()))
                 continue
             if inner:
-                unselected = self.catalog.dataset(dataset).resource_at(inner)
+                unselected = self.catalog.dataset(dataset).inventory.at(inner)
                 if unselected is not None:
                     raise CollectionError(
                         f"collection {name!r}: paths.{handle} names the file {key!r}, which "
@@ -636,34 +635,6 @@ class _VariantError(CollectionError):
         super().__init__(own)
 
 
-def path_matches(path: str, pattern: str) -> bool:
-    """Glob a resource path with proper directory semantics.
-
-    ``*`` matches within one path segment; ``**`` matches any number of
-    segments. Plain ``fnmatch`` would let ``*.tif`` match ``sub/dir/x.tif``,
-    which quietly pulls in far more than a collections file asked for.
-
-    Public because the manifest writer selects files with the same rule -- see
-    ``maintain.manifest.select``. A dataset's ``ethos:include`` and a collection's
-    ``files:`` have to mean the same thing by the same code, or a pattern that
-    picks a file in one place would miss it in the other.
-    """
-    return _match_segments(path.split("/"), pattern.split("/"))
-
-
-def _match_segments(parts: list[str], patterns: list[str]) -> bool:
-    if not patterns:
-        return not parts
-    head, rest = patterns[0], patterns[1:]
-    if head == "**":
-        if not rest:
-            return True
-        return any(_match_segments(parts[i:], rest) for i in range(len(parts) + 1))
-    if not parts or not fnmatch.fnmatchcase(parts[0], head):
-        return False
-    return _match_segments(parts[1:], rest)
-
-
 def load_collections(
     path: str | Path,
     catalog: str | Catalog | None = None,
@@ -707,7 +678,7 @@ def load_collections(
         location, source = settings.choose_catalog(
             explicit=str(catalog) if catalog else None, bounds=bounds
         )
-        resolved = load_catalog(location)
+        resolved = load_catalog(location, settings=settings)
     if bounds is not None:
         check_release(resolved, bounds, path.name)
     settings = settings.with_catalog(resolved.location, source, resolved.version)

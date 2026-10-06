@@ -48,6 +48,11 @@ source of truth.
 Every copy is checksummed against the manifest before it is put in place, and
 the old link target is recorded in ``.ethos-data-materialized.json`` so that a copy
 can always be traced back to where it came from.
+
+A dataset with unread terms is not copied: the guard of the ``materialize``
+step. Given ``--catalog-root``, the command line takes each copy as a step of
+the dataset in that checkout, through :mod:`ethos_data.maintain.namespace`;
+this module records nothing.
 """
 
 from __future__ import annotations
@@ -56,6 +61,7 @@ import json
 import os
 import shutil
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -64,7 +70,7 @@ from .catalogs import Catalog
 from .config import Roots, current_user
 from .errors import AccessError, LinkError, UnknownDataset
 from .formats import keys as k
-from .linking import source_dir_for
+from .linking import raise_if_refused
 from .model import digest
 from .model.resource import Resource
 
@@ -121,16 +127,21 @@ def plan_materialize(
     catalog: Catalog,
     names: list[str],
     roots: Roots | None = None,
-    force: bool = False,
     source: "str | Path | None" = None,
-    catalog_root: "str | Path | None" = None,
+    source_dir: Callable[[str], Path] | None = None,
     cache: str | Path | None = None,
 ) -> list[MaterializeReport]:
     """Classify each dataset without copying anything.
 
+    A dataset with unread terms cannot be copied (the guard of the
+    ``materialize`` step).
+
     ``source`` is a directory to copy from in place of whatever the entry points
     at. It also makes an *absent* entry copyable, which is the only way to fill
     one for a dataset that has no ``source_dir`` left to be linked from.
+    ``source_dir(name)`` answers where an absent entry's build input is; the
+    command line reads it from a source checkout, and without it an absent
+    entry needs ``source``.
     ``cache`` is the cache that holds the entries, as the global ``--root``
     names it; see :func:`ethos_data.access.entry_for`.
 
@@ -162,31 +173,30 @@ def plan_materialize(
             reports.append(MaterializeReport(name, "cannot", error.message))
             continue
 
+        try:
+            raise_if_refused(catalog, name, "materialize", LinkError)
+        except LinkError as error:
+            reports.append(
+                MaterializeReport(
+                    name, "cannot", error.message.splitlines()[0], entry=entry
+                )
+            )
+            continue
+
         was_link = entry.is_symlink()
 
         if not was_link and entry.exists():
             # A real directory is data the cache already owns, and ``--from`` does
             # not change that: "copy these bytes in" must never be a way to write
             # over a verified copy that is already there.
-            if force:
-                reports.append(
-                    MaterializeReport(
-                        name,
-                        "already real",
-                        f"{entry} is a real directory; --force re-copies "
-                        "nothing, it is already owned",
-                        entry=entry,
-                    )
+            reports.append(
+                MaterializeReport(
+                    name,
+                    "already real",
+                    f"{entry} is already a real directory",
+                    entry=entry,
                 )
-            else:
-                reports.append(
-                    MaterializeReport(
-                        name,
-                        "already real",
-                        f"{entry} is already a real directory",
-                        entry=entry,
-                    )
-                )
+            )
             continue
 
         if given is not None:
@@ -206,9 +216,11 @@ def plan_materialize(
             target = given
         elif not was_link:
             # Nothing in the cache and no --from: the source catalogue knows
-            # where the bytes are.
+            # where the bytes are, when the caller can ask it.
             try:
-                target = source_dir_for(name, catalog_root)
+                if source_dir is None:
+                    raise LinkError(f"no source_dir for {name!r}")
+                target = source_dir(name)
             except LinkError:
                 reports.append(
                     MaterializeReport(
@@ -276,12 +288,11 @@ def materialize(
     catalog: Catalog,
     names: list[str],
     roots: Roots | None = None,
-    force: bool = False,
     verify_hashes: bool = True,
     dry_run: bool = False,
     on_file=None,
     source: "str | Path | None" = None,
-    catalog_root: "str | Path | None" = None,
+    source_dir: Callable[[str], Path] | None = None,
     cache: str | Path | None = None,
 ) -> list[MaterializeReport]:
     """Replace symbolic-link cache entries with real, verified copies.
@@ -299,9 +310,8 @@ def materialize(
         catalog,
         names,
         roots,
-        force=force,
         source=source,
-        catalog_root=catalog_root,
+        source_dir=source_dir,
         cache=cache,
     )
     if dry_run:

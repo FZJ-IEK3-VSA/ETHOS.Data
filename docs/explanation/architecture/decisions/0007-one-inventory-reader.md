@@ -1,6 +1,6 @@
 # 0007. Read every generated catalogue through one inventory reader
 
-**Status:** proposed · **Date:** 2026-10-05 · **Implemented by:** a new PR (inventory reader)
+**Status:** implemented · **Date:** 2026-10-05 · **Implemented by:** #40
 
 ## Context
 

@@ -3,8 +3,9 @@
 Each records what it was asked to do and does it locally: a
 :class:`FakeStore` keeps what it is sent and reads it back, a
 :class:`FakeDownloader` serves bytes it was given, a :class:`FakeGit` keeps
-its commits and tags in lists. None of them touches the network or runs a
-command, and each fails with the typed error its port names.
+its commits and tags in lists, and a :class:`MemorySource` holds a catalogue
+tree in memory. None of them touches the network or runs a command, and each
+fails with the typed error its port names.
 """
 
 from __future__ import annotations
@@ -15,8 +16,9 @@ from pathlib import Path
 
 from ..errors import DownloadError, UploadError
 from ..model import digest
+from .metadata import MemorySource
 
-__all__ = ["FakeDownloader", "FakeGit", "FakeStore"]
+__all__ = ["FakeDownloader", "FakeGit", "FakeStore", "MemorySource"]
 
 
 @dataclass

@@ -28,6 +28,11 @@ Guard rails:
     ``ethos:include`` / ``ethos:exclude`` is usually a shared download directory
     holding things that are not the dataset, so "copy the directory" is not the
     same instruction as "publish the dataset"
+  * the dataset's state must allow the step: a built dataset is uploaded, a
+    frozen one only rechecked with ``--verify-only``
+
+A verified upload, or a recheck that passes, is recorded in the dataset's
+``status.yaml`` as a copy on dCache, and makes a built dataset available.
 """
 
 from __future__ import annotations
@@ -45,17 +50,19 @@ from ..errors import UploadError
 from ..formats import keys as k
 from ..formats.derived import license_settled, remote_prefix_of, resource_url
 from ..formats.keys import ROLE_PUBLISHED
+from ..formats.status_file import Copy, StatusFile
+from ..model import lifecycle
 from . import (
     catalogue_role,
     dataset_name_for,
     datasets_dir,
+    inventory_of,
     is_namespace,
     iter_dataset_dirs,
     read_catalog_meta,
     read_descriptor,
-    resources_of,
-    source_dir_of,
 )
+from . import status as dataset_status
 
 
 @dataclass(frozen=True)
@@ -99,9 +106,10 @@ def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path | None
         )
     meta = read_descriptor(dataset_dir)
     package = json.loads(package_file.read_text(encoding="utf-8"))
-    # None for a dataset marked ethos:uploaded: true -- dCache is already the
-    # source of truth, and there is nothing local left to read bytes from.
-    return meta, package, source_dir_of(dataset_dir, meta), dataset_dir
+    # None for a frozen dataset -- its authoritative copy is elsewhere, and
+    # there is nothing local left to read bytes from.
+    source = dataset_status.build_input(dataset_dir, meta, dataset_name).source_dir
+    return meta, package, source, dataset_dir
 
 
 def preflight(
@@ -116,12 +124,17 @@ def preflight(
     # dataset's own name unless it declares a prefix.
     prefix = remote_prefix_of(package)
 
-    if access == k.RESTRICTED:
-        raise UploadError(
-            f"{name} is restricted and must never be uploaded.\n"
-            "Restricted data stays where it is; register it in a restricted cache:\n"
-            f"    ethos-data link {name} /path/to/{name}"
-        )
+    # The guards of the step, ahead of the mechanical checks below: they do
+    # not depend on how the dataset is configured, and being told about a
+    # missing prefix instead would send somebody off to fix the wrong thing.
+    # --verify-only rechecks what is published and hands nothing out.
+    lifecycle.guard(
+        "upload",
+        name,
+        access=access,
+        settled=verify_only or license_settled(package),
+        note=package.get(k.LICENSE_NOTE, ""),
+    )
     if access == "internal" and not allow_internal:
         raise UploadError(
             f"{name} is internal (not published). Upload it only if the VO-only "
@@ -129,30 +142,11 @@ def preflight(
             "It will NOT be made world-readable."
         )
 
-    # Ahead of the mechanical checks below, and no longer a warning. Publishing
-    # is the irreversible half of this: once the bytes are on dCache under terms
-    # nobody has read, "we were not sure" stops being a position anybody can
-    # take. It comes first because it is the reason that does not depend on how
-    # the dataset is configured -- being told about a missing prefix instead
-    # sends somebody off to fix the wrong thing. --verify-only is still allowed:
-    # rechecking what is already published copies nothing.
-    if not verify_only and not license_settled(package):
-        note = package.get(k.LICENSE_NOTE, "")
-        raise UploadError(
-            f"{name} has unresolved licensing and is not uploaded. {note}\n".rstrip()
-            + "\n"
-            "Record the terms in its dataset.yaml -- a `licenses:` entry, or "
-            "`ethos:license_status: resolved` once somebody has read them -- and rebuild.\n"
-            "Development against it does not need an upload; stage it instead:\n"
-            f"    staging add {name} <directory>  (with your package's data command)"
-        )
-
     if source_dir is None:
         if not verify_only:
             raise UploadError(
-                f"{name} has no source_dir (ethos:uploaded: true) -- there is nothing left "
-                "to upload. Pass --verify-only to recheck what is already on dCache, or "
-                "unset ethos:uploaded and restore source_dir to publish a fresh copy."
+                f"{name} has no source_dir: its inventory is final, so there is nothing "
+                "left to upload. Pass --verify-only to recheck what is already on dCache."
             )
     elif not source_dir.is_dir():
         raise UploadError(f"source_dir does not exist: {source_dir}")
@@ -275,6 +269,8 @@ class Plan(NamedTuple):
     source_dir: Path | None
     dataset_dir: Path
     prefix: str
+    #: Its status file, which records the upload.
+    status: StatusFile
 
 
 def upload_one(
@@ -295,12 +291,12 @@ def upload_one(
         f"{plan.package['ethos:total_bytes'] / 1e6:,.1f} MB)"
     )
     report.info(
-        f"from         {plan.source_dir or '(already uploaded -- no local source_dir)'}"
+        f"from         {plan.source_dir or '(no source_dir: the inventory is final)'}"
     )
     report.info(f"to           {destination}")
     report.info(f"public URL   {dataset_url}\n")
 
-    resources = resources_of(plan.package, plan.dataset_dir)
+    resources = inventory_of(plan.name, plan.dataset_dir).records()
 
     if not options.verify_only:
         store.copy(
@@ -381,6 +377,26 @@ class UploadResult:
         return not self.failed
 
 
+def _record(plan: Plan, options: UploadOptions, base_url: str) -> None:
+    """Record a verified upload, or a recheck that passed, in the status file."""
+    taken = dataset_status.take(
+        plan.dataset_dir,
+        dataset_status.read(plan.dataset_dir),
+        "verify" if options.verify_only else "upload",
+        dataset=plan.name,
+        copy=Copy(
+            kind=k.COPY_UPLOADED,
+            location=resource_url(base_url, plan.prefix),
+            verified=dataset_status.now(),
+        ),
+        files=plan.package[k.FILE_COUNT],
+        bytes=plan.package[k.TOTAL_BYTES],
+    )
+    report.info(
+        f"\nrecorded     {plan.name} is {taken.state}, its copy on dCache verified"
+    )
+
+
 @report.reported
 def run(
     catalog_root: Path,
@@ -437,7 +453,9 @@ def run(
         prefix = preflight(
             name, package, source_dir, options.allow_internal, options.verify_only
         )
-        plans.append(Plan(name, package, source_dir, dataset_dir, prefix))
+        status = dataset_status.build_input(dataset_dir, _meta, name).status
+        lifecycle.step("verify" if options.verify_only else "upload", status.state, name)
+        plans.append(Plan(name, package, source_dir, dataset_dir, prefix, status))
 
     # One token for the whole run, fetched only if something actually needs it:
     # a --dry-run never talks to dCache, and asking oidc-agent for a token it
@@ -470,6 +488,9 @@ def run(
         except UploadError as error:
             failed[plan.name] = error.message
             report.warning(error.message)
+        else:
+            if not options.dry_run:
+                _record(plan, options, base_url)
         if len(plans) > 1:
             report.info()
 

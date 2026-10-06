@@ -4,9 +4,14 @@ Loading the catalogue, and resolving a collections file against it. Both are
 described in [The catalogue format](../../explanation/catalogue-format.md).
 
 Loading is **lazy**: `load_catalog` reads only the index, and a dataset's
-inventory is fetched the first time something asks for its files. A sharded
-dataset goes further — `resources_matching` pulls only the shards a set of
-patterns could reach.
+descriptor and inventory are read the first time something asks for its files.
+A [`Dataset`][ethos_data.catalogs.Dataset] is its row in the index plus its
+[`Inventory`][ethos_data.model.inventory.Inventory], read by the one inventory
+reader through the metadata source the catalogue was loaded from: the files on
+disk for a path, HTTPS with the metadata cache in front for a URL
+([`metadata_source`][ethos_data.catalogs.metadata_source]). A sharded dataset
+goes further: `inventory.matching(patterns)` reads only the shards the
+patterns can reach.
 
 ## Catalogue
 
@@ -32,6 +37,7 @@ bounds.
     options:
       members:
         - load_catalog
+        - metadata_source
         - Catalog
         - Dataset
         - shard_key
@@ -67,7 +73,6 @@ process. The file format is in
         - load_collections
         - Collections
         - variant_name
-        - path_matches
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

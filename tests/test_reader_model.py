@@ -17,7 +17,7 @@ import pytest
 import ethos_data
 from ethos_data import staging
 from ethos_data.errors import StagingError
-from ethos_data.maintain.manifest import build_resource
+from ethos_data.files import build_resource
 from ethos_data.model import digest, names
 from ethos_data.model.resource import (
     Resource,
@@ -314,13 +314,13 @@ class TestDescriptorsAreReadOnce:
     def test_an_empty_source_dir_is_refused_rather_than_read_as_the_dataset(
         self, source
     ):
-        source.dataset("flat", {"a.csv": "1"})
-        source.edit("flat", source_dir="")
+        directory = source.dataset("flat", {"a.csv": "1"})
+        (directory / "status.yaml").write_text("state: draft\nsource_dir: ''\n")
 
         code, _, err = source.build()
 
         assert code == 1
-        assert "flat: source_dir is required" in err
+        assert "status.yaml" in err and "source_dir" in err
 
     def test_a_descriptor_that_is_not_yaml_is_refused_with_its_path(self, source):
         directory = source.dataset("flat", {"a.csv": "1"})

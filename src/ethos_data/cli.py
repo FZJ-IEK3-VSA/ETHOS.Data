@@ -17,7 +17,7 @@ import yaml
 
 from .access import chain_for
 from .bundles import export_bundle, load_bundle
-from .catalogs import Catalog, catalog_for
+from .catalogs import Catalog, catalog_for, load_catalog
 from .config import (
     CATALOG_ENV_VAR,
     CONFIG_ENV_VAR,
@@ -40,6 +40,7 @@ from .errors import (
     CollectionError,
     EthosDataError,
     IncompleteCatalog,
+    MaintenanceError,
     UnknownDataset,
 )
 from .formats import keys as k
@@ -521,11 +522,6 @@ def _add_cache_commands(sub) -> None:
         "--dry-run", action="store_true", help="show the cost, copy nothing"
     )
     material.add_argument(
-        "--force",
-        action="store_true",
-        help="compatibility option; existing real directories are still skipped",
-    )
-    material.add_argument(
         "--no-verify",
         action="store_true",
         help="skip checksum verification of each copied file (not advised)",
@@ -543,7 +539,8 @@ def _add_cache_commands(sub) -> None:
         "--catalog-root",
         default=None,
         help="catalogue checkout to read source_dir from, when there is no "
-        "entry and no --from (default: search upward for catalog.yaml)",
+        "entry and no --from (default: search upward for catalog.yaml); given, "
+        "each copy is also recorded in the dataset's status.yaml there",
     )
 
     linker = sub.add_parser(
@@ -604,8 +601,9 @@ def _add_cache_commands(sub) -> None:
     linker.add_argument(
         "--catalog-root",
         default=None,
-        help="catalogue checkout to read source_dir from "
-        "(default: search upward for catalog.yaml)",
+        help="catalogue checkout to read source_dir from (default: search upward "
+        "for catalog.yaml); given, each link is also recorded in the dataset's "
+        "status.yaml there",
     )
     unlinker = sub.add_parser(
         "unlink", help="remove a cache entry that is a link; never a real directory"
@@ -1209,6 +1207,7 @@ def _link_all_command(args, roots) -> int:
         root,
         dry_run=args.dry_run,
         prune=args.prune,
+        record=args.catalog_root is not None,
     )
     return 0 if result.ok else 1
 
@@ -1254,15 +1253,23 @@ def _link_command(args, settings) -> int:
             )
             return 2
 
-    catalog = _cache_catalog(settings)
+    checkout, catalog = _checkout_and_catalog(args, settings)
     if args.command == "link":
+        from .maintain import namespace
+
+        if checkout is not None:
+            namespace.allow(checkout, args.dataset, "link")
+        directory = args.directory
+        if directory is None:
+            from .maintain import source_dir_for
+
+            directory = source_dir_for(args.dataset, args.catalog_root)
         report = link(
             catalog,
             args.dataset,
-            args.directory,
+            directory,
             roots,
             force=args.force,
-            catalog_root=args.catalog_root,
             cache=args.root,
         )
     else:
@@ -1272,6 +1279,8 @@ def _link_command(args, settings) -> int:
     # streams arrive in the opposite order and the warning reads as being about
     # whatever came before it.
     print(f"  {report}", flush=True)
+    if args.command == "link" and checkout is not None:
+        _print_recorded(args.dataset, namespace.record_link(checkout, report))
     if report.missing:
         # Not a failure: the link is made, and the person who typed the path is
         # the only one who can say whether it is the right level.
@@ -1284,11 +1293,32 @@ def _link_command(args, settings) -> int:
     return 0
 
 
+def _checkout_and_catalog(args, settings):
+    """The checkout ``--catalog-root`` names, and the catalogue a cache command reads.
+
+    With ``--catalog-root`` the dataset is the one in that checkout, read from
+    its index, and the link or copy is a step recorded there; without it, the
+    configured catalogue, and nothing is recorded.
+    """
+    if getattr(args, "catalog_root", None) is None:
+        return None, _cache_catalog(settings)
+    from .maintain import resolve_catalog_root
+
+    checkout = resolve_catalog_root(args.catalog_root)
+    return checkout, load_catalog(str(checkout / "datacatalog.json"), settings=settings)
+
+
+def _print_recorded(dataset: str, state: str) -> None:
+    """Say what a link or a copy recorded in the checkout's status file."""
+    print(f"  recorded    {dataset} is {state}, in its status.yaml")
+
+
 def _materialize_command(args, settings) -> int:
-    from .materialize import linked_entries, materialize
+    from .maintain import namespace, source_dir_for
+    from .materialize import MaterializeReport, linked_entries, materialize
 
     roots = settings.roots
-    catalog = _cache_catalog(settings)
+    checkout, catalog = _checkout_and_catalog(args, settings)
 
     names = list(args.datasets)
     if args.source is not None:
@@ -1309,21 +1339,38 @@ def _materialize_command(args, settings) -> int:
             print(f"no symbolic-link entries in {walked}; nothing to materialise.")
             return 0
 
-    reports = materialize(
+    refused = []
+    if checkout is not None:
+        # The step is checked for each dataset before anything is copied; one
+        # whose state does not allow it is reported and left alone.
+        for name in list(names):
+            try:
+                namespace.allow(checkout, name, "materialize")
+            except MaintenanceError as error:
+                refused.append(
+                    MaterializeReport(name, "cannot", error.message.splitlines()[0])
+                )
+                names.remove(name)
+
+    reports = refused + materialize(
         catalog,
         names,
         roots,
-        force=args.force,
         verify_hashes=not args.no_verify,
         dry_run=args.dry_run,
         source=args.source,
-        catalog_root=args.catalog_root,
+        source_dir=lambda name: source_dir_for(name, args.catalog_root),
         cache=args.root,
     )
     for report in reports:
         print(f"  {report}")
         for failure in report.failures[:10]:
             print(f"      ! {failure}")
+        if checkout is not None and report.action == "materialized":
+            state = namespace.record_materialized(
+                checkout, report, verified=not args.no_verify
+            )
+            _print_recorded(report.dataset, state)
 
     total = sum(r.bytes for r in reports if r.action in ("would copy", "materialized"))
     destinations = sorted(

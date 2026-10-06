@@ -14,11 +14,11 @@ import json
 from pathlib import Path
 
 import pytest
+from support import write_descriptor
 
-from ethos_data.maintain.manifest import render_dataset
-from ethos_data.maintain.manifest import run as build_run
-from ethos_data.maintain.manifest import write_dataset
 from ethos_data.errors import DescriptorError
+from ethos_data.maintain.manifest import render_dataset, write_dataset
+from ethos_data.maintain.manifest import run as build_run
 
 TERMS = b"You may use these bytes, with attribution.\n"
 DIGEST = hashlib.sha256(TERMS).hexdigest()
@@ -34,7 +34,8 @@ def _catalogue(root: Path, licence_yaml: str) -> Path:
     (dataset / "licenses").mkdir(parents=True)
     (dataset / "licenses" / "terms.txt").write_bytes(TERMS)
     (root / "catalog.yaml").write_text(CATALOG, encoding="utf-8")
-    (dataset / "dataset.yaml").write_text(
+    write_descriptor(
+        dataset,
         "name: d\ntitle: T\ndescription: D\n"
         f"source_dir: {source.as_posix()}\nethos:remote_prefix: d\n" + licence_yaml,
         encoding="utf-8",
@@ -123,7 +124,9 @@ def test_a_hash_with_no_document_to_hash_is_refused(tmp_path):
 )
 def test_a_document_outside_the_dataset_directory_is_refused(tmp_path, outside):
     root = _catalogue(tmp_path, _licence(f"    ethos:document: {outside}"))
-    with pytest.raises(DescriptorError, match="relative path inside the dataset directory"):
+    with pytest.raises(
+        DescriptorError, match="relative path inside the dataset directory"
+    ):
         _package(root)
 
 

@@ -18,6 +18,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from support import write_descriptor
 
 from ethos_data.access import cache_entries
 from ethos_data.errors import DescriptorError
@@ -54,7 +55,7 @@ def build(tmp: Path, members: dict[str, dict], namespace: str = NAMESPACE) -> Pa
     (catalog / "datasets" / "family").mkdir(parents=True)
     (catalog / "catalog.yaml").write_text(CATALOG)
     if namespace is not None:
-        (catalog / "datasets" / "family" / "dataset.yaml").write_text(namespace)
+        write_descriptor(catalog / "datasets" / "family", namespace)
     for name, spec in members.items():
         source = tmp / "src" / name
         source.mkdir(parents=True)
@@ -62,7 +63,8 @@ def build(tmp: Path, members: dict[str, dict], namespace: str = NAMESPACE) -> Pa
             (source / filename).write_text(filename)
         directory = catalog / "datasets" / "family" / name
         directory.mkdir(parents=True, exist_ok=True)
-        directory.joinpath("dataset.yaml").write_text(
+        write_descriptor(
+            directory,
             MEMBER.format(
                 title=name.title(),
                 description=f"Member {name}.",
@@ -70,7 +72,7 @@ def build(tmp: Path, members: dict[str, dict], namespace: str = NAMESPACE) -> Pa
                 access=spec.get("access", "public"),
                 visibility=spec.get("visibility", "public"),
                 extra=spec.get("extra", "ethos:license_status: unresolved\n"),
-            )
+            ),
         )
     return catalog
 
@@ -98,10 +100,10 @@ class TestDiscovery:
             catalog = build(Path(tmp), {"alpha": PUBLIC_MEMBER})
             directory = catalog / "datasets" / "family" / "alpha"
             text = directory.joinpath("dataset.yaml").read_text()
-            directory.joinpath("dataset.yaml").write_text(
-                "name: something-else\n" + text
-            )
-            with pytest.raises(DescriptorError, match="the directory it is in makes it"):
+            write_descriptor(directory, "name: something-else\n" + text)
+            with pytest.raises(
+                DescriptorError, match="the directory it is in makes it"
+            ):
                 render_dataset(directory, name="family/alpha")
 
 
@@ -360,10 +362,11 @@ class TestFlatCataloguesAreUnaffected:
             source = tmp / "src"
             source.mkdir()
             (source / "a.txt").write_text("a")
-            (catalog / "datasets" / "solo" / "dataset.yaml").write_text(
+            write_descriptor(
+                catalog / "datasets" / "solo",
                 f"title: Solo\ndescription: Flat.\nsource_dir: {source}\n"
                 "ethos:access: public\nethos:visibility: public\n"
-                "ethos:license_status: unresolved\n"
+                "ethos:license_status: unresolved\n",
             )
             build_run(catalog, [])
             package = json.loads(

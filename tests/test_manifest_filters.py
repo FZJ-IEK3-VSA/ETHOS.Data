@@ -16,9 +16,11 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from support import write_descriptor
 
-from ethos_data.maintain.manifest import expand_pattern, render_dataset
 from ethos_data.errors import DescriptorError
+from ethos_data.files import expand_pattern
+from ethos_data.maintain.manifest import render_dataset
 
 CATALOG = "name: t\nethos:catalog_role: source\nethos:publication_url: https://example.invalid/x\n"
 
@@ -98,9 +100,10 @@ def inventory(extra_yaml: str, tree=gwa_tree) -> list[str]:
         dataset_dir = workspace / "datasets" / "d"
         dataset_dir.mkdir(parents=True)
         (workspace / "catalog.yaml").write_text(CATALOG)
-        (dataset_dir / "dataset.yaml").write_text(
+        write_descriptor(
+            dataset_dir,
             f"name: d\ntitle: t\nsource_dir: {source}\nethos:remote_prefix: d\n"
-            + extra_yaml
+            + extra_yaml,
         )
 
         files = render_dataset(dataset_dir)

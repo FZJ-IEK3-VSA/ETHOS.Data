@@ -43,8 +43,32 @@ cluster](../../explanation/architecture/decisions/0028-one-public-cache-on-the-c
       members:
         - link
         - unlink
-        - source_dir_for
         - LinkReport
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+`link` takes the directory it links to. `ethos-data link NAME` without one
+reads the dataset's build input from a source checkout with
+[`maintain.source_dir_for`][ethos_data.maintain.source_dir_for], as
+`materialize` does for an absent entry: reading a checkout is catalogue
+maintenance, and no data-access module imports it.
+
+## Data directories
+
+The files of a data directory, as the catalogue records them: the walk, the
+`ethos:include` and `ethos:exclude` patterns, shapefile companions and the
+record each file gets. The build inventories a `source_dir` with it.
+
+::: ethos_data.files
+    options:
+      members:
+        - iter_data_files
+        - expand_pattern
+        - select
+        - build_resource
+        - slugify
+        - mediatype_of
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

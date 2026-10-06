@@ -625,7 +625,7 @@ class Settings:
             )
         from .catalogs import public_releases
 
-        published = public_releases()
+        published = public_releases(self)
         newest = bounds.newest(published)
         if newest is None:
             listed = ", ".join(map(str, published)) or "none"

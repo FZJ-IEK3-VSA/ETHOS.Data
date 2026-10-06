@@ -113,10 +113,10 @@ ethos-data catalog publish ../ETHOS.Data-Catalogue
     `git checkout HEAD -- <path>`; untracked files do not.
 
 `publish` emits, for every dataset with `ethos:visibility: public`, the index,
-the descriptor and shards with `source_dir`, `ethos:embargo`,
-`ethos:license_note`, `ethos:uploaded` and `ethos:frozen` stripped, the
-licence documents, and the README table. It stamps
-`ethos:catalog_role: published` into the index.
+the descriptor and shards with `source_dir`, `ethos:embargo` and
+`ethos:license_note` stripped, the
+licence documents, and the README table; status files are never published.
+It stamps `ethos:catalog_role: published` into the index.
 
 ### Check for a leak before committing {#leak-check}
 
@@ -218,8 +218,12 @@ that would leak fails before anybody publishes.
 
 | Dataset state | The runner needs |
 | --- | --- |
-| Candidate with `source_dir` | Read access to that directory, so a runner on the cluster computer |
-| Uploaded or frozen, no `source_dir` | Only the checkout; the recorded inventory is preserved |
+| `draft`, `built` or `available`, with a `source_dir` | Read access to that directory, so a runner on the cluster computer |
+| `frozen`, no `source_dir` | Only the checkout; the recorded inventory is preserved |
+
+`ethos-data catalog status` lists the state of every dataset, and
+`catalog status --check` compares each record with the evidence before a
+release.
 
 The build keeps a size-and-mtime hash cache; for a review that must hash every
 byte, start from a checkout without `.ethos-data-hash-cache.json`. To check that

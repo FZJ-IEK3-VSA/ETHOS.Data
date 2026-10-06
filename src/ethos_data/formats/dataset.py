@@ -218,25 +218,13 @@ class DatasetDescriptor(_Part):
     # -- where the bytes are -----------------------------------------------
     source_dir: str | None = field(
         k.SOURCE_DIR,
-        description="Where the files are on this machine; relative to the dataset directory if relative.",
+        description="Where a draft's files are; status.yaml keeps it once the dataset is in a catalogue.",
         published=False,
     )
     remote_prefix: str | None = field(
         k.REMOTE_PREFIX,
         description="Folder on the public store; defaults to the name.",
         promoted=True,
-    )
-    uploaded: bool = field(
-        k.UPLOADED,
-        False,
-        description="dCache holds the copy the inventory describes.",
-        published=False,
-    )
-    frozen: bool = field(
-        k.FROZEN,
-        False,
-        description="The inventory is final; nothing local is left to build from.",
-        published=False,
     )
 
     # -- classification ----------------------------------------------------
@@ -337,11 +325,7 @@ def check(meta: dict) -> None:
     inherited keys applied. It is not changed.
     """
     problem = (
-        _classification(meta)
-        or _provenance(meta)
-        or _licenses(meta)
-        or _patterns(meta)
-        or _freeze(meta)
+        _classification(meta) or _provenance(meta) or _licenses(meta) or _patterns(meta)
     )
     if problem:
         raise DescriptorError(problem)
@@ -349,7 +333,7 @@ def check(meta: dict) -> None:
 
 def check_namespace(meta: dict) -> None:
     """The same for a family's ``dataset.yaml``: it may not describe files or terms."""
-    for forbidden in (k.SOURCE_DIR, k.UPLOADED, k.SHARD_DEPTH, k.INCLUDE, k.EXCLUDE):
+    for forbidden in (k.SOURCE_DIR, k.SHARD_DEPTH, k.INCLUDE, k.EXCLUDE):
         if forbidden in meta:
             raise DescriptorError(
                 "is a namespace -- it holds other datasets -- so it cannot also "
@@ -397,14 +381,6 @@ def _classification(meta: dict) -> str | None:
         return (
             "restricted data must not declare ethos:remote_prefix -- "
             "it is never uploaded. Each machine reads it from a restricted cache."
-        )
-    if access == k.RESTRICTED and meta.get(k.UPLOADED):
-        # The freeze this asks for is right; the claim attached to it is not.
-        return (
-            f"restricted data is never uploaded, so {k.UPLOADED}: true cannot "
-            f"be right. If its inventory is final -- the authorised installation is the "
-            f"permanent copy and there is nothing local left to build from -- say that "
-            f"instead:\n    {k.FROZEN}: true"
         )
     return None
 
@@ -555,35 +531,6 @@ def _patterns(meta: dict) -> str | None:
                 return "ethos:shard_depth must not be negative"
         except (TypeError, ValueError):
             return f"ethos:shard_depth must be a whole number, got {depth!r}"
-    return None
-
-
-def _freeze(meta: dict) -> str | None:
-    """``source_dir`` against ``ethos:uploaded`` / ``ethos:frozen``."""
-    uploaded = bool(meta.get(k.UPLOADED, False))
-    frozen = bool(meta.get(k.FROZEN, False)) or uploaded
-    source_dir = meta.get(k.SOURCE_DIR)
-    if frozen and source_dir is not None:
-        reason = (
-            "Once uploaded, dCache is the source of truth and source_dir is never "
-            "read again -- remove it."
-            if uploaded
-            else "A frozen inventory is never rebuilt from local files; the copy it "
-            "describes is the permanent one -- remove it."
-        )
-        declared = k.UPLOADED if uploaded else k.FROZEN
-        return (
-            f"declares {declared}: true and still has "
-            f"source_dir: {source_dir!r}. {reason}"
-        )
-    # Empty counts as absent: resolved against the dataset directory, an empty
-    # source_dir would build the dataset from its own descriptor files.
-    if not frozen and not source_dir:
-        return (
-            f"source_dir is required, unless {k.UPLOADED}: true says the "
-            f"dataset was already uploaded, or {k.FROZEN}: true says its inventory "
-            "is final and there is nothing local left to build from."
-        )
     return None
 
 

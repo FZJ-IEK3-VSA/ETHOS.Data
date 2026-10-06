@@ -40,7 +40,7 @@ def link(entry: Path, target: Path) -> None:
 def place(reader, name: str, path: str, roots: Roots) -> tuple[str, Path | None]:
     """Where the chain reads one file from, as ``(origin, path)``."""
     catalog = load_catalog(str(reader.write()))
-    resource = catalog.dataset(name).resource_at(path)
+    resource = catalog.dataset(name).inventory.at(path)
     [found] = locate(catalog, [resource], roots)
     return found.origin, found.path
 

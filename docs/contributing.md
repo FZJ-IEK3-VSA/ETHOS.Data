@@ -58,20 +58,11 @@ none of your own settings apply: every `ETHOS_*` variable is cleared and the
 settings files and the default cache move into a temporary directory, so a
 catalogue configured on your account cannot replace the one a test wrote.
 
-`tests/support.py` holds the builders the newer tests share: a reader-side
+`tests/support.py` holds the builders the tests share: a reader-side
 catalogue, a source catalogue that runs the real `ethos-data catalog`
 commands, and a local HTTP server standing in for the published store, so the
 download path runs with real checksums and no network. Prefer them, and the
 public entry points they go through, to building `Dataset` objects by hand.
-
-A test marked `legacy` pins behaviour that a [decision
-record](explanation/architecture/decisions/index.md) replaces. It keeps running
-until the change it describes is made, and the pull request making that change
-rewrites it:
-
-```bash
-pytest -m legacy --collect-only -q   # what is still waiting to be rewritten
-```
 
 ## Library code does not print
 
