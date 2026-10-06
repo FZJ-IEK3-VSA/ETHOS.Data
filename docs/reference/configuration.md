@@ -85,7 +85,7 @@ catalog: /shared/ethos/catalogue/datacatalog.json
 | `ETHOS_DATA_CATALOG` | `catalog` |
 | `ETHOS_CATALOG_NO_CACHE` | if set, a fetched catalogue descriptor is never cached on disk |
 | `ETHOS_PUBLICATION_URL` | `publication_url` |
-| `ETHOS_DATA_DOWNLOAD` | a package's bundles: `1` reads the catalogue route instead, as `download=True` does |
+| `ETHOS_DATA_DOWNLOAD` | the download switch: `1` reads a bundled file whose bytes the catalogue holds under the same key through the catalogue route, as `download=True` does; `config show` reports it |
 
 ## Settings of a handle {#handle-settings}
 
@@ -118,12 +118,14 @@ places is built from the settings snapshot of the handle or the command, and
 `config show` prints it for this machine:
 
 1. the staging root, never for restricted data, read in place without checksums;
-2. the restricted caches, for restricted data only: in place, from the first
+2. the bundles a package's handle lists, for what they hold: in place,
+   hash-checked once per process;
+3. the restricted caches, for restricted data only: in place, from the first
    listed cache whose entry is readable;
-3. the public cache: in place where the dataset's entry, or its family's, is a
+4. the public cache: in place where the dataset's entry, or its family's, is a
    link; otherwise a copy of the size the catalogue records, hash-checked when
    it is fetched;
-4. a download from the publication root into the public cache, for public data
+5. a download from the publication root into the public cache, for public data
    only.
 
 A place that may not serve a file refuses, and the search stops there. A

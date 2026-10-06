@@ -1,667 +1,555 @@
-"""Exported bundles: catalogue copies that keep their identity through development edits.
+"""Bundles: data a package keeps in its repository, authoritative for that package.
 
-Repository bundles, which the repository is the source of truth for, are
-tested in ``test_repository_bundles.py``.
+Tests for the decisions "Keep attributed data in bundles that are
+authoritative for their package" and "Let a bundle be ahead of the
+catalogue, and warn until it is realigned". A bundle holds public, visible
+data with settled licensing; a handle reads it first, hash-checked, and
+reads no catalogue index when its bundles hold every input; a bundle ahead
+of the catalogue is read all the same, with a warning; ``bundle update``
+records changes against the alignment and the alignment itself; the
+download switch reads a bundled file the catalogue holds through the
+catalogue route; ``bundle export`` writes a new bundle through the handle;
+``catalog add-bundle`` takes the ahead datasets into the catalogue.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
-import shutil
-import urllib.request
+import warnings
+from pathlib import Path
 
-import pooch
 import pytest
 import yaml
+from support import SourceCatalogue, digest
 
-from ethos_data.adapters.fakes import FakeDownloader
+import ethos_data
+from ethos_data import BundleAlignmentWarning
 from ethos_data.bundles import (
+    _WARNED,
     ModifiedBundleWarning,
+    create_bundle,
     export_bundle,
     load_bundle,
+    update_bundle,
 )
+from ethos_data.catalogs import load_catalog
 from ethos_data.errors import BundleError
 
-
-def digest(data):
-    return "sha256:" + hashlib.sha256(data).hexdigest()
+LICENSED = {
+    "licenses": [{"name": "CC-BY-4.0", "path": "https://example.invalid/cc-by"}],
+}
 
 
 @pytest.fixture(autouse=True)
-def no_network(monkeypatch):
-    def forbidden(*args, **kwargs):
-        raise AssertionError("bundle operation attempted network access")
-
-    monkeypatch.setattr(urllib.request, "urlopen", forbidden)
-    monkeypatch.setattr(pooch, "retrieve", forbidden)
+def _fresh_warnings():
+    _WARNED.clear()
+    yield
+    _WARNED.clear()
 
 
-@pytest.fixture
-def catalogue(tmp_path, monkeypatch):
-    source = tmp_path / "existing-fixtures"
-    source.mkdir()
-    payloads = {
-        "sites.shp": b"shape",
-        "sites.dbf": b"table",
-        "nested/a.bin": b"123",
-        "empty.bin": b"",
-    }
-    resources = []
-    for name, data in payloads.items():
-        path = source / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
-        record = {
-            "name": name.replace("/", "-"),
-            "path": name,
-            "bytes": len(data),
-            "hash": digest(data),
-        }
-        if name == "sites.shp":
-            record["ethos:sidecars"] = ["sites.dbf"]
-            record["licenses"] = [
-                {"name": "CC-BY-4.0", "path": "https://example.invalid/licence"}
-            ]
-            record["ethos:provenance"] = {"derived_from": "example-source"}
-            record["ethos:license_note"] = "private per-resource review"
-        resources.append(record)
-    package = {
-        "name": "fixture",
-        "title": "Fixture dataset",
-        "ethos:access": "public",
-        "ethos:license_status": "resolved",
-        "licenses": [{"name": "CC0-1.0"}],
-        "sources": [
-            {"title": "Generated example", "path": "https://example.invalid/provenance"}
-        ],
-        "ethos:embargo": {"reason": "old private review"},
-        "ethos:license_note": "private review",
-        "source_dir": "/private/workstation/path",
-        "resources": resources,
-    }
-    descriptor = tmp_path / "datapackage.json"
-    descriptor.write_text(json.dumps(package))
-    index = tmp_path / "datacatalog.json"
-    index.write_text(
-        json.dumps(
-            {
-                "name": "test-catalog",
-                "version": "v1",
-                "ethos:catalog_role": "published",
-                "ethos:publication_url": "https://dcache.invalid/data",
-                "datasets": [
-                    {
-                        "name": "fixture",
-                        "path": "datapackage.json",
-                        "ethos:access": "public",
-                        "ethos:license_status": "resolved",
-                        "ethos:remote_prefix": "immutable/fixture/v1",
-                    }
-                ],
-            }
-        )
+def describe(root: Path, name: str, **meta: object) -> None:
+    """Fill a dataset's description in, as a package maintainer does after create."""
+    path = root / "datasets" / name / "dataset.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump({"name": name, "title": f"The {name} data", **LICENSED, **meta}),
+        encoding="utf-8",
     )
+
+
+def bundled(root: Path, datasets: dict[str, dict[str, bytes]], **create) -> Path:
+    """A bundle of ``datasets``, created and described, its descriptions recorded."""
+    for name, files in datasets.items():
+        for relative, data in files.items():
+            target = root / "data" / name / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+    create_bundle(root, **create)
+    for name in datasets:
+        describe(root, name)
+    update_bundle(root)
+    return root
+
+
+def manifest(root: Path) -> dict:
+    return json.loads((root / "bundle.json").read_text(encoding="utf-8"))
+
+
+def same_description(name: str) -> dict:
+    """The descriptor keys a catalogue holds when it holds the bundle's description."""
+    return {"title": f"The {name} data", **LICENSED}
+
+
+class TestCreate:
+    def test_it_inventories_the_files_and_drafts_the_descriptions(self, tmp_path):
+        (tmp_path / "data" / "sites").mkdir(parents=True)
+        (tmp_path / "data" / "sites" / "a.csv").write_bytes(b"1\n")
+        (tmp_path / "data" / "fam" / "era5").mkdir(parents=True)
+        (tmp_path / "data" / "fam" / "era5" / "x.nc").write_bytes(b"nc")
+
+        created = create_bundle(tmp_path, family="fam")
+
+        assert created.datasets == ["fam/era5", "sites"]
+        assert sorted(created.drafted) == ["fam", "fam/era5", "sites"]
+        document = manifest(tmp_path)
+        assert document["format"] == "ethos-data-bundle"
+        assert document["datasets"]["sites"]["alignment"] is None
+        assert document["datasets"]["sites"]["resources"][0]["path"] == "a.csv"
+        assert list(document["families"]) == ["fam"]
+
+    def test_a_draft_whose_terms_nobody_read_is_refused_when_read(self, tmp_path):
+        (tmp_path / "data" / "sites").mkdir(parents=True)
+        (tmp_path / "data" / "sites" / "a.csv").write_bytes(b"1\n")
+        create_bundle(tmp_path)
+
+        with pytest.raises(BundleError, match="sites: its licensing is not settled"):
+            load_bundle(tmp_path)
+
+    def test_a_bundle_is_not_created_twice(self, tmp_path):
+        bundled(tmp_path, {"sites": {"a.csv": b"1\n"}})
+
+        with pytest.raises(BundleError, match="is a bundle already"):
+            create_bundle(tmp_path)
+
+
+class TestWhatABundleHolds:
+    @pytest.mark.parametrize(
+        "meta, message",
+        [
+            ({"ethos:access": "restricted"}, "sites is restricted: a bundle holds public data only"),
+            ({"ethos:visibility": "hidden"}, "sites is hidden"),
+            ({"licenses": None, "ethos:license_status": "unresolved"}, "licensing is not settled"),
+        ],
+    )  # fmt: skip
+    def test_only_public_visible_data_with_settled_terms(self, tmp_path, meta, message):
+        root = bundled(tmp_path, {"sites": {"a.csv": b"1\n"}})
+        describe(root, "sites", **meta)
+
+        with pytest.raises(BundleError, match=message):
+            update_bundle(root)
+        with pytest.raises(BundleError, match=message):
+            load_bundle(root)
+
+    def test_a_licence_document_travels_with_the_files(self, tmp_path):
+        root = bundled(tmp_path, {"sites": {"a.csv": b"1\n"}})
+        describe(
+            root,
+            "sites",
+            licenses=[{"name": "Terms", "ethos:document": "terms.txt"}],
+        )
+        (root / "datasets" / "sites" / "terms.txt").write_bytes(b"the terms")
+        update_bundle(root)
+
+        assert load_bundle(root).verify()[-1].key == "datasets/sites/terms.txt"
+        (root / "datasets" / "sites" / "terms.txt").unlink()
+        with pytest.raises(BundleError, match="lacks datasets/sites/terms.txt"):
+            load_bundle(root)
+
+    @pytest.mark.parametrize("name", ["../escaped", "/absolute", "a/../b", "a\\b"])
+    def test_an_unsafe_name_is_refused(self, tmp_path, name):
+        root = bundled(tmp_path, {"sites": {"a.csv": b"1\n"}})
+        document = manifest(root)
+        document["datasets"][name] = document["datasets"].pop("sites")
+        (root / "bundle.json").write_text(json.dumps(document), encoding="utf-8")
+
+        with pytest.raises(BundleError):
+            load_bundle(root)
+
+
+class TestReading:
+    @pytest.fixture
+    def package(self, tmp_path, monkeypatch):
+        root = bundled(
+            tmp_path / "bundle", {"sites": {"a.csv": b"1\n", "b.csv": b"22\n"}}
+        )
+        collections = tmp_path / "collections.yaml"
+        collections.write_text(
+            "collections:\n  inputs:\n    include:\n      - dataset: sites\n"
+            "    paths:\n      sites: sites\n",
+            encoding="utf-8",
+        )
+        # No catalogue anywhere: a handle whose bundles hold every input reads none.
+        monkeypatch.setenv("ETHOS_DATA_CATALOG", str(tmp_path / "nowhere.json"))
+        return root, collections
+
+    def test_a_handle_reads_its_bundle_and_no_catalogue_index(self, package):
+        root, collections = package
+        data = ethos_data.collections(collections, tool="mytool", bundles=[root])
+
+        with pytest.warns(
+            BundleAlignmentWarning, match="sites \\(not in the catalogue\\)"
+        ):
+            inputs = data.paths("inputs")
+
+        assert inputs["sites"] == root / "data" / "sites"
+        assert data._catalog is None, "the index was never read"
+
+    def test_the_warning_comes_once_per_bundle(self, package):
+        root, collections = package
+        data = ethos_data.collections(collections, tool="mytool", bundles=[root])
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            data.fetch("inputs")
+            data.fetch("inputs")
+
+        ahead = [w for w in caught if issubclass(w.category, BundleAlignmentWarning)]
+        assert len(ahead) == 1
+        assert "mytool-data propose" in str(ahead[0].message)
+
+    def test_a_changed_file_is_an_error_never_a_download(self, package):
+        root, collections = package
+        (root / "data" / "sites" / "a.csv").write_bytes(b"9\n")
+        data = ethos_data.collections(collections, bundles=[root])
+
+        with pytest.raises(BundleError, match="sites/a.csv is in the bundle"):
+            data.fetch("inputs")
+
+    def test_one_test_may_read_a_change_nobody_recorded(self, package):
+        root, _ = package
+        (root / "data" / "sites" / "a.csv").write_bytes(b"9\n")
+        bundle = load_bundle(root)
+
+        with pytest.raises(BundleError, match="Record the change"):
+            bundle.fetch("sites")
+        with pytest.warns(ModifiedBundleWarning, match="sites/a.csv"):
+            files = bundle.fetch("sites", allow_modified=True)
+        assert files["sites/a.csv"].read_bytes() == b"9\n"
+        assert next(f.status for f in bundle.verify("sites/a.csv")) == "modified"
+
+        (root / "data" / "sites" / "b.csv").unlink()
+        with pytest.raises(BundleError, match="lacks sites/b.csv"):
+            bundle.fetch("sites", allow_modified=True)
+
+    def test_verify_names_a_file_nobody_recorded(self, package):
+        root, _ = package
+        (root / "data" / "sites" / "c.csv").write_bytes(b"333\n")
+
+        statuses = {f.key: f.status for f in load_bundle(root).verify()}
+
+        assert statuses["sites/c.csv"] == "unrecorded"
+
+
+class TestUpdate:
+    def test_changes_are_kept_against_the_alignment(self, tmp_path, reader):
+        files = {"a.csv": b"1\n", "b.csv": b"22\n"}
+        reader.dataset("sites", files, descriptor=same_description("sites"))
+        catalog = load_catalog(str(reader.write()))
+        root = bundled(tmp_path / "bundle", {"sites": files})
+        update_bundle(root, catalog=catalog)
+        assert manifest(root)["datasets"]["sites"]["alignment"] == {
+            "revision": 1,
+            "release": None,
+        }
+
+        (root / "data" / "sites" / "a.csv").write_bytes(b"9\n")
+        (root / "data" / "sites" / "c.csv").write_bytes(b"333\n")
+        update_bundle(root)
+        changes = manifest(root)["datasets"]["sites"]["changes"]
+        assert [(c["path"], c["change"]) for c in changes] == [
+            ("a.csv", "changed"),
+            ("c.csv", "added"),
+        ]
+        assert load_bundle(root).ahead() == {"sites": "2 files changed"}
+
+        (root / "data" / "sites" / "a.csv").write_bytes(b"1\n")
+        (root / "data" / "sites" / "c.csv").unlink()
+        update_bundle(root)
+        assert manifest(root)["datasets"]["sites"]["changes"] == []
+
+    def test_the_alignment_is_recorded_once_the_catalogue_holds_what_it_holds(
+        self, tmp_path, reader
+    ):
+        files = {"a.csv": b"1\n"}
+        root = bundled(tmp_path / "bundle", {"sites": files})
+        assert load_bundle(root).ahead() == {"sites": "not in the catalogue"}
+        reader.dataset("sites", files, descriptor=same_description("sites"))
+
+        update = update_bundle(root, catalog=load_catalog(str(reader.write())))
+
+        assert update.aligned == {"sites": 1}
+        assert load_bundle(root).ahead() == {}
+
+    def test_the_catalogues_version_is_taken(self, tmp_path, reader, store):
+        root = bundled(tmp_path / "bundle", {"sites": {"a.csv": b"1\n"}})
+        reader.dataset(
+            "sites",
+            {"a.csv": b"2\n", "b.csv": b"3\n"},
+            where="store",
+            descriptor=same_description("sites"),
+            index={"ethos:revision": 2},
+        )
+        catalog = load_catalog(str(reader.write()))
+
+        update = update_bundle(
+            root,
+            catalog=catalog,
+            from_catalog=["sites"],
+            roots=ethos_data.config.Roots(public=tmp_path / "cache"),
+        )
+
+        assert update.taken == ["sites"]
+        assert (root / "data" / "sites" / "b.csv").read_bytes() == b"3\n"
+        entry = manifest(root)["datasets"]["sites"]
+        assert entry["alignment"]["revision"] == 2 and entry["changes"] == []
+
+
+class TestTheCatalogueReadAnyway:
+    @pytest.fixture
+    def package(self, tmp_path, reader):
+        root = bundled(tmp_path / "bundle", {"sites": {"a.csv": b"1\n"}})
+        reader.dataset("sites", {"a.csv": b"1\n"}, descriptor=same_description("sites"))
+        reader.dataset("other", {"o.csv": b"o"})
+        update_bundle(root, catalog=load_catalog(str(reader.write())))
+        return root
+
+    def test_a_later_revision_in_the_catalogue_warns(self, package, reader):
+        reader.entries[0]["ethos:revision"] = 2
+        collections = reader.collections(
+            """
+            inputs:
+              include:
+                - dataset: sites
+                - dataset: other
+            """
+        )
+        data = ethos_data.collections(collections, bundles=[package])
+
+        with pytest.warns(BundleAlignmentWarning, match="behind the catalogue: sites"):
+            data.fetch("inputs")
+
+    def test_a_withdrawn_dataset_warns(self, package, reader):
+        del reader.entries[0]
+        collections = reader.collections(
+            """
+            inputs:
+              include:
+                - dataset: other
+            """
+        )
+        data = ethos_data.collections(collections, bundles=[package])
+
+        with pytest.warns(BundleAlignmentWarning, match="withdrawn from the catalogue"):
+            data.fetch("inputs")
+
+
+def test_a_bundled_dataset_the_catalogue_withholds_is_refused(tmp_path, reader):
+    root = bundled(tmp_path / "bundle", {"sites": {"a.csv": b"1\n"}})
+    reader.dataset("sites", {"a.csv": b"1\n"}, access="restricted")
+    reader.dataset("other", {"o.csv": b"o"})
+    collections = reader.collections(
+        """
+        inputs:
+          include:
+            - dataset: other
+        """
+    )
+    data = ethos_data.collections(collections, bundles=[root])
+
+    with pytest.raises(BundleError, match="lists as restricted"):
+        data.fetch("inputs")
+
+
+class TestTheDownloadSwitch:
+    def test_a_file_the_catalogue_holds_is_read_through_it(
+        self, tmp_path, reader, store
+    ):
+        root = bundled(
+            tmp_path / "bundle", {"sites": {"a.csv": b"1\n", "b.csv": b"22\n"}}
+        )
+        reader.dataset(
+            "sites",
+            {"a.csv": b"1\n", "b.csv": b"20\n"},
+            where="store",
+            descriptor=same_description("sites"),
+        )
+        collections = reader.collections(
+            """
+            inputs:
+              include:
+                - dataset: sites
+            """
+        )
+        data = ethos_data.collections(collections, bundles=[root], download=True)
+
+        files = data.fetch("inputs")
+
+        assert files["sites/a.csv"] == reader.cache / "sites" / "a.csv"
+        assert files["sites/b.csv"] == root / "data" / "sites" / "b.csv"
+        assert store.downloads() == ["/sites/a.csv"]
+        assert not (reader.cache / "sites" / "b.csv").exists(), "never a bundle's bytes"
+        assert data.settings.download
+
+
+class TestExport:
+    def test_it_writes_a_new_bundle_through_the_handle(self, tmp_path, reader, store):
+        reader.dataset(
+            "sites",
+            {"a.csv": b"1\n", "b.csv": b"22\n"},
+            where="store",
+            descriptor=same_description("sites"),
+        )
+        collections = reader.collections(
+            """
+            inputs:
+              include:
+                - dataset: sites
+                  files: [a.csv]
+            """
+        )
+        data = ethos_data.collections(collections, tool="mytool")
+
+        bundle = export_bundle(data, tmp_path / "exported", ["inputs"])
+
+        entry = bundle.datasets["sites"]
+        assert (entry.alignment.revision, entry.selection) == (1, "some")
+        assert sorted(bundle.resources) == ["sites/a.csv"]
+        description = yaml.safe_load(
+            (bundle.path / "datasets" / "sites" / "dataset.yaml").read_text("utf-8")
+        )
+        assert description["title"] == "The sites data"
+        assert bundle.fetch()["sites/a.csv"].read_bytes() == b"1\n"
+
+    def test_a_bundled_dataset_keeps_its_alignment_and_changes(self, tmp_path):
+        root = bundled(tmp_path / "bundle", {"sites": {"a.csv": b"1\n"}})
+        collections = tmp_path / "collections.yaml"
+        collections.write_text(
+            "collections:\n  inputs:\n    include:\n      - dataset: sites\n",
+            encoding="utf-8",
+        )
+        data = ethos_data.collections(collections, bundles=[root])
+
+        with pytest.warns(BundleAlignmentWarning):
+            bundle = export_bundle(data, tmp_path / "exported", "inputs")
+
+        assert bundle.datasets["sites"].alignment is None
+        assert bundle.datasets["sites"].selection == "all"
+
+    def test_an_existing_target_is_refused(self, tmp_path, reader):
+        reader.dataset("sites", {"a.csv": b"1\n"}, descriptor=same_description("sites"))
+        collections = reader.collections(
+            """
+            inputs:
+              include:
+                - dataset: sites
+            """
+        )
+        (tmp_path / "exported").mkdir()
+
+        with pytest.raises(BundleError, match="exists"):
+            export_bundle(
+                ethos_data.collections(collections), tmp_path / "exported", "inputs"
+            )
+
+    def test_restricted_data_is_refused(self, tmp_path, reader):
+        reader.dataset(
+            "licensed",
+            {"a.csv": b"1\n"},
+            access="restricted",
+            descriptor={**same_description("licensed"), "ethos:access": "restricted"},
+        )
+        collections = reader.collections(
+            """
+            inputs:
+              include:
+                - dataset: licensed
+            """
+        )
+        data = ethos_data.collections(collections)
+
+        with pytest.raises(Exception, match="restricted"):
+            export_bundle(data, tmp_path / "exported", "inputs")
+
+
+class TestThePackageCommand:
+    def test_create_update_verify_and_fetch(self, tmp_path, monkeypatch):
+        (tmp_path / "data" / "sites").mkdir(parents=True)
+        (tmp_path / "data" / "sites" / "a.csv").write_bytes(b"1\n")
+        collections = tmp_path / "collections.yaml"
+        collections.write_text("collections: {}\n", encoding="utf-8")
+        monkeypatch.setenv("ETHOS_DATA_CATALOG", str(tmp_path / "nowhere.json"))
+
+        def tool(*argv):
+            return ethos_data.tool_main(
+                str(collections), prog="mytool-data", argv=list(argv)
+            )
+
+        assert tool("bundle", "create", str(tmp_path)) == 0
+        describe(tmp_path, "sites")
+        assert tool("bundle", "update", str(tmp_path)) == 0
+        assert tool("bundle", "verify", str(tmp_path)) == 0
+        (tmp_path / "data" / "sites" / "a.csv").write_bytes(b"9\n")
+        assert tool("bundle", "verify", str(tmp_path)) == 1
+        assert tool("bundle", "update", str(tmp_path)) == 0
+        assert tool("bundle", "fetch", str(tmp_path), "sites") == 0
+
+
+class TestAddBundle:
+    @pytest.fixture
+    def catalogue(self, tmp_path):
+        return SourceCatalogue(tmp_path)
+
+    def test_a_new_dataset_is_added_from_a_build_input(self, catalogue, tmp_path):
+        root = bundled(tmp_path / "bundle", {"sites": {"a.csv": b"1\n"}})
+        into = tmp_path / "inputs"
+
+        code, _, err = catalogue.catalog("add-bundle", str(root), "--into", str(into))
+
+        assert code == 0, err
+        assert (into / "sites" / "a.csv").read_bytes() == b"1\n"
+        status = catalogue.status("sites")
+        assert (status["state"], status["source_dir"]) == ("built", str(into / "sites"))
+        assert catalogue.package("sites")["resources"][0]["hash"] == digest(b"1\n")
+
+    def test_an_access_change_from_a_bundle_is_refused(self, catalogue, tmp_path):
+        root = bundled(tmp_path / "bundle", {"sites": {"a.csv": b"1\n"}})
+        catalogue.dataset(
+            "sites",
+            {"a.csv": "1\n"},
+            ethos_access="restricted",
+            ethos_restriction="Ask the custodian.",
+        )
+        assert catalogue.build()[0] == 0
+        document = manifest(root)
+        document["datasets"]["sites"]["changes"] = [
+            {"path": "dataset.yaml", "change": "changed", "document": True, "was": None}
+        ]
+        document["datasets"]["sites"]["alignment"] = {"revision": 1, "release": None}
+        (root / "bundle.json").write_text(json.dumps(document), encoding="utf-8")
+
+        code, _, err = catalogue.catalog(
+            "add-bundle", str(root), "--into", str(tmp_path / "inputs")
+        )
+
+        assert code == 1
+        assert "not for access or visibility" in err
+
+    def test_an_aligned_bundle_has_nothing_to_take(self, catalogue, tmp_path, reader):
+        root = bundled(tmp_path / "bundle", {"sites": {"a.csv": b"1\n"}})
+        reader.dataset("sites", {"a.csv": b"1\n"}, descriptor=same_description("sites"))
+        update_bundle(root, catalog=load_catalog(str(reader.write())))
+
+        code, out, _ = catalogue.catalog(
+            "add-bundle", str(root), "--into", str(tmp_path / "inputs")
+        )
+
+        assert code == 0
+        assert "is aligned" in out
+
+
+def test_verify_fails_on_a_changed_bundled_file(tmp_path, monkeypatch):
+    root = bundled(tmp_path / "bundle", {"sites": {"a.csv": b"1\n"}})
     collections = tmp_path / "collections.yaml"
     collections.write_text(
-        yaml.safe_dump(
-            {
-                "collections": {
-                    "shape": {
-                        "include": [{"dataset": "fixture", "files": ["sites.shp"]}]
-                    },
-                    "test_suite": {
-                        "extends": ["shape"],
-                        "include": [
-                            {"dataset": "fixture", "files": ["nested/*", "empty.bin"]}
-                        ],
-                    },
-                },
-            }
-        )
+        "collections:\n  inputs:\n    include:\n      - dataset: sites\n",
+        encoding="utf-8",
     )
-    # Named as a user's settings would name it.
-    monkeypatch.setenv("ETHOS_DATA_CATALOG", str(index))
-    return {
-        "source": source,
-        "collections": collections,
-        "index": index,
-        "descriptor": descriptor,
-        "payloads": payloads,
-    }
+    monkeypatch.setenv("ETHOS_DATA_CATALOG", str(tmp_path / "nowhere.json"))
+    (root / "data" / "sites" / "a.csv").write_bytes(b"9\n")
+    data = ethos_data.collections(collections, bundles=[root])
 
-
-def export(catalogue, target, **kwargs):
-    return export_bundle(
-        catalogue["collections"],
-        ["shape", "test_suite"],
-        target,
-        dataset_roots={"fixture": catalogue["source"]},
-        source_revision="commit-123",
-        **kwargs,
+    findings = ethos_data.verify(
+        data.view_for(data.resolve("inputs")), data.resolve("inputs")
     )
 
-
-def rewrite(bundle, mutate):
-    path = bundle.path / "bundle.json"
-    document = json.loads(path.read_text())
-    mutate(document)
-    path.write_text(json.dumps(document))
-
-
-def test_portable_snapshot_with_sidecars_and_provenance(
-    catalogue, tmp_path, monkeypatch
-):
-    staging = tmp_path / "staging" / "fixture"
-    staging.mkdir(parents=True)
-    (staging / "sites.shp").write_bytes(b"uncatalogued development")
-    monkeypatch.setenv("ETHOS_STAGING_DIR", str(staging.parent))
-    monkeypatch.setenv("ETHOS_DATA_DIR", str(tmp_path / "empty-cache"))
-    monkeypatch.chdir(tmp_path)
-    bundle = export(catalogue, tmp_path / "bundle")
-    assert bundle.names() == ["shape", "test_suite"]
-    assert bundle.source["catalog"] == str(catalogue["index"])
-    assert bundle.source["revision"] == "commit-123"
-    assert bundle.source["catalog_version"] == "v1"
-    assert bundle.datasets["fixture"]["licenses"] == [{"name": "CC0-1.0"}]
-    assert bundle.datasets["fixture"]["sources"][0]["title"] == "Generated example"
-    package = bundle.datasets["fixture"]
-    assert not ({"ethos:embargo", "ethos:license_note", "source_dir"} & package.keys())
-    shape_record = next(
-        record for record in package["resources"] if record["path"] == "sites.shp"
-    )
-    assert shape_record["licenses"] == [
-        {"name": "CC-BY-4.0", "path": "https://example.invalid/licence"}
-    ]
-    assert shape_record["ethos:provenance"] == {"derived_from": "example-source"}
-    assert "ethos:license_note" not in shape_record
-    assert set(bundle.fetch("shape")) == {"fixture/sites.shp", "fixture/sites.dbf"}
-
-    # The snapshot and files move together and no longer need their source.
-    shutil.rmtree(catalogue["source"])
-    catalogue["index"].unlink()
-    catalogue["descriptor"].unlink()
-    moved = tmp_path / "different-package" / "fixtures"
-    moved.parent.mkdir()
-    bundle.path.rename(moved)
-    monkeypatch.chdir(tmp_path.parent)
-    loaded = load_bundle(moved / "bundle.json")
-    files = loaded.fetch("test_suite")
-    assert {key: path.read_bytes() for key, path in files.items()} == {
-        "fixture/" + name: data for name, data in catalogue["payloads"].items()
-    }
-    assert all(finding.ok for finding in loaded.verify("test_suite"))
-    assert not (tmp_path / "empty-cache").exists()
-
-
-@pytest.mark.parametrize("changed", [b"abc", b"longer changed file", b""])
-def test_development_override_reports_changes_and_preserves_hashes(
-    catalogue, tmp_path, changed
-):
-    bundle = export(catalogue, tmp_path / "bundle")
-    manifest = (bundle.path / "bundle.json").read_bytes()
-    key = "fixture/nested/a.bin"
-    path = bundle.fetch("test_suite")[key]
-    path.write_bytes(changed)
-    with pytest.raises(
-        BundleError, match="differ from the catalogue.*fixture/nested/a.bin"
-    ):
-        bundle.fetch("test_suite")
-    with pytest.warns(ModifiedBundleWarning, match="fixture/nested/a.bin"):
-        assert bundle.fetch("test_suite", allow_modified=True)[key] == path
-    finding = next(
-        finding for finding in bundle.verify("test_suite") if finding.key == key
-    )
-    assert finding.status == "modified"
-    assert finding.expected_hash == digest(b"123")
-    assert finding.actual_hash == digest(changed)
-    assert (bundle.path / "bundle.json").read_bytes() == manifest
-    with pytest.raises(BundleError, match="differ from the catalogue"):
-        load_bundle(bundle.path).fetch("test_suite")
-    # The override is local to each call and does not affect other collections.
-    assert len(bundle.fetch("shape")) == 2
-
-
-def test_missing_file_is_an_error_even_during_development(catalogue, tmp_path):
-    bundle = export(catalogue, tmp_path / "bundle")
-    bundle.fetch("shape")["fixture/sites.dbf"].unlink()
-    assert any(f.status == "missing" for f in bundle.verify("shape"))
-    with pytest.raises(BundleError, match="missing bundled files: fixture/sites.dbf"):
-        bundle.fetch("shape", allow_modified=True)
-
-
-def test_missing_manifest_is_not_replaced_or_fetched(catalogue, tmp_path):
-    bundle = export(catalogue, tmp_path / "bundle")
-    (bundle.path / "bundle.json").unlink()
-    with pytest.raises(BundleError, match="cannot read bundle metadata"):
-        load_bundle(bundle.path)
-    assert not (bundle.path / "bundle.json").exists()
-
-
-def test_export_input_errors_are_actionable(catalogue, tmp_path):
-    with pytest.raises(BundleError, match="unknown collections: typo"):
-        export_bundle(catalogue["collections"], "typo", tmp_path / "bundle")
-    with pytest.raises(BundleError, match="cannot load collections"):
-        export_bundle(tmp_path / "missing.yaml", "shape", tmp_path / "bundle")
-    catalogue["descriptor"].unlink()
-    with pytest.raises(BundleError, match="cannot resolve collection 'shape'"):
-        export(catalogue, tmp_path / "bundle")
-
-
-@pytest.mark.parametrize(
-    "bad_record",
-    [None, "resource", [], {}, {"name": "a", "path": "a", "bytes": 1, "hash": ""}],
-)
-def test_invalid_resource_metadata_errors_cleanly(catalogue, tmp_path, bad_record):
-    bundle = export(catalogue, tmp_path / "bundle")
-    rewrite(
-        bundle, lambda doc: doc["datasets"]["fixture"].update(resources=[bad_record])
-    )
-    with pytest.raises(BundleError):
-        load_bundle(bundle.path)
-
-
-@pytest.mark.parametrize("access", ["staging", "restricted", "unknown"])
-def test_unsupported_access_snapshot_is_rejected(catalogue, tmp_path, access):
-    bundle = export(catalogue, tmp_path / "bundle")
-    rewrite(
-        bundle, lambda doc: doc["datasets"]["fixture"].update({"ethos:access": access})
-    )
-    with pytest.raises(BundleError, match="not a public catalogue snapshot"):
-        load_bundle(bundle.path)
-
-
-def test_missing_resource_metadata_and_sidecars_fail(catalogue, tmp_path):
-    bundle = export(catalogue, tmp_path / "bundle")
-    rewrite(bundle, lambda doc: doc["collections"]["shape"].remove("fixture/sites.dbf"))
-    with pytest.raises(BundleError, match="lacks sidecar metadata"):
-        load_bundle(bundle.path)
-    rewrite(
-        bundle, lambda doc: doc["collections"]["shape"].append("fixture/missing.bin")
-    )
-    with pytest.raises(BundleError, match="missing resource metadata"):
-        load_bundle(bundle.path)
-
-
-@pytest.mark.parametrize(
-    "unsafe",
-    ["../escaped", "/absolute", "a/../escaped", "a//b", "a/./b", "C:/drive", "a\\b"],
-)
-def test_unsafe_metadata_paths_are_rejected(catalogue, tmp_path, unsafe):
-    bundle = export(catalogue, tmp_path / "bundle")
-    rewrite(
-        bundle,
-        lambda doc: doc["datasets"]["fixture"]["resources"][0].update(path=unsafe),
-    )
-    with pytest.raises(BundleError, match="unsafe resource path"):
-        load_bundle(bundle.path)
-
-
-def test_symlink_escape_cannot_bypass_verification(catalogue, tmp_path):
-    bundle = export(catalogue, tmp_path / "bundle")
-    fixture = bundle.fetch("shape")["fixture/sites.shp"]
-    fixture.unlink()
-    fixture.symlink_to(catalogue["source"] / "sites.shp")
-    with pytest.raises(BundleError, match="escapes"):
-        bundle.fetch("shape", allow_modified=True)
-    manifest = bundle.path / "bundle.json"
-    original = tmp_path / "outside-manifest.json"
-    manifest.rename(original)
-    manifest.symlink_to(original)
-    with pytest.raises(BundleError, match="escapes"):
-        load_bundle(bundle.path)
-
-
-def test_export_rejects_changed_input_and_preserves_existing_bundle(
-    catalogue, tmp_path
-):
-    target = tmp_path / "bundle"
-    target.mkdir()
-    sentinel = target / "keep.txt"
-    sentinel.write_text("existing")
-    with pytest.raises(BundleError, match="target already exists"):
-        export(catalogue, target)
-    assert sentinel.read_text() == "existing"
-    (catalogue["source"] / "nested/a.bin").write_bytes(b"abc")
-    with pytest.raises(
-        BundleError, match="input fixture differs.*fixture/nested/a.bin"
-    ):
-        export(catalogue, tmp_path / "new-bundle")
-    assert not (tmp_path / "new-bundle").exists()
-    assert not list(tmp_path.glob(".ethos-bundle-*"))
-
-
-def test_export_rejects_source_symlink_escape(catalogue, tmp_path):
-    path = catalogue["source"] / "sites.shp"
-    outside = tmp_path / "outside.shp"
-    path.rename(outside)
-    path.symlink_to(outside)
-    with pytest.raises(BundleError, match="escapes"):
-        export(catalogue, tmp_path / "bundle")
-    assert not (tmp_path / "bundle").exists()
-
-
-def test_export_from_shards_flattens_snapshot(catalogue, tmp_path):
-    package = json.loads(catalogue["descriptor"].read_text())
-    (tmp_path / "root.json").write_text(
-        json.dumps(
-            {"resources": [r for r in package["resources"] if "/" not in r["path"]]}
-        )
-    )
-    (tmp_path / "nested.json").write_text(
-        json.dumps({"resources": [r for r in package["resources"] if "/" in r["path"]]})
-    )
-    package.pop("resources")
-    package.update(
-        {
-            "ethos:shard_depth": 1,
-            "ethos:shards": [
-                {"prefix": "_root", "path": "root.json"},
-                {"prefix": "nested", "path": "nested.json"},
-            ],
-        }
-    )
-    catalogue["descriptor"].write_text(json.dumps(package))
-    bundle = export(catalogue, tmp_path / "bundle")
-    assert "ethos:shards" not in bundle.datasets["fixture"]
-    shape = next(
-        record
-        for record in bundle.datasets["fixture"]["resources"]
-        if record["path"] == "sites.shp"
-    )
-    assert shape["licenses"][0]["name"] == "CC-BY-4.0"
-    assert shape["ethos:provenance"] == {"derived_from": "example-source"}
-    (tmp_path / "root.json").unlink()
-    (tmp_path / "nested.json").unlink()
-    assert len(load_bundle(bundle.path).fetch("test_suite")) == 4
-
-
-def test_subset_export_never_loads_unselected_shards(catalogue, tmp_path):
-    package = json.loads(catalogue["descriptor"].read_text())
-    (tmp_path / "root.json").write_text(
-        json.dumps(
-            {"resources": [r for r in package["resources"] if "/" not in r["path"]]}
-        )
-    )
-    package.pop("resources")
-    package.update(
-        {
-            "ethos:shard_depth": 1,
-            "ethos:shards": [
-                {"prefix": "_root", "path": "root.json"},
-                {
-                    "prefix": "nested",
-                    "path": "https://must-not-fetch.invalid/nested.json",
-                },
-            ],
-        }
-    )
-    catalogue["descriptor"].write_text(json.dumps(package))
-    bundle = export_bundle(
-        catalogue["collections"],
-        "shape",
-        tmp_path / "bundle",
-        dataset_roots={"fixture": catalogue["source"]},
-    )
-    assert len(bundle.fetch("shape")) == 2
-    assert len(bundle.datasets["fixture"]["resources"]) == 2
-
-
-@pytest.mark.parametrize(
-    "field,value", [("ethos:access", "restricted"), ("ethos:visibility", "hidden")]
-)
-def test_export_rejects_non_public_index_and_descriptor(
-    catalogue, tmp_path, field, value
-):
-    document = json.loads(catalogue["descriptor"].read_text())
-    document[field] = value
-    catalogue["descriptor"].write_text(json.dumps(document))
-    with pytest.raises(BundleError, match="descriptor is not public"):
-        export(catalogue, tmp_path / "descriptor-bundle")
-    index = json.loads(catalogue["index"].read_text())
-    index["datasets"][0][field] = value
-    catalogue["index"].write_text(json.dumps(index))
-    with pytest.raises(
-        BundleError, match="portable fixture bundles require public data"
-    ):
-        export(catalogue, tmp_path / "index-bundle")
-
-
-def test_remote_export_uses_authoritative_url_not_ambient_settings(
-    catalogue, tmp_path, monkeypatch
-):
-    monkeypatch.setenv("ETHOS_PUBLICATION_URL", "https://wrong.invalid/data")
-    monkeypatch.setenv("ETHOS_STAGING_DIR", str(tmp_path / "staging"))
-    base = "https://dcache.invalid/data/immutable/fixture/v1/"
-    downloader = FakeDownloader(
-        {base + path: payload for path, payload in catalogue["payloads"].items()}
-    )
-
-    bundle = export_bundle(
-        catalogue["collections"], "shape", tmp_path / "bundle", downloader=downloader
-    )
-
-    assert len(downloader.fetched) == 2
-    assert all(url.startswith(base) for url in downloader.fetched)
-    assert len(bundle.fetch("shape")) == 2
-
-
-def test_fetch_leaves_read_only_bundle_unchanged(catalogue, tmp_path):
-    bundle = export(catalogue, tmp_path / "bundle")
-    paths = sorted(bundle.path.rglob("*"))
-    before = {path: path.read_bytes() for path in paths if path.is_file()}
-    try:
-        for path in paths:
-            path.chmod(0o555 if path.is_dir() else 0o444)
-        bundle.path.chmod(0o555)
-        assert len(load_bundle(bundle.path).fetch("test_suite")) == 4
-        with pytest.raises(BundleError, match="not bundled"):
-            bundle.fetch("not-exported", allow_modified=True)
-        assert before == {path: path.read_bytes() for path in before}
-    finally:
-        bundle.path.chmod(0o755)
-        for path in paths:
-            path.chmod(0o755 if path.is_dir() else 0o644)
-
-
-# -- family members: a dataset name may have more than one path component ----
-#
-# The fixture families a package ships are described one upstream per member --
-# `reskit-test-data/era5` beside `reskit-test-data/merra2` -- because access is
-# a property of a whole dataset. A bundle that cannot hold them is a bundle
-# that cannot hold the test data it exists for.
-
-
-def build_family(tmp_path, monkeypatch, *, members, document=None):
-    """A small catalogue whose datasets are family members.
-
-    ``members`` maps a dataset name to {relative path: bytes}. Descriptors sit
-    at datasets/<name>/datapackage.json, which is where a published catalogue
-    puts them and what makes a licence document's relative path meaningful.
-    """
-    root = tmp_path / "catalogue"
-    entries, sources = [], {}
-    packages = dict(members)
-    for name, payloads in packages.items():
-        source = tmp_path / "input" / name.replace("/", "-")
-        source.mkdir(parents=True)
-        resources = []
-        for relative, data in payloads.items():
-            (source / relative).parent.mkdir(parents=True, exist_ok=True)
-            (source / relative).write_bytes(data)
-            resources.append(
-                {
-                    "name": relative,
-                    "path": relative,
-                    "bytes": len(data),
-                    "hash": digest(data),
-                }
-            )
-        package = {
-            "name": name,
-            "title": f"Dataset {name}",
-            "ethos:access": "public",
-            "ethos:license_status": "resolved",
-            "licenses": [{"name": "CC0-1.0"}],
-            "resources": resources,
-        }
-        descriptor_dir = root / "datasets" / name
-        descriptor_dir.mkdir(parents=True)
-        if document is not None and name == next(iter(members)):
-            relative, data, declared = document
-            (descriptor_dir / relative).parent.mkdir(parents=True, exist_ok=True)
-            (descriptor_dir / relative).write_bytes(data)
-            package["licenses"] = [
-                {
-                    "title": "Archived terms",
-                    "ethos:document": relative,
-                    "ethos:document_sha256": declared,
-                }
-            ]
-        (descriptor_dir / "datapackage.json").write_text(json.dumps(package))
-        entries.append(
-            {
-                "name": name,
-                "path": f"datasets/{name}/datapackage.json",
-                "ethos:access": "public",
-                "ethos:license_status": "resolved",
-                "ethos:remote_prefix": name,
-            }
-        )
-        sources[name] = source
-    index = root / "datacatalog.json"
-    index.write_text(
-        json.dumps(
-            {
-                "name": "family-catalog",
-                "version": "v1",
-                "ethos:catalog_role": "published",
-                "ethos:publication_url": "https://dcache.invalid/data",
-                "datasets": entries,
-            }
-        )
-    )
-    collections = root / "collections.yaml"
-    collections.write_text(
-        yaml.safe_dump(
-            {
-                "collections": {
-                    "fixtures": {"include": [{"dataset": name} for name in packages]}
-                },
-            }
-        )
-    )
-    monkeypatch.setenv("ETHOS_DATA_CATALOG", str(index))
-    return collections, sources
-
-
-def test_family_members_bundle_under_their_namespace(tmp_path, monkeypatch):
-    collections, sources = build_family(
-        tmp_path,
-        monkeypatch,
-        members={
-            "family/alpha": {"a.bin": b"alpha"},
-            "family/beta": {"b.bin": b"beta"},
-        },
-    )
-    bundle = export_bundle(
-        collections,
-        ["fixtures"],
-        tmp_path / "bundle",
-        dataset_roots=sources,
-        source_revision="commit-abc",
-    )
-    files = bundle.fetch("fixtures")
-    assert sorted(bundle.datasets) == ["family/alpha", "family/beta"]
-    # The key nests, and so does the file: one member cannot tread on another.
-    assert (bundle.path / "data/family/alpha/a.bin").read_bytes() == b"alpha"
-    assert (bundle.path / "data/family/beta/b.bin").read_bytes() == b"beta"
-    assert len(files) == 2
-    assert load_bundle(bundle.path).fetch("fixtures")
-
-
-def test_dataset_living_under_another_dataset_is_refused(tmp_path, monkeypatch):
-    """A committed manifest is the place this has to be caught.
-
-    Selecting a namespace resolves to its members, so an export cannot
-    normally produce the overlap; a hand-edited or hand-written bundle.json
-    can, and that is what a package ships and reads back.
-    """
-    collections, sources = build_family(
-        tmp_path, monkeypatch, members={"family/alpha": {"a.bin": b"alpha"}}
-    )
-    bundle = export_bundle(
-        collections,
-        ["fixtures"],
-        tmp_path / "bundle",
-        dataset_roots=sources,
-        source_revision="commit-abc",
-    )
-
-    def add_parent(document):
-        # Not a duplicate key -- a different file, at a path that the member
-        # dataset already owns the directory of.
-        document["datasets"]["family"] = {
-            "name": "family",
-            "ethos:access": "public",
-            "resources": [
-                {
-                    "name": "other",
-                    "path": "alpha/other.bin",
-                    "bytes": 5,
-                    "hash": digest(b"other"),
-                }
-            ],
-        }
-
-    rewrite(bundle, add_parent)
-    with pytest.raises(BundleError, match="lives under dataset"):
-        load_bundle(bundle.path)
-
-
-# -- archived licences travel with the bytes --------------------------------
-
-
-def test_license_document_is_copied_and_hash_checked(tmp_path, monkeypatch):
-    terms = b"You may use these bytes for any purpose."
-    collections, sources = build_family(
-        tmp_path,
-        monkeypatch,
-        members={"family/alpha": {"a.bin": b"alpha"}},
-        document=("licenses/terms.txt", terms, hashlib.sha256(terms).hexdigest()),
-    )
-    bundle = export_bundle(
-        collections,
-        ["fixtures"],
-        tmp_path / "bundle",
-        dataset_roots=sources,
-        source_revision="commit-abc",
-    )
-    stored = bundle.path / "datasets/family/alpha/licenses/terms.txt"
-    assert stored.read_bytes() == terms
-    # A bundle whose licence has gone missing is incomplete, not merely thinner.
-    stored.unlink()
-    with pytest.raises(BundleError, match="licence document"):
-        load_bundle(bundle.path)
-
-
-def test_license_document_not_matching_its_hash_is_refused(tmp_path, monkeypatch):
-    terms = b"You may use these bytes for any purpose."
-    collections, sources = build_family(
-        tmp_path,
-        monkeypatch,
-        members={"family/alpha": {"a.bin": b"alpha"}},
-        document=(
-            "licenses/terms.txt",
-            terms,
-            hashlib.sha256(b"different").hexdigest(),
-        ),
-    )
-    with pytest.raises(BundleError, match="does not match its catalogued hash"):
-        export_bundle(
-            collections,
-            ["fixtures"],
-            tmp_path / "bundle",
-            dataset_roots=sources,
-            source_revision="commit-abc",
-        )
+    assert [(f.status, f.ok) for f in findings] == [("wrong checksum", False)]

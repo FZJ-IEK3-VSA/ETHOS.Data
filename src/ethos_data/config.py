@@ -597,6 +597,10 @@ class Settings:
     catalog_version: str | None = None
     publication_url: str | None = None
     publication_url_source: str = ""
+    #: The download switch: a package's bundled files the catalogue holds too
+    #: are read through the catalogue route.
+    download: bool = False
+    download_source: str = ""
 
     def choose_catalog(
         self, *, explicit: str | None = None, bounds: Bounds | None = None
@@ -650,6 +654,12 @@ class Settings:
         """These settings with the public cache named explicitly."""
         return replace(self, roots=self.roots.with_public(value))
 
+    def with_download(self, explicit: bool | None) -> Settings:
+        """These settings with a handle's ``download=``, when it gives one."""
+        if explicit is None:
+            return self
+        return replace(self, download=explicit, download_source="explicit argument")
+
     def as_dict(self) -> dict:
         """Every value and its source, as strings, for a results file."""
 
@@ -678,6 +688,7 @@ class Settings:
             "publication_url": None
             if self.publication_url is None
             else {"url": self.publication_url, "source": self.publication_url_source},
+            "download": {"on": self.download, "source": self.download_source},
         }
 
     def rows(self) -> list[tuple[str, str]]:
@@ -728,6 +739,16 @@ class Settings:
                     f"{self.publication_url}  ({source(self.publication_url_source)})",
                 )
             )
+        if self.download:
+            rows.append(
+                (
+                    "download switch",
+                    (
+                        "on: bundled files the catalogue holds are read through it  "
+                        f"({self.download_source})"
+                    ),
+                )
+            )
         return rows
 
     def __str__(self) -> str:
@@ -749,6 +770,7 @@ def read_settings(
     path = config_path()
     catalog_found = _catalog(catalog, settings, origin)
     url = _publication_url(settings, origin)
+    download = download_requested()
     return Settings(
         file=path,
         file_source=_config_source(),
@@ -758,6 +780,8 @@ def read_settings(
         catalog_source=catalog_found[1] if catalog_found else "",
         publication_url=url[0] if url else None,
         publication_url_source=url[1] if url else "",
+        download=download,
+        download_source=f"${DOWNLOAD_ENV_VAR}" if download else "",
     )
 
 
@@ -766,7 +790,7 @@ DOWNLOAD_ENV_VAR = "ETHOS_DATA_DOWNLOAD"
 
 
 def download_requested(explicit: bool | None = None) -> bool:
-    """Whether the catalogue route is asked for instead of the bundles.
+    """Whether the download switch is on: the catalogue route for bundled files.
 
     ``explicit``, a handle's ``download=``, when given; else
     ``$ETHOS_DATA_DOWNLOAD`` set to ``1``, ``true``, ``yes`` or ``on``.
@@ -779,4 +803,3 @@ def download_requested(explicit: bool | None = None) -> bool:
         "yes",
         "on",
     )
-

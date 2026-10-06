@@ -91,12 +91,6 @@ accepted it in a release, raise `min_version` to that release and run
 the warning stops. Never fix a mismatch by editing the recorded hash to agree
 with an unexplained change.
 
-!!! warning "Gap: a bundle cannot be ahead of the catalogue"
-    The code's bundles are copies exported from the catalogue, which stays
-    authoritative for them. There is no `bundle update`, nothing records a
-    change or warns about one, and a changed file is read only with
-    `allow_modified=True`.
-
 ## Release bounds are only part of reproducibility
 
 An exact catalogue release, such as `exact_version: v1.2.0`, fixes the

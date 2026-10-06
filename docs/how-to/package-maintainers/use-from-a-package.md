@@ -123,11 +123,6 @@ builds the handle only for the commands that need it, so `your-tool-data
 `catalog=` on both calls is the place for a package-specific catalogue
 override, applied below `--catalog` and above `$ETHOS_DATA_CATALOG`.
 
-!!! warning "Gap: no `bundles=`"
-    `ethos_data.collections` and `tool_main` take no `bundles=`. With the
-    code, drop `BUNDLES` and `bundles=` from the module above; the rest,
-    `fetch=` included, works as shown.
-
 ## 4. Use the data in code, examples and tests
 
 ```python

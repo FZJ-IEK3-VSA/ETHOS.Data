@@ -180,6 +180,9 @@ class Catalog:
     _settings: Settings | None = field(default=None, repr=False)
     #: The bundles this view reads first; see :func:`ethos_data.bundles.with_bundles`.
     bundles: tuple = ()
+    #: Under the download switch, the catalogue a bundled file is read through
+    #: when it holds the same bytes under the same key.
+    routes: Catalog | None = field(default=None, repr=False)
 
     def bundle_of(self, name: str):
         """The bundle that holds the dataset ``name``, if one does."""

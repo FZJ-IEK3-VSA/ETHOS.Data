@@ -27,6 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .access import (
+    ORIGIN_BUNDLE,
     ORIGIN_LINK,
     ORIGIN_STAGING,
     RESTRICTED,
@@ -178,6 +179,20 @@ def verify(
             findings.extend(
                 Finding(location, NOTE, note) for note in _notes(catalog, roots, name)
             )
+        if not location.available and location.origin == ORIGIN_BUNDLE:
+            # A bundle is authoritative for its package: a bundled file that is
+            # missing or changed without `bundle update` is a failure, never
+            # "unavailable here".
+            status = MISSING if "missing" in location.reason else HASH
+            findings.append(
+                Finding(
+                    location,
+                    status,
+                    f"{location.reason}; restore it from the repository, or record "
+                    "the change with `bundle update`",
+                )
+            )
+            continue
         if not location.available:
             findings.append(
                 Finding(

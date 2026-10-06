@@ -60,11 +60,6 @@ ahead of the catalogue until the catalogue accepts them. Commit the whole
 directory. Keep every bundle small: Git hosts refuse files over 100 MiB, and
 every revision of a fixture stays in the history.
 
-!!! warning "Gap: `bundle create` does not exist"
-    In the code, a bundle can only be exported from data the catalogue
-    already holds. Nothing creates one from local files or drafts its
-    descriptions.
-
 ## 2. Work with it {#use-a-bundle}
 
 List the bundle in the package's data module (see
@@ -114,12 +109,6 @@ the public cache, or downloaded into it; every other bundled file is still
 read from the bundle, with the warning. The switch changes where a file is
 read from, never which bytes, and a bundle's own bytes never enter a cache.
 
-!!! warning "Gap: bundle-first reads, the warning and the download switch are not in ETHOS.Data"
-    `ethos_data.collections` takes no `bundles=`, nothing compares a bundle
-    with the catalogue or warns about one that is ahead of it, and there is
-    no `ETHOS_DATA_DOWNLOAD`. One package implements bundle-first reads and a
-    download switch for itself.
-
 ## 3. Change it {#update-data}
 
 Edit the files as you edit anything in the repository, then record the
@@ -158,7 +147,7 @@ The bundle's `datasets/` holds the descriptions and licence documents and its
 maintainer takes the ahead datasets in:
 
 ```bash
-ethos-data catalog add-bundle /path/to/checkout/your_tool/data/test_data
+ethos-data catalog add-bundle /path/to/checkout/your_tool/data/test_data --into <build inputs>
 ```
 
 `add-bundle` takes new datasets, revisions of changed ones and changed
@@ -183,11 +172,10 @@ and licence documents, and records the alignment.
 
 A later change makes the bundle ahead again and goes the same way.
 
-!!! warning "Gap: no `bundle update`, no `propose`, no `catalog add-bundle`"
-    In the code, `bundle.json` records no alignment and no changes, and
-    `bundle verify` compares the files with `bundle.json` only. Nothing
-    records a change to a bundle, drafts a proposal from it, or takes it into
-    the catalogue.
+!!! warning "Gap: no `propose`"
+    The code has no `<your-tool>-data propose`. Write the proposal by hand,
+    as under [Propose a dataset](propose-a-dataset.md), naming the bundle's
+    ahead datasets, which `bundle verify` lists.
 
 ## 5. Export it to another repository
 
@@ -212,12 +200,6 @@ or `ethos-data materialize NAME --from DIR`.
 Read `datasets/` in the new bundle before committing it: it states the terms
 under which that repository redistributes the files. The other package lists
 the bundle in its `bundles=`, like any bundle.
-
-!!! warning "Gap: export reads the catalogue only"
-    In the code, `bundle export` reads the catalogue, never the package's
-    bundles or caches, and has no `--test`. It downloads each file, or copies
-    it from a local copy named with `--source-root DATASET=PATH`, and the
-    bundle it writes records no alignment.
 
 See [Run tests and examples in CI](run-in-ci.md) for the CI wiring and the
 [bundle reference](../../reference/cli/package-data.md#bundle) for the

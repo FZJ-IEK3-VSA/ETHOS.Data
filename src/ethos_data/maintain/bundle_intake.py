@@ -1,61 +1,66 @@
-"""``catalog add-bundle``: take a package's repository bundle into the catalogue.
+"""``catalog add-bundle``: take a bundle's ahead datasets into the catalogue.
 
-    ethos-data catalog add-bundle /checkout/your_tool/data/test_data --dry-run
-    ethos-data catalog add-bundle /checkout/your_tool/data/test_data
+    ethos-data catalog add-bundle /checkout/your_tool/test_data --into /projects/inputs --dry-run
+    ethos-data catalog add-bundle /checkout/your_tool/test_data --into /projects/inputs
 
-The repository is the source of truth for a bundle and the catalogue holds
-its published versions, so the catalogue is updated from the bundle, never
-the other way round. ``add-bundle`` compares the bundle with what the
-catalogue holds of its family and plans one step for each difference:
+A package's bundle is ahead of the catalogue when it holds changes ``bundle
+update`` recorded, or datasets the catalogue does not describe (see
+:mod:`ethos_data.bundles`). ``add-bundle`` takes those datasets, or the ones
+named, into the maintainer's clone, one step each:
 
 =============  =================================================================
-``family``     the family's description, where the catalogue lacks it or it changed
-``add``        a member the catalogue lacks: placed and built, as ``catalog add``
-               does, from the bundle's draft and files
-``describe``   a member whose description changed: its ``dataset.yaml`` replaced
-``rebuild``    a member not published yet whose files changed: rebuilt from them
-``revise``     a member whose published files changed: its next revision, as
-               ``catalog build --revision`` makes it, its unchanged files kept
+``add``        a dataset the catalogue does not describe: placed and built, as
+               ``catalog add`` does, from the bundle's description
+``revise``     a published dataset whose files changed: its next revision, as
+               ``catalog build --revision`` makes it, while the catalogue is at
+               the revision the bundle is aligned with
+``rebuild``    a dataset not published yet whose files changed: built again
+``describe``   a dataset whose description or licence documents changed
 =============  =================================================================
 
-The bundle's files are the build input: each member's ``source_dir`` is its
-folder under the bundle's ``data/``. A file the bundle no longer has is
-refused for a published member unless ``--remove-missing`` says it is meant.
-A member of the family that the bundle lacks is left as it is; ``catalog
-remove`` takes it out.
+The files are copied first into a build input the catalogue maintainers own,
+``<into>/<dataset>`` or ``<into>/<dataset>@<revision>``, checked against
+``bundle.json`` as they are copied, so the catalogue never reads a package
+checkout. A bundle is authoritative for its bytes and descriptions, not for
+access or visibility: a change of either that comes from a bundle is refused.
+Every step is recorded in the dataset's status file, and the families above
+the datasets are built again last.
 """
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
+import shutil
+import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
 
+import yaml
+
 from .. import report
-from ..bundles import DATA_DIR, METADATA_DIR, Bundle, load_bundle
+from ..bundles import Bundle, load_bundle
 from ..errors import MaintenanceError
 from ..formats import keys as k
-from ..model import digest, lifecycle
-from . import DESCRIPTOR, datasets_dir, iter_dataset_dirs, resources_of
+from ..formats.edit import without_keys
+from ..model import digest, lifecycle, names
+from . import DESCRIPTOR, datasets_dir, read_descriptor
 from . import status as dataset_status
-from .migrate import edited_text
 from .pipeline import Action, Pipeline
 
-__all__ = ["PIPELINE", "BundleIntake", "run"]
+__all__ = ["PIPELINE", "BundleIntake", "IntakeResult", "run"]
 
 
 @dataclass
 class BundleIntake:
-    """The bundle ``add-bundle`` takes in, and where to."""
+    """The bundle ``add-bundle`` takes in, which of its datasets, and where to."""
 
     catalog_root: Path
     directory: Path
+    into: Path
+    names: list[str] = field(default_factory=list)
     remove_missing: bool = False
     bundle: Bundle | None = None
-
-
-def _hashes(records: list[dict]) -> dict[str, str | None]:
-    return {record[k.PATH]: digest.expected(record[k.HASH]) for record in records}
+    #: The datasets taken in: set by the plan.
+    taken: list[str] = field(default_factory=list)
 
 
 def _published(status) -> bool:
@@ -64,169 +69,304 @@ def _published(status) -> bool:
     )
 
 
+def _copy_files(bundle: Bundle, name: str, target: Path) -> None:
+    """The bundled files of ``name`` into ``target``, each checked as it is copied."""
+    if target.exists():
+        raise MaintenanceError(
+            f"{target} exists; a build input is written once. Remove it, or name "
+            "another --into"
+        )
+    temporary = Path(tempfile.mkdtemp(prefix=".ethos-intake-", dir=target.parent))
+    try:
+        for key, resource in sorted(bundle.resources.items()):
+            if resource.dataset != name:
+                continue
+            destination = temporary / resource.path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(bundle.file(key), destination)
+            if destination.stat().st_size != resource.bytes or not digest.matches(
+                resource.hash, digest.of_file(destination)
+            ):
+                raise MaintenanceError(
+                    f"{key} differs from what the bundle records; record the change "
+                    "with `bundle update` first"
+                )
+        temporary.rename(target)
+    except BaseException:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+
+
+def _description_text(bundle: Bundle, name: str) -> str:
+    """The bundle's ``dataset.yaml`` of ``name``, as the catalogue keeps it."""
+    path = bundle.path / k.BUNDLE_DESCRIPTIONS_DIR / name / DESCRIPTOR
+    try:
+        return without_keys(path.read_bytes().decode("utf-8"), [k.SOURCE_DIR])
+    except ValueError:
+        raise MaintenanceError(
+            f"{path}: source_dir could not be left out line by line; write it as one "
+            "key per line"
+        ) from None
+
+
+def _documents(bundle: Bundle, name: str) -> list[str]:
+    from ..bundles import _license_documents
+
+    return _license_documents(bundle.descriptions[name])
+
+
 class Update:
     name = "update"
 
     def plan(self, intake: BundleIntake) -> list[Action]:
         bundle = load_bundle(intake.directory)
-        if not bundle.repository:
-            raise MaintenanceError(
-                f"{bundle.path} is a copy exported from the catalogue; there is "
-                "nothing in it the catalogue does not hold"
-            )
         intake.bundle = bundle
-        actions = self._family(intake)
-        for name in sorted(bundle.datasets):
-            actions += self._member(intake, name)
-        if actions:
+        ahead = bundle.ahead()
+        wanted = intake.names or sorted(ahead)
+        unknown = sorted(set(wanted) - set(bundle.datasets))
+        if unknown:
+            raise MaintenanceError(
+                f"{', '.join(unknown)} is not a dataset of the bundle at {bundle.path}"
+            )
+        if not wanted:
+            report.info(f"  {self.name:<12} the bundle at {bundle.path} is aligned")
+            return []
+        actions: list[Action] = []
+        families: set[str] = set()
+        for name in wanted:
+            actions += self._dataset(intake, name)
+            families.update(names.ancestors(name))
+            intake.taken.append(name)
+        actions = self._families(intake, sorted(families)) + actions
+        if families:
             from . import manifest
 
-            # The family's own entry sums its members: built after them.
-            actions.append(
-                Action(
-                    f"rebuild the family {bundle.family}",
-                    lambda: manifest.run(intake.catalog_root, [bundle.family]),
-                )
-            )
-        root = datasets_dir(intake.catalog_root)
-        family = root / bundle.family
-        if family.is_dir():
-            for directory in iter_dataset_dirs(family):
-                name = directory.relative_to(root).as_posix()
-                if directory != family and name not in bundle.datasets:
-                    report.info(
-                        f"  {name} is not in the bundle; left as it is, "
-                        "`ethos-data catalog remove` takes it out"
-                    )
+            def rebuild() -> None:
+                manifest.run(intake.catalog_root, sorted(families))
+
+            actions.append(Action(f"build {', '.join(sorted(families))}", rebuild))
         return actions
 
     @staticmethod
-    def _family(intake: BundleIntake) -> list[Action]:
+    def _families(intake: BundleIntake, families: list[str]) -> list[Action]:
+        actions = []
         bundle = intake.bundle
-        draft = bundle.path / METADATA_DIR / bundle.family / DESCRIPTOR
-        if not draft.is_file():
-            return []
-        target = datasets_dir(intake.catalog_root) / bundle.family / DESCRIPTOR
-        text = draft.read_bytes()
-        if target.is_file() and target.read_bytes() == text:
-            return []
+        for family in families:
+            if family not in bundle.manifest.families:
+                continue
+            text = (
+                bundle.path / k.BUNDLE_DESCRIPTIONS_DIR / family / DESCRIPTOR
+            ).read_bytes()
+            target = datasets_dir(intake.catalog_root) / family / DESCRIPTOR
+            if target.is_file() and target.read_bytes() == text:
+                continue
 
-        def write() -> None:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(text)
+            def write(target=target, text=text) -> None:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(text)
 
-        verb = "describe" if target.is_file() else "add"
-        return [Action(f"{verb} the family {bundle.family}", write)]
+            verb = "describe" if target.is_file() else "add"
+            actions.append(Action(f"{verb} the family {family}", write))
+        return actions
 
-    @staticmethod
-    def _member(intake: BundleIntake, name: str) -> list[Action]:
-        from . import accept, manifest, revision
-
+    def _dataset(self, intake: BundleIntake, name: str) -> list[Action]:
         bundle = intake.bundle
-        draft = bundle.path / METADATA_DIR / name / DESCRIPTOR
-        source = bundle.path / DATA_DIR / name
+        entry = bundle.datasets[name]
         directory = datasets_dir(intake.catalog_root) / name
         if not (directory / DESCRIPTOR).is_file():
-            # Checked now, so a draft the build would refuse stops the plan.
-            accept.Intake().plan(accept.Draft(intake.catalog_root, draft, name))
-            return [
-                Action(
-                    f"add {name}, {len(bundle.datasets[name][k.RESOURCES])} file(s)",
-                    lambda: accept.run(intake.catalog_root, draft, name=name),
+            return [self._add(intake, name)]
+        status = dataset_status.checked_status(directory, name, "build")
+        meta = read_descriptor(directory)
+        mine = bundle.descriptions[name]
+        for key in (k.ACCESS, k.VISIBILITY):
+            if mine.get(key, k.PUBLIC) != meta.get(key, k.PUBLIC):
+                raise MaintenanceError(
+                    f"{name}: the bundle says {key}: {mine.get(key, k.PUBLIC)}, the "
+                    f"catalogue {meta.get(key, k.PUBLIC)}. A bundle is authoritative "
+                    "for bytes and descriptions, not for access or visibility; change "
+                    "them in the catalogue."
                 )
-            ]
-        status = dataset_status.read(directory)
-        if status is None:
-            raise MaintenanceError(
-                f"{name} has no {dataset_status.STATUS} yet; write one with\n"
-                f"    ethos-data catalog migrate {name}"
-            )
+        files = [change for change in entry.changes if not change.document]
         actions = []
-        described = edited_text(draft.read_bytes().decode("utf-8"), [k.SOURCE_DIR])
-        if described is None:
-            raise MaintenanceError(
-                f"{draft}: source_dir could not be left out line by line; write it "
-                "as one key per line"
-            )
-        if (directory / DESCRIPTOR).read_bytes().decode("utf-8") != described:
-            actions.append(
-                Action(
-                    f"describe {name}: its {DESCRIPTOR} from the bundle",
-                    lambda: (directory / DESCRIPTOR).write_bytes(
-                        described.encode("utf-8")
-                    ),
-                )
-            )
-        package = json.loads((directory / "datapackage.json").read_text("utf-8"))
-        held = _hashes(resources_of(package, directory))
-        bundled = _hashes(bundle.datasets[name][k.RESOURCES])
-        if held == bundled:
+        if any(change.document for change in entry.changes):
+            actions.append(self._describe(intake, name, directory))
+        if not files:
             if actions:
+                from . import manifest
+
                 actions.append(
                     Action(
-                        f"rebuild {name}'s descriptor",
+                        f"build {name}",
                         lambda: manifest.run(intake.catalog_root, [name]),
                     )
                 )
             return actions
-        gone = sorted(set(held) - set(bundled))
+        if entry.alignment is None or entry.alignment.revision != status.revision:
+            raise MaintenanceError(
+                f"{name}: the catalogue holds revision {status.revision}, and the "
+                "bundle is aligned with "
+                + (
+                    f"revision {entry.alignment.revision}"
+                    if entry.alignment
+                    else "none"
+                )
+                + ". Realign the bundle first: <tool>-data bundle update DIR "
+                f"--from-catalog {name}"
+            )
+        if entry.selection != "all":
+            raise MaintenanceError(
+                f"{name}: the bundle holds a selection of its files, and a revision "
+                "is built from every file. Propose the change with the whole dataset."
+            )
+        removed = [c.path for c in files if c.change == "removed"]
+        if removed and not intake.remove_missing:
+            raise MaintenanceError(
+                f"{', '.join(removed[:5])} of {name} are gone from the bundle. Each "
+                "takes its key with it, and every collection that names one breaks: "
+                "propose a successor instead, or pass --remove-missing if they are "
+                "meant to go."
+            )
         if _published(status):
-            if gone and not intake.remove_missing:
-                raise MaintenanceError(
-                    f"the bundle no longer has {', '.join(gone[:5])} of {name}, whose "
-                    "files are published. Each takes its key with it, and every "
-                    "collection that names one breaks: propose a successor instead, "
-                    "or pass --remove-missing if they are meant to go."
+            return actions + [self._revise(intake, name, status.revision + 1)]
+        return actions + [self._rebuild(intake, name, directory)]
+
+    @staticmethod
+    def _add(intake: BundleIntake, name: str) -> Action:
+        from . import accept
+
+        bundle = intake.bundle
+        target = intake.into / name
+
+        def add() -> None:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            _copy_files(bundle, name, target)
+            with tempfile.TemporaryDirectory(prefix=".ethos-draft-") as draft:
+                draft_dir = Path(draft)
+                meta = yaml.safe_load(_description_text(bundle, name)) or {}
+                meta[k.SOURCE_DIR] = str(target)
+                (draft_dir / DESCRIPTOR).write_text(
+                    yaml.safe_dump(meta, sort_keys=False, allow_unicode=True),
+                    encoding="utf-8",
+                    newline="\n",
                 )
-            revision.Compare().plan(
-                revision.Revision(
-                    intake.catalog_root, name, source, intake.remove_missing
-                )
+                for document in _documents(bundle, name):
+                    source = bundle.path / k.BUNDLE_DESCRIPTIONS_DIR / name / document
+                    destination = draft_dir / document
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(source, destination)
+                accept.run(intake.catalog_root, draft_dir / DESCRIPTOR, name=name)
+
+        files = sum(1 for r in bundle.resources.values() if r.dataset == name)
+        return Action(f"add {name}, {files} file(s), built from {target}", add)
+
+    @staticmethod
+    def _describe(intake: BundleIntake, name: str, directory: Path) -> Action:
+        bundle = intake.bundle
+
+        def describe() -> None:
+            (directory / DESCRIPTOR).write_bytes(
+                _description_text(bundle, name).encode("utf-8")
             )
-            actions.append(
-                Action(
-                    f"revise {name}: revision {status.revision + 1} from the bundle",
-                    lambda: revision.run(
-                        intake.catalog_root,
-                        name,
-                        source=source,
-                        remove_missing=intake.remove_missing,
-                    ),
-                )
+            for document in _documents(bundle, name):
+                source = bundle.path / k.BUNDLE_DESCRIPTIONS_DIR / name / document
+                destination = directory / document
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, destination)
+
+        return Action(f"describe {name}: its description from the bundle", describe)
+
+    @staticmethod
+    def _revise(intake: BundleIntake, name: str, number: int) -> Action:
+        from . import revision
+
+        bundle = intake.bundle
+        target = intake.into / names.entry(name, number)
+
+        def revise() -> None:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if not target.exists():
+                _copy_files(bundle, name, target)
+            revision.run(
+                intake.catalog_root,
+                name,
+                source=target,
+                remove_missing=intake.remove_missing,
             )
-            return actions
+
+        return Action(f"revise {name}: revision {number}, built from {target}", revise)
+
+    @staticmethod
+    def _rebuild(intake: BundleIntake, name: str, directory: Path) -> Action:
+        from . import manifest
+
+        bundle = intake.bundle
+        status = dataset_status.read(directory)
+        target = intake.into / names.entry(name, status.revision)
 
         def rebuild() -> None:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            stale = target.with_name(target.name + ".before")
+            if target.exists():
+                target.rename(stale)
+            try:
+                _copy_files(bundle, name, target)
+            except BaseException:
+                if stale.exists():
+                    stale.rename(target)
+                raise
+            shutil.rmtree(stale, ignore_errors=True)
             current = dataset_status.read(directory)
-            if current.source_dir != str(source):
+            if current.source_dir != str(target):
                 dataset_status.write(
-                    directory, current.model_copy(update={"source_dir": str(source)})
+                    directory, current.model_copy(update={"source_dir": str(target)})
                 )
-            if manifest.run(intake.catalog_root, [name]):
-                raise MaintenanceError(f"{name}: the build failed")
+            manifest.run(intake.catalog_root, [name])
 
-        actions.append(Action(f"rebuild {name} from the bundle", rebuild))
-        return actions
+        return Action(f"rebuild {name} from {target}", rebuild)
 
 
 PIPELINE: Pipeline[BundleIntake] = Pipeline("add-bundle", [Update()])
+
+
+@dataclass(frozen=True)
+class IntakeResult:
+    """The datasets ``add-bundle`` took in, or would take in."""
+
+    datasets: list[str]
+    made: bool
+
+    @property
+    def ok(self) -> bool:
+        return True
 
 
 @report.reported
 def run(
     catalog_root: Path,
     directory: str | Path,
+    datasets: list[str] | None = None,
     *,
+    into: str | Path,
     remove_missing: bool = False,
     dry_run: bool = False,
-) -> int:
-    """Bring the catalogue's family up to the bundle at ``directory``."""
-    intake = BundleIntake(catalog_root, Path(directory).expanduser(), remove_missing)
-    planned = PIPELINE.run(intake, dry_run=dry_run)
-    if planned and not dry_run:
+) -> IntakeResult:
+    """Take the ahead datasets of the bundle at ``directory``, or ``datasets``, in.
+
+    ``into`` is the directory of build inputs the catalogue maintainers own.
+    """
+    intake = BundleIntake(
+        catalog_root,
+        Path(directory).expanduser().absolute(),
+        Path(into).expanduser().absolute(),
+        list(datasets or []),
+        remove_missing,
+    )
+    outcome = PIPELINE.run(intake, dry_run=dry_run)
+    if outcome.planned and not dry_run:
         report.info(
-            f"\n{intake.bundle.family} is up to the bundle's version "
-            f"{intake.bundle.version}. Make what is new available and release it; "
-            "`ethos-data catalog status` says how."
+            f"\n{', '.join(intake.taken)} taken in. Make what is new available, "
+            "merge it and release it; `ethos-data catalog status` says how. The "
+            "package maintainer then runs `bundle update` with the catalogue "
+            "readable, which records the alignment."
         )
-    return 0
+    return IntakeResult(intake.taken, not dry_run)

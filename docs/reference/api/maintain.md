@@ -177,6 +177,16 @@ freezing, removing and checking a dataset here.
       show_root_toc_entry: false
       heading_level: 3
 
+::: ethos_data.maintain.bundle_intake
+    options:
+      members:
+        - run
+        - IntakeResult
+        - BundleIntake
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
 ::: ethos_data.maintain.release
     options:
       members:

@@ -1,6 +1,6 @@
 # 0024. Let unresolved licensing block distribution, not development
 
-**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #21, #25
+**Status:** implemented · **Date:** 2026-10-06 · **Implemented by:** #21, #25
 
 ## Context
 

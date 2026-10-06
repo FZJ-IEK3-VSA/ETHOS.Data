@@ -1,6 +1,6 @@
 # 0021. Let a bundle be ahead of the catalogue, and warn until it is realigned
 
-**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #25
+**Status:** implemented · **Date:** 2026-10-06 · **Implemented by:** #25
 
 ## Context
 

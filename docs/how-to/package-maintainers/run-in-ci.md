@@ -52,11 +52,6 @@ filterwarnings =
     default::ethos_data.BundleAlignmentWarning
 ```
 
-!!! warning "Gap: no shared download switch and no bundle warning"
-    `ETHOS_DATA_DOWNLOAD` and `ethos_data.BundleAlignmentWarning` do not
-    exist; one package has a variable of its own for the switch. See
-    [Keep data in the repository](keep-data-in-the-repository.md#use-a-bundle).
-
 ## 3. Download public data the repository does not hold
 
 A live job fetches what its collections select from the published store. A

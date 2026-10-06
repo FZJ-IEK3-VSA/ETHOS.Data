@@ -36,6 +36,7 @@ against one runs unchanged against the other; the caller only flips ``test=``.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -103,10 +104,13 @@ class Collections:
     Built by :func:`ethos_data.collections` (or :func:`load_collections`) and
     kept for the life of the process -- the file is read once and the
     catalogue loaded once, whatever the number of ``fetch`` calls after.
+
+    With ``bundles``, what they hold is read from them first, and the
+    catalogue is opened only for what they do not hold: a handle whose
+    bundles hold every input reads no catalogue index.
     """
 
     path: Path
-    catalog: Catalog
     definitions: dict
     #: The tool whose file this is (``"mytool"``), for messages and as the
     #: default name of its command; None for a file named on its own.
@@ -118,6 +122,56 @@ class Collections:
     _settings: Settings | None = field(default=None, repr=False)
     #: Each collection checked through its model, when it is first used.
     _checked: dict[str, Collection] = field(default_factory=dict, repr=False)
+    #: The bundles the package ships, read first.
+    bundles: tuple = ()
+    #: The download switch: bundled files the catalogue holds too are read
+    #: through the catalogue route.
+    download: bool = False
+    #: The catalogue view, opened when first needed by :attr:`catalog`.
+    _catalog: Catalog | None = field(default=None, repr=False)
+    _open: Callable[[], Catalog] | None = field(default=None, repr=False)
+    #: The view of the bundles alone, which reads no index.
+    _bundled: Catalog | None = field(default=None, repr=False)
+    #: The catalogue as loaded, without the bundles and staging laid over it.
+    _base: Catalog | None = field(default=None, repr=False)
+
+    def base_catalog(self) -> Catalog:
+        """The catalogue this handle reads, without its bundles and staging."""
+        _ = self.catalog
+        return self._base
+
+    @property
+    def catalog(self) -> Catalog:
+        """The catalogue this handle reads, the bundles and staging laid over it.
+
+        Opened when first needed, then kept.
+        """
+        if self._catalog is None:
+            self._catalog = self._open()
+        return self._catalog
+
+    @property
+    def prog(self) -> str:
+        """The package's data command, ``<tool>-data``."""
+        return f"{self.tool}-data" if self.tool else "<tool>-data"
+
+    def view_for(self, resources: Sequence[Resource]) -> Catalog:
+        """The view that answers for ``resources``: the bundles alone, when they hold all."""
+        if self._bundled is not None and all(
+            resource.dataset in self._bundled.datasets for resource in resources
+        ):
+            return self._bundled
+        return self.catalog
+
+    def _bundled_datasets(self, pattern: str) -> list:
+        """The bundled datasets a rule's ``dataset:`` selects; none when it reaches past them."""
+        if self._bundled is None:
+            return []
+        try:
+            found = self._bundled.matching_datasets(pattern)
+        except UnknownDataset:
+            return []
+        return [dataset for dataset in found if not dataset.namespace]
 
     @property
     def settings(self) -> Settings:
@@ -294,10 +348,16 @@ class Collections:
             # `files: ["era5/*.nc"]` selects nothing while
             # `dataset: reskit-test-data/era5` with `files: ["*.nc"]` selects
             # what you meant.
-            try:
-                datasets = self.catalog.matching_datasets(rule.dataset)
-            except UnknownDataset as error:
-                raise UnknownDataset(f"collection {name!r}: {error.message}") from None
+            datasets = self._bundled_datasets(rule.dataset)
+            view = self._bundled if datasets else None
+            if not datasets:
+                view = self.catalog
+                try:
+                    datasets = view.matching_datasets(rule.dataset)
+                except UnknownDataset as error:
+                    raise UnknownDataset(
+                        f"collection {name!r}: {error.message}"
+                    ) from None
             for dataset in datasets:
                 if dataset.superseded_by:
                     report.warning(
@@ -315,7 +375,7 @@ class Collections:
                 ]
                 # A sidecar the inventory lacks is left out: the files that are
                 # there are still the ones the rule asked for.
-                with_companions, _ = self.catalog.with_sidecars(matched)
+                with_companions, _ = view.with_sidecars(matched)
                 selected.update(with_companions)
 
         return sorted(selected.values(), key=lambda r: r.key)
@@ -364,13 +424,12 @@ class Collections:
         """
         roots = self._roots(root)
         resources = self.resolve(name, test=test)
-        self._refuse_unpublished(resources)
         # Checked before anything is downloaded: a handle naming a file the
         # collection does not include is a mistake in collections.yaml, and the
         # maintainer should hear about it before a 40 GB transfer, not after.
         targets = self._named_targets(name, test, resources)
         files = retrieval.download(
-            self.catalog,
+            self.view_for(resources),
             resources,
             root=roots,
             progressbar=progressbar,
@@ -436,11 +495,8 @@ class Collections:
         The report :func:`ethos_data.plan` builds: what is already cached,
         what would be downloaded and how many bytes, what is used in place.
         """
-        return retrieval.plan(
-            self.catalog,
-            self.resolve(name, test=test),
-            self._roots(root),
-        )
+        resources = self.resolve(name, test=test)
+        return retrieval.plan(self.view_for(resources), resources, self._roots(root))
 
     def prepare(
         self,
@@ -460,9 +516,10 @@ class Collections:
 
         resources = self.select(name, test=test)
         roots = self._roots(root)
-        report = retrieval.plan(self.catalog, resources, roots)
+        view = self.view_for(resources)
+        report = retrieval.plan(view, resources, roots)
         if report["unavailable"]:
-            locate(self.catalog, resources, roots)  # raises the refusal
+            locate(view, resources, roots)  # raises the refusal
         return report
 
     def resolve_every(self) -> tuple[list[Resource], list[tuple[str, str]]]:
@@ -534,12 +591,19 @@ class Collections:
         """
         named = self.named_keys(name, test)
         selected = {resource.key: resource for resource in resources}
+        view = self.view_for(resources)
         targets = []
         for handle, key in named.items():
             try:
-                dataset, inner = split_key(self.catalog, key)
+                dataset, inner = split_key(view, key)
             except KeyError as error:
-                raise _not_in_catalogue(name, error) from error
+                if view is self.catalog:
+                    raise _not_in_catalogue(name, error) from error
+                view = self.catalog
+                try:
+                    dataset, inner = split_key(view, key)
+                except KeyError as error:
+                    raise _not_in_catalogue(name, error) from error
             # Answered from the selection first, so that checking a dataset-level
             # handle on a sharded dataset does not pull in every shard the include
             # patterns deliberately avoided. The catalogue is only consulted to
@@ -549,7 +613,7 @@ class Collections:
                 targets.append(_NamedTarget(handle, file.key, dataset, inner, file, ()))
                 continue
             if inner:
-                unselected = self.catalog.dataset(dataset).inventory.at(inner)
+                unselected = view.dataset(dataset).inventory.at(inner)
                 if unselected is not None:
                     raise CollectionError(
                         f"collection {name!r}: paths.{handle} names the file {key!r}, which "
@@ -560,7 +624,7 @@ class Collections:
             under = tuple(r for r in resources if r.key.startswith(prefix))
             if not under:
                 try:
-                    select_key(self.catalog, dataset, inner, key)
+                    select_key(view, dataset, inner, key)
                 except KeyError as error:
                     raise _not_in_catalogue(name, error) from error
                 raise CollectionError(
@@ -669,62 +733,96 @@ def load_collections(
     read for it. ``settings`` is the snapshot the handle keeps; by default the
     settings are read here, once.
 
-    ``bundles`` are the bundle directories the package ships: their datasets
-    are read from them first, before staging is laid over them, unless
-    ``download`` -- by default ``$ETHOS_DATA_DOWNLOAD`` -- asks for the
-    catalogue route.
+    ``bundles`` are the bundle directories the package ships: what they hold
+    is read from them first, and the catalogue is opened only for what they do
+    not hold, so a handle whose bundles hold every input reads no catalogue
+    index. ``download`` -- by default ``$ETHOS_DATA_DOWNLOAD``, as the settings
+    snapshot records it -- reads a bundled file the catalogue holds for the
+    same key through the catalogue route.
     """
-    from .bundles import Bundle, load_bundle, with_bundles
-    from .config import download_requested, read_settings
+    from .bundles import (
+        Bundle,
+        load_bundle,
+        refuse_what_the_catalogue_withholds,
+        warn_behind,
+        with_bundles,
+    )
+    from .config import read_settings
 
     path = Path(path).expanduser().resolve()
     bounds, definitions = _read(path)
     if settings is None:
         settings = read_settings()
+    settings = settings.with_download(download)
     if roots is None:
         roots = settings.roots
-
-    if isinstance(catalog, Catalog):
-        resolved = catalog
-        source = (
-            resolved._settings.catalog_source if resolved._settings else "passed in"
-        )
-    else:
-        location, source = settings.choose_catalog(
-            explicit=str(catalog) if catalog else None, bounds=bounds
-        )
-        resolved = load_catalog(location, settings=settings)
-    if bounds is not None:
-        check_release(resolved, bounds, path.name)
-    settings = settings.with_catalog(resolved.location, source, resolved.version)
-    if not isinstance(catalog, Catalog):
-        # Loaded here, so it is this handle's: a catalogue passed in is not
-        # modified, and keeps the settings it already has.
-        resolved._settings = settings
-
-    base = resolved
-    download = download_requested(download)
+    prog = f"{tool}-data" if tool else "<tool>-data"
     loaded = tuple(
-        bundle if isinstance(bundle, Bundle) else load_bundle(bundle)
+        bundle if isinstance(bundle, Bundle) else load_bundle(bundle, prog=prog)
         for bundle in bundles
     )
-    if loaded and not download:
-        resolved = with_bundles(resolved, loaded)
-    if include_staging:
-        from .staging import with_staging
+    for bundle in loaded:
+        bundle.prog = prog
 
-        resolved = with_staging(resolved, roots)
-    return Collections(
+    def open_catalog() -> Catalog:
+        nonlocal settings
+        if isinstance(catalog, Catalog):
+            resolved = catalog
+            source = (
+                resolved._settings.catalog_source if resolved._settings else "passed in"
+            )
+        else:
+            location, source = settings.choose_catalog(
+                explicit=str(catalog) if catalog else None, bounds=bounds
+            )
+            resolved = load_catalog(location, settings=settings)
+        if bounds is not None:
+            check_release(resolved, bounds, path.name)
+        settings = settings.with_catalog(resolved.location, source, resolved.version)
+        handle._settings = settings
+        handle._base = resolved
+        if not isinstance(catalog, Catalog):
+            # Loaded here, so it is this handle's: a catalogue passed in is not
+            # modified, and keeps the settings it already has.
+            resolved._settings = settings
+        # The index is read now anyway: each bundle is compared with its rows.
+        for bundle in loaded:
+            refuse_what_the_catalogue_withholds(bundle, resolved)
+            warn_behind(bundle, resolved)
+        view = resolved
+        if loaded:
+            view = with_bundles(
+                resolved, loaded, routes=resolved if settings.download else None
+            )
+        if include_staging:
+            from .staging import with_staging
+
+            view = with_staging(view, roots)
+        return view
+
+    bundled = None
+    if loaded and not settings.download:
+        bundled = with_bundles(None, loaded)
+        if include_staging:
+            from .staging import with_staging
+
+            bundled = with_staging(bundled, roots, warn=False)
+    handle = Collections(
         path=path,
-        catalog=resolved,
         definitions=definitions,
         tool=tool,
         roots=roots,
         _settings=settings,
         bundles=loaded,
-        download=download,
-        base_catalog=base,
+        download=settings.download,
+        _open=open_catalog,
+        _bundled=bundled,
     )
+    if not loaded:
+        # Without bundles, every read needs the catalogue: opened now, so a
+        # catalogue outside the bounds is refused when the handle is made.
+        handle._catalog = open_catalog()
+    return handle
 
 
 def _read(path: Path) -> tuple[Bounds | None, dict]:

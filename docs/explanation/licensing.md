@@ -46,10 +46,6 @@ is one person's, on one machine; it shadows nothing for anybody else, it is
 never uploaded, and it verifies as `unverifiable` by construction. Development
 does not have to wait for a legal answer — publication does.
 
-!!! warning "Gap: bundles do not check licensing"
-    The code refuses a bundle that holds data that is not public, but not
-    one whose licensing is unsettled, and it has no `bundle update`.
-
 A dataset counts as settled when it carries a `licenses:` entry, or an explicit
 `ethos:license_status: resolved`. Nothing else does, including silence: the
 default has to be "nobody has looked" rather than "nothing applies".

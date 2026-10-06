@@ -90,10 +90,6 @@ downloaded:
 [One lookup chain](architecture/decisions/0012-one-lookup-chain.md) gives what
 each place considers and when it refuses.
 
-!!! warning "Gap: no bundles in the chain"
-    The code's chain is staging, the restricted caches, the public cache and
-    the download. It has no bundles in the chain.
-
 ## The rule that does not bend
 
 Retrieval never writes restricted data into the public cache and never

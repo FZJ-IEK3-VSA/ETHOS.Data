@@ -33,7 +33,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .access import Location, locate
-from .bundles import Bundle, export_bundle, load_bundle
+from .bundles import Bundle, BundleAlignmentWarning, export_bundle, load_bundle
 from .catalogs import (
     Catalog,
     Dataset,
@@ -103,6 +103,7 @@ __all__ = [
     "UnknownKey",
     "UploadError",
     "Bundle",
+    "BundleAlignmentWarning",
     "BundleError",
     "export_bundle",
     "load_bundle",
@@ -193,8 +194,12 @@ def collections(
 
     ``bundles`` are the bundle directories the package ships in its
     repository: what they hold is read from them first, hash-checked, and the
-    catalogue is asked only for the rest. ``download=True``, or
-    ``$ETHOS_DATA_DOWNLOAD=1``, reads everything the catalogue route instead.
+    catalogue is opened only for the rest, so a handle whose bundles hold
+    every input reads no catalogue index. A bundle ahead of the catalogue is
+    read all the same, with a :class:`BundleAlignmentWarning`. ``download=True``,
+    or ``$ETHOS_DATA_DOWNLOAD=1``, reads a bundled file whose bytes the
+    catalogue holds under the same key through the catalogue route, and every
+    other bundled file from its bundle.
     """
     settings = read_settings(
         root=root, catalog=catalog if isinstance(catalog, str) else None

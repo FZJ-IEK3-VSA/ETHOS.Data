@@ -20,11 +20,13 @@ order:
 
   1. the staging root -- work in progress, shadowing the catalogue during
      development.  Never applies to restricted data.
-  2. the restricted caches, for restricted datasets: in place from the first
+  2. the bundles a package ships, for what they hold: in place, hash-checked
+     once per process, never passed by
+  3. the restricted caches, for restricted datasets: in place from the first
      listed cache whose entry is readable; never downloaded, never written to
-  3. the public cache: in place where the dataset's entry, or its family's, is
+  4. the public cache: in place where the dataset's entry, or its family's, is
      a link; otherwise a copy of the size the catalogue records
-  4. a download from the publication root into the public cache, for public
+  5. a download from the publication root into the public cache, for public
      data only
 
 Each locator answers *found* with a :class:`Location`, *pass* with None, or
@@ -71,6 +73,8 @@ __all__ = [
     "ORIGIN_LINK",
     "ORIGIN_CACHED",
     "ORIGIN_DOWNLOAD",
+    "ORIGIN_BUNDLE",
+    "Reroute",
     "UNAVAILABLE",
 ]
 
@@ -323,30 +327,49 @@ def restricted_states(caches: tuple[Path, ...], name: str) -> str:
     return f"restricted; no listed restricted cache has a readable entry ({states})"
 
 
+@dataclass(frozen=True)
+class Reroute:
+    """What a locator answers to send a file on through the chain as another resource.
+
+    The bundle locator answers it under the download switch: a bundled file
+    whose bytes the catalogue holds under the same key is read through the
+    catalogue route, as the catalogue's dataset and resource.
+    """
+
+    dataset: Dataset
+    resource: Resource
+
+
 @dataclass
 class Bundled(Locator):
-    """3. A bundle the package ships: read in place, hash-checked, never passed by.
+    """2. The bundles a package ships: in place, hash-checked, never passed by.
 
-    A bundled file that is missing or altered is refused, not downloaded: the
-    repository is the source of truth for what a bundle holds, and the
-    catalogue's copy may be another version. With ``describe`` it is reported
-    as not available instead.
+    A bundled file that is missing, or changed without ``bundle update``
+    recording it, is refused, never downloaded: a bundle is authoritative for
+    its package. Under the download switch, a bundled file whose SHA-256 the
+    catalogue holds for the same key goes on through the catalogue route; a
+    bundle's own bytes never enter a cache. With ``describe_only`` a refusal
+    is reported as not available here instead.
     """
 
     describe_only: bool = False
 
     def describe(self) -> str:
-        return "bundles the package ships, unless downloading is asked for"
+        return "bundles the package ships, hash-checked, for what they hold"
 
     def locate(self, catalog, dataset, resource):
         bundle = catalog.bundle_of(dataset.name) if catalog.bundles else None
         if bundle is None:
             return None
-        from .bundles import checked_file, warn_if_unpublished
+        from .bundles import checked_file, warn_once
 
+        if catalog.routes is not None:
+            routed = _routed(catalog.routes, resource)
+            if routed is not None:
+                return routed
         why = checked_file(bundle, resource)
         if not why:
-            warn_if_unpublished(bundle)
+            warn_once(bundle)
             return Location(
                 resource, bundle.file(resource.key), "in-place", ORIGIN_BUNDLE
             )
@@ -359,9 +382,24 @@ class Bundled(Locator):
         )
 
 
+def _routed(catalog: Catalog, resource: Resource) -> Reroute | None:
+    """The catalogue's copy of a bundled file, when it holds the same bytes under its key."""
+    from .errors import EthosDataError
+    from .model import digest
+
+    try:
+        dataset = catalog.dataset(resource.dataset)
+        held = dataset.inventory.at(resource.path)
+    except EthosDataError:
+        return None
+    if held is None or digest.expected(held.hash) != digest.expected(resource.hash):
+        return None
+    return Reroute(dataset, held)
+
+
 @dataclass
 class RestrictedCache(Locator):
-    """2. Restricted data: read in place from a listed restricted cache, or refused.
+    """3. Restricted data: read in place from a listed restricted cache, or refused.
 
     The first listed cache whose entry is readable wins. Never passes. Listing
     no restricted cache is a legitimate, permanent state -- an account that
@@ -449,7 +487,7 @@ def linked_entry(root: Path, name: str) -> Path | None:
 
 @dataclass
 class PublicCache(Locator):
-    """3. The public cache: data already on this machine, or a copy it holds.
+    """4. The public cache: data already on this machine, or a copy it holds.
 
     In place where the dataset's entry, or a family entry above it, is a link.
     Otherwise a file of the size the catalogue records, which is still a
@@ -491,7 +529,7 @@ class PublicCache(Locator):
 
 @dataclass
 class Download(Locator):
-    """4. A download from the publication root into the public cache.
+    """5. A download from the publication root into the public cache.
 
     For public data only: restricted data never gets here, because its locator
     never passes. Refuses rather than passes, since nothing comes after it;
@@ -538,8 +576,12 @@ class Chain:
         located = []
         for resource in resources:
             dataset = catalog.dataset(resource.dataset)
+            current = resource
             for locator in self.locators:
-                found = locator.locate(catalog, dataset, resource)
+                found = locator.locate(catalog, dataset, current)
+                if isinstance(found, Reroute):
+                    dataset, current = found.dataset, found.resource
+                    continue
                 if found is not None:
                     located.append(found)
                     break
@@ -559,8 +601,8 @@ def chain_for(roots: Roots, *, describe: bool = False) -> Chain:
 
     ``describe`` builds the chain for a command that only says what a fetch
     would do: restricted data this machine cannot read is reported as not
-    available here instead of refused. Bundles are not in the chain: they are
-    read through :func:`ethos_data.load_bundle`.
+    available here instead of refused. The bundles a catalogue view holds, a
+    package's handle given ``bundles=``, are read by the second locator.
     """
     return Chain(
         (
