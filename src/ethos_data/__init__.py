@@ -81,7 +81,8 @@ from .materialize import materialize
 from .model.resource import Resource
 from .retrieval import DataFiles, NamedPaths, download, plan
 from .selection import Collections, load_collections
-from .staging import apply_staging, classify_staged, staged_only
+from .selftest import EXAMPLE_COLLECTIONS, run_selftest
+from .staging import classify_staged, staged_only
 from .verify import Finding, repair, verify
 
 __all__ = [
@@ -106,6 +107,7 @@ __all__ = [
     "CollectionError",
     "Collections",
     "DEFAULT_CATALOG",
+    "EXAMPLE_COLLECTIONS",
     "Dataset",
     "AccessError",
     "DataFiles",
@@ -121,7 +123,6 @@ __all__ = [
     "Settings",
     "UnknownCollection",
     "UnknownDataset",
-    "apply_staging",
     "catalog",
     "classify_staged",
     "collections",
@@ -139,6 +140,7 @@ __all__ = [
     "read_settings",
     "repair",
     "resolve",
+    "run_selftest",
     "locate",
     "staged_only",
     "add_restricted_cache",

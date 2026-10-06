@@ -36,7 +36,8 @@ ethos-data catalog build --check         # CI: fail if any manifest is out of da
 
 Walks `source_dir`, computes a SHA-256 per file, applies
 `ethos:include`/`ethos:exclude`, pulls in shapefile companions, and excludes VCS
-plumbing, `__pycache__` and root `README*`/`LICENSE*`/`CHANGELOG*`.
+plumbing, `__pycache__` and root `README*`/`LICENSE*`/`CHANGELOG*`. A
+`dataset.yaml` at the top of `source_dir` is never one of the dataset's files.
 
 An `ethos:include` pattern matching nothing **fails**; an `ethos:exclude` pattern
 matching nothing only warns. See

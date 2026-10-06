@@ -43,6 +43,7 @@ from .errors import (
     UnknownDataset,
 )
 from .formats import keys as k
+from .formats.derived import reader_description
 from .maintain.cli import add_catalog_parser
 from .maintain.cli import dispatch as _catalog_dispatch
 from .report import ConsoleReporter, reporting
@@ -285,6 +286,11 @@ def _add_collection_commands(sub) -> None:
         action="store_true",
         help="with a collection: list every file it selects, with its size",
     )
+    shower.add_argument(
+        "--meta",
+        action="store_true",
+        help="with a collection: print the description of every dataset it selects",
+    )
 
     fetcher = sub.add_parser(
         "fetch",
@@ -361,6 +367,43 @@ def _add_key_commands(sub) -> None:
         "key",
         nargs="?",
         help="a dataset, family, folder or file (default: list datasets)",
+    )
+    lister.add_argument(
+        "--meta",
+        action="store_true",
+        help="with a key: print the description of the dataset(s) under it",
+    )
+    checker = sub.add_parser(
+        "verify",
+        help="check the files under a key: sizes, or SHA-256 hashes with --deep",
+        description="Check a dataset, folder or file against the catalogue, without "
+        "changing anything unless --repair is given.",
+    )
+    checker.add_argument("key", help="<dataset>/<file or folder>, or a dataset name")
+    checker.add_argument(
+        "--deep",
+        action="store_true",
+        help="compare checksums, not just sizes (reads every byte)",
+    )
+    checker.add_argument(
+        "--repair",
+        action="store_true",
+        help="re-fetch repairable data; may remove public-cache links; preview with --dry-run",
+    )
+    checker.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="with --repair: say what would be re-fetched, change nothing",
+    )
+    checker.add_argument(
+        "-q", "--quiet", action="store_true", help="only report problems"
+    )
+    sub.add_parser(
+        "selftest",
+        help="check that this machine can obtain data: settings, catalogue, a small download",
+        description="Fetch the small public collections ETHOS.Data ships, under 200 KB, "
+        "and check every file against the catalogue. Give an empty --root to force a "
+        "download where the files are already cached.",
     )
 
 
@@ -690,6 +733,8 @@ def _main(argv: list[str] | None = None) -> int:
         return _config_command(args)
     if args.command == "catalog":
         return _catalog_dispatch(args)
+    if args.command == "selftest":
+        return _selftest_command(args)
 
     if args.command in ("materialize", "link", "unlink"):
         # Here --root names the cache that holds the entry, not the public cache.
@@ -703,6 +748,8 @@ def _main(argv: list[str] | None = None) -> int:
     catalog = _cache_catalog(settings).overlaid(roots)
     if args.command == "ls":
         return _ls_command(args, catalog)
+    if args.command == "verify":
+        return _key_verify_command(args, catalog, roots)
     return _path_command(args, catalog, roots)
 
 
@@ -790,6 +837,10 @@ def _show_one_collection(args, loaded) -> int:
     """
     resources, label = _selection(args, loaded)
     print(f"{label}: {len(resources)} files, {_human(sum(r.bytes for r in resources))}")
+    if args.meta:
+        print()
+        _print_meta(loaded.catalog, sorted({r.dataset for r in resources}))
+        return 0
     title = loaded.describe(args.collection).get("title", "")
     if title:
         print(f"  {title}")
@@ -930,6 +981,9 @@ def _ls_command(args, catalog: Catalog) -> int:
             print(f"  {name:<40} {dataset.access:<12} {dataset.title}")
         return 0
     resources = catalog.resources(args.key)
+    if args.meta:
+        _print_meta(catalog, sorted({r.dataset for r in resources}))
+        return 0
     print(
         f"{args.key}: {len(resources)} files, {_human(sum(r.bytes for r in resources))}\n"
     )
@@ -939,16 +993,6 @@ def _ls_command(args, catalog: Catalog) -> int:
 
 
 def _verify_command(args, loaded, roots) -> int:
-    from .verify import (
-        NOTE,
-        OK,
-        UNAVAILABLE,
-        UNVERIFIABLE,
-        repair,
-        summarise,
-        verify,
-    )
-
     if not args.collection and not args.all:
         args.all = True
     skipped: list[tuple[str, str]] = []
@@ -962,15 +1006,48 @@ def _verify_command(args, loaded, roots) -> int:
         ordered = loaded.resolve(args.collection, test=args.test)
 
     what = "every collection" if args.all else args.collection
+    retry = (
+        f"{args.prog} verify {args.collection or '--all'} --repair"
+        + (" --deep" if args.deep else "")
+        + (" --test" if args.test else "")
+    )
+    return _report_findings(
+        args, loaded.catalog, ordered, roots, what=what, retry=retry, skipped=skipped
+    )
+
+
+def _key_verify_command(args, catalog: Catalog, roots) -> int:
+    """Check the files under one catalogue key, as a package's verify checks a collection."""
+    resources = catalog.resources(args.key)
+    retry = f"ethos-data verify {args.key} --repair" + (" --deep" if args.deep else "")
+    return _report_findings(args, catalog, resources, roots, what=args.key, retry=retry)
+
+
+def _report_findings(
+    args,
+    catalog: Catalog,
+    ordered,
+    roots,
+    *,
+    what: str,
+    retry: str,
+    skipped: list[tuple[str, str]] | None = None,
+) -> int:
+    """Verify ``ordered``, print what was found, and repair it if asked."""
+    from .verify import (
+        NOTE,
+        OK,
+        UNAVAILABLE,
+        UNVERIFIABLE,
+        repair,
+        summarise,
+        verify,
+    )
+
     how = "checksums" if args.deep else "sizes"
     print(f"verifying {len(ordered):,} files from {what} ({how})\n")
 
-    findings = verify(
-        loaded.catalog,
-        ordered,
-        roots,
-        deep=args.deep,
-    )
+    findings = verify(catalog, ordered, roots, deep=args.deep)
     grouped = summarise(findings)
 
     for status, group in grouped.items():
@@ -1027,14 +1104,10 @@ def _verify_command(args, loaded, roots) -> int:
                 f"\n{len(broken) - len(unrecorded)} file(s) do not match. "
                 "Re-fetch them with:"
             )
-            print(
-                f"    {args.prog} verify {args.collection or '--all'} --repair"
-                + (" --deep" if args.deep else "")
-                + (" --test" if args.test else "")
-            )
+            print(f"    {retry}")
         return 1
 
-    outcome = repair(loaded.catalog, findings, roots, dry_run=args.dry_run)
+    outcome = repair(catalog, findings, roots, dry_run=args.dry_run)
     for key, why in sorted(outcome["skipped"].items()):
         print(f"  not repairable: {key}  ({why})")
     if args.dry_run:
@@ -1044,6 +1117,57 @@ def _verify_command(args, loaded, roots) -> int:
         return 1
     print(f"\nre-fetched {outcome['downloaded']:,} file(s).")
     return 0 if not outcome["skipped"] else 1
+
+
+def _print_meta(catalog: Catalog, names: list[str]) -> None:
+    """Each dataset's description, from its descriptor: nothing is fetched."""
+    for index, name in enumerate(names):
+        if index:
+            print()
+        print(name)
+        for line in reader_description(catalog.dataset(name).descriptor):
+            print(f"  {line}")
+
+
+def _selftest_command(args) -> int:
+    """Settings, catalogue, then every file: the first failing step is named."""
+    from .selftest import run_selftest
+
+    result = run_selftest(catalog=args.catalog, root=args.root)
+    print("1. settings")
+    if result.settings is not None:
+        roots = result.settings.roots
+        for label, value in result.settings.rows():
+            marker = ""
+            if label == "public cache":
+                marker = _reachability(roots.public, created_on_demand=True)
+            elif label.startswith("restricted cache "):
+                number = int(label.rsplit(" ", 1)[1])
+                marker = _reachability(roots.restricted[number - 1])
+            if label not in ("catalogue", "catalogue version"):
+                print(f"   {label:<17}  {value}{marker}")
+    if result.failed == "settings":
+        return _selftest_failed(result)
+    print("\n2. catalogue")
+    if result.catalog:
+        print(f"   {result.catalog}  ({result.catalog_source})")
+        print(f"   version {result.version or 'not recorded'}")
+    if result.failed == "catalogue":
+        return _selftest_failed(result)
+    print("\n3. files")
+    width = max((len(o.key) for o in result.files), default=0)
+    for outcome in result.files:
+        check = "" if outcome.ok else f"   [{outcome.status}: {outcome.detail}]"
+        print(f"   {outcome.how:<15}  {outcome.key:<{width}}  {outcome.path}{check}")
+    if result.failed:
+        return _selftest_failed(result)
+    print("\nselftest passed")
+    return 0
+
+
+def _selftest_failed(result) -> int:
+    print(f"\nselftest FAILED at {result.failed}: {result.error}", file=sys.stderr)
+    return 1
 
 
 def _cache_catalog(settings):
@@ -1243,6 +1367,11 @@ def _staging_command(args) -> int:
         verb = "copied from" if args.copy else "linked to"
         print(f"staged {staged.name!r}: {staged.entry} {verb} {source}")
         print(f"  {staged.files:,} files, {_human(staged.bytes)}")
+        if staged.descriptor is not None:
+            print(
+                f"  wrote {staged.descriptor}: the start of the dataset's description; "
+                "fill it in as you learn more"
+            )
         print(
             "\nThis shadows the catalogue for that dataset. It is not checksummed and "
             "not reproducible;\nremove it once the data is described and published:"

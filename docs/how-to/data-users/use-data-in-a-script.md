@@ -177,9 +177,6 @@ Both print title, description, origin, sources, licences, attribution, access
 class and contact, without fetching anything. In Python, a dataset's
 descriptor is `data.catalog.dataset("reskit-test-data/gebco").descriptor`.
 
-!!! warning "Gap: `--meta` is not implemented"
-    Neither command has the flag. The descriptor is reachable in Python only.
-
 ## Check the result
 
 Open the returned path with the reader the workflow uses. If a path is

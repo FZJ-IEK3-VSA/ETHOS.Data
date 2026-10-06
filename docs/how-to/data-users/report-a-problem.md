@@ -37,11 +37,6 @@ origin. `show` names the catalogue the package actually reads and marks
 unresolvable collections. The plan says what a fetch would download and what
 is missing, without downloading.
 
-!!! warning "Gap: `selftest` is not implemented"
-    Until it is, `ethos-data fetch
-    reskit-test-data/placements/turbine_placements.csv` checks a single
-    download from the configured catalogue.
-
 To rule out a stale metadata cache without changing settings:
 
 === "Bash"

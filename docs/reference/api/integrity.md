@@ -23,6 +23,19 @@ cluster](../../explanation/architecture/decisions/0028-one-public-cache-on-the-c
       show_root_toc_entry: false
       heading_level: 3
 
+## Self-test
+
+::: ethos_data.selftest
+    options:
+      members:
+        - run_selftest
+        - EXAMPLE_COLLECTIONS
+        - SelfTest
+        - FileOutcome
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
 ## Cache entries
 
 ::: ethos_data.linking
