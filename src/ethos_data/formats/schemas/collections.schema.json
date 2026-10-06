@@ -1,0 +1,172 @@
+{
+  "$defs": {
+    "Collection": {
+      "additionalProperties": true,
+      "description": "One collection; written plainly, or twice under ``test:`` and ``full:``.",
+      "properties": {
+        "extends": {
+          "default": [],
+          "description": "Other collections in this file.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Extends",
+          "type": "array"
+        },
+        "include": {
+          "default": [],
+          "description": "The data this collection adds.",
+          "items": {
+            "$ref": "#/$defs/IncludeRule"
+          },
+          "title": "Include",
+          "type": "array"
+        },
+        "paths": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Handle to catalogue key, for the workflow's arguments.",
+          "title": "Paths",
+          "type": "object"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "One line, shown by `show`.",
+          "title": "Title"
+        },
+        "test": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Selection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The small selection for tests."
+        },
+        "full": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Selection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The real inputs; the default."
+        }
+      },
+      "title": "Collection",
+      "type": "object"
+    },
+    "IncludeRule": {
+      "additionalProperties": true,
+      "description": "One ``include`` entry: a dataset, family or glob, and the files to take from it.",
+      "properties": {
+        "dataset": {
+          "description": "A dataset or family name, or a glob over names.",
+          "title": "Dataset",
+          "type": "string"
+        },
+        "files": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Globs against each dataset's paths; omit for every file.",
+          "title": "Files"
+        }
+      },
+      "required": [
+        "dataset"
+      ],
+      "title": "IncludeRule",
+      "type": "object"
+    },
+    "Selection": {
+      "additionalProperties": true,
+      "description": "What a collection, or one of its variants, selects.",
+      "properties": {
+        "extends": {
+          "default": [],
+          "description": "Other collections in this file.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Extends",
+          "type": "array"
+        },
+        "include": {
+          "default": [],
+          "description": "The data this collection adds.",
+          "items": {
+            "$ref": "#/$defs/IncludeRule"
+          },
+          "title": "Include",
+          "type": "array"
+        },
+        "paths": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Handle to catalogue key, for the workflow's arguments.",
+          "title": "Paths",
+          "type": "object"
+        }
+      },
+      "title": "Selection",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "A package's selection of catalogue data, by workflow.",
+  "properties": {
+    "catalog": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The catalogue location; a relative path is relative to this file.",
+      "title": "Catalog"
+    },
+    "collections": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Collection"
+      },
+      "default": {},
+      "description": "Collection name to definition.",
+      "title": "Collections",
+      "type": "object"
+    }
+  },
+  "title": "collections.yaml",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

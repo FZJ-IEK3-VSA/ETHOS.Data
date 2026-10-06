@@ -20,6 +20,10 @@ dependencies = [
   "pooch>=1.8.0",
   "pyyaml>=5.4",
   "platformdirs>=3.0",   # cross-platform config and cache locations
+  # The file-format specifications (ethos_data.formats) are pydantic models.
+  # Loaded only when a file is validated, so `--help` and plain reads do not
+  # pay for it.
+  "pydantic>=2",
 ]
 
 [project.optional-dependencies]
@@ -52,7 +56,6 @@ docs = [
 # One executable. The maintainer commands are `ethos-data catalog ...`; they need
 # no extra Python dependencies -- only `rclone` and `oidc-agent` on PATH, and
 # only for `upload` / `check-store` -- so there is no install extra to gate them.
-# There was a second entry point, `ice2-catalog`, until the two were unified.
 ethos-data = "ethos_data.cli:main"
 
 [tool.hatch.version]

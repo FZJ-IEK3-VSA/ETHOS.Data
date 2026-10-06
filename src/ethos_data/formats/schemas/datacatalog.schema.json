@@ -1,0 +1,87 @@
+{
+  "additionalProperties": true,
+  "description": "The generated index: catalog.yaml's keys and one row per dataset.",
+  "properties": {
+    "$schema": {
+      "default": "https://datapackage.org/profiles/2.0/datacatalog.json",
+      "description": "",
+      "title": "$Schema",
+      "type": "string",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Title"
+    },
+    "ethos:publication_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "",
+      "title": "Ethos:Publication Url",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:catalog_role": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "",
+      "title": "Ethos:Catalog Role",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "datasets": {
+      "default": [],
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Datasets",
+      "type": "array"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "datacatalog.json",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

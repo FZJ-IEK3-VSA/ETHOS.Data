@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data/main/src/ethos_data/formats/schemas/dataset.schema.json
+#
+# Written by `staging add`: the start of this dataset's description. Add where
+# the data came from, its licence and its origin as you learn them; the file
+# becomes your proposal. See "Propose a dataset" in the ETHOS.Data documentation.
+name: ${name}
+source_dir: .
+description: ${description}

@@ -43,6 +43,7 @@ from pathlib import Path
 from .catalogs import Catalog, Dataset, Resource
 from .config import Roots, current_user, resolve_staging_cache
 from .errors import AccessError, StagingError
+from .formats import keys as k
 
 __all__ = [
     "NEW",
@@ -60,7 +61,7 @@ __all__ = [
 ]
 
 #: Provenance for the entries, so ``staging list`` can say who added what and why.
-INDEX_FILE = ".ice2-staging.json"
+INDEX_FILE = k.STAGING_REGISTRY_FILE
 
 #: Never part of a dataset's inventory.
 EXCLUDE_NAMES = {".git", ".datalad", "__pycache__", ".ipynb_checkpoints", INDEX_FILE}
@@ -131,20 +132,24 @@ def _index_path(root: Path) -> Path:
 
 
 def _read_index(root: Path) -> dict:
+    """The staging registry, read through its specification."""
     path = _index_path(root)
     if not path.is_file():
         return {}
+    from .formats.records import StagingRegistry
+
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        registry = StagingRegistry.model_validate_json(path.read_bytes())
     except ValueError:
-        # A corrupt index costs provenance, not data -- the entries on disk are
-        # the truth. Say so rather than refusing to work.
+        # A corrupt registry costs provenance, not data -- the entries on disk
+        # are the truth. Say so rather than refusing to work.
         warnings.warn(
-            f"{path} is not valid JSON; staging provenance is unavailable",
+            f"{path} is not a valid staging registry; staging provenance is unavailable",
             UserWarning,
             stacklevel=2,
         )
         return {}
+    return registry.model_dump(mode="json")
 
 
 def _write_index(root: Path, index: dict) -> None:

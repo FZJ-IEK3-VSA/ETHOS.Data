@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data/main/src/ethos_data/formats/schemas/dataset.schema.json
+#
+# A dataset made here from scratch. Name its author; the licence is yours to
+# choose.
+name: ${name}
+title: ${title}
+description: What it contains and what it is for.
+source_dir: ${source_dir}
+ethos:access: public
+ethos:visibility: public
+ethos:origin: created
+contributors:
+  - title: ${contact}
+    roles: [author]
+licenses:
+  - name: CC-BY-4.0
+    path: https://creativecommons.org/licenses/by/4.0/
+ethos:contact: ${contact}
