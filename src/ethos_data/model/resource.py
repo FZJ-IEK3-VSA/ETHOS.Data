@@ -26,7 +26,7 @@ __all__ = [
 
 #: The keys a :class:`Resource` holds. Any other key of a record, a narrowed
 #: licence or provenance, travels beside it as an extra.
-CORE_KEYS = (k.NAME, k.PATH, k.BYTES, k.HASH, k.MEDIATYPE, k.SIDECARS)
+CORE_KEYS = (k.NAME, k.PATH, k.BYTES, k.HASH, k.MEDIATYPE, k.SIDECARS, k.REVISION)
 
 
 @dataclass(frozen=True)
@@ -40,6 +40,9 @@ class Resource:
     hash: str
     mediatype: str
     sidecars: tuple[str, ...] = ()
+    #: The revision of the dataset its bytes were published in; the store
+    #: serves them from that revision's folder.
+    revision: int = 1
 
     @property
     def key(self) -> str:
@@ -62,6 +65,7 @@ def from_record(dataset: str, record: Mapping) -> Resource:
         hash=record[k.HASH],
         mediatype=record.get(k.MEDIATYPE, k.DEFAULT_MEDIATYPE),
         sidecars=tuple(record.get(k.SIDECARS, ())),
+        revision=int(record.get(k.REVISION, 1)),
     )
 
 
@@ -85,6 +89,8 @@ def to_record(resource: Resource, extras: Mapping | None = None) -> dict:
     }
     if resource.sidecars:
         record[k.SIDECARS] = list(resource.sidecars)
+    if resource.revision > 1:
+        record[k.REVISION] = resource.revision
     record.update(extras or {})
     return record
 

@@ -354,12 +354,23 @@ def _official_entry(roots: Roots, name: str) -> Path | None:
     that may have no catalogue loaded, and the caches are the thing that
     actually determines what a job can resolve. A dataset described in the
     catalogue but not yet linked into the public cache is, on this machine,
-    exactly as unavailable as one nobody has described at all.
+    exactly as unavailable as one nobody has described at all. An entry of
+    any revision counts, ``<name>@<revision>`` as well as ``<name>``.
     """
     for root in (roots.public, *roots.restricted):
-        entry = root / name
-        if entry.exists() or entry.is_symlink():
-            return entry
+        plain = root / name
+        revisions = sorted(
+            (
+                entry
+                for entry in plain.parent.glob(f"{plain.name}@*")
+                if names.of_entry(entry.name)[1] > 1
+            ),
+            key=lambda entry: names.of_entry(entry.name)[1],
+            reverse=True,
+        )
+        for entry in (plain, *revisions):
+            if entry.exists() or entry.is_symlink():
+                return entry
     return None
 
 

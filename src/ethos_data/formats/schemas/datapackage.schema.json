@@ -70,6 +70,25 @@
             "published": true,
             "user_facing": false
           }
+        },
+        "ethos:revision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The revision the file's bytes were published in, when not the first.",
+          "title": "Ethos:Revision",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         }
       },
       "required": [
@@ -241,6 +260,47 @@
       "description": "",
       "title": "Ethos:File Count",
       "type": "integer",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:revision": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Which revision of the dataset this is, when not the first.",
+      "title": "Ethos:Revision",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:superseded_by": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The datasets whose ethos:supersedes names this one.",
+      "title": "Ethos:Superseded By",
       "x-ethos": {
         "inherited": false,
         "promoted": false,

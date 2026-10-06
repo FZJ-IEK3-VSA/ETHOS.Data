@@ -104,7 +104,7 @@ Settle every row before the file enters the catalogue:
 
 | Question | Settled when |
 | --- | --- |
-| What is it, and for which workflows | Name, version, title and purpose are agreed. A revision of existing data gets new paths, never the old ones. |
+| What is it, and for which workflows | Name, version, title and purpose are agreed. A new version of catalogued data is a [revision or a successor](publish-a-new-version.md), never new bytes behind published objects. |
 | Where does it come from | `ethos:origin` is right. Downloaded data names its source and retrieval date and [matches that source](verify-provenance.md). Created or derived data names its authors, inputs and method. |
 | May it be redistributed | A `licenses:` entry, or an explicit `resolved` status, based on terms somebody read. Unclear terms stay `ethos:license_status: unresolved` with the question in `ethos:license_note`, which blocks linking and upload until answered. Attribution text is recorded where the licence requires it. |
 | Who may read it | `ethos:access` and `ethos:visibility` are right, a hidden dataset has an embargo block, and a restricted dataset says in `ethos:restriction` who may obtain it and how. |

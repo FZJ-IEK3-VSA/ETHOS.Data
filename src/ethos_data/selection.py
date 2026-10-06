@@ -42,7 +42,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from . import retrieval
+from . import report, retrieval
 from .catalogs import (
     Catalog,
     Resource,
@@ -299,6 +299,12 @@ class Collections:
             except UnknownDataset as error:
                 raise UnknownDataset(f"collection {name!r}: {error.message}") from None
             for dataset in datasets:
+                if dataset.superseded_by:
+                    report.warning(
+                        f"collection {name!r} reads {dataset.name!r}, which "
+                        f"{', '.join(dataset.superseded_by)} supersedes: a newer "
+                        "version of the data with another layout and other keys."
+                    )
                 patterns = rule.files or ["**"]
                 # resources_matching narrows a sharded dataset to the shards these
                 # patterns can reach; the glob below is still the real filter.

@@ -100,19 +100,22 @@ class Finding:
         return f"{line}\n                 {self.detail}" if self.detail else line
 
 
-def _broken_link(roots: Roots, dataset: str, origin: str) -> str | None:
+def _broken_link(
+    roots: Roots, dataset: str, origin: str, entry_name: str | None = None
+) -> str | None:
     """Why the dataset's entry is a symbolic link pointing nowhere, naming the cache.
 
     Checked once per dataset rather than once per file: a dataset with 170,000
     resources behind a dangling link should cost one ``stat``, not 170,000. A
     restricted dataset is read only from an entry that is readable, so its
-    broken entries are notes; see :func:`_notes`.
+    broken entries are notes; see :func:`_notes`. ``entry_name`` is where the
+    revision the catalogue names lies in a cache, the dataset's name by default.
     """
     if origin == ORIGIN_STAGING and roots.staging is not None:
         entry = roots.staging / dataset
         where = f"the staging root {roots.staging}"
     elif origin == ORIGIN_LINK:
-        entry = linked_entry(roots.public, dataset)
+        entry = linked_entry(roots.public, entry_name or dataset)
         where = f"the public cache {roots.public}"
     else:
         return None
@@ -129,15 +132,17 @@ def _notes(catalog: Catalog, roots: Roots, dataset: str) -> list[str]:
     public data, an entry in a restricted cache, which the lookup never reads
     and its maintainer removes.
     """
-    if catalog.dataset(dataset).access == RESTRICTED:
-        entry, reasons = restricted_entry(roots.restricted, dataset)
+    described = catalog.dataset(dataset)
+    entry_name = described.entry_name
+    if described.access == RESTRICTED:
+        entry, reasons = restricted_entry(roots.restricted, entry_name)
         return reasons if entry is not None else []
     return [
-        f"{cache / dataset} is an entry in a restricted cache, but the dataset is "
+        f"{cache / entry_name} is an entry in a restricted cache, but the dataset is "
         f"public; its maintainer removes it: "
         f"ethos-data --root {cache} unlink {dataset}"
         for cache in roots.restricted
-        if (cache / dataset).exists() or (cache / dataset).is_symlink()
+        if (cache / entry_name).exists() or (cache / entry_name).is_symlink()
     ]
 
 
@@ -181,7 +186,9 @@ def verify(
             )
             continue
         if name not in link_state:
-            link_state[name] = _broken_link(roots, name, location.origin)
+            link_state[name] = _broken_link(
+                roots, name, location.origin, catalog.dataset(name).entry_name
+            )
         broken = link_state[name]
         if broken is not None:
             findings.append(Finding(location, DANGLING, broken))

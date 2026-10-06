@@ -37,7 +37,8 @@ Update any unpublished descriptor's `ethos:remote_prefix`, rebuild, and check
 the intended URLs before releasing it.
 
 For released datasets, retain the old path for the releases that describe
-it. Publish a new version at a new path rather than rename its storage. See
+it. Publish a [new version](publish-a-new-version.md) rather than rename its
+storage. See
 [Licensing and immutability](../../explanation/licensing.md#paths-are-immutable).
 
 ## Delete an empty folder

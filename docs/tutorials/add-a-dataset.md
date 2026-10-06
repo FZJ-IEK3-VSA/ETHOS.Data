@@ -130,7 +130,7 @@ ethos-data catalog build --check
 
 This time the check ends with `All manifests up to date.` Rebuilding is how an
 inventory follows its files only until the dataset is uploaded. After that its
-published paths are immutable, and changed bytes get new paths.
+published objects are immutable, and changed bytes are a new revision.
 
 ## 4. Publish the public view
 

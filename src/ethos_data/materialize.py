@@ -71,7 +71,7 @@ from .config import Roots, current_user
 from .errors import AccessError, LinkError, UnknownDataset
 from .formats import keys as k
 from .linking import raise_if_refused
-from .model import digest
+from .model import digest, names
 from .model.resource import Resource
 
 __all__ = ["MaterializeReport", "materialize", "plan_materialize", "PROVENANCE_FILE"]
@@ -120,7 +120,13 @@ def linked_entries(roots: Roots, cache: str | Path | None = None) -> list[str]:
             f"{walked} is a restricted cache; --all walks a public cache only. "
             "Name each restricted dataset to copy."
         )
-    return sorted(name for name, path in cache_entries(walked) if path.is_symlink())
+    return sorted(
+        {
+            names.of_entry(entry)[0]
+            for entry, path in cache_entries(walked)
+            if path.is_symlink()
+        }
+    )
 
 
 def plan_materialize(

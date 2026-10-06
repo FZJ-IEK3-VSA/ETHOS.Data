@@ -185,6 +185,11 @@ class DatasetDescriptor(_Part):
         description="Present when upstream no longer serves this delivery.",
         user_facing=True,
     )
+    supersedes: str | None = field(
+        k.SUPERSEDES,
+        description="The dataset this one replaces, with another layout and other keys.",
+        promoted=True,
+    )
 
     # -- provenance --------------------------------------------------------
     origin: str = field(

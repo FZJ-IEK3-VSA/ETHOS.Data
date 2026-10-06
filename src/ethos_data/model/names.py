@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import PurePosixPath, PureWindowsPath
 
-__all__ = ["ancestors", "nested", "relative", "within"]
+__all__ = ["ancestors", "entry", "nested", "of_entry", "relative", "within"]
 
 
 def relative(value: object, what: str = "path") -> PurePosixPath:
@@ -66,3 +66,21 @@ def nested(names: Iterable[str]) -> tuple[str, str] | None:
             if ancestor in present:
                 return name, ancestor
     return None
+
+
+def entry(name: str, revision: int = 1) -> str:
+    """Where a revision of a dataset lies in a cache, relative to its root.
+
+    The first revision keeps the dataset's own name; a later one is
+    ``<name>@<revision>``, so two releases that name different revisions of the
+    same keys can be read on one machine side by side.
+    """
+    return name if revision <= 1 else f"{name}@{revision}"
+
+
+def of_entry(entry_name: str) -> tuple[str, int]:
+    """The dataset and the revision a cache entry holds: ``era5@2`` is ``("era5", 2)``."""
+    head, at, tail = entry_name.rpartition("@")
+    if at and tail.isdigit() and int(tail) > 1:
+        return head, int(tail)
+    return entry_name, 1

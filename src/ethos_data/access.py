@@ -148,7 +148,9 @@ def entry_for(
     AccessError when no cache may hold the entry, naming the listed caches or
     how to list one.
     """
-    restricted = access_class(catalog.dataset(name)) == RESTRICTED
+    dataset = catalog.dataset(name)
+    restricted = access_class(dataset) == RESTRICTED
+    entry = dataset.entry_name
     if cache is not None:
         named = Path(cache).expanduser()
         listed = roots.restricted_cache(named)
@@ -163,9 +165,9 @@ def entry_for(
                 f"dataset {name!r} is public, and {named} is a restricted cache. A "
                 "public dataset's entry never goes into one."
             )
-        return named / name
+        return named / entry
     if not restricted:
-        return roots.public / name
+        return roots.public / entry
     if not roots.restricted:
         raise AccessError(
             f"dataset {name!r} is restricted, and this account lists no restricted "
@@ -179,7 +181,7 @@ def entry_for(
             "combination with the global --root, for example:\n"
             f"    ethos-data --root {roots.restricted[0]} link {name} DIR"
         )
-    return roots.restricted[0] / name
+    return roots.restricted[0] / entry
 
 
 def _listing(roots: Roots) -> str:
@@ -353,14 +355,16 @@ class RestrictedCache(Locator):
             return None
         # Once per dataset, not per file.
         if dataset.name not in self._entries:
-            self._entries[dataset.name] = restricted_entry(self.caches, dataset.name)
+            self._entries[dataset.name] = restricted_entry(
+                self.caches, dataset.entry_name
+            )
         entry, reasons = self._entries[dataset.name]
         if entry is not None:
             return Location(
                 resource, entry / resource.path, "in-place", ORIGIN_RESTRICTED
             )
         if self.describe_only:
-            why = restricted_states(self.caches, dataset.name)
+            why = restricted_states(self.caches, dataset.entry_name)
             return Location(resource, None, UNAVAILABLE, ORIGIN_RESTRICTED, why)
         raise AccessError(restricted_refusal(dataset, reasons))
 
@@ -434,9 +438,9 @@ class PublicCache(Locator):
         linked = self._linked.get(dataset.name)
         if linked is None:
             linked = self._linked[dataset.name] = (
-                linked_entry(self.root, dataset.name) is not None
+                linked_entry(self.root, dataset.entry_name) is not None
             )
-        target = self.root / dataset.name / resource.path
+        target = self.root / dataset.entry_name / resource.path
         if linked:
             return Location(resource, target, "in-place", ORIGIN_LINK)
         try:
@@ -476,7 +480,7 @@ class Download(Locator):
                 f"not yet uploaded, point at the copy on this machine:\n"
                 f"    ethos-data link {dataset.name} /path/to/{dataset.name}"
             )
-        target = self.root / dataset.name / resource.path
+        target = self.root / dataset.entry_name / resource.path
         return Location(resource, target, "download", ORIGIN_DOWNLOAD)
 
 

@@ -206,6 +206,13 @@
       "description": "The build input: the directory the build reads, relative to the dataset directory if relative.",
       "title": "Source Dir"
     },
+    "revision": {
+      "default": 1,
+      "description": "Which revision of the dataset the inventory describes; 1 for the first.",
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
     "authority": {
       "anyOf": [
         {

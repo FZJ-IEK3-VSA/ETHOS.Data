@@ -37,6 +37,8 @@ RESTRICTION = "ethos:restriction"
 INCLUDE = "ethos:include"
 EXCLUDE = "ethos:exclude"
 SHARD_DEPTH = "ethos:shard_depth"
+#: The dataset this one replaces, with another layout and other keys.
+SUPERSEDES = "ethos:supersedes"
 
 # In use in the catalogue before the format reference named them.
 PROVENANCE = "ethos:provenance"
@@ -63,6 +65,13 @@ TOTAL_BYTES = "ethos:total_bytes"
 FILE_COUNT = "ethos:file_count"
 NAMESPACE = "ethos:namespace"
 SIDECARS = "ethos:sidecars"
+#: Of a descriptor and its index row: which revision of the dataset it
+#: describes, absent for the first. Of a resource: the revision its bytes were
+#: published in, absent for the first; the object is
+#: ``<remote_prefix>@<revision>/<path>``.
+REVISION = "ethos:revision"
+#: Written by the build into a dataset another one's ``ethos:supersedes`` names.
+SUPERSEDED_BY = "ethos:superseded_by"
 
 # Inside one ``resources`` record.
 BYTES = "bytes"
