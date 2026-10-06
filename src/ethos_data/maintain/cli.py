@@ -25,9 +25,9 @@ import argparse
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
+from .. import report
 from ..errors import MaintenanceError
 from . import resolve_catalog_root
 
@@ -51,13 +51,12 @@ def check_store(vo: str) -> int:
     if os.name == "nt":
         bash = shutil.which("bash")
         if bash is None:
-            print(
+            report.warning(
                 "check-store needs bash, which is not on PATH.\n"
                 "It is a shell script on purpose -- it prints the very curl and rclone\n"
                 "commands it ran, so that a failure can be retried by hand.\n"
                 "Install Git for Windows (which ships one) or run it from WSL:\n"
-                f"    bash {script} {vo}",
-                file=sys.stderr,
+                f"    bash {script} {vo}"
             )
             return 1
         return subprocess.run([bash, str(script), vo]).returncode
@@ -185,6 +184,20 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     return parser
 
 
+def _status(result) -> int:
+    """The exit status of a maintenance command: 0 when its result is ok."""
+    return 0 if result.ok else 1
+
+
+def _upload_options(args):
+    """The upload flags a parsed command line carries, as the upload takes them."""
+    from .upload import UploadOptions
+
+    return UploadOptions(
+        **{name: getattr(args, name) for name in UploadOptions.__dataclass_fields__}
+    )
+
+
 def dispatch(args) -> int:
     """Run one ``ethos-data catalog`` subcommand.
 
@@ -200,16 +213,16 @@ def dispatch(args) -> int:
     if args.catalog_command == "build":
         from . import manifest
 
-        return manifest.run(root, args.datasets, check=args.check)
+        return _status(manifest.run(root, args.datasets, check=args.check))
 
     if args.catalog_command == "publish":
         from . import publish
 
-        return publish.run(root, args.target, check=args.check)
+        return _status(publish.run(root, args.target, check=args.check))
 
     if args.catalog_command == "upload":
         from . import upload
 
-        return upload.run(root, args)
+        return _status(upload.run(root, args.datasets, _upload_options(args)))
 
     raise MaintenanceError(f"unknown catalog command: {args.catalog_command}")

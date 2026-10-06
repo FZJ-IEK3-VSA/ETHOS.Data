@@ -24,6 +24,31 @@ The catalogue-locating helpers below serve both entry points: `link --all` reads
 `source_dir` from the hand-written `dataset.yaml` of a source checkout, and it
 finds that checkout the same way the maintainer commands find theirs.
 
+## Reporting
+
+Every entry point below that runs a command (`manifest.run`, `publish.run`,
+`upload.run`, the namespace builder's `run`) takes a `reporter=` keyword and
+sends its progress and warnings there. Without one, progress goes to standard
+output and warnings are Python warnings. Each returns a result whose `ok` says
+whether the command succeeded, and the command line chooses the exit status
+from it. Refusals are raised, never reported.
+
+::: ethos_data.report
+    options:
+      members:
+        - Reporter
+        - ConsoleReporter
+        - NullReporter
+        - RecordingReporter
+        - PythonWarnings
+        - reporting
+        - reported
+        - info
+        - warning
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
 ## Locating and reading a catalogue
 
 ::: ethos_data.maintain
@@ -46,6 +71,7 @@ finds that checkout the same way the maintainer commands find theirs.
     options:
       members:
         - run
+        - BuildResult
         - render_dataset
         - write_dataset
         - stale_files
@@ -70,6 +96,7 @@ finds that checkout the same way the maintainer commands find theirs.
     options:
       members:
         - run
+        - PublishResult
         - render
         - public_datasets
         - strip
@@ -91,6 +118,7 @@ be a whole link tree built somewhere nobody named.
     options:
       members:
         - run
+        - NamespaceResult
         - plan
         - apply
         - Action
@@ -104,6 +132,8 @@ be a whole link tree built somewhere nobody named.
     options:
       members:
         - run
+        - UploadResult
+        - UploadOptions
         - preflight
         - resources_of
         - remote_manifest_check

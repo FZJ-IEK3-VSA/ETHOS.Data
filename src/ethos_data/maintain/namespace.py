@@ -36,6 +36,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from .. import report
 from ..formats import keys as k
 from ..formats.derived import license_settled
 from . import (
@@ -218,13 +219,31 @@ def apply(actions: list[Action]) -> list[Action]:
     return actions
 
 
+@dataclass
+class NamespaceResult:
+    """The actions ``link --all`` planned, and whether it carried them out."""
+
+    actions: list[Action]
+    applied: bool = False
+
+    @property
+    def problems(self) -> list[Action]:
+        """The datasets whose ``source_dir`` does not exist."""
+        return [action for action in self.actions if action.verb == "missing"]
+
+    @property
+    def ok(self) -> bool:
+        return not self.problems
+
+
+@report.reported
 def run(
     catalog_root: Path,
     root: Path,
     *,
     dry_run: bool = False,
     prune: bool = False,
-) -> int:
+) -> NamespaceResult:
     """Plan the namespace, report it, and -- unless ``dry_run`` -- build it.
 
     ``root`` is the public cache the caller names, and deliberately has no
@@ -236,25 +255,24 @@ def run(
     changes = [a for a in actions if a.changes_anything]
     problems = [a for a in actions if a.verb == "missing"]
 
-    print(f"namespace root: {root}")
-    print(f"catalogue:      {catalog_root}\n")
+    report.info(f"namespace root: {root}")
+    report.info(f"catalogue:      {catalog_root}\n")
     for action in actions:
-        print(f"  {action}")
+        report.info(f"  {action}")
 
     if dry_run:
-        print(f"\n{len(changes)} change(s) would be made. Nothing was written.")
-        return 1 if problems else 0
+        report.info(f"\n{len(changes)} change(s) would be made. Nothing was written.")
+        return NamespaceResult(actions)
 
     if not changes:
-        print("\nnothing to do.")
-        return 1 if problems else 0
+        report.info("\nnothing to do.")
+        return NamespaceResult(actions)
 
     apply(changes)
-    print(f"\n{len(changes)} change(s) applied.")
+    report.info(f"\n{len(changes)} change(s) applied.")
     if problems:
-        print(
+        report.info(
             f"{len(problems)} dataset(s) have a source_dir that does not exist -- "
             f"fix dataset.yaml or the storage, then run this again."
         )
-        return 1
-    return 0
+    return NamespaceResult(actions, applied=True)

@@ -59,7 +59,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .access import entry_for
+from .access import cache_entries, entry_for
 from .catalogs import Catalog
 from .config import Roots, current_user
 from .errors import AccessError, LinkError, UnknownDataset
@@ -99,6 +99,22 @@ class MaterializeReport:
     def __str__(self) -> str:
         head = f"{self.action:<14} {self.dataset}"
         return f"{head}  {self.detail}" if self.detail else head
+
+
+def linked_entries(roots: Roots, cache: str | Path | None = None) -> list[str]:
+    """The entries ``materialize --all`` converts: every link in a public cache.
+
+    The public cache, or the one ``cache`` names. A listed restricted cache is
+    refused: copying restricted bytes is something somebody names dataset by
+    dataset. A cache that does not exist holds nothing to convert.
+    """
+    walked = Path(cache).expanduser() if cache is not None else roots.public
+    if roots.restricted_cache(walked) is not None:
+        raise AccessError(
+            f"{walked} is a restricted cache; --all walks a public cache only. "
+            "Name each restricted dataset to copy."
+        )
+    return sorted(name for name, path in cache_entries(walked) if path.is_symlink())
 
 
 def plan_materialize(

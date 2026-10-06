@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
-import warnings
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Mapping, Sequence
@@ -19,6 +18,7 @@ from typing import Iterable, Mapping, Sequence
 import pooch
 import yaml
 
+from . import report
 from .catalogs import Catalog, _join, _read_binary
 from .errors import BundleError
 from .formats import keys as k
@@ -267,7 +267,7 @@ class Bundle:
                     message
                     + "; allow_modified=True is available for temporary development edits"
                 )
-            warnings.warn(
+            report.warning(
                 message
                 + ". Development override active; original hashes are retained.",
                 ModifiedBundleWarning,

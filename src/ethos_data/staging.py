@@ -36,10 +36,10 @@ from __future__ import annotations
 
 import json
 import time
-import warnings
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from . import report
 from .catalogs import Catalog, Dataset
 from .config import Roots, current_user, read_settings
 from .errors import AccessError, StagingError
@@ -155,7 +155,7 @@ def _read_index(root: Path) -> dict:
     except ValueError:
         # A corrupt registry costs provenance, not data -- the entries on disk
         # are the truth. Say so rather than refusing to work.
-        warnings.warn(
+        report.warning(
             f"{path} is not a valid staging registry; staging provenance is unavailable",
             UserWarning,
             stacklevel=2,
@@ -483,7 +483,7 @@ def apply_staging(
             # overlay; that it was ignored is exactly the thing they must be
             # told, and it is not the routine "staging is on" noise that
             # ``warn`` exists to quieten.
-            warnings.warn(
+            report.warning(
                 f"{name!r} is staged at {directory} but is a restricted dataset; "
                 f"the staging entry is IGNORED. Restricted data is only ever read "
                 f"from a restricted cache.",
@@ -496,7 +496,7 @@ def apply_staging(
         shadowed.append(name)
 
     if shadowed and warn:
-        warnings.warn(
+        report.warning(
             f"staging is active: {', '.join(shadowed)} "
             f"{'is' if len(shadowed) == 1 else 'are'} read from {roots.staging} instead of "
             f"the catalogue. Results from staged data are not reproducible.",

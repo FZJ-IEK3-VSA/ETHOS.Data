@@ -27,9 +27,10 @@ from __future__ import annotations
 
 import json
 import re
-import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
+from .. import report
 from ..errors import PublishError
 from ..formats import dataset as dataset_format
 from ..formats import keys as k
@@ -271,7 +272,24 @@ def _differs(path: Path, content: str | bytes) -> bool:
     return path.read_text(encoding="utf-8") != content
 
 
-def run(catalog_root: Path, target: str, check: bool = False) -> int:
+@dataclass
+class PublishResult:
+    """What ``catalog publish`` wrote, or with ``check`` what is out of date."""
+
+    files: list[str] = field(default_factory=list)
+    withheld: list[str] = field(default_factory=list)
+    stale: list[str] = field(default_factory=list)
+    orphans: list[str] = field(default_factory=list)
+    leaks: list[str] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not (self.stale or self.orphans or self.leaks)
+
+
+@report.reported
+def run(catalog_root: Path, target: str, check: bool = False) -> PublishResult:
+    """Write the public catalogue into ``target``, or with ``check`` compare it."""
     destination_root = Path(target).expanduser().resolve()
     # Publishing deletes everything in its target but .git, so a source
     # checkout, which holds catalog.yaml, is never one.
@@ -320,18 +338,23 @@ def run(catalog_root: Path, target: str, check: bool = False) -> int:
             and str(p.relative_to(destination_root)) not in generated
         ]
         for problem in leaked:
-            print(f"  LEAK: {problem}", file=sys.stderr)
+            report.warning(f"  LEAK: {problem}")
         if stale or orphans or leaked:
             if stale or orphans:
-                print("Public catalogue is out of date:", file=sys.stderr)
+                report.warning("Public catalogue is out of date:")
             for rel in stale:
-                print(f"  changed/missing: {rel}", file=sys.stderr)
+                report.warning(f"  changed/missing: {rel}")
             for rel in orphans:
-                print(f"  should be removed: {rel}", file=sys.stderr)
-            return 1
+                report.warning(f"  should be removed: {rel}")
+            return PublishResult(
+                withheld=withheld,
+                stale=[str(rel) for rel in stale],
+                orphans=orphans,
+                leaks=leaked,
+            )
 
-        print(f"Public catalogue is current ({len(files)} files).")
-        return 0
+        report.info(f"Public catalogue is current ({len(files)} files).")
+        return PublishResult(withheld=withheld)
 
     if leaked:
         raise PublishError(
@@ -370,10 +393,10 @@ def run(catalog_root: Path, target: str, check: bool = False) -> int:
         else:
             destination.write_text(content, encoding="utf-8", newline="\n")
 
-    print(f"Published to {destination_root}")
+    report.info(f"Published to {destination_root}")
     for rel in sorted(files, key=str):
-        print(f"  + {rel}")
+        report.info(f"  + {rel}")
     if withheld:
-        print(f"\nWithheld (visibility: hidden): {', '.join(withheld)}")
-    print("\nReview and commit in the public repo, then push.")
-    return 0
+        report.info(f"\nWithheld (visibility: hidden): {', '.join(withheld)}")
+    report.info("\nReview and commit in the public repo, then push.")
+    return PublishResult(files=sorted(str(rel) for rel in files), withheld=withheld)

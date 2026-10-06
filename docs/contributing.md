@@ -73,6 +73,20 @@ rewrites it:
 pytest -m legacy --collect-only -q   # what is still waiting to be rewritten
 ```
 
+## Library code does not print
+
+Only `ethos_data.cli` prints and chooses an exit status. Below it, a refusal
+is one of the typed errors in `ethos_data.errors`, a command returns a result
+that says whether it succeeded, and progress and warnings go through
+`ethos_data.report`: `report.info(...)` and `report.warning(..., category)`
+reach the reporter of the command being run. The command line prints a
+warning; outside any command it is a Python warning of its category, so a
+script filters it like any other. The maintainer entry points take
+`reporter=`, so a test records what a build said with
+`report.RecordingReporter()` and a script silences it with
+`report.NullReporter()`. A test fails when a `print` or a `warnings.warn`
+appears below the command line.
+
 ## Two invariants that a patch must not break
 
 **Deduplication depends on path agreement.** Every tool must derive the same

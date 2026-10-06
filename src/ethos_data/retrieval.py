@@ -22,11 +22,11 @@ ever create real directories, and never write through a link.
 
 from __future__ import annotations
 
-import warnings
 from pathlib import Path
 
 import pooch
 
+from . import report
 from .access import (
     ORIGIN_CACHED,
     Location,
@@ -189,7 +189,7 @@ def download(
     naming the path it belongs at.
     """
     roots = root if root is not None else catalog.settings.roots
-    _warn_about_licensing(catalog, resources)
+    warn_about_licensing(catalog, resources)
 
     locations = locate(catalog, resources, roots)
 
@@ -277,11 +277,12 @@ def _refuse_to_write_through_a_link(root: Path, name: str) -> None:
         )
 
 
-def _warn_about_licensing(catalog: Catalog, resources: list[Resource]) -> None:
-    """Refuse to let unresolved licensing pass silently.
+def warn_about_licensing(catalog: Catalog, resources: list[Resource]) -> None:
+    """Refuse to let unresolved licensing pass silently, for whoever reads the data.
 
     An absent licence is a question, not a default. Datasets are published with
     ethos:license_status until somebody has actually read the upstream terms.
+    The warning names the line that called the caller: a fetch, or a verify.
     """
     unresolved = sorted(
         {
@@ -292,7 +293,7 @@ def _warn_about_licensing(catalog: Catalog, resources: list[Resource]) -> None:
     )
     for name in unresolved:
         note = catalog.dataset(name).descriptor.get(k.LICENSE_NOTE, "")
-        warnings.warn(
+        report.warning(
             f"dataset {name!r} has unresolved licensing; redistribution terms "
             f"have not been confirmed. {note}".strip(),
             UserWarning,

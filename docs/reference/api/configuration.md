@@ -30,6 +30,8 @@ which cache holds an entry that `link` or `materialize` makes.
         - config_path
         - account_config_path
         - load_config
+        - unreachable
+        - catalog_index
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

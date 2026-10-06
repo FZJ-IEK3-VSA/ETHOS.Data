@@ -42,11 +42,11 @@ for it fails with an explanation instead of doing something surprising.
 from __future__ import annotations
 
 import os
-import warnings
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import report
 from .catalogs import Catalog, Dataset
 from .config import Roots
 from .errors import AccessError
@@ -244,7 +244,7 @@ class Staging(Locator):
             return None
         if dataset.name not in self._warned:
             self._warned.add(dataset.name)
-            warnings.warn(
+            report.warning(
                 f"dataset {dataset.name!r} is being read from the staging root "
                 f"({staged}), not from the catalogue. Staged data is not "
                 f"checksummed and is not reproducible -- do not publish results "

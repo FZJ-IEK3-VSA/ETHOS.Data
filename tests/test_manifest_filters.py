@@ -188,10 +188,10 @@ class TestGuardRails:
         with pytest.raises(DescriptorError, match="typo_"):
             inventory('ethos:include:\n  - "wind_speed_cog_*.tif"\n  - "typo_*.tif"\n')
 
-    def test_exclude_matching_nothing_is_only_a_warning(self, capsys):
+    def test_exclude_matching_nothing_is_only_a_warning(self):
         # The stray it named may simply have been cleaned up since.
-        assert inventory('ethos:exclude:\n  - "already-gone.txt"\n')
-        assert "matches nothing" in capsys.readouterr().err
+        with pytest.warns(UserWarning, match="matches nothing"):
+            assert inventory('ethos:exclude:\n  - "already-gone.txt"\n')
 
     def test_empty_list_is_refused_rather_than_ignored(self):
         with pytest.raises(DescriptorError, match="empty list"):

@@ -35,13 +35,14 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import tempfile
 import urllib.error
 import urllib.request
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
 
+from .. import report
 from ..errors import UploadError
 from ..formats import keys as k
 from ..formats.derived import license_settled, remote_prefix_of, resource_url
@@ -57,6 +58,23 @@ from . import (
     resources_of,
     source_dir_of,
 )
+
+
+@dataclass(frozen=True)
+class UploadOptions:
+    """The flags of ``ethos-data catalog upload``, with the command's defaults."""
+
+    remote: str = "HIFIS"
+    oidc_profile: str = "HIFIS"
+    vo_path: str = "Helmholtz/FZJ-ICE2"
+    #: The publication root under the VO; None means the catalogue's own.
+    root: str | None = None
+    dry_run: bool = False
+    verify_only: bool = False
+    allow_internal: bool = False
+    no_chmod: bool = False
+    transfers: int = 8
+
 
 FRONTEND = "https://hifis-storage-web.desy.de/api/v1"
 MODE_0755 = 493  # dCache wants the mode as a decimal integer, not octal
@@ -297,7 +315,7 @@ def expand_families(catalog_root: Path, names: list[str]) -> list[str]:
             raise UploadError(
                 f"{name} is a family with no member dataset beneath it; nothing to upload."
             )
-        print(
+        report.info(
             f"{name} is a family: its {len(members)} members are uploaded in its place"
         )
         expanded.extend(members)
@@ -314,25 +332,27 @@ class Plan(NamedTuple):
     prefix: str
 
 
-def upload_one(args, plan: Plan, base_url: str, root: str, bearer) -> int:
+def upload_one(
+    options: UploadOptions, plan: Plan, base_url: str, root: str, bearer
+) -> int:
     """Upload and verify a single dataset. Returns a process-style exit code."""
-    namespace_path = f"{args.vo_path}/{root}/{plan.prefix}"
-    destination = f"{args.remote}:{root}/{plan.prefix}"
+    namespace_path = f"{options.vo_path}/{root}/{plan.prefix}"
+    destination = f"{options.remote}:{root}/{plan.prefix}"
     dataset_url = resource_url(base_url, plan.prefix)
 
-    print(
+    report.info(
         f"dataset      {plan.name}  ({plan.package['ethos:file_count']} files, "
         f"{plan.package['ethos:total_bytes'] / 1e6:,.1f} MB)"
     )
-    print(
+    report.info(
         f"from         {plan.source_dir or '(already uploaded -- no local source_dir)'}"
     )
-    print(f"to           {destination}")
-    print(f"public URL   {dataset_url}\n")
+    report.info(f"to           {destination}")
+    report.info(f"public URL   {dataset_url}\n")
 
     resources = resources_of(plan.package, plan.dataset_dir)
 
-    if not args.verify_only:
+    if not options.verify_only:
         # Upload the manifest, not the directory. They are the same thing only
         # when nothing else lives under source_dir; with ethos:include or
         # ethos:exclude in play they are not, and `rclone copy <dir>` would
@@ -363,85 +383,105 @@ def upload_one(args, plan: Plan, base_url: str, root: str, bearer) -> int:
             "--files-from",
             str(listing),
             "--transfers",
-            str(args.transfers),
+            str(options.transfers),
             "--checksum",
             # dCache cannot modify a file in place -- a changed file is delete +
             # rewrite. --immutable makes rclone fail loudly if a published file
             # differs, instead of silently republishing under the same path.
             "--immutable",
-            "--progress" if not args.dry_run else "--dry-run",
+            "--progress" if not options.dry_run else "--dry-run",
         ]
-        print(f"  ({len(resources)} files listed in {listing})")
-        print("  $ " + " ".join(command) + "\n")
+        report.info(f"  ({len(resources)} files listed in {listing})")
+        report.info("  $ " + " ".join(command) + "\n")
         try:
             result = subprocess.run(command)
         finally:
             listing.unlink(missing_ok=True)
         if result.returncode != 0:
-            print("\nrclone failed. Common causes:", file=sys.stderr)
-            print(
+            report.warning("\nrclone failed. Common causes:")
+            report.warning(
                 "  * no rclone remote called "
-                f"{args.remote!r} -- check ~/.config/rclone/rclone.conf",
-                file=sys.stderr,
+                f"{options.remote!r} -- check ~/.config/rclone/rclone.conf"
             )
-            print(
-                "  * oidc-agent not running, so bearer_token_command returned nothing",
-                file=sys.stderr,
+            report.warning(
+                "  * oidc-agent not running, so bearer_token_command returned nothing"
             )
-            print(
+            report.warning(
                 "  * --immutable tripped: a published file changed. Publish it at a "
-                "NEW path rather than overwriting.",
-                file=sys.stderr,
+                "NEW path rather than overwriting."
             )
             return result.returncode
-        if args.dry_run:
-            print("\nDry run only; nothing was uploaded.")
+        if options.dry_run:
+            report.info("\nDry run only; nothing was uploaded.")
             return 0
 
-    if not args.no_chmod and plan.package.get(k.ACCESS, k.PUBLIC) == k.PUBLIC:
+    if not options.no_chmod and plan.package.get(k.ACCESS, k.PUBLIC) == k.PUBLIC:
         status = chmod(namespace_path, MODE_0755, bearer())
-        print(f"\nchmod 0755 {namespace_path} -> HTTP {status}")
+        report.info(f"\nchmod 0755 {namespace_path} -> HTTP {status}")
         if status not in (200, 204):
-            print("  chmod failed; anonymous reads will 401 until it succeeds.")
+            report.info("  chmod failed; anonymous reads will 401 until it succeeds.")
 
-    print(
+    report.info(
         "\nverifying anonymous access (no credentials, exactly what a public user gets)"
     )
     ok, missing, wrong = remote_manifest_check(resources, dataset_url)
-    print(f"  readable       {len(ok)}/{plan.package['ethos:file_count']}")
+    report.info(f"  readable       {len(ok)}/{plan.package['ethos:file_count']}")
     if wrong:
-        print(f"  WRONG SIZE     {len(wrong)}")
+        report.info(f"  WRONG SIZE     {len(wrong)}")
         for resource, length in wrong[:5]:
-            print(
+            report.info(
                 f"    {resource['path']}: {length} on server, {resource['bytes']} in manifest"
             )
     if missing:
-        print(f"  NOT READABLE   {len(missing)}")
+        report.info(f"  NOT READABLE   {len(missing)}")
         for resource, why in missing[:5]:
-            print(f"    {resource['path']}: {why}")
-        print("\n  A 401 here means the directory is not world-readable yet.")
-        print(
-            f'    curl -H "Authorization: Bearer $(oidc-token {args.oidc_profile})" \\'
+            report.info(f"    {resource['path']}: {why}")
+        report.info("\n  A 401 here means the directory is not world-readable yet.")
+        report.info(
+            f'    curl -H "Authorization: Bearer $(oidc-token {options.oidc_profile})" \\'
         )
-        print("      -H 'Content-Type: application/json' -X POST \\")
-        print(
+        report.info("      -H 'Content-Type: application/json' -X POST \\")
+        report.info(
             f'      \'{FRONTEND}/namespace/{namespace_path}\' -d \'{{"action":"chmod","mode":493}}\''
         )
 
     sample = resources[0]["path"]
     where = locality(f"{namespace_path}/{sample}", bearer())
-    print(f"\n  storage locality of {sample}: {where}")
+    report.info(f"\n  storage locality of {sample}: {where}")
     if where == "NEARLINE":
-        print("    NEARLINE means tape only -- the first read will block on staging.")
+        report.info(
+            "    NEARLINE means tape only -- the first read will block on staging."
+        )
     elif where == "ONLINE":
-        print(
+        report.info(
             "    ONLINE means disk. Large files may also gain a tape copy after ~1 week."
         )
 
     return 1 if (missing or wrong) else 0
 
 
-def run(catalog_root: Path, args) -> int:
+@dataclass
+class UploadResult:
+    """The datasets an upload handled, and those that failed with rclone's status."""
+
+    datasets: list[str] = field(default_factory=list)
+    failed: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def ok(self) -> bool:
+        return not self.failed
+
+
+@report.reported
+def run(
+    catalog_root: Path, datasets: list[str], options: UploadOptions | None = None
+) -> UploadResult:
+    """Upload ``datasets`` -- names, paths or families -- and verify each anonymously.
+
+    Every dataset is loaded and checked before any of them is uploaded.
+    ``options`` are the command's flags; ``reporter=`` takes the progress.
+    """
+    options = options or UploadOptions()
     catalog_meta = read_catalog_meta(catalog_root)
     base_url = catalog_meta[k.PUBLICATION_URL].rstrip("/")
 
@@ -451,12 +491,12 @@ def run(catalog_root: Path, args) -> int:
     # verification HEAD would 404 against the other, which reads like a
     # permissions problem and is not one.
     published_root = base_url.rstrip("/").rsplit("/", 1)[-1]
-    root = args.root or published_root
-    if args.root and args.root != published_root:
+    root = options.root or published_root
+    if options.root and options.root != published_root:
         raise UploadError(
-            f"--root {args.root!r} does not match the catalogue's publication root "
+            f"--root {options.root!r} does not match the catalogue's publication root "
             f"{published_root!r} (from ethos:publication_url in catalog.yaml).\n"
-            f"Uploading to {args.root!r} would publish bytes that {base_url}/... never serves.\n"
+            f"Uploading to {options.root!r} would publish bytes that {base_url}/... never serves.\n"
             "Fix ethos:publication_url, or drop --root to use the catalogue's own value."
         )
 
@@ -465,7 +505,7 @@ def run(catalog_root: Path, args) -> int:
     names = dict.fromkeys(
         expand_families(
             catalog_root,
-            [resolve_name(catalog_root, argument) for argument in args.datasets],
+            [resolve_name(catalog_root, argument) for argument in datasets],
         )
     )
 
@@ -479,7 +519,7 @@ def run(catalog_root: Path, args) -> int:
     for name in names:
         _meta, package, source_dir, dataset_dir = load(catalog_root, name)
         prefix = preflight(
-            name, package, source_dir, args.allow_internal, args.verify_only
+            name, package, source_dir, options.allow_internal, options.verify_only
         )
         plans.append(Plan(name, package, source_dir, dataset_dir, prefix))
 
@@ -490,36 +530,34 @@ def run(catalog_root: Path, args) -> int:
 
     def bearer() -> str:
         if not cached:
-            cached.append(token(args.oidc_profile))
+            cached.append(token(options.oidc_profile))
         return cached[0]
 
     if len(plans) > 1:
         files = sum(plan.package["ethos:file_count"] for plan in plans)
         size = sum(plan.package["ethos:total_bytes"] for plan in plans)
-        print(f"{len(plans)} datasets, {files:,} files, {size / 1e9:,.2f} GB")
-        print(f"  {', '.join(plan.name for plan in plans)}\n")
+        report.info(f"{len(plans)} datasets, {files:,} files, {size / 1e9:,.2f} GB")
+        report.info(f"  {', '.join(plan.name for plan in plans)}\n")
 
     failed: dict[str, int] = {}
     for index, plan in enumerate(plans, start=1):
         if len(plans) > 1:
-            print(
+            report.info(
                 f"---- [{index}/{len(plans)}] {plan.name} "
                 + "-" * max(0, 50 - len(plan.name))
             )
-        status = upload_one(args, plan, base_url, root, bearer)
+        status = upload_one(options, plan, base_url, root, bearer)
         if status:
             failed[plan.name] = status
         if len(plans) > 1:
-            print()
+            report.info()
 
-    # A single dataset keeps its exit code exactly as before -- rclone's own on a
-    # transfer failure, 1 on a verification miss -- so existing scripts that read
-    # it do not change meaning now that the argument is a list.
+    result = UploadResult([plan.name for plan in plans], failed)
     if len(plans) == 1:
-        return failed.get(plans[0].name, 0)
+        return result
 
-    print("=" * 72)
-    print(f"{len(plans) - len(failed)}/{len(plans)} datasets ok")
+    report.info("=" * 72)
+    report.info(f"{len(plans) - len(failed)}/{len(plans)} datasets ok")
     for name, status in failed.items():
-        print(f"  FAILED   {name} (exit {status})")
-    return 1 if failed else 0
+        report.info(f"  FAILED   {name} (exit {status})")
+    return result
