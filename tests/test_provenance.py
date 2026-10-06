@@ -182,12 +182,12 @@ def test_applies_to_matching_nothing_is_an_error():
         )
 
 
-def test_uncovered_files_warn_when_every_licence_is_narrowed(capsys):
+def test_uncovered_files_warn_when_every_licence_is_narrowed():
     resources = [{"path": "a.nc"}, {"path": "b.tif"}]
-    apply_resource_licenses(
-        "d", resources, [{"name": "MIT", "ethos:applies_to": ["*.nc"]}]
-    )
-    assert "covered by no licence at all" in capsys.readouterr().err
+    with pytest.warns(UserWarning, match="covered by no licence at all"):
+        apply_resource_licenses(
+            "d", resources, [{"name": "MIT", "ethos:applies_to": ["*.nc"]}]
+        )
 
 
 # -- end to end ------------------------------------------------------------

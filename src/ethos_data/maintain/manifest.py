@@ -60,6 +60,7 @@ import json
 import mimetypes
 import re
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from .. import report
@@ -838,8 +839,28 @@ def _inherited_for(root: Path, dataset_dir: Path) -> dict:
     return inherited
 
 
+@dataclass
+class BuildResult:
+    """What ``catalog build`` did: the datasets it rendered, and what is stale.
+
+    ``stale`` is filled by ``check`` only: the files a build would change.
+    """
+
+    built: list[str] = field(default_factory=list)
+    stale: list[Path] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not self.stale
+
+
 @report.reported
-def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
+def run(catalog_root: Path, names: list[str], check: bool = False) -> BuildResult:
+    """Build the named datasets, or every one, and the catalogue index.
+
+    With ``check`` nothing is written: the result names the files a build would
+    change.
+    """
     catalog_meta(catalog_root)  # fail on a bad catalog.yaml before hashing anything
     root = datasets_dir(catalog_root)
     selected = [root / name for name in names] if names else iter_dataset_dirs(root)
@@ -849,7 +870,8 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
     # known. Deepest first does that with no graph to walk.
     selected = sorted(selected, key=lambda p: (-len(p.relative_to(root).parts), p))
 
-    stale: list[Path] = []
+    result = BuildResult()
+    stale = result.stale
     rendered: dict[Path, dict] = {}
     rows: list[str] = []
     for dataset_dir in selected:
@@ -888,6 +910,7 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
         )
         package = json.loads(files["datapackage.json"])
         rendered[dataset_dir] = package
+        result.built.append(name)
 
         if check:
             stale += stale_files(dataset_dir, files)
@@ -927,10 +950,10 @@ def run(catalog_root: Path, names: list[str], check: bool = False) -> int:
             report.warning("Out of date (re-run `ethos-data catalog build`):")
             for path in stale:
                 report.warning(f"  {path.relative_to(catalog_root)}")
-            return 1
+            return result
         report.info("All manifests up to date.")
-        return 0
+        return result
 
     catalog_path.write_text(catalog_text, encoding="utf-8", newline="\n")
     report.info(f"  {'datacatalog.json':<22} {len(all_dirs):>5} datasets")
-    return 0
+    return result

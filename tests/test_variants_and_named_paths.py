@@ -1470,44 +1470,6 @@ class TestCommandLine:
         )
         assert "the dataset 'landcover' cannot be found" in capsys.readouterr().err
 
-    @pytest.mark.parametrize(
-        ("retired", "replacement"),
-        [
-            ("list", "example-data show"),
-            ("info", "example-data show <collection>"),
-            ("plan", "example-data fetch <collection> --plan"),
-            ("paths", "example-data fetch <collection> --paths"),
-            ("path", "ethos-data fetch <key>"),
-            ("ls", "ethos-data ls [<key>]"),
-        ],
-    )
-    def test_a_retired_command_names_what_replaces_it(
-        self, define, capsys, retired, replacement
-    ):
-        """A hard rename, but not a silent one: the names that went away, and
-        the two that moved to ethos-data with the catalogue, each answer with
-        the line to type instead rather than argparse's 'invalid choice'."""
-        file = define(ONSHORE)
-        assert (
-            tool_main(str(file), prog="example-data", argv=[retired, "onshore_wind"])
-            == 2
-        )
-        captured = capsys.readouterr()
-        assert captured.out == ""
-        assert captured.err.startswith(f"error: `example-data {retired}` is gone")
-        assert replacement in captured.err
-
-    def test_a_retired_name_is_not_read_out_of_an_option_value(self, define, capsys):
-        """``--catalog list`` names a file; only the subcommand slot is checked."""
-        file = define(ONSHORE)
-        assert (
-            tool_main(
-                str(file), prog="example-data", argv=["--catalog", "list", "show"]
-            )
-            == 2
-        )
-        assert "is gone" not in capsys.readouterr().err
-
 
 @pytest.fixture
 def other_catalog(world):

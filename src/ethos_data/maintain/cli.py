@@ -184,6 +184,20 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     return parser
 
 
+def _status(result) -> int:
+    """The exit status of a maintenance command: 0 when its result is ok."""
+    return 0 if result.ok else 1
+
+
+def _upload_options(args):
+    """The upload flags a parsed command line carries, as the upload takes them."""
+    from .upload import UploadOptions
+
+    return UploadOptions(
+        **{name: getattr(args, name) for name in UploadOptions.__dataclass_fields__}
+    )
+
+
 def dispatch(args) -> int:
     """Run one ``ethos-data catalog`` subcommand.
 
@@ -199,16 +213,16 @@ def dispatch(args) -> int:
     if args.catalog_command == "build":
         from . import manifest
 
-        return manifest.run(root, args.datasets, check=args.check)
+        return _status(manifest.run(root, args.datasets, check=args.check))
 
     if args.catalog_command == "publish":
         from . import publish
 
-        return publish.run(root, args.target, check=args.check)
+        return _status(publish.run(root, args.target, check=args.check))
 
     if args.catalog_command == "upload":
         from . import upload
 
-        return upload.run(root, args.datasets, upload.UploadOptions.from_args(args))
+        return _status(upload.run(root, args.datasets, _upload_options(args)))
 
     raise MaintenanceError(f"unknown catalog command: {args.catalog_command}")

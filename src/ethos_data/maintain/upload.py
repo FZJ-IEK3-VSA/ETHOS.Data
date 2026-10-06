@@ -38,7 +38,7 @@ import subprocess
 import tempfile
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
 
@@ -74,11 +74,6 @@ class UploadOptions:
     allow_internal: bool = False
     no_chmod: bool = False
     transfers: int = 8
-
-    @classmethod
-    def from_args(cls, args) -> UploadOptions:
-        """The options a parsed command line carries."""
-        return cls(**{name: getattr(args, name) for name in cls.__dataclass_fields__})
 
 
 FRONTEND = "https://hifis-storage-web.desy.de/api/v1"
@@ -465,15 +460,26 @@ def upload_one(
     return 1 if (missing or wrong) else 0
 
 
+@dataclass
+class UploadResult:
+    """The datasets an upload handled, and those that failed with rclone's status."""
+
+    datasets: list[str] = field(default_factory=list)
+    failed: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def ok(self) -> bool:
+        return not self.failed
+
+
 @report.reported
 def run(
     catalog_root: Path, datasets: list[str], options: UploadOptions | None = None
-) -> int:
+) -> UploadResult:
     """Upload ``datasets`` -- names, paths or families -- and verify each anonymously.
 
     Every dataset is loaded and checked before any of them is uploaded.
     ``options`` are the command's flags; ``reporter=`` takes the progress.
-    Returns a process-style exit status.
     """
     options = options or UploadOptions()
     catalog_meta = read_catalog_meta(catalog_root)
@@ -546,14 +552,12 @@ def run(
         if len(plans) > 1:
             report.info()
 
-    # A single dataset keeps its exit code exactly as before -- rclone's own on a
-    # transfer failure, 1 on a verification miss -- so existing scripts that read
-    # it do not change meaning now that the argument is a list.
+    result = UploadResult([plan.name for plan in plans], failed)
     if len(plans) == 1:
-        return failed.get(plans[0].name, 0)
+        return result
 
     report.info("=" * 72)
     report.info(f"{len(plans) - len(failed)}/{len(plans)} datasets ok")
     for name, status in failed.items():
         report.info(f"  FAILED   {name} (exit {status})")
-    return 1 if failed else 0
+    return result

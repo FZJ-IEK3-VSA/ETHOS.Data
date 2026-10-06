@@ -107,25 +107,25 @@ class TestBuildingADescriptor:
         assert b"\r" not in raw
 
     def test_the_catalogue_index_is_utf8_and_lf(self, catalog):
-        assert build_run(catalog, []) == 0
+        assert build_run(catalog, []).ok
         raw = (catalog / "datacatalog.json").read_bytes()
         assert b"\r" not in raw
         assert CJK in json.loads(raw.decode("utf-8"))["datasets"][0]["title"]
 
     def test_a_freshly_built_catalogue_reports_itself_up_to_date(self, catalog):
         """--check re-reads what build wrote. Mis-encode either half and it drifts."""
-        assert build_run(catalog, []) == 0
-        assert build_run(catalog, [], check=True) == 0
+        assert build_run(catalog, []).ok
+        assert build_run(catalog, [], check=True).ok
 
 
 class TestPublishing:
     def test_the_public_tree_is_utf8_and_lf(self, catalog, tmp_path):
         from ethos_data.maintain.publish import run as publish_run
 
-        assert build_run(catalog, []) == 0
+        assert build_run(catalog, []).ok
         destination = tmp_path / "public"
         destination.mkdir()
-        assert publish_run(catalog, str(destination)) == 0
+        assert publish_run(catalog, str(destination)).ok
 
         for path in sorted(destination.rglob("*")):
             if not path.is_file() or path.suffix == ".pdf":
@@ -142,7 +142,7 @@ class TestPublishing:
 
     def test_render_keys_are_posix_paths(self, catalog):
         """The published tree is addressed with forward slashes on every platform."""
-        assert build_run(catalog, []) == 0
+        assert build_run(catalog, []).ok
         assert "datasets/d/datapackage.json" in {p.as_posix() for p in render(catalog)}
 
     def test_the_source_line_ending_rules_are_published_too(self, catalog, tmp_path):
@@ -155,17 +155,17 @@ class TestPublishing:
             "* text=auto eol=lf" + chr(10) + "datasets/**/licenses/** -text" + chr(10)
         )
         write_utf8(catalog / ".gitattributes", rules)
-        assert build_run(catalog, []) == 0
+        assert build_run(catalog, []).ok
         assert render(catalog)[Path(".gitattributes")] == rules
         destination = tmp_path / "public"
         destination.mkdir()
-        assert publish_run(catalog, str(destination)) == 0
+        assert publish_run(catalog, str(destination)).ok
         assert (destination / ".gitattributes").read_text(encoding="utf-8") == rules
         # --check knows the copy is generated, not a stray file to be removed.
-        assert publish_run(catalog, str(destination), check=True) == 0
+        assert publish_run(catalog, str(destination), check=True).ok
 
     def test_without_source_rules_none_are_invented(self, catalog):
-        assert build_run(catalog, []) == 0
+        assert build_run(catalog, []).ok
         assert Path(".gitattributes") not in render(catalog)
 
 
@@ -179,7 +179,7 @@ class TestCommandLineOutput:
         own UTF-16 API. Run as a real subprocess, because that difference only
         exists for a process that owns its streams.
         """
-        assert build_run(catalog, []) == 0
+        assert build_run(catalog, []).ok
         destination = tmp_path / "listing.txt"
         # Select the local catalogue explicitly, including in a configured environment.
         env = {

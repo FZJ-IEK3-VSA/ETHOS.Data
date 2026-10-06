@@ -143,7 +143,7 @@ class TestSubsetIsCheckedBeforeAnythingUploads:
 class TestUploadingTheSubset:
     def test_each_named_dataset_gets_its_own_rclone_call(self, workspace, no_rclone):
         make_catalog(workspace, {"a": {}, "b": {}})
-        assert upload.run(workspace, *make_args(["a", "b"])) == 0
+        assert upload.run(workspace, *make_args(["a", "b"])).ok
 
         destinations = [command[3] for command in no_rclone]
         assert destinations == ["HIFIS:ice2-data-files/a", "HIFIS:ice2-data-files/b"]
@@ -169,18 +169,16 @@ class TestUploadingTheSubset:
             "HIFIS:ice2-data-files/b",
         ]
 
-    def test_one_dataset_still_returns_rclones_own_exit_code(
+    def test_the_result_names_each_failure_with_rclones_status(
         self, workspace, monkeypatch
     ):
-        # Scripts read this. Adding the list must not turn a transfer failure
-        # into a generic 1, so the single-dataset path passes the code through.
         make_catalog(workspace, {"a": {}})
         monkeypatch.setattr(
             upload.subprocess,
             "run",
             lambda *a, **k: type("Result", (), {"returncode": 7})(),
         )
-        assert upload.run(workspace, *make_args(["a"])) == 7
+        assert upload.run(workspace, *make_args(["a"])).failed == {"a": 7}
 
     def test_a_failure_is_reported_per_dataset_and_fails_the_run(
         self, workspace, monkeypatch
@@ -191,9 +189,9 @@ class TestUploadingTheSubset:
             "run",
             lambda *a, **k: type("Result", (), {"returncode": 7})(),
         )
-        # Aggregated to 1 across a subset: which dataset failed is in the summary,
-        # and there is no single rclone exit code left to report.
-        assert upload.run(workspace, *make_args(["a", "b"])) == 1
+        result = upload.run(workspace, *make_args(["a", "b"]))
+        assert not result.ok
+        assert result.failed == {"a": 7, "b": 7}
 
 
 if __name__ == "__main__":
@@ -224,7 +222,7 @@ def make_family(root: Path, members: dict[str, dict]) -> Path:
             del meta["ethos:remote_prefix"]
         (family / member).mkdir()
         (family / member / "dataset.yaml").write_text(yaml.safe_dump(meta))
-    assert build_run(root, []) == 0
+    assert build_run(root, []).ok
     return root
 
 
@@ -233,7 +231,7 @@ class TestNamingAFamily:
         self, workspace, no_rclone
     ):
         make_family(workspace, {"b": {}, "a": {}})
-        assert upload.run(workspace, *make_args(["fam"])) == 0
+        assert upload.run(workspace, *make_args(["fam"])).ok
         destinations = [command[3] for command in no_rclone]
         assert destinations == [
             "HIFIS:ice2-data-files/fam/a",

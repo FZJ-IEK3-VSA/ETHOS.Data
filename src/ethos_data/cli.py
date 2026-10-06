@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-from .access import cache_entries, chain_for, locate
+from .access import chain_for
 from .bundles import export_bundle, load_bundle
 from .catalogs import Catalog, catalog_for
 from .config import (
@@ -45,6 +45,7 @@ from .errors import (
 from .formats import keys as k
 from .maintain.cli import add_catalog_parser
 from .maintain.cli import dispatch as _catalog_dispatch
+from .report import ConsoleReporter, reporting
 from .retrieval import plan
 from .selection import Collections, load_collections, variant_name
 
@@ -116,56 +117,10 @@ def run_tool(
     already exists, reused when nothing overrides its catalogue.
     """
     prog = prog or (f"{tool}-data" if tool else "ethos-data")
-    retired = _retired_command(prog, argv)
-    if retired is not None:
-        return retired
     source = _ToolSource(file, tool, catalog, loaded)
     return _run(
         lambda: _dispatch(_build_tool_parser(prog, source).parse_args(argv), source)
     )
-
-
-#: Commands a tool's data command used to have, and what replaces each.
-#: They are gone, not aliased: the whole point of the shorter command list is
-#: that there is one way to ask each question, and an alias that keeps working
-#: keeps the old shape alive in every script nobody got round to updating. But
-#: argparse's "invalid choice" would leave somebody staring at a command that
-#: worked last week, so each retired name gets one line saying what to type.
-_RETIRED_COMMANDS = {
-    "list": "{prog} show",
-    "info": "{prog} show <collection>",
-    "plan": "{prog} fetch <collection> --plan",
-    "paths": "{prog} fetch <collection> --paths",
-    "path": "ethos-data fetch <key>",
-    "ls": "ethos-data ls [<key>]",
-}
-
-#: Global options that take a value, so their value is not mistaken for the
-#: subcommand when looking for a retired name.
-_VALUED_GLOBALS = ("--catalog", "--root")
-
-
-def _retired_command(prog: str, argv: list[str] | None) -> int | None:
-    """Two lines pointing at the replacement, or None to parse as usual."""
-    skip = False
-    for word in sys.argv[1:] if argv is None else argv:
-        if skip:
-            skip = False
-            continue
-        if word.startswith("-"):
-            skip = word in _VALUED_GLOBALS
-            continue
-        replacement = _RETIRED_COMMANDS.get(word)
-        if replacement is None:
-            return None
-        print(
-            f"error: `{prog} {word}` is gone -- "
-            f"use `{replacement.format(prog=prog)}`.\n"
-            f"Run `{prog} --help` for the commands this version has.",
-            file=sys.stderr,
-        )
-        return 2
-    return None
 
 
 def _run(command) -> int:
@@ -181,7 +136,9 @@ def _run(command) -> int:
     """
     _use_utf8_output()
     try:
-        return command()
+        # A command prints its warnings, where a script gets Python warnings.
+        with reporting(ConsoleReporter()):
+            return command()
     except EthosDataError as error:
         # ``message`` rather than str(): the KeyError subclasses stringify
         # quoted, which reads badly on a line that already says "error:".
@@ -880,8 +837,8 @@ def _collection_fetch_command(args, loaded, roots) -> int:
     if args.paths:
         return _paths_command(args, loaded, roots)
 
-    report = plan(loaded.catalog, resources, roots)
     if args.plan:
+        report = plan(loaded.catalog, resources, roots)
         print(f"public cache:    {report['root']}")
         for origin, items in sorted(report["in_place_by_origin"].items()):
             print(
@@ -914,10 +871,7 @@ def _collection_fetch_command(args, loaded, roots) -> int:
                 print(f"    ! {location.path}   [{location.origin}]")
         return 0
 
-    if report["unavailable"]:
-        # Every input is required: stop before anything is printed or fetched,
-        # with the refusal that says what the dataset is and how to get it.
-        locate(loaded.catalog, resources, roots)
+    report = loaded.prepare(args.collection, test=args.test, root=roots)
     if not report["missing"]:
         note = (
             f" ({len(report['in_place'])} used in place)" if report["in_place"] else ""
@@ -997,37 +951,15 @@ def _verify_command(args, loaded, roots) -> int:
 
     if not args.collection and not args.all:
         args.all = True
-    resources = {}
-    skipped = 0
+    skipped: list[tuple[str, str]] = []
     if args.all:
-        # Every collection in every variant: what is on disk is one cache, and
-        # a file the test variant selects is as much a file to check as one the
-        # full variant does. A variant that cannot be resolved -- a dataset not
-        # in this catalogue, say -- is reported and skipped, as `show` does,
-        # rather than stopping the check of everything else.
-        for name in loaded.names():
-            try:
-                variants = loaded.variants(name) or (None,)
-            except CollectionError as error:
-                skipped += 1
-                print(f"skipped {name}: {_first_line(error)}")
-                continue
-            for variant in variants:
-                label = name if variant is None else f"{name} [{variant}]"
-                try:
-                    selected = loaded.resolve(name, test=variant == "test")
-                except (UnknownDataset, IncompleteCatalog, CollectionError) as error:
-                    skipped += 1
-                    print(f"skipped {label}: {_first_line(error)}")
-                    continue
-                for resource in selected:
-                    resources[resource.key] = resource
+        ordered, skipped = loaded.resolve_every()
+        for label, reason in skipped:
+            print(f"skipped {label}: {reason}")
         if skipped:
             print()
     else:
-        for resource in loaded.resolve(args.collection, test=args.test):
-            resources[resource.key] = resource
-    ordered = sorted(resources.values(), key=lambda r: r.key)
+        ordered = loaded.resolve(args.collection, test=args.test)
 
     what = "every collection" if args.all else args.collection
     how = "checksums" if args.deep else "sizes"
@@ -1077,8 +1009,8 @@ def _verify_command(args, loaded, roots) -> int:
             # The files checked are fine, but the check was not complete, and
             # an exit status of 0 would let a CI job believe it was.
             print(
-                f"{skipped} collection variant(s) could not be resolved and were skipped "
-                f"(see above)."
+                f"{len(skipped)} collection variant(s) could not be resolved and were "
+                "skipped (see above)."
             )
             return 1
         return 0
@@ -1149,12 +1081,13 @@ def _link_all_command(args, roots) -> int:
         return 2
 
     catalog_root = resolve_catalog_root(args.catalog_root)
-    return namespace_module.run(
+    result = namespace_module.run(
         catalog_root,
         root,
         dry_run=args.dry_run,
         prune=args.prune,
     )
+    return 0 if result.ok else 1
 
 
 def _link_command(args, settings) -> int:
@@ -1229,7 +1162,7 @@ def _link_command(args, settings) -> int:
 
 
 def _materialize_command(args, settings) -> int:
-    from .materialize import materialize
+    from .materialize import linked_entries, materialize
 
     roots = settings.roots
     catalog = _cache_catalog(settings)
@@ -1247,23 +1180,9 @@ def _materialize_command(args, settings) -> int:
             )
             return 2
     elif args.all or not names:
-        # A public cache only: copying restricted bytes is something somebody
-        # names dataset by dataset.
-        walked = Path(args.root).expanduser() if args.root else roots.public
-        if roots.restricted_cache(walked) is not None:
-            print(
-                f"{walked} is a restricted cache; --all walks a public cache only. "
-                "Name each restricted dataset to copy.",
-                file=sys.stderr,
-            )
-            return 2
-        if not walked.is_dir():
-            print(f"no public cache at {walked}")
-            return 1
-        names = sorted(
-            name for name, path in cache_entries(walked) if path.is_symlink()
-        )
+        names = linked_entries(roots, args.root)
         if not names:
+            walked = args.root or roots.public
             print(f"no symbolic-link entries in {walked}; nothing to materialise.")
             return 0
 

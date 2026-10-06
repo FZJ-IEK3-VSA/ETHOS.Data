@@ -254,26 +254,3 @@ nothing.
 other mode — `--root` or `--prune` beside a dataset name, `--force` beside
 `--all` — a dataset or directory named beside `--all`, or neither a dataset nor
 `--all`.
-
-## Migrating earlier commands {#tool-command}
-
-| Earlier invocation | Current invocation |
-| --- | --- |
-| `ethos-data path KEY` | `ethos-data fetch KEY` |
-| `ethos-data -c reskit/data/collections.yaml fetch COLLECTION` | `<your-tool>-data fetch COLLECTION` |
-| Collection `list`, `info` | `<your-tool>-data show [COLLECTION]` |
-| Collection `plan`, `paths` | `<your-tool>-data fetch COLLECTION --plan` / `--paths` |
-| `<your-tool>-data path KEY`, `<your-tool>-data ls [KEY]` | `ethos-data fetch KEY`, `ethos-data ls [KEY]` |
-| `ethos-data staging ...` or `ethos-data bundle ...` | The package's `staging ...` or `bundle ...` command |
-| `ethos-data catalog link-cache --root DIR` | `ethos-data link --all --root DIR` |
-
-`-c` / `--collections`, default collections-file discovery, and
-`config set-collections` / `unset-collections` have been removed from the CLI.
-`--test` is a package-wrapper option.
-Applications without a wrapper can still pass an explicit file to
-[`ethos_data.collections`][ethos_data.collections] in Python.
-
-`catalog link-cache` was a second name for the planner behind `link --all`, and
-two entrances to one mechanism is how a maintainer ends up wondering which of
-them prunes. `--root`, `--prune` and `--dry-run` mean on `link --all` exactly what
-they meant there.

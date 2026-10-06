@@ -152,10 +152,14 @@ def verify(
     Without ``deep`` this compares sizes, which catches truncation, replacement
     by a different file, and an empty placeholder -- the common failures -- for
     the cost of one ``stat`` per file. With ``deep`` it compares checksums,
-    which catches everything and reads every byte. Licensed data this
-    machine cannot read is reported as ``unavailable here``, with the reason.
+    which catches everything and reads every byte. Restricted data this
+    account cannot read is reported as ``unavailable here``, with the reason.
+    Like a fetch, it warns about a dataset whose licensing is unsettled.
     """
+    from .retrieval import warn_about_licensing
+
     roots = roots if roots is not None else catalog.settings.roots
+    warn_about_licensing(catalog, resources)
     locations = locate(catalog, resources, roots, describe=True)
 
     findings: list[Finding] = []
@@ -171,7 +175,9 @@ def verify(
             )
         if not location.available:
             findings.append(
-                Finding(location, UNAVAILABLE, f"{location.reason}; nothing was checked")
+                Finding(
+                    location, UNAVAILABLE, f"{location.reason}; nothing was checked"
+                )
             )
             continue
         if name not in link_state:

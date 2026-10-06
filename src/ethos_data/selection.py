@@ -51,7 +51,13 @@ from .catalogs import (
     select_key,
     split_key,
 )
-from .errors import CollectionError, UnknownCollection, UnknownDataset, UnknownKey
+from .errors import (
+    CollectionError,
+    IncompleteCatalog,
+    UnknownCollection,
+    UnknownDataset,
+    UnknownKey,
+)
 from .retrieval import DataFiles, NamedPaths
 
 if TYPE_CHECKING:
@@ -490,6 +496,57 @@ class Collections:
             self._roots(root),
         )
 
+    def prepare(
+        self,
+        name: str,
+        *,
+        test: bool = False,
+        root: Roots | str | Path | None = None,
+    ) -> dict:
+        """The plan of a fetch about to start, after the checks the fetch makes.
+
+        The collection is selected, its ``paths`` checked, and restricted data
+        this account cannot read, or a file with nowhere to download it from,
+        is refused here, before anything is downloaded: what is reported next
+        is a fetch that starts. The plan is :func:`ethos_data.plan`'s.
+        """
+        from .access import locate
+
+        resources = self.select(name, test=test)
+        roots = self._roots(root)
+        report = retrieval.plan(self.catalog, resources, roots)
+        if report["unavailable"]:
+            locate(self.catalog, resources, roots)  # raises the refusal
+        return report
+
+    def resolve_every(self) -> tuple[list[Resource], list[tuple[str, str]]]:
+        """Every collection in every variant, and what could not be resolved.
+
+        What is on disk is one cache, and a file a test variant selects is as
+        much a file to check as one a full variant does. A collection or
+        variant that cannot be resolved -- a dataset this catalogue does not
+        describe, say -- is listed as ``(label, reason)`` and left out, rather
+        than stopping the rest. The resources are in key order, each once.
+        """
+        resources: dict[str, Resource] = {}
+        skipped: list[tuple[str, str]] = []
+        for name in self.names():
+            try:
+                variants = self.variants(name) or (None,)
+            except CollectionError as error:
+                skipped.append((name, _first_line(error)))
+                continue
+            for variant in variants:
+                label = name if variant is None else f"{name} [{variant}]"
+                try:
+                    selected = self.resolve(name, test=variant == VARIANT_TEST)
+                except (UnknownDataset, IncompleteCatalog, CollectionError) as error:
+                    skipped.append((label, _first_line(error)))
+                    continue
+                for resource in selected:
+                    resources[resource.key] = resource
+        return sorted(resources.values(), key=lambda r: r.key), skipped
+
     def main(self, argv: list[str] | None = None, *, prog: str | None = None) -> int:
         """Run the collection commands bound to this file, from a built handle.
 
@@ -601,6 +658,12 @@ class _NamedTarget:
     file: Resource | None
     #: The collection's selected resources below a folder, dataset or family key.
     under: tuple[Resource, ...]
+
+
+def _first_line(error: BaseException) -> str:
+    """An error's message, first line only, as a list of what was skipped shows it."""
+    message = getattr(error, "message", None) or (error.args[0] if error.args else "")
+    return str(message).splitlines()[0] if message else type(error).__name__
 
 
 def _not_in_catalogue(collection: str, error: KeyError) -> KeyError:

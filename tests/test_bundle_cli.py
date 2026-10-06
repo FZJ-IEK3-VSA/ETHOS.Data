@@ -7,7 +7,7 @@ import urllib.request
 import pytest
 
 from ethos_data import config, tool_main
-from ethos_data.bundles import ModifiedBundleWarning
+from ethos_data.bundles import ModifiedBundleWarning, load_bundle
 
 pytestmark = pytest.mark.legacy(
     "bundles become repository-first: bundle.json gains a family, a version and per-member dataset.yaml files"
@@ -101,15 +101,18 @@ def test_cli_export_verify_development_override(tmp_path, monkeypatch, capsys):
         )
         == 2
     )
-    with pytest.warns(ModifiedBundleWarning, match="lesson/value.txt"):
-        assert (
-            tool_main(
-                collections,
-                prog="example-data",
-                argv=["bundle", "fetch", str(target), "small", "--allow-modified"],
-            )
-            == 0
+    capsys.readouterr()
+    assert (
+        tool_main(
+            collections,
+            prog="example-data",
+            argv=["bundle", "fetch", str(target), "small", "--allow-modified"],
         )
+        == 0
+    )
+    assert "lesson/value.txt" in capsys.readouterr().err, "a command prints it"
+    with pytest.warns(ModifiedBundleWarning, match="lesson/value.txt"):
+        load_bundle(target).fetch("small", allow_modified=True)
     assert (target / "bundle.json").read_bytes() == snapshot
     assert fixture.read_bytes() == b"4"
     fixture.unlink()

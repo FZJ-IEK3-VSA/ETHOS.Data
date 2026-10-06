@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .. import report
@@ -271,8 +272,24 @@ def _differs(path: Path, content: str | bytes) -> bool:
     return path.read_text(encoding="utf-8") != content
 
 
+@dataclass
+class PublishResult:
+    """What ``catalog publish`` wrote, or with ``check`` what is out of date."""
+
+    files: list[str] = field(default_factory=list)
+    withheld: list[str] = field(default_factory=list)
+    stale: list[str] = field(default_factory=list)
+    orphans: list[str] = field(default_factory=list)
+    leaks: list[str] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not (self.stale or self.orphans or self.leaks)
+
+
 @report.reported
-def run(catalog_root: Path, target: str, check: bool = False) -> int:
+def run(catalog_root: Path, target: str, check: bool = False) -> PublishResult:
+    """Write the public catalogue into ``target``, or with ``check`` compare it."""
     destination_root = Path(target).expanduser().resolve()
     # Publishing deletes everything in its target but .git, so a source
     # checkout, which holds catalog.yaml, is never one.
@@ -329,10 +346,15 @@ def run(catalog_root: Path, target: str, check: bool = False) -> int:
                 report.warning(f"  changed/missing: {rel}")
             for rel in orphans:
                 report.warning(f"  should be removed: {rel}")
-            return 1
+            return PublishResult(
+                withheld=withheld,
+                stale=[str(rel) for rel in stale],
+                orphans=orphans,
+                leaks=leaked,
+            )
 
         report.info(f"Public catalogue is current ({len(files)} files).")
-        return 0
+        return PublishResult(withheld=withheld)
 
     if leaked:
         raise PublishError(
@@ -377,4 +399,4 @@ def run(catalog_root: Path, target: str, check: bool = False) -> int:
     if withheld:
         report.info(f"\nWithheld (visibility: hidden): {', '.join(withheld)}")
     report.info("\nReview and commit in the public repo, then push.")
-    return 0
+    return PublishResult(files=sorted(str(rel) for rel in files), withheld=withheld)

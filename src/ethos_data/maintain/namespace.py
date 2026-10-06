@@ -219,6 +219,23 @@ def apply(actions: list[Action]) -> list[Action]:
     return actions
 
 
+@dataclass
+class NamespaceResult:
+    """The actions ``link --all`` planned, and whether it carried them out."""
+
+    actions: list[Action]
+    applied: bool = False
+
+    @property
+    def problems(self) -> list[Action]:
+        """The datasets whose ``source_dir`` does not exist."""
+        return [action for action in self.actions if action.verb == "missing"]
+
+    @property
+    def ok(self) -> bool:
+        return not self.problems
+
+
 @report.reported
 def run(
     catalog_root: Path,
@@ -226,7 +243,7 @@ def run(
     *,
     dry_run: bool = False,
     prune: bool = False,
-) -> int:
+) -> NamespaceResult:
     """Plan the namespace, report it, and -- unless ``dry_run`` -- build it.
 
     ``root`` is the public cache the caller names, and deliberately has no
@@ -245,11 +262,11 @@ def run(
 
     if dry_run:
         report.info(f"\n{len(changes)} change(s) would be made. Nothing was written.")
-        return 1 if problems else 0
+        return NamespaceResult(actions)
 
     if not changes:
         report.info("\nnothing to do.")
-        return 1 if problems else 0
+        return NamespaceResult(actions)
 
     apply(changes)
     report.info(f"\n{len(changes)} change(s) applied.")
@@ -258,5 +275,4 @@ def run(
             f"{len(problems)} dataset(s) have a source_dir that does not exist -- "
             f"fix dataset.yaml or the storage, then run this again."
         )
-        return 1
-    return 0
+    return NamespaceResult(actions, applied=True)

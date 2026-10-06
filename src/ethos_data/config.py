@@ -501,8 +501,6 @@ def _publication_url(settings: dict, origin: dict[str, str]) -> tuple[str, str] 
     return None
 
 
-
-
 def current_user() -> str:
     """Who is running this, for the provenance records that say so.
 

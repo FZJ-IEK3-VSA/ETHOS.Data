@@ -130,18 +130,18 @@ def test_a_document_outside_the_dataset_directory_is_refused(tmp_path, outside):
 def test_the_documents_digest_is_written_and_a_changed_text_is_reported_stale(tmp_path):
     """--check re-hashes the archived text like everything else it regenerates."""
     root = _catalogue(tmp_path, _licence("    ethos:document: licenses/terms.txt"))
-    assert build_run(root, []) == 0
+    assert build_run(root, []).ok
     on_disk = json.loads(
         (root / "datasets" / "d" / "datapackage.json").read_text(encoding="utf-8")
     )
     assert on_disk["licenses"][0]["ethos:document_sha256"] == DIGEST
-    assert build_run(root, [], check=True) == 0
+    assert build_run(root, [], check=True).ok
 
     (root / "datasets" / "d" / "licenses" / "terms.txt").write_bytes(
         TERMS + b"revised upstream\n"
     )
-    assert build_run(root, [], check=True) == 1
-    assert build_run(root, []) == 0
+    assert not build_run(root, [], check=True).ok
+    assert build_run(root, []).ok
     rebuilt = json.loads(
         (root / "datasets" / "d" / "datapackage.json").read_text(encoding="utf-8")
     )

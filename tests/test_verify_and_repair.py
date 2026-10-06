@@ -82,10 +82,11 @@ class TestFindings:
         (staging / "wind" / "u.nc").write_bytes(b"new!")
         monkeypatch.setenv("ETHOS_STAGING_DIR", str(staging))
 
-        with pytest.warns(UserWarning, match="staging"):
-            code = verify(wind, "--deep")
+        code = verify(wind, "--deep")
 
-        out = capsys.readouterr().out
+        captured = capsys.readouterr()
+        out = captured.out
+        assert "read from the staging root" in captured.err
         assert code == 0, "nothing is wrong; nothing could be compared"
         assert "unverifiable: 1" in out
         assert "could NOT be checked" in out
@@ -109,6 +110,15 @@ class TestFindings:
         assert verify(wind, "--deep", "--repair") == 1
         assert "no download can be checked" in capsys.readouterr().out
         assert store.downloads() == []
+
+    def test_unsettled_licensing_is_warned_about_as_a_fetch_does(self, reader):
+        reader.dataset(
+            "wind", {"u.nc": "uuuu"}, where="cache", license_status="unresolved"
+        )
+        catalog = ethos_data.catalog(str(reader.write()))
+
+        with pytest.warns(UserWarning, match="'wind' has unresolved licensing"):
+            ethos_data.verify(catalog, catalog.resources("wind"))
 
     def test_the_api_reports_the_same_findings(self, wind, reader):
         (reader.cache / "wind" / "v.nc").write_bytes(b"v")
@@ -234,7 +244,7 @@ class TestNotesOnTheRestrictedCaches:
         assert f"ethos-data --root {restricted} unlink wind" in out
 
     def test_staged_data_is_left_alone(
-        self, wind, reader, store, tmp_path, monkeypatch
+        self, wind, reader, store, tmp_path, monkeypatch, capsys
     ):
         """A staging entry replaces the dataset's description, so nothing official is
         compared or fetched while it is there, damaged cache copy or not."""
@@ -244,9 +254,9 @@ class TestNotesOnTheRestrictedCaches:
         monkeypatch.setenv("ETHOS_STAGING_DIR", str(staging))
         (reader.cache / "wind" / "u.nc").write_bytes(b"uu")
 
-        with pytest.warns(UserWarning, match="staging"):
-            code = verify(wind, "--deep", "--repair")
+        code = verify(wind, "--deep", "--repair")
 
+        assert "read from the staging root" in capsys.readouterr().err
         assert code == 0
         assert (staging / "wind" / "u.nc").read_bytes() == b"u"
         assert (reader.cache / "wind" / "u.nc").read_bytes() == b"uu"

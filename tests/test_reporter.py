@@ -11,16 +11,18 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 import ethos_data
 from ethos_data import report
 from ethos_data.maintain import manifest, publish, upload
 
 
 def test_a_build_reports_its_warnings_and_summary_to_the_reporter_given(source, capsys):
-    source.dataset("flat", {"a.csv": "1"}, ethos_acess="internal")
+    source.dataset("flat", {"a.csv": "1"}, ethos_acess="restricted")
     recorded = report.RecordingReporter()
 
-    assert manifest.run(source.root, [], reporter=recorded) == 0
+    assert manifest.run(source.root, [], reporter=recorded).ok
 
     assert capsys.readouterr() == ("", ""), "nothing reaches the console"
     assert recorded.warnings == [
@@ -36,7 +38,7 @@ def test_a_null_reporter_silences_a_publish(source, tmp_path, capsys):
     target = tmp_path / "public"
     target.mkdir()
 
-    assert publish.run(source.root, str(target), reporter=report.NullReporter()) == 0
+    assert publish.run(source.root, str(target), reporter=report.NullReporter()).ok
 
     assert capsys.readouterr() == ("", "")
     assert (target / "datacatalog.json").is_file()
@@ -57,14 +59,14 @@ def test_an_upload_takes_its_flags_as_options_not_a_command_line(source, monkeyp
     )
     recorded = report.RecordingReporter()
 
-    code = upload.run(
+    result = upload.run(
         source.root,
         ["flat"],
         upload.UploadOptions(dry_run=True, transfers=2),
         reporter=recorded,
     )
 
-    assert code == 0
+    assert result.ok and result.datasets == ["flat"]
     assert commands[0][commands[0].index("--transfers") + 1] == "2"
     assert "Dry run only; nothing was uploaded." in "\n".join(recorded.infos)
 
@@ -82,6 +84,36 @@ def test_reporting_restores_the_reporter_it_replaced():
     assert inner.infos == ["inside"]
     assert outer.warnings == ["after"] and outer.infos == ["kept"]
     assert isinstance(report.current(), report.ConsoleReporter)
+
+
+def test_outside_a_command_a_warning_is_a_python_warning_of_its_category():
+    class Particular(UserWarning):
+        pass
+
+    with pytest.warns(Particular, match="look here") as caught:
+        report.warning("look here", Particular)
+
+    assert caught[0].filename == __file__, "it names the line that warned"
+
+
+def test_nothing_below_the_report_issues_a_python_warning_itself():
+    package = Path(ethos_data.__file__).parent
+    offenders = []
+    for path in sorted(package.rglob("*.py")):
+        relative = path.relative_to(package).as_posix()
+        if relative == "report.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        offenders += [
+            f"{relative}:{node.lineno}"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "warn"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "warnings"
+        ]
+    assert offenders == [], "warn through ethos_data.report.warning instead"
 
 
 #: Modules allowed to print: the presentation layer, and the console reporter.

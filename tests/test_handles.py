@@ -262,11 +262,12 @@ def test_the_tool_command_runs_the_collection_commands_on_its_file(
     assert data.main(["fetch", "wind", "--paths"]) == 2
     assert "declares no named paths" in capsys.readouterr().err
     # A single catalogue key is ethos-data's job: this command works in
-    # collections, and says so rather than failing with 'invalid choice'.
-    assert data.main(["path", "family/alpha/sites.shp"]) == 2
-    assert "use `ethos-data fetch <key>`" in capsys.readouterr().err
-    assert data.main(["ls", "family/alpha/era5"]) == 2
-    assert "use `ethos-data ls [<key>]`" in capsys.readouterr().err
+    # collections only.
+    for command in (["path", "family/alpha/sites.shp"], ["ls", "family/alpha/era5"]):
+        with pytest.raises(SystemExit) as refused:
+            data.main(command)
+        assert refused.value.code == 2
+    capsys.readouterr()
     # A refusal is a message naming the tool, not a traceback.
     assert data.main(["fetch", "nosuch"]) == 2
     assert "faketool defines: wind" in capsys.readouterr().err

@@ -28,8 +28,10 @@ finds that checkout the same way the maintainer commands find theirs.
 
 Every entry point below that runs a command (`manifest.run`, `publish.run`,
 `upload.run`, the namespace builder's `run`) takes a `reporter=` keyword and
-sends its progress and warnings there; without one they go to the console.
-Refusals are raised, never reported.
+sends its progress and warnings there. Without one, progress goes to standard
+output and warnings are Python warnings. Each returns a result whose `ok` says
+whether the command succeeded, and the command line chooses the exit status
+from it. Refusals are raised, never reported.
 
 ::: ethos_data.report
     options:
@@ -38,6 +40,7 @@ Refusals are raised, never reported.
         - ConsoleReporter
         - NullReporter
         - RecordingReporter
+        - PythonWarnings
         - reporting
         - reported
         - info
@@ -68,6 +71,7 @@ Refusals are raised, never reported.
     options:
       members:
         - run
+        - BuildResult
         - render_dataset
         - write_dataset
         - stale_files
@@ -92,6 +96,7 @@ Refusals are raised, never reported.
     options:
       members:
         - run
+        - PublishResult
         - render
         - public_datasets
         - strip
@@ -113,6 +118,7 @@ be a whole link tree built somewhere nobody named.
     options:
       members:
         - run
+        - NamespaceResult
         - plan
         - apply
         - Action
@@ -126,6 +132,7 @@ be a whole link tree built somewhere nobody named.
     options:
       members:
         - run
+        - UploadResult
         - UploadOptions
         - preflight
         - resources_of
