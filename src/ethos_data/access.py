@@ -39,7 +39,6 @@ from .config import Roots, resolve_skip_unavailable
 from .errors import AccessError
 
 __all__ = [
-    "AccessError",
     "cache_entries",
     "entry_for",
     "Location",

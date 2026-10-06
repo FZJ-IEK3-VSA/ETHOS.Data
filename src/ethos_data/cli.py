@@ -48,7 +48,6 @@ from .maintain.cli import dispatch as _catalog_dispatch
 from .retrieval import plan
 from .errors import (
     BundleError,
-    CatalogueRootError,
     CollectionError,
     ConfigurationError,
     EthosDataError,
@@ -1024,11 +1023,7 @@ def _paths_command(args, loaded, roots) -> int:
 
 def _path_command(args, catalog: Catalog, roots) -> int:
     """Fetch a catalogue key and print a path suitable for shell use."""
-    try:
-        print(catalog.path(args.key, root=roots))
-    except KeyError as error:
-        print(f"error: {error.args[0] if error.args else error}", file=sys.stderr)
-        return 2
+    print(catalog.path(args.key, root=roots))
     return 0
 
 
@@ -1039,11 +1034,7 @@ def _ls_command(args, catalog: Catalog) -> int:
         for name, dataset in sorted(catalog.datasets.items()):
             print(f"  {name:<40} {dataset.access:<12} {dataset.title}")
         return 0
-    try:
-        resources = catalog.resources(args.key)
-    except KeyError as error:
-        print(f"error: {error.args[0] if error.args else error}", file=sys.stderr)
-        return 2
+    resources = catalog.resources(args.key)
     print(
         f"{args.key}: {len(resources)} files, {_human(sum(r.bytes for r in resources))}\n"
     )
@@ -1192,11 +1183,7 @@ def _link_all_command(args, roots) -> int:
     from .maintain import namespace as namespace_module
     from .maintain import resolve_catalog_root
 
-    try:
-        catalog_root = resolve_catalog_root(args.catalog_root)
-    except CatalogueRootError as error:
-        print(f"error: {error.message}", file=sys.stderr)
-        return 2
+    catalog_root = resolve_catalog_root(args.catalog_root)
 
     # Decided only once there is a checkout to link from. A run that ends in
     # "no catalogue here" has chosen nothing, and a line above that error
@@ -1223,7 +1210,7 @@ def _link_all_command(args, roots) -> int:
 
 
 def _link_command(args, roots) -> int:
-    from .linking import LinkError, link, unlink
+    from .linking import link, unlink
 
     if args.command == "link":
         if args.all:
@@ -1263,21 +1250,17 @@ def _link_command(args, roots) -> int:
             return 2
 
     catalog = _cache_catalog(args)
-    try:
-        if args.command == "link":
-            report = link(
-                catalog,
-                args.dataset,
-                args.directory,
-                roots,
-                force=args.force,
-                catalog_root=args.catalog_root,
-            )
-        else:
-            report = unlink(catalog, args.dataset, roots)
-    except (LinkError, UnknownDataset) as error:
-        print(f"error: {error}", file=sys.stderr)
-        return 2
+    if args.command == "link":
+        report = link(
+            catalog,
+            args.dataset,
+            args.directory,
+            roots,
+            force=args.force,
+            catalog_root=args.catalog_root,
+        )
+    else:
+        report = unlink(catalog, args.dataset, roots)
 
     # Flushed, because the warning below goes to stderr: unflushed, the two
     # streams arrive in the opposite order and the warning reads as being about

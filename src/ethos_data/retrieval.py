@@ -31,7 +31,6 @@ from pathlib import Path
 import pooch
 
 from .access import (
-    AccessError,
     Location,
     check_missing,
     locate,
@@ -39,9 +38,9 @@ from .access import (
 )
 from .catalogs import Catalog, Resource
 from .config import ENV_VAR, Roots, dataset_roots, resolve_public_cache
+from .errors import AccessError
 
 __all__ = [
-    "AccessError",
     "DataFiles",
     "ENV_VAR",
     "NamedPaths",

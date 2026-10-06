@@ -95,8 +95,8 @@ anything is downloaded, and the variant check — the same handles under `test`
 and `full` — applies to every collection a resolution reaches through
 `extends`, not only the one asked for, so a plain collection that extends a
 lopsided one is refused too. A definition the reader cannot resolve raises
-[`CollectionError`][ethos_data.selection.CollectionError]; a name the file does
-not define raises [`UnknownCollection`][ethos_data.selection.UnknownCollection].
+[`CollectionError`][ethos_data.errors.CollectionError]; a name the file does
+not define raises [`UnknownCollection`][ethos_data.errors.UnknownCollection].
 `ethos-data` prints both as `error: ...` and exits `2`.
 
 See [Write a collections file](../how-to/package-maintainers/write-a-collections-file.md).

@@ -49,12 +49,8 @@ if TYPE_CHECKING:
 __all__ = [
     "LICENSE_RESOLVED",
     "Catalog",
-    "CatalogUnavailable",
     "Dataset",
-    "IncompleteCatalog",
     "Resource",
-    "UnknownDataset",
-    "UnknownKey",
     "directory_of",
     "license_settled",
     "load_catalog",

@@ -40,10 +40,9 @@ import warnings
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from .access import AccessError
 from .catalogs import Catalog, Dataset, Resource
 from .config import Roots, current_user, resolve_staging_cache
-from .errors import StagingError
+from .errors import AccessError, StagingError
 
 __all__ = [
     "NEW",

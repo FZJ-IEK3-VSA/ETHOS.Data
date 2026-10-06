@@ -28,7 +28,6 @@ from .selection import load_collections
 
 __all__ = [
     "Bundle",
-    "BundleError",
     "BundleFinding",
     "ModifiedBundleWarning",
     "export_bundle",

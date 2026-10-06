@@ -13,11 +13,11 @@ import pytest
 import yaml
 
 from ethos_data.bundles import (
-    BundleError,
     ModifiedBundleWarning,
     export_bundle,
     load_bundle,
 )
+from ethos_data.errors import BundleError
 
 pytestmark = pytest.mark.legacy(
     "bundles become repository-first: bundle.json gains a family, a version and per-member dataset.yaml files"

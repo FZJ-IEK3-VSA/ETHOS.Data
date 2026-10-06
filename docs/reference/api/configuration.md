@@ -56,7 +56,6 @@ actually ask.
       members:
         - locate
         - Location
-        - AccessError
         - requires_local_root
         - check_missing
         - unavailable

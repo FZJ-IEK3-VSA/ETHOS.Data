@@ -5,10 +5,9 @@ data, a test that checks a rule and the ``ethos-data`` command all receive the
 same exception and decide for themselves what to do with it. The command line
 prints one as ``error: <message>`` and exits with its :attr:`~EthosDataError.exit_code`.
 
-Each class also derives from the standard exception it used to be, so an
-``except KeyError`` or ``except OSError`` written against an older release
-still catches it. The classes stay importable from the modules that raise
-them, ``ethos_data.catalogs.UnknownDataset`` and the rest, as before.
+Each class also derives from the standard exception that describes it, so an
+``except KeyError`` catches an unknown name and an ``except OSError`` an
+unreadable catalogue. Import them from here, or from :mod:`ethos_data`.
 
 Two groups, by what the command line returns:
 
@@ -17,8 +16,7 @@ Two groups, by what the command line returns:
        bundle or setting, a refused staging entry;
 ``1``  a maintenance command refused its input: a descriptor the build
        rejects, a checkout that is not a source catalogue, an upload or a
-       publication that cannot go ahead. This is the status those refusals
-       have always had.
+       publication that cannot go ahead.
 """
 
 from __future__ import annotations
@@ -29,7 +27,6 @@ __all__ = [
     "CatalogUnavailable",
     "CatalogueRootError",
     "CollectionError",
-    "CollectionsNotFound",
     "ConfigurationError",
     "DescriptorError",
     "EthosDataError",
@@ -63,9 +60,8 @@ class EthosDataError(Exception):
 class UnknownDataset(EthosDataError, KeyError):
     """A collection or key names a dataset this catalogue does not describe.
 
-    Usually a withdrawn dataset rather than a typo: a collections file pinned to
-    an older catalogue keeps working, and only breaks when it is repointed at a
-    newer one that no longer publishes what it asks for.
+    Either the name is mistyped, or the catalogue in use does not publish the
+    dataset. Both get the same plain message.
     """
 
 
@@ -111,12 +107,8 @@ class CollectionError(EthosDataError, ValueError):
     """
 
 
-class CollectionsNotFound(EthosDataError, LookupError):
-    """No collections file where one was asked for."""
-
-
 class BundleError(EthosDataError, ValueError):
-    """A bundle is incomplete, invalid, or differs from its catalogue."""
+    """A bundle is incomplete, invalid, or differs from its own ``bundle.json``."""
 
 
 class AccessError(EthosDataError, RuntimeError):

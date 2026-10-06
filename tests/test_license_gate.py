@@ -17,7 +17,8 @@ import yaml
 
 from ethos_data.catalogs import Catalog, Dataset, Resource, license_settled
 from ethos_data.config import Roots
-from ethos_data.linking import LinkError, link
+from ethos_data.errors import LinkError
+from ethos_data.linking import link
 from ethos_data.maintain import namespace
 from ethos_data.maintain.manifest import render_dataset, write_dataset
 from ethos_data.maintain.upload import preflight

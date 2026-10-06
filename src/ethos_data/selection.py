@@ -52,7 +52,7 @@ from .catalogs import (
     select_key,
     split_key,
 )
-from .errors import CollectionError, CollectionsNotFound, UnknownCollection
+from .errors import CollectionError, UnknownCollection
 from .retrieval import DataFiles, NamedPaths
 
 if TYPE_CHECKING:
@@ -65,10 +65,7 @@ __all__ = [
     "VARIANTS",
     "VARIANT_FULL",
     "VARIANT_TEST",
-    "CollectionError",
     "Collections",
-    "CollectionsNotFound",
-    "UnknownCollection",
     "catalog_pin",
     "load_collections",
     "path_matches",

@@ -42,7 +42,7 @@ from .catalogs import LICENSE_RESOLVED, Catalog
 from .config import Roots
 from .errors import AccessError, CatalogueRootError, LinkError
 
-__all__ = ["LinkError", "LinkReport", "link", "source_dir_for", "unlink"]
+__all__ = ["LinkReport", "link", "source_dir_for", "unlink"]
 
 
 @dataclass

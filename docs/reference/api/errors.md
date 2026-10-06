@@ -3,10 +3,10 @@
 Every refusal `ethos_data` raises on purpose is an
 [`EthosDataError`][ethos_data.errors.EthosDataError]. Library code raises it and
 never exits the process, so a script, a test and the command line all receive
-the same exception. Each class also derives from the standard exception it used
-to be, so an `except KeyError` or `except OSError` written against an older
-release still catches it, and each stays importable from the module that
-raises it.
+the same exception. Each class also derives from the standard exception that
+describes it, so an `except KeyError` catches an unknown name and an
+`except OSError` an unreadable catalogue. Import them from `ethos_data` or
+`ethos_data.errors`.
 
 The command line prints a refusal as `error: <message>` and exits with the
 error's `exit_code`:
