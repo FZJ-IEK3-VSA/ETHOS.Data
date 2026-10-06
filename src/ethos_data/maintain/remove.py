@@ -2,7 +2,7 @@
 
     ethos-data catalog remove old-dataset --reason "accepted by mistake" --dry-run
     ethos-data catalog remove old-dataset --reason "accepted by mistake"
-    ethos-data catalog release v2026.10.2 --public ../ETHOS.Data-Catalogue --push
+    ethos-data catalog release v2.0.0 --public ../ETHOS.Data-Catalogue --push
     ethos-data catalog remove old-dataset --purge --dry-run
     ethos-data catalog remove old-dataset --purge
 
@@ -33,22 +33,24 @@ still describe the dataset. ``--purge`` is the second half:
 from __future__ import annotations
 
 import json
+import os
 import shutil
-import urllib.error
-import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .. import report
 from ..adapters import Store
-from ..errors import MaintenanceError
+from ..config import Roots
+from ..errors import ConfigurationError, MaintenanceError, UploadError
 from ..formats import keys as k
 from ..formats.catalogue import StoreSettings, store_of
 from ..formats.status_file import StatusFile
 from ..model import lifecycle
+from ..model.versions import FIRST, MAJOR, Version
 from . import (
     dataset_name_for,
     datasets_dir,
+    inventory_of,
     is_namespace,
     read_catalog_meta,
     read_descriptor,
@@ -68,6 +70,8 @@ class Removal:
     reason: str = ""
     #: The publication store, for ``--purge``; the one catalog.yaml names by default.
     store: Store | None = None
+    #: The account's caches, where ``--purge`` looks for entries nobody recorded.
+    roots: Roots | None = None
     #: Each dataset to withdraw, by name, with its directory: set by ``withdraw``.
     datasets: list[tuple[str, Path]] = field(default_factory=list)
     #: Each dataset to purge, with its status: set by the purge's ``check``.
@@ -162,23 +166,64 @@ class Released:
         meta = read_catalog_meta(root)
         removal.settings = store_of(meta)
         removal.publication_url = (meta.get(k.PUBLICATION_URL) or "").rstrip("/")
+        current = meta.get(k.VERSION)
+        major = Version.parse(current).next(MAJOR) if current else FIRST
         for name, directory in removal.datasets:
-            status = dataset_status.read(directory)
-            if status is None:
+            status = dataset_status.checked_status(directory, name, "purge")
+            if dataset_status.major_release_after(status, "remove") is None:
                 raise MaintenanceError(
-                    f"{name} has no {dataset_status.STATUS}; withdraw it first with\n"
-                    f"    ethos-data catalog remove {name}"
+                    f"{name} was withdrawn, but no major release is recorded after its "
+                    "removal: the releases of the current major describe it, and its "
+                    "bytes stay until the next one. Purge it after\n"
+                    f"    ethos-data catalog release {major} --public DIR"
                 )
-            lifecycle.step("purge", status.state, name)
-            if dataset_status.released_since(status, "remove") is None:
-                raise MaintenanceError(
-                    f"{name} was withdrawn, but no release without it is recorded "
-                    "yet, so readers may still be served a catalogue that lists it. "
-                    "Release first:\n    ethos-data catalog release VERSION --public DIR"
-                )
+            self._writable(name, status)
             removal.purging.append((name, directory, status))
         self._shared(removal)
+        self._unrecorded(removal)
+        if removal.store is None:
+            from ..adapters.dcache import DcacheStore
+
+            removal.store = DcacheStore(
+                removal.settings.remote, removal.settings.frontend
+            )
         return []
+
+    @staticmethod
+    def _writable(name: str, status: StatusFile) -> None:
+        """Refuse an entry in a cache this account cannot write, before deleting any."""
+        for copy in status.copies:
+            if copy.kind not in (k.COPY_LINKED, k.COPY_MATERIALIZED):
+                continue
+            entry = Path(copy.location)
+            if not (entry.exists() or entry.is_symlink()):
+                continue
+            owned = copy.kind == k.COPY_MATERIALIZED and entry.is_dir()
+            if not os.access(entry.parent, os.W_OK) or (
+                owned and not os.access(entry, os.W_OK)
+            ):
+                raise MaintenanceError(
+                    f"{name}: its entry {entry} lies in {entry.parent}, which this "
+                    "account cannot write, so nothing was deleted. Whoever purges "
+                    "needs write access to every cache that holds the dataset."
+                )
+
+    def _unrecorded(self, removal: Removal) -> None:
+        """Report the entries in the account's caches that no copy records."""
+        if removal.roots is None:
+            return
+        caches = (removal.roots.public, *removal.roots.restricted)
+        for name, _, status in removal.purging:
+            recorded = {copy.location for copy in status.copies}
+            for cache in caches:
+                entry = Path(cache) / name
+                if (entry.exists() or entry.is_symlink()) and str(
+                    entry
+                ) not in recorded:
+                    report.info(
+                        f"  {self.name:<12} {name}: {entry} is not recorded, so it is "
+                        "not deleted; remove it by hand if it holds this dataset"
+                    )
 
     @staticmethod
     def _shared(removal: Removal) -> None:
@@ -257,46 +302,34 @@ class StoreBytes:
                         f"publication root {root_url or '(none in catalog.yaml)'}"
                     )
                 destination = f"{published_root}/{folder[len(root_url) + 1 :]}"
+                if not removal.store.exists(destination):
+                    report.info(
+                        f"  {self.name:<12} {destination} holds nothing any more"
+                    )
+                    continue
                 actions.append(
                     Action(
                         f"purge {removal.settings.remote}:{destination} on the store",
-                        self._purge(removal, destination),
-                        self._gone(directory, folder),
+                        lambda destination=destination: removal.store.purge(
+                            destination
+                        ),
+                        self._gone(removal, name, directory, folder),
                     )
                 )
         return actions
 
     @staticmethod
-    def _purge(removal: Removal, destination: str):
-        def purge() -> None:
-            if removal.store is None:
-                from ..adapters.dcache import DcacheStore
-
-                removal.store = DcacheStore(
-                    removal.settings.remote, removal.settings.frontend
-                )
-            if removal.store.purge(destination, dry_run=False):
-                raise MaintenanceError(f"purging {destination} on the store failed")
-
-        return purge
-
-    @staticmethod
-    def _gone(directory: Path, folder: str):
+    def _gone(removal: Removal, name: str, directory: Path, folder: str):
         def gone() -> str:
-            package = json.loads((directory / "datapackage.json").read_text("utf-8"))
-            from . import resources_of
-
-            resources = resources_of(package, directory)
-            if not resources:
+            records = inventory_of(name, directory).records()
+            if not records:
                 return ""
-            url = f"{folder}/{resources[0][k.PATH]}"
+            url = f"{folder}/{records[0][k.PATH]}"
             try:
-                with urllib.request.urlopen(
-                    urllib.request.Request(url, method="HEAD"), timeout=60
-                ):
-                    return f"{url} is still served"
-            except (urllib.error.URLError, OSError):
+                removal.store.served(url)
+            except UploadError:
                 return ""
+            return f"{url} is served after the purge"
 
         return gone
 
@@ -400,15 +433,24 @@ def run(
     purge: bool = False,
     dry_run: bool = False,
     store: Store | None = None,
+    roots: Roots | None = None,
 ) -> RemoveResult:
     """Withdraw ``names`` -- datasets or families -- or, with ``purge``, delete them.
 
     Withdrawing rebuilds the index without them. Purging deletes their cache
     entries, their bytes on ``store`` -- the one catalog.yaml names by default
     -- and their directories, once a major release is recorded after their
-    removal.
+    removal. It reports the entries in the caches ``roots`` names, the
+    account's by default, that no copy records.
     """
-    removal = Removal(catalog_root, list(names), reason, store)
+    if purge and roots is None:
+        from ..config import read_settings
+
+        try:
+            roots = read_settings().roots
+        except ConfigurationError:
+            roots = None
+    removal = Removal(catalog_root, list(names), reason, store, roots)
     (PURGE if purge else PIPELINE).run(removal, dry_run=dry_run)
     if purge and not dry_run:
         report.info(

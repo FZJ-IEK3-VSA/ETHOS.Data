@@ -2,7 +2,7 @@
   "$defs": {
     "StoreSettings": {
       "additionalProperties": false,
-      "description": "How the maintainer commands reach the publication store; today's dCache by default.",
+      "description": "How the maintainer commands reach the publication store; the institute's dCache by default.",
       "properties": {
         "remote": {
           "default": "HIFIS",
@@ -170,7 +170,7 @@
         }
       ],
       "default": null,
-      "description": "How upload, release and purge reach the store; today's dCache by default.",
+      "description": "How upload, release and purge reach the store; the institute's dCache by default.",
       "x-ethos": {
         "inherited": false,
         "promoted": false,

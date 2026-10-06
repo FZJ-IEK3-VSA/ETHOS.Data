@@ -2,7 +2,7 @@
 
     ethos-data catalog --catalog-root /shared/ethos/catalogue update-checkout --dry-run
     ethos-data catalog --catalog-root /shared/ethos/catalogue update-checkout
-    ethos-data catalog --catalog-root /shared/ethos/catalogue update-checkout --to v2026.10.1
+    ethos-data catalog --catalog-root /shared/ethos/catalogue update-checkout --to v1.2.0
 
 Cluster users read one checkout of the source catalogue, which holds one
 release, the latest. A runner elsewhere cannot reach it, so it is updated on
@@ -14,7 +14,8 @@ the machine that serves it, by this command, when no jobs are reading it:
 
 Nothing is rebuilt in a served checkout: an index from one release paired
 with inventories from another is what a reader reports as an incomplete
-catalogue.
+catalogue. The check hashes the files of every dataset that is not frozen, so
+freezing datasets with ``catalog record`` keeps it short.
 """
 
 from __future__ import annotations
@@ -26,11 +27,11 @@ from .. import report
 from ..adapters import Git
 from ..errors import MaintenanceError
 from ..formats import keys as k
-from ..model.versions import Version
+from ..model.versions import Version, releases
 from . import read_catalog_meta
 from .pipeline import Action, Pipeline
 
-__all__ = ["PIPELINE", "Update", "latest", "run"]
+__all__ = ["PIPELINE", "Update", "UpdateResult", "latest", "run"]
 
 
 @dataclass
@@ -46,14 +47,9 @@ class Update:
 
 
 def latest(names: list[str]) -> str | None:
-    """The newest of ``names`` that is a release, vYYYY.MM.N."""
-    releases = []
-    for name in names:
-        try:
-            releases.append(Version.parse(name))
-        except ValueError:
-            continue
-    return str(max(releases)) if releases else None
+    """The newest of ``names`` that is a release, ``vMAJOR.MINOR.PATCH``."""
+    found = releases(names)
+    return str(found[-1]) if found else None
 
 
 class Fetch:
@@ -111,7 +107,7 @@ class Check:
         def check() -> None:
             from . import manifest
 
-            if manifest.run(update.catalog_root, [], check=True):
+            if not manifest.run(update.catalog_root, [], check=True).ok:
                 raise MaintenanceError(
                     f"{update.reached} does not check clean in the served checkout: its "
                     "manifests and the files they describe disagree. Do not announce it."
@@ -123,6 +119,17 @@ class Check:
 PIPELINE: Pipeline[Update] = Pipeline("update-checkout", [Fetch(), Advance(), Check()])
 
 
+@dataclass(frozen=True)
+class UpdateResult:
+    """The release the served checkout is at, or None after a dry run."""
+
+    reached: str | None
+
+    @property
+    def ok(self) -> bool:
+        return True
+
+
 @report.reported
 def run(
     catalog_root: Path,
@@ -131,7 +138,7 @@ def run(
     remote: str = "origin",
     dry_run: bool = False,
     git: Git | None = None,
-) -> int:
+) -> UpdateResult:
     """Move the served checkout at ``catalog_root`` to ``to``, or the latest release."""
     from ..adapters.git import GitRepository
 
@@ -141,4 +148,4 @@ def run(
         report.info(
             f"\nThe served checkout is at {update.reached}; announce the release."
         )
-    return 0
+    return UpdateResult(update.reached)

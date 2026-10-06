@@ -18,7 +18,7 @@ DCACHE_FRONTEND = "https://hifis-storage-web.desy.de/api/v1"
 
 
 class StoreSettings(BaseModel):
-    """How the maintainer commands reach the publication store; today's dCache by default."""
+    """How the maintainer commands reach the publication store; the institute's dCache by default."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -67,7 +67,8 @@ class CatalogMeta(BaseModel):
     )
     store: StoreSettings | None = field(
         k.STORE,
-        description="How upload, release and purge reach the store; today's dCache by default.",
+        description="How upload, release and purge reach the store; the institute's "
+        "dCache by default.",
         published=False,
     )
 
@@ -77,7 +78,7 @@ STRIPPED = keys_with(CatalogMeta, "published", False)
 
 
 def store_of(meta: Mapping) -> StoreSettings:
-    """The store settings ``catalog.yaml`` gives, with today's values for any it leaves out."""
+    """The store settings ``catalog.yaml`` gives, with the defaults for any it leaves out."""
     try:
         return StoreSettings.model_validate(meta.get(k.STORE) or {})
     except ValidationError as error:

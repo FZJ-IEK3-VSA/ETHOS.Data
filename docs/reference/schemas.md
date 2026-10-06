@@ -596,7 +596,7 @@ ethos:store:                     # optional; these are the defaults
 | `ethos:publication_url` | | root of the public data store. Every resource URL is `<publication_url>/<remote_prefix>/<resource path>`. Override per machine with `ethos-data config set-publication-url` |
 | `ethos:contact` | | team or username |
 | `ethos:catalog_role` | `source` \| `published` | always `source` in a hand-written file — `build` defaults it and **rejects** any other value. `ethos-data catalog publish` stamps `published` into the generated copy |
-| `version` | `vMAJOR.MINOR.PATCH` | the release this catalogue is, set before it is released; `build` refuses any other form and writes it into the index |
+| `version` | `vMAJOR.MINOR.PATCH` | the release this catalogue is; [`ethos-data catalog release`](cli/catalog.md#release-version) writes it, and `build` refuses any other form and writes it into the index |
 | `ethos:store` | mapping | how `upload`, `release --upload` and `remove --purge` reach the publication store: the rclone `remote`, the VO's `vo_path`, the `oidc_profile` that issues tokens, and the REST `frontend`. Each defaults to the institute's dCache. Never published |
 
 ---
@@ -653,20 +653,21 @@ history:
 | `available` | bytes reachable for the access class: uploaded and verified, linked, or registered | `ethos-data catalog upload`; `ethos-data link` and `materialize` given `--catalog-root` |
 | `frozen` | inventory final, no build input left, authoritative copy recorded | `ethos-data catalog record` |
 | `withdrawn` | out of the catalogue; bytes not yet deleted | `ethos-data catalog remove`, see [Remove a dataset](../how-to/catalogue-maintainers/withdraw-a-dataset.md) |
-| `purged` | bytes deleted after the release that dropped the dataset; only the status file is left | `ethos-data catalog remove --purge` |
+| `purged` | bytes deleted after a major release recorded after its removal; only the status file is left | `ethos-data catalog remove --purge` |
 
 Every command checks its step against the state first: a draft is built
 before it is uploaded or linked, a dataset is frozen only with a copy that
 `catalog record` has just found complete, and a frozen dataset is only
 rechecked, never uploaded again. A rebuild that finds other files than the
 inventory before is recorded as a `change`, and returns an available dataset
-to built, because what was checked is no longer what the inventory describes.
+to built, because what was checked differs from what the inventory describes.
 A rebuild that changes no file records nothing.
 
 `ethos-data catalog release` adds a `release` step to the history of every
 dataset with steps since its last release, so the history says which release
 holds each change, and `catalog status` shows the last release and how many
-steps came after it.
+steps came after it. A major release adds one to every withdrawn dataset as
+well: its purge waits for a major release recorded after its removal.
 
 Keys a later release adds are kept as they are when an older one rewrites the
 file. See [`ethos-data catalog status`](cli/catalog.md#status-datasets).

@@ -1,6 +1,6 @@
 # 0018. Number catalogue releases `vMAJOR.MINOR.PATCH`, purge data only after a major release, and let collections files bound them
 
-**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #19, #23
+**Status:** implemented · **Date:** 2026-10-06 · **Implemented by:** #19, #23
 
 ## Context
 

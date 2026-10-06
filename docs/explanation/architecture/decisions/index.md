@@ -26,7 +26,7 @@ dash means that the decision is implemented and needs no pull request.
 | 0007 | [Read every generated catalogue through one inventory reader](0007-one-inventory-reader.md) | implemented | #40 |
 | | **Code structure** | | |
 | 0008 | [Build the package in four layers: model, adapters, services, presentation](0008-four-layers.md) | implemented | #10, #13, #17, #20, #41 |
-| 0009 | [Reach dCache, downloads, metadata sources and git through ports with fakes](0009-ports-and-fakes-for-external-systems.md) | proposed | #20, #40, #23 |
+| 0009 | [Reach dCache, downloads, metadata sources and git through ports with fakes](0009-ports-and-fakes-for-external-systems.md) | implemented | #20, #40, #23 |
 | | **Reading data** | | |
 | 0010 | [Read settings from one file per account, once per handle](0010-one-settings-file-per-account.md) | proposed | #14, #15, #39, #19, #40, #25 |
 | 0011 | [Let the access class pick the root, and a link mean "read in place"](0011-access-class-picks-the-root.md) | implemented | #15, #39, #42 |
@@ -37,12 +37,12 @@ dash means that the decision is implemented and needs no pull request.
 | 0016 | [Give one link command two modes](0016-one-link-command-two-modes.md) | implemented | #39 |
 | 0017 | [Ship a self-test collection with the package](0017-self-test-collection.md) | implemented | #18 |
 | | **Versions** | | |
-| 0018 | [Number catalogue releases `vMAJOR.MINOR.PATCH`, purge data only after a major release, and let collections files bound them](0018-numbered-catalogue-releases.md) | proposed | #19, #23 |
+| 0018 | [Number catalogue releases `vMAJOR.MINOR.PATCH`, purge data only after a major release, and let collections files bound them](0018-numbered-catalogue-releases.md) | implemented | #19, #23 |
 | 0019 | [Publish new versions as revisions or successors; published objects never change](0019-revisions-and-successors.md) | proposed | #24, #25 |
 | 0020 | [Keep attributed data in bundles that are authoritative for their package](0020-repository-bundles.md) | proposed | #25 |
 | 0021 | [Let a bundle be ahead of the catalogue, and warn until it is realigned](0021-bundles-ahead-of-the-catalogue.md) | proposed | #25 |
 | | **Maintaining the catalogue** | | |
-| 0022 | [Record each dataset's state in a status file](0022-dataset-status-files.md) | proposed | #21, #22, #23 |
+| 0022 | [Record each dataset's state in a status file](0022-dataset-status-files.md) | implemented | #21, #22, #23 |
 | 0023 | [Run every catalogue workflow that writes as a pipeline that plans before it acts](0023-maintenance-pipelines.md) | proposed | #20, #22, #42, #23, #26 |
 | 0024 | [Let unresolved licensing block distribution, not development](0024-licensing-gates-distribution.md) | proposed | #21, #25 |
 | 0025 | [Draft the handoffs between roles from templates](0025-handoff-templates.md) | proposed | #26 |

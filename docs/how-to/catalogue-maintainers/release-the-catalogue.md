@@ -70,10 +70,7 @@ tag and runs `build --check`, which writes nothing. Never rebuild inside the
 served checkout while jobs read it: an index from one revision paired with
 inventories from another is exactly what an `IncompleteCatalog` error reports.
 
-## 3. The public catalogue {#public}
-
-`release` generates it with `publish`, which you can also run on its own to
-look at the result:
+## 3. Generate the public catalogue {#public}
 
 `catalog release` generates the public catalogue with `catalog publish`; run
 it alone to look at the result before a release:
@@ -108,7 +105,7 @@ cd ../ETHOS.Data-Catalogue && git diff
 
 A hidden dataset must not be mentioned at all.
 
-### Committed and tagged with the source
+### Commit, tag, push
 
 `catalog release` commits and tags the public catalogue with the same version,
 and `--push` pushes it. Its check refuses a public dataset whose upload was

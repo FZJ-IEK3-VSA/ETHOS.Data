@@ -65,12 +65,12 @@ checks the copy on dCache again, makes it the authoritative copy and retires
 
 ```bash
 ethos-data catalog record my-dataset
-ethos-data catalog build --check
-ethos-data catalog publish ../ETHOS.Data-Catalogue
 ```
 
-[Release the catalogue](release-the-catalogue.md). `publish` does not push or
-deploy it.
+Commit the status file on a branch and merge it by merge request on JuGit,
+then [release the catalogue](release-the-catalogue.md): the release generates
+the public catalogue, and its check refuses a public dataset whose upload was
+not verified after its last inventory change.
 
 See [Upload options](../../reference/cli/catalog.md#upload-dataset-dataset) for the
 complete reference.

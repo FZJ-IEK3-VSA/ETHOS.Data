@@ -17,8 +17,8 @@ smaller job look like the unrelated one.
 
 Every one of them but ``check-store`` needs a catalogue checkout, found by
 searching upward from the current directory for ``catalog.yaml``, so they work
-from anywhere inside one. ``check-store`` probes dCache and has nothing to do
-with any particular catalogue.
+from anywhere inside one. ``check-store`` probes dCache; run inside a
+checkout, it probes the store ``catalog.yaml`` names under ``ethos:store``.
 
 This module owns the argument definitions rather than exporting a ``main``:
 :mod:`ethos_data.cli` calls :func:`add_catalog_parser` to graft them on, and
@@ -40,8 +40,11 @@ from . import resolve_catalog_root
 SCRIPTS = Path(__file__).resolve().parent / "scripts"
 
 
-def check_store(vo: str) -> int:
+def check_store(vo: str | None, start: Path | None = None) -> int:
     """Run the dCache access probe, which is a shell script by necessity.
+
+    Inside a catalogue checkout, the probe reaches the store ``catalog.yaml``
+    names under ``ethos:store``; ``vo`` names another VO.
 
     It reproduces exactly what a maintainer types by hand against curl and
     rclone; rewriting it in Python would make it a worse diagnostic, because the
@@ -54,6 +57,7 @@ def check_store(vo: str) -> int:
     for Windows and the WSL distributions both put a usable bash on PATH.
     """
     script = SCRIPTS / "check_dcache_access.sh"
+    env = {**os.environ, **_store_environment(vo, start)}
     if os.name == "nt":
         bash = shutil.which("bash")
         if bash is None:
@@ -65,10 +69,26 @@ def check_store(vo: str) -> int:
                 f"    bash {script} {vo}"
             )
             return 1
-        return subprocess.run([bash, str(script), vo]).returncode
+        return subprocess.run([bash, str(script)], env=env, check=False).returncode
     if not os.access(script, os.X_OK):
         script.chmod(0o755)
-    return subprocess.run([str(script), vo]).returncode
+    return subprocess.run([str(script)], env=env, check=False).returncode
+
+
+def _store_environment(vo: str | None, start: Path | None) -> dict[str, str]:
+    """The store the probe reaches: ``ethos:store`` of the enclosing checkout, if any."""
+    from ..formats.catalogue import StoreSettings, store_of
+    from . import find_catalog_root, read_catalog_meta
+
+    try:
+        settings = store_of(read_catalog_meta(find_catalog_root(start)))
+    except MaintenanceError:
+        settings = StoreSettings()
+    return {
+        "ETHOS_STORE_VO_PATH": f"Helmholtz/{vo}" if vo else settings.vo_path,
+        "ETHOS_STORE_FRONTEND": settings.frontend,
+        "ETHOS_STORE_OIDC_PROFILE": settings.oidc_profile,
+    }
 
 
 def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentParser:
@@ -259,8 +279,9 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     remover.add_argument(
         "--purge",
         action="store_true",
-        help="once a release without them is recorded: delete their cache entries, "
-        "their bytes on the store and their directories but status.yaml",
+        help="once a major release is recorded after their removal: delete their "
+        "cache entries, their bytes on the store and their directories but "
+        "status.yaml",
     )
     remover.add_argument(
         "--dry-run", action="store_true", help="check and plan; write nothing"
@@ -289,13 +310,17 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     releaser = catalog_sub.add_parser(
         "release",
         help="release the catalogue: stamp, commit, tag, generate the public one",
-        description="Check the catalogue, write the version into catalog.yaml and "
-        "the index, record the release in the status files, commit and tag the "
-        "source checkout, and generate, commit and tag the public catalogue. "
-        "--push and --upload reach past this machine; run it again with them to "
-        "finish a release made without.",
+        description="Check the catalogue and that the version is the next patch, "
+        "minor or major of the last release at or above the level the changes "
+        "need, write the version into catalog.yaml and the index, record the "
+        "release in the status files, commit and tag the source checkout, and "
+        "generate, commit and tag the public catalogue. --push and --upload reach "
+        "past this machine; run it again with them to finish a release made "
+        "without.",
     )
-    releaser.add_argument("version", help="the release, vYYYY.MM.N")
+    releaser.add_argument(
+        "version", help="the release, vMAJOR.MINOR.PATCH; the first is v1.0.0"
+    )
     releaser.add_argument(
         "--public",
         required=True,
@@ -349,16 +374,20 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         "--dry-run", action="store_true", help="show what would change; write nothing"
     )
 
-    # Was `check-access`, which did not say access to *what*. It probes the
-    # publication store, and is the one subcommand here that needs no catalogue.
+    # It probes the publication store, and is the one subcommand here that
+    # needs no catalogue.
     prober = catalog_sub.add_parser(
         "check-store",
         help="probe dCache permissions using temporary remote objects",
         description="Creates and cleans up temporary remote files/directories to test access "
-        "and permission inheritance. Needs storage credentials, no catalogue checkout.",
+        "and permission inheritance. Needs storage credentials; inside a catalogue "
+        "checkout it probes the store catalog.yaml names under ethos:store.",
     )
     prober.add_argument(
-        "vo", nargs="?", default="FZJ-ICE2", help="VO name (default: FZJ-ICE2)"
+        "vo",
+        nargs="?",
+        default=None,
+        help="VO name (default: from catalog.yaml's ethos:store, else FZJ-ICE2)",
     )
 
     return parser
@@ -386,7 +415,8 @@ def dispatch(args) -> int:
     manifest builder to do it.
     """
     if args.catalog_command == "check-store":
-        return check_store(args.vo)
+        start = Path(args.catalog_root) if args.catalog_root else None
+        return check_store(args.vo, start)
 
     root = resolve_catalog_root(args.catalog_root)
 
@@ -449,20 +479,24 @@ def dispatch(args) -> int:
     if args.catalog_command == "release":
         from . import release
 
-        return release.run(
-            root,
-            args.version,
-            args.public,
-            push=args.push,
-            upload=args.upload,
-            remote=args.remote,
-            dry_run=args.dry_run,
+        return _status(
+            release.run(
+                root,
+                args.version,
+                args.public,
+                push=args.push,
+                upload=args.upload,
+                remote=args.remote,
+                dry_run=args.dry_run,
+            )
         )
 
     if args.catalog_command == "update-checkout":
         from . import checkout
 
-        return checkout.run(root, to=args.to, remote=args.remote, dry_run=args.dry_run)
+        return _status(
+            checkout.run(root, to=args.to, remote=args.remote, dry_run=args.dry_run)
+        )
 
     if args.catalog_command == "check-source":
         from . import provenance

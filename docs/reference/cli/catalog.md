@@ -286,22 +286,23 @@ checkout, and its cache entries and bytes where they are, until a major
 release is recorded after the removal. Removing a withdrawn dataset again does
 nothing.
 
-`--purge` is the second half, once a [release](#release-version) since the
-removal is recorded in the dataset's status file:
+`--purge` is the second half, once a major [release](#release-version) is
+recorded after the removal in the dataset's status file:
 
 | Stage | |
 |---|---|
-| `check` | every dataset named is withdrawn, a release since says it is gone, and no other dataset's copy on the store lies in its folder or around it |
+| `check` | every dataset named is withdrawn; a major release is recorded after its removal; no other dataset's copy on the store lies in its folder or around it; this account can write every cache that holds a recorded entry, else the cache is named and nothing is deleted. Entries in the account's public cache and restricted caches that no copy records are reported, not deleted |
 | `cache` | unlink every link the status file records; delete every copy a cache owns |
-| `store` | purge the dataset's folder on the store, which has no trash area, and check that it is no longer served |
+| `store` | purge the dataset's folder on the store, which has no trash area, unless it holds nothing any more, and check that it is not served afterwards |
 | `tombstone` | delete the dataset's directory but its `status.yaml`, which records it `purged`, and a family left with no members; rebuild the index |
 
 The tombstone keeps the name: `catalog add` refuses to give it to other bytes.
+A purge interrupted half-way finishes when it is run again.
 
 | Flag | |
 |---|---|
 | `--reason TEXT` | why, for the record in `status.yaml` |
-| `--purge` | delete the cache entries, bytes and directory of datasets a release dropped |
+| `--purge` | delete the cache entries, bytes and directory of withdrawn datasets, after a major release |
 | `--dry-run` | check and plan; write nothing |
 
 ## `check-source <dataset> <directory>` {#check-source}
@@ -336,22 +337,37 @@ Make a release of the checked source catalogue, the internal and the public
 catalogue alike.
 
 ```bash
-ethos-data catalog release v2026.10.1 --public ../ETHOS.Data-Catalogue --dry-run
-ethos-data catalog release v2026.10.1 --public ../ETHOS.Data-Catalogue
-ethos-data catalog release v2026.10.1 --public ../ETHOS.Data-Catalogue --push --upload
+ethos-data catalog release v1.3.0 --public ../ETHOS.Data-Catalogue --dry-run
+ethos-data catalog release v1.3.0 --public ../ETHOS.Data-Catalogue
+ethos-data catalog release v1.3.0 --public ../ETHOS.Data-Catalogue --push --upload
 ```
 
 | Stage | |
 |---|---|
-| `check` | the version, `vYYYY.MM.N`, follows the catalogue's last release and has no tag; both checkouts are clean, and the public one is not a source catalogue; every manifest is current; every public dataset the public catalogue lists has a verified upload recorded; the public tree does not leak |
-| `stamp` | write `version:` into `catalog.yaml` and the index; add a `release` step to the history of every dataset with steps since its last release |
+| `check` | the version is admissible and has no tag; both checkouts are clean, and the public one is not a source catalogue; every manifest is current; every public dataset the public catalogue lists has an upload verified after its last inventory change; the public tree does not leak |
+| `stamp` | write `version:` into `catalog.yaml` and the index; add a `release` step to the history of every dataset with steps since its last release, and, in a major release, of every withdrawn dataset |
 | `commit` | commit the source checkout, `Release <version>`, and tag it |
 | `public` | generate the public catalogue in its checkout, commit and tag it |
 | `push` | with `--push`: push both checkouts and the tag to `--remote` |
 | `store` | with `--upload`: put the public catalogue on the store under `<publication root>/catalogue/`, replacing the previous one, make it world-readable, and check that it is served |
 
-Run again with the same version, it does only what is left: a stamp or a tag
-that is there is not made again. A release made without `--push` and
+The version is `vMAJOR.MINOR.PATCH`. The first release is `v1.0.0`; every
+later one is the next patch, minor or major of the last release, at or above
+the smallest level the changes since need. The `check` stage works that level
+out and names the smallest admissible version, `catalog status` too:
+
+| Changes since the last release | Level |
+|---|---|
+| A step recorded in a status file that adds, builds, changes or withdraws a dataset | minor |
+| A dataset that enters or leaves the internal or the public catalogue, or whose row changes its access class, visibility, size, file count or remote prefix | minor |
+| Any other change of an index row, and any file of the clone that differs from the last release's tag, status files aside | patch |
+
+A patch or minor release that changes nothing is refused. A major release is
+a retention epoch: it needs no change, and the purge of a withdrawn dataset
+waits for one.
+
+Run again with the same version, it does only what is left: a stamp, a
+release step or a tag that is there is not made again. A release made without `--push` and
 `--upload` is finished by running it again with them, and so is one that was
 interrupted.
 
@@ -377,11 +393,13 @@ Three stages: `fetch` the remote's branches and tags, refusing a checkout
 with changes nobody committed; `advance` to the latest release tag, or to
 `--to`, by fast-forward only, checking that `catalog.yaml` then says that
 release; `check` every manifest against its files, writing nothing. Nothing is
-rebuilt in a served checkout.
+rebuilt in a served checkout. The check hashes the files of every dataset that
+is not frozen, so freezing datasets with [`record`](#record-dataset) keeps it
+short.
 
 | Flag | |
 |---|---|
-| `--to VERSION` | the release to move to (default: the latest tag) |
+| `--to VERSION` | the release to move to, `v1.2.0` (default: the latest release tag) |
 | `--remote NAME` | the git remote to fetch (default: `origin`) |
 | `--dry-run` | plan; fetch and move nothing |
 
@@ -419,8 +437,10 @@ Exit `1` if a dataset was left alone.
 
 ## `check-store [vo]`
 
-Probe what this account can do on dCache InfiniteSpace. Default VO:
-`FZJ-ICE2`.
+Probe what this account can do on dCache InfiniteSpace. Inside a catalogue
+checkout it probes the store `catalog.yaml` names under
+[`ethos:store`](../schemas.md#catalogyaml); elsewhere, or for another VO
+named, the VO `FZJ-ICE2` by default.
 
 ```bash
 ethos-data catalog check-store FZJ-ICE2

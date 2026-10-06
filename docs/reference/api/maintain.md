@@ -181,7 +181,11 @@ freezing, removing and checking a dataset here.
     options:
       members:
         - run
+        - ReleaseResult
         - Release
+        - changes_since
+        - next_release
+        - Changes
         - stamped
       show_root_heading: false
       show_root_toc_entry: false
@@ -191,6 +195,7 @@ freezing, removing and checking a dataset here.
     options:
       members:
         - run
+        - UpdateResult
         - Update
         - latest
       show_root_heading: false

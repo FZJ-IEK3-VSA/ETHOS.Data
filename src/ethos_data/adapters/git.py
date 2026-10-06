@@ -49,6 +49,20 @@ class GitRepository:
     def fast_forward(self, ref: str) -> None:
         self._git("merge", "--ff-only", ref)
 
+    def show(self, ref: str, path: str) -> str | None:
+        result = subprocess.run(
+            ["git", "show", f"{ref}:{path}"],
+            cwd=self.root,
+            capture_output=True,
+            check=False,
+        )
+        return result.stdout.decode("utf-8") if result.returncode == 0 else None
+
+    def changed(self, ref: str) -> list[str]:
+        tracked = self._git("diff", "--name-only", ref).splitlines()
+        untracked = self._git("ls-files", "--others", "--exclude-standard").splitlines()
+        return sorted({*tracked, *untracked})
+
     def head(self) -> str:
         return self._git("rev-parse", "HEAD")
 

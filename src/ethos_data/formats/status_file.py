@@ -72,7 +72,8 @@ class Event(_Record):
         None, description="The build input that freezing the dataset retired."
     )
     release: str | None = Field(
-        None, description="The catalogue release a release step made, vYYYY.MM.N."
+        None,
+        description="The catalogue release a release step made, vMAJOR.MINOR.PATCH.",
     )
 
 

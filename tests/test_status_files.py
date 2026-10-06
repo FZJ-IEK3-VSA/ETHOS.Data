@@ -39,8 +39,10 @@ def uploading(tmp_path, store, monkeypatch):
     catalogue.dataset("flat", {"a.csv": "1\n", "b.csv": "22\n"})
     assert catalogue.build()[0] == 0
     fake = FakeStore(put=store.put)
-    monkeypatch.setattr(upload, "DcacheStore", lambda remote: fake)
-    monkeypatch.setattr(dcache, "DcacheStore", lambda remote="HIFIS": fake)
+    monkeypatch.setattr(upload, "DcacheStore", lambda remote, frontend=None: fake)
+    monkeypatch.setattr(
+        dcache, "DcacheStore", lambda remote="HIFIS", frontend=None: fake
+    )
     return catalogue, fake
 
 

@@ -1,19 +1,20 @@
 """``catalog release``: make a release of the checked source catalogue.
 
-    ethos-data catalog release v2026.10.1 --public ../ETHOS.Data-Catalogue --dry-run
-    ethos-data catalog release v2026.10.1 --public ../ETHOS.Data-Catalogue
-    ethos-data catalog release v2026.10.1 --public ../ETHOS.Data-Catalogue --push --upload
+    ethos-data catalog release v1.3.0 --public ../ETHOS.Data-Catalogue --dry-run
+    ethos-data catalog release v1.3.0 --public ../ETHOS.Data-Catalogue
+    ethos-data catalog release v1.3.0 --public ../ETHOS.Data-Catalogue --push --upload
 
 One release names the internal catalogue and the public one alike. The
 stages:
 
-``check``   the version follows the catalogue's last release; both checkouts
-            are clean and the public one is not a source catalogue; every
-            manifest is current; every public dataset the public catalogue
-            lists has a verified upload recorded; the public tree does not leak
+``check``   the version is admissible (see below); both checkouts are clean and
+            the public one is not a source catalogue; every manifest is current;
+            every public dataset the public catalogue lists has an upload
+            verified after its last inventory change; the public tree does not
+            leak
 ``stamp``   write the version into ``catalog.yaml`` and the index, and add a
-            release step to the history of every dataset with steps since
-            its last release
+            release step to the history of every dataset with steps since its
+            last release; a major release adds one to every withdrawn dataset
 ``commit``  commit the source checkout and tag it with the version
 ``public``  generate the public catalogue in its checkout, commit and tag it
 ``push``    with ``--push``: push both checkouts and the tag
@@ -21,16 +22,21 @@ stages:
             store, under ``<publication root>/catalogue/``, replacing the
             one before; the store keeps the latest release only
 
-Run again with the same version, it does only what is left: a stamp or a tag
-that is there is not made again. A release made without ``--push`` and
-``--upload`` is pushed and uploaded by running it again with them.
+The version is the next patch, minor or major of the last release, at or above
+the smallest level the changes since need (see :func:`changes_since`), and the
+first release is ``v1.0.0``. A patch or minor release that changes nothing is
+refused; a major release is a retention epoch, which needs no change.
+
+Run again with the same version, it does only what is left: a stamp, a
+release step or a tag that is there is not made again. A release made without
+``--push`` and ``--upload`` is pushed and uploaded by running it again with
+them.
 """
 
 from __future__ import annotations
 
+import json
 import re
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -39,15 +45,136 @@ import yaml
 from .. import report
 from ..adapters import Git, Store
 from ..adapters.dcache import MODE_0755
-from ..errors import MaintenanceError
+from ..errors import MaintenanceError, UploadError
 from ..formats import keys as k
 from ..formats.catalogue import store_of
-from ..model.versions import Version
+from ..model import lifecycle
+from ..model.versions import FIRST, LEVELS, MAJOR, MINOR, PATCH, Version, admissible
 from . import CATALOG_MARKER, read_catalog_meta
 from . import status as dataset_status
 from .pipeline import Action, Pipeline
 
-__all__ = ["PIPELINE", "Release", "run", "stamped"]
+__all__ = [
+    "PIPELINE",
+    "Changes",
+    "Release",
+    "ReleaseResult",
+    "changes_since",
+    "next_release",
+    "run",
+    "stamped",
+]
+
+#: The steps that change a dataset's data, which needs at least a minor release.
+DATA_STEPS = frozenset({"add", "build", "change", "remove"})
+#: The keys of an index row that say where and how a dataset's bytes are read.
+DATA_KEYS = (k.ACCESS, k.VISIBILITY, k.TOTAL_BYTES, k.FILE_COUNT, k.REMOTE_PREFIX)
+
+
+@dataclass(frozen=True)
+class Changes:
+    """What changed since the last release, and the smallest level that needs."""
+
+    #: ``patch``, ``minor``, or None when nothing changed.
+    level: str | None
+    #: One line per change, in the order found.
+    reasons: tuple[str, ...] = ()
+
+
+def _rows(before: str | None, after: str | None, which: str) -> list[tuple[str, str]]:
+    """How the index rows of one catalogue changed, as ``(level, reason)``."""
+    if before is None or after is None:
+        return []
+    old = {row[k.NAME]: row for row in json.loads(before).get(k.DATASETS, [])}
+    new = {row[k.NAME]: row for row in json.loads(after).get(k.DATASETS, [])}
+    found = []
+    for name in sorted(old.keys() | new.keys()):
+        if name not in old:
+            found.append((MINOR, f"{name} enters the {which} catalogue"))
+        elif name not in new:
+            found.append((MINOR, f"{name} leaves the {which} catalogue"))
+        else:
+            data = [
+                key for key in DATA_KEYS if old[name].get(key) != new[name].get(key)
+            ]
+            if data:
+                found.append(
+                    (MINOR, f"{name}: {', '.join(data)} in the {which} catalogue")
+                )
+            elif old[name] != new[name]:
+                found.append((PATCH, f"{name}: its row in the {which} catalogue"))
+    return found
+
+
+def changes_since(
+    catalog_root: Path,
+    git: Git,
+    last: Version | None,
+    *,
+    public: Path | None = None,
+    public_git: Git | None = None,
+) -> Changes:
+    """What changed in the clone at ``catalog_root`` since the release ``last``.
+
+    From the steps recorded in the status files since each dataset's last
+    release: adding, building, changing or withdrawing a dataset changes data.
+    From the index rows of both catalogues compared with ``last``, read from
+    the tags through ``git`` and ``public_git``: a dataset that enters or leaves
+    a catalogue, or whose access, visibility or bytes differ, changes data; any
+    other difference, metadata. And from the files of the clone that differ
+    from ``last``, the status files aside: metadata.
+    """
+    found: list[tuple[str, str]] = []
+    for name, directory in dataset_status.datasets(catalog_root, [], tombstones=True):
+        status = dataset_status.read(directory)
+        if status is None:
+            continue
+        steps = sorted(
+            {entry.step for entry in dataset_status.since_release(status)} & DATA_STEPS
+        )
+        if steps:
+            found.append((MINOR, f"{name}: {', '.join(steps)}"))
+    if last is not None:
+        tag = str(last)
+        index = catalog_root / k.INDEX_FILE
+        found += _rows(
+            git.show(tag, k.INDEX_FILE),
+            index.read_text(encoding="utf-8") if index.is_file() else None,
+            "internal",
+        )
+        if public is not None and public_git is not None:
+            from .publish import plan
+
+            files, _, _ = plan(catalog_root, public)
+            rendered = files.get(Path(k.INDEX_FILE))
+            found += _rows(public_git.show(tag, k.INDEX_FILE), rendered, "public")
+        differ = [
+            path
+            for path in git.changed(tag)
+            if path.rsplit("/", 1)[-1] != dataset_status.STATUS
+        ]
+        if differ:
+            shown = ", ".join(differ[:3]) + (
+                f" and {len(differ) - 3} more" if len(differ) > 3 else ""
+            )
+            found.append((PATCH, f"files differ from {tag}: {shown}"))
+    if not found:
+        return Changes(None)
+    level = max((each for each, _ in found), key=LEVELS.index)
+    return Changes(level, tuple(reason for _, reason in found))
+
+
+def next_release(catalog_root: Path, git: Git) -> tuple[Version | None, Changes]:
+    """The smallest admissible next release of the clone, and the changes it needs.
+
+    The release is None when nothing changed since the last one.
+    """
+    current = read_catalog_meta(catalog_root).get(k.VERSION)
+    last = Version.parse(current) if current else None
+    changes = changes_since(catalog_root, git, last)
+    if last is not None and changes.level is None:
+        return None, changes
+    return admissible(last, changes.level or PATCH)[0], changes
 
 
 @dataclass
@@ -90,16 +217,7 @@ class Check:
         current = read_catalog_meta(root).get(k.VERSION)
         release.stamped = current == release.version
         if not release.stamped:
-            if current and Version.parse(current) >= version:
-                raise MaintenanceError(
-                    f"{release.version} does not follow the catalogue's release "
-                    f"{current}; releases are numbered vYYYY.MM.N"
-                )
-            if release.version in release.source_git.tag_names():
-                raise MaintenanceError(
-                    f"the source checkout has a tag {release.version} already; "
-                    "a released tag never moves"
-                )
+            self._admissible(release, version, current)
         resuming = (
             release.stamped and release.version not in release.source_git.tag_names()
         )
@@ -122,6 +240,51 @@ class Check:
             )
         return []
 
+    def _admissible(
+        self, release: Release, version: Version, current: str | None
+    ) -> None:
+        last = Version.parse(current) if current else None
+        if last is not None and version <= last:
+            raise MaintenanceError(
+                f"{release.version} does not follow the catalogue's release {last}"
+            )
+        if release.version in release.source_git.tag_names():
+            raise MaintenanceError(
+                f"the source checkout has a tag {release.version} already; "
+                "a released tag never moves"
+            )
+        changes = changes_since(
+            release.catalog_root,
+            release.source_git,
+            last,
+            public=release.public,
+            public_git=release.public_git,
+        )
+        if last is not None and changes.level is None and not version.is_major:
+            raise MaintenanceError(
+                f"nothing changed since {last}, so there is nothing to release; a "
+                f"major release, {last.next(MAJOR)}, needs no change"
+            )
+        allowed = admissible(last, changes.level or PATCH)
+        if last is not None and changes.level is not None:
+            report.info(
+                f"  {self.name:<12} the changes since {last} need a {changes.level} "
+                f"release, at least {allowed[0]}:"
+            )
+            for reason in changes.reasons[:10]:
+                report.info(f"  {'':<12}   {reason}")
+        if version not in allowed:
+            if last is None:
+                raise MaintenanceError(
+                    f"{release.version} cannot be the catalogue's first release, "
+                    f"which is {FIRST}"
+                )
+            raise MaintenanceError(
+                f"{release.version} is not admissible after {last}: the changes "
+                f"since need a {changes.level} release, so the next is one of "
+                f"{', '.join(str(each) for each in allowed)}"
+            )
+
     @staticmethod
     def _public(release: Release) -> None:
         public = release.public
@@ -143,9 +306,9 @@ class Check:
     def _manifests(release: Release) -> None:
         from . import manifest
 
-        if manifest.run(
+        if not manifest.run(
             release.catalog_root, [], check=True, reporter=report.NullReporter()
-        ):
+        ).ok:
             raise MaintenanceError(
                 "the manifests are not current: run `ethos-data catalog build`, "
                 "review and commit the result, then release"
@@ -160,32 +323,68 @@ class Check:
             if package.get(k.NAMESPACE) or package.get(k.ACCESS, k.PUBLIC) != k.PUBLIC:
                 continue
             status = dataset_status.read(directory)
-            if status is None or not any(
-                copy.kind == k.COPY_UPLOADED for copy in status.copies
-            ):
+            if status is None or not _upload_verified(status):
                 missing.append(package[k.NAME])
         if missing:
             raise MaintenanceError(
-                "the public catalogue would offer downloads with no verified upload "
-                f"recorded: {', '.join(missing)}. Upload them with "
-                "`ethos-data catalog upload`, or keep them hidden."
+                "the public catalogue would offer downloads with no upload verified "
+                f"after their last inventory change: {', '.join(missing)}. Upload "
+                "them with `ethos-data catalog upload`, or keep them hidden."
             )
+
+
+def _upload_verified(status) -> bool:
+    """Whether an upload was verified after the last step that changed the inventory."""
+    if status.state not in (lifecycle.AVAILABLE, lifecycle.FROZEN):
+        return False
+    changed = max(
+        (entry.at for entry in status.history if entry.step in ("build", "change")),
+        default="",
+    )
+    return any(
+        copy.kind == k.COPY_UPLOADED
+        and copy.verified is not None
+        and copy.verified >= changed
+        for copy in status.copies
+    )
 
 
 class Stamp:
     name = "stamp"
 
     def plan(self, release: Release) -> list[Action]:
-        if release.stamped:
+        if release.version in release.source_git.tag_names():
             return []
-        changed = []
+        actions = []
+        if not release.stamped:
+            actions.append(
+                Action(
+                    f"write {k.VERSION}: {release.version} into catalog.yaml and the "
+                    "index",
+                    self._stamp(release),
+                )
+            )
+        major = Version.parse(release.version).is_major
         for name, directory in dataset_status.datasets(
             release.catalog_root, [], tombstones=True
         ):
             status = dataset_status.read(directory)
-            if status is not None and dataset_status.releases(status)[1]:
-                changed.append((name, directory))
+            if status is None:
+                continue
+            last, after = dataset_status.releases(status)
+            if last == release.version:
+                continue
+            if after or (major and status.state == lifecycle.WITHDRAWN):
+                actions.append(
+                    Action(
+                        f"{name}: record the release {release.version}",
+                        self._record(release, name, directory),
+                    )
+                )
+        return actions
 
+    @staticmethod
+    def _stamp(release: Release):
         def stamp() -> None:
             from . import manifest
 
@@ -196,32 +395,20 @@ class Stamp:
             path.write_bytes(text.encode("utf-8"))
             manifest.write_index(release.catalog_root)
 
-        def record() -> None:
-            for name, directory in changed:
-                dataset_status.take(
-                    directory,
-                    dataset_status.read(directory),
-                    "release",
-                    dataset=name,
-                    release=release.version,
-                )
+        return stamp
 
-        actions = [
-            Action(
-                f"write {k.VERSION}: {release.version} into catalog.yaml and the index",
-                stamp,
+    @staticmethod
+    def _record(release: Release, name: str, directory: Path):
+        def record() -> None:
+            dataset_status.take(
+                directory,
+                dataset_status.read(directory),
+                "release",
+                dataset=name,
+                release=release.version,
             )
-        ]
-        if changed:
-            actions.append(
-                Action(
-                    f"record the release in {len(changed)} dataset(s): "
-                    + ", ".join(name for name, _ in changed[:5])
-                    + (" and more" if len(changed) > 5 else ""),
-                    record,
-                )
-            )
-        return actions
+
+        return record
 
 
 class Commit:
@@ -304,30 +491,24 @@ class Upload:
             from ..adapters.dcache import DcacheStore
 
             release.store = DcacheStore(settings.remote, settings.frontend)
+        store = release.store
         destination = f"{publication_url.rsplit('/', 1)[-1]}/catalogue"
-        index_url = f"{publication_url}/catalogue/datacatalog.json"
+        index_url = f"{publication_url}/catalogue/{k.INDEX_FILE}"
 
         def upload() -> None:
-            store = release.store
-            if store.sync(release.public, destination, dry_run=False):
-                raise MaintenanceError(
-                    f"copying the public catalogue to {destination} failed"
-                )
-            bearer = store.token(settings.oidc_profile)
-            status = store.chmod(f"{settings.vo_path}/{destination}", MODE_0755, bearer)
-            if status not in (200, 204):
-                report.warning(
-                    f"chmod 0755 {settings.vo_path}/{destination} answered HTTP {status}; "
-                    "anonymous reads fail until it succeeds"
-                )
+            store.sync(release.public, destination)
+            folder = f"{settings.vo_path}/{destination}"
+            try:
+                store.chmod(folder, MODE_0755, store.token(settings.oidc_profile))
+            except UploadError as error:
+                report.warning(f"{error.message}; anonymous reads fail without it")
 
         def readable() -> str:
-            request = urllib.request.Request(index_url, method="HEAD")
             try:
-                with urllib.request.urlopen(request, timeout=60):
-                    return ""
-            except (urllib.error.URLError, OSError) as error:
-                return f"{index_url} is not readable anonymously: {error}"
+                store.served(index_url)
+            except UploadError as error:
+                return error.message
+            return ""
 
         return [
             Action(
@@ -344,6 +525,19 @@ PIPELINE: Pipeline[Release] = Pipeline(
 )
 
 
+@dataclass(frozen=True)
+class ReleaseResult:
+    """The release ``catalog release`` made, or with a dry run would make."""
+
+    version: str
+    #: Whether it was made: not for a dry run.
+    made: bool
+
+    @property
+    def ok(self) -> bool:
+        return True
+
+
 @report.reported
 def run(
     catalog_root: Path,
@@ -357,12 +551,12 @@ def run(
     source_git: Git | None = None,
     public_git: Git | None = None,
     store: Store | None = None,
-) -> int:
+) -> ReleaseResult:
     """Release ``catalog_root`` as ``version``, its public catalogue in ``public``.
 
     The checkouts are reached through ``source_git`` and ``public_git``, git
     by default, and the store through ``store``, the one ``catalog.yaml``
-    names by default. Returns 0, or raises.
+    names by default. Raises what refuses the release.
     """
     from ..adapters.git import GitRepository
 
@@ -395,4 +589,4 @@ def run(
             + " Then update the checkout cluster users read: "
             "`ethos-data catalog update-checkout` there."
         )
-    return 0
+    return ReleaseResult(version, not dry_run)

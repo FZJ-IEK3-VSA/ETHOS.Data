@@ -84,7 +84,7 @@ class UploadOptions:
     """The flags of ``ethos-data catalog upload``, with the command's defaults.
 
     ``remote``, ``oidc_profile`` and ``vo_path`` left None are taken from
-    ``catalog.yaml``'s ``ethos:store``, whose own defaults are today's dCache.
+    ``catalog.yaml``'s ``ethos:store``, whose own defaults are the institute's dCache.
     """
 
     remote: str | None = None
@@ -294,6 +294,8 @@ class Upload:
     arguments: list[str]
     options: UploadOptions
     store: Store
+    #: The store's REST interface, for the command a failed read-back prints.
+    frontend: str = FRONTEND
     #: The publication URL and the folder under the VO it serves: set by ``check``.
     base_url: str = ""
     root: str = ""
@@ -490,7 +492,7 @@ class Verify:
                 )
                 report.info("      -H 'Content-Type: application/json' -X POST \\")
                 report.info(
-                    f"      '{FRONTEND}/namespace/{namespace_path}' "
+                    f"      '{upload.frontend}/namespace/{namespace_path}' "
                     """-d '{"action":"chmod","mode":493}'"""
                 )
 
@@ -587,12 +589,20 @@ def run(
 
     Every dataset is loaded and checked before any of them is uploaded, and a
     dry run is the plan: it contacts no store. ``options`` are the command's
-    flags; ``store`` is the publication store, dCache through
-    ``options.remote`` by default; ``reporter=`` takes the progress.
+    flags, over the store settings of ``catalog.yaml``; ``store`` is the
+    publication store, dCache through the remote they name by default;
+    ``reporter=`` takes the progress.
     """
-    options = options or UploadOptions()
-    store = store if store is not None else DcacheStore(options.remote)
-    upload = Upload(catalog_root, list(datasets), options, store)
+    settings = store_of(read_catalog_meta(catalog_root))
+    options = dataclasses.replace(
+        options or UploadOptions(),
+        remote=(options and options.remote) or settings.remote,
+        oidc_profile=(options and options.oidc_profile) or settings.oidc_profile,
+        vo_path=(options and options.vo_path) or settings.vo_path,
+    )
+    if store is None:
+        store = DcacheStore(options.remote, settings.frontend)
+    upload = Upload(catalog_root, list(datasets), options, store, settings.frontend)
     outcome = PIPELINE.run(upload, dry_run=options.dry_run)
     result = UploadResult([plan.name for plan in upload.plans], outcome.failed)
     if len(upload.plans) > 1 and not options.dry_run:

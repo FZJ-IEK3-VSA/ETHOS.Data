@@ -27,7 +27,7 @@ import yaml
 from pydantic import ValidationError
 
 from .. import report
-from ..adapters import Store
+from ..adapters import Git, Store
 from ..config import current_user
 from ..errors import DescriptorError, MaintenanceError
 from ..formats import keys as k
@@ -36,6 +36,7 @@ from ..formats.dataset import describe
 from ..formats.derived import license_settled
 from ..formats.status_file import Copy, Event, StatusFile
 from ..model import lifecycle
+from ..model.versions import Version
 from . import (
     _read_mapping,
     dataset_name_for,
@@ -276,26 +277,34 @@ def releases(status: StatusFile) -> tuple[str | None, int]:
     return last, after
 
 
-def released_since(status: StatusFile, step: str) -> str | None:
-    """The first release after the last ``step``, or None if no release holds it yet."""
+def since_release(status: StatusFile) -> list[Event]:
+    """The steps the dataset took after its last release step: every one, without one."""
+    last = max(
+        (
+            index
+            for index, entry in enumerate(status.history)
+            if entry.step == "release"
+        ),
+        default=-1,
+    )
+    return status.history[last + 1 :]
+
+
+def major_release_after(status: StatusFile, step: str) -> str | None:
+    """The first major release recorded after the last ``step``, or None."""
     seen, found = False, None
     for entry in status.history:
         if entry.step == step:
             seen, found = True, None
-        elif seen and entry.step == "release" and found is None:
+        elif (
+            seen
+            and found is None
+            and entry.step == "release"
+            and entry.release
+            and Version.parse(entry.release).is_major
+        ):
             found = entry.release
     return found
-
-
-def unrecorded(names: list[str]) -> str:
-    """The warning for datasets a step could not be recorded for."""
-    listed = ", ".join(names[:5]) + (
-        f" and {len(names) - 5} more" if len(names) > 5 else ""
-    )
-    return (
-        f"not recorded: {listed} {'has' if len(names) == 1 else 'have'} no {STATUS} "
-        "yet; `ethos-data catalog migrate` writes one from dataset.yaml"
-    )
 
 
 # -- whether the record still holds ----------------------------------------------
@@ -509,12 +518,14 @@ def run(
     *,
     check: bool = False,
     store: Store | None = None,
+    git: Git | None = None,
 ) -> StatusResult:
     """List each dataset's state and next step; with ``check``, test the record.
 
-    ``store`` reads uploads back, dCache's public door by default. The result
-    is not ``ok`` when a status file is missing or cannot be read, or a record
-    does not hold.
+    ``store`` reads uploads back, dCache's public door by default. ``git``
+    reaches the clone, for the smallest admissible next release; without a git
+    checkout, that line is left out. The result is not ``ok`` when a status
+    file is missing or cannot be read, or a record does not hold.
     """
     if store is None:
         from ..adapters.dcache import DcacheStore
@@ -564,6 +575,8 @@ def run(
             result.findings[name] = found
             for finding in found:
                 report.info(f"  {'':<{width}}    {finding}")
+    if not names:
+        _next_release(catalog_root, git)
     if check:
         failed = sum(
             not finding.ok for found in result.findings.values() for finding in found
@@ -572,3 +585,23 @@ def run(
             f"\n{failed} finding(s) do not hold." if failed else "\nEvery record holds."
         )
     return result
+
+
+def _next_release(catalog_root: Path, git: Git | None) -> None:
+    """Report the smallest admissible next release, and why; nothing outside git."""
+    from .release import next_release
+
+    if git is None:
+        from ..adapters.git import GitRepository
+
+        git = GitRepository(catalog_root)
+    try:
+        version, changes = next_release(catalog_root, git)
+    except MaintenanceError:
+        return
+    if version is None:
+        report.info("\nnext release: none, nothing changed since the last one")
+        return
+    report.info(f"\nnext release: {version} at least, a {changes.level} release")
+    for reason in changes.reasons[:10]:
+        report.info(f"  {reason}")

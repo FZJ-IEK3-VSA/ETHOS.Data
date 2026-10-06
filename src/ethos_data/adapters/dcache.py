@@ -113,6 +113,51 @@ class DcacheStore:
                 "to overwrite it: publish the change at a new path."
             )
 
+    def sync(self, source: Path, destination: str) -> None:
+        """``rclone sync``: the destination ends up holding what ``source`` holds."""
+        command = [
+            "rclone",
+            "sync",
+            str(source),
+            f"{self.remote}:{destination}",
+            "--checksum",
+            "--exclude",
+            ".git/**",
+            "--progress",
+        ]
+        report.info("  $ " + " ".join(command) + "\n")
+        status = _run(command).returncode
+        if status != 0:
+            raise UploadError(
+                f"rclone exited {status} syncing {source} to "
+                f"{self.remote}:{destination}"
+            )
+
+    def purge(self, destination: str) -> None:
+        """``rclone purge``: the folder and everything in it, with no trash area."""
+        command = ["rclone", "purge", f"{self.remote}:{destination}"]
+        report.info("  $ " + " ".join(command) + "\n")
+        status = _run(command).returncode
+        if status != 0:
+            raise UploadError(
+                f"rclone exited {status} purging {self.remote}:{destination}"
+            )
+
+    def exists(self, destination: str) -> bool:
+        """``rclone lsf`` of the folder: whether it lists anything."""
+        result = _capture(
+            ["rclone", "lsf", "--max-depth", "1", f"{self.remote}:{destination}"]
+        )
+        # rclone's exit status 3 means "directory not found".
+        if result.returncode == 3:
+            return False
+        if result.returncode != 0:
+            raise UploadError(
+                f"rclone exited {result.returncode} listing "
+                f"{self.remote}:{destination}: {result.stderr.strip()}"
+            )
+        return bool(result.stdout.strip())
+
     def chmod(self, path: str, mode: int, bearer: str) -> None:
         request = urllib.request.Request(
             f"{self.frontend}/namespace/{path.lstrip('/')}",

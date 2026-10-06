@@ -47,13 +47,19 @@ configuration, never shared.
 
 ```bash
 git clone <source catalogue repository> /shared/ethos/catalogue
-cd /shared/ethos/catalogue
-ethos-data catalog build --check
+ethos-data catalog --catalog-root /shared/ethos/catalogue update-checkout
 ```
+
+`update-checkout` moves the checkout to the latest release and checks every
+manifest against its files. It is the one command that changes the served
+checkout: nobody commits or rebuilds there, and records are made in
+maintainers' own clones and merged by merge request on JuGit. Its check
+hashes the files of every dataset that is not frozen, so freezing datasets
+with `catalog record` keeps it short.
 
 Cluster users point at `/shared/ethos/catalogue/datacatalog.json`. Updating
 the checkout is part of [releasing the catalogue](release-the-catalogue.md#internal);
-do it only when no jobs read it, and never rebuild in place while they do.
+do it only when no jobs read it.
 
 ## 3. Fill the public cache
 
@@ -69,7 +75,9 @@ ethos-data link --all --root /shared/ethos/cache --catalog-root <your clone>
 
 Read the preview first. It links public data only: restricted datasets are
 registered by name in step 4, and datasets with unresolved licensing are left
-out. See [Link existing data into the cache](link-existing-data.md).
+out. It records each link in the dataset's status file in your clone; commit
+the status files on a branch and merge them by merge request on JuGit. See
+[Link existing data into the cache](link-existing-data.md).
 
 ## 4. Register restricted data
 

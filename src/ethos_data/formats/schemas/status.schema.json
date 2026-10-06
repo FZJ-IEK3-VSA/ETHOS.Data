@@ -164,7 +164,7 @@
             }
           ],
           "default": null,
-          "description": "The catalogue release a release step made, vYYYY.MM.N.",
+          "description": "The catalogue release a release step made, vMAJOR.MINOR.PATCH.",
           "title": "Release"
         }
       },

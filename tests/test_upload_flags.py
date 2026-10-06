@@ -24,7 +24,7 @@ def uploading(tmp_path, monkeypatch):
     )
     assert catalogue.build()[0] == 0
     dcache = FakeStore()
-    monkeypatch.setattr(upload, "DcacheStore", lambda remote: dcache)
+    monkeypatch.setattr(upload, "DcacheStore", lambda remote, frontend=None: dcache)
     return catalogue, dcache
 
 

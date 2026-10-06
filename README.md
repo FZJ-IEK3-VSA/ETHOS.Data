@@ -54,7 +54,7 @@ inputs = data.paths("onshore_wind", test=True)
 Packages expose collections, named inputs, test variants, bundles and staging
 through `ethos_data.tool_main`. The shared CLI owns configuration, direct
 catalogue access and `link`, `unlink`, `materialize` and `catalog` maintenance.
-Staging uses a shared development root even though package wrappers manage it.
+Staging uses each developer's own root, which package wrappers manage.
 
 Applications can also use `ethos_data.catalog().path(KEY)` for keys or
 `ethos_data.collections("collections.yaml").paths(COLLECTION)` for an explicit
@@ -96,7 +96,10 @@ ethos-data catalog build                            # regenerate manifests from 
 ethos-data catalog publish ../ETHOS.Data-Catalogue  # emit the public subset
 ethos-data catalog upload <dataset>                 # put the bytes on dCache, then verify
 ethos-data catalog remove <dataset> --reason "..."  # withdraw a dataset from the catalogue
+ethos-data catalog remove <dataset> --purge         # delete its bytes after a major release
 ethos-data catalog check-source <dataset> <dir>     # compare a re-download with the inventory
+ethos-data catalog release v1.3.0 --public <dir>    # release both catalogues
+ethos-data catalog update-checkout                  # move the served checkout to a release
 ethos-data catalog check-store                      # probe dCache permissions
 ```
 

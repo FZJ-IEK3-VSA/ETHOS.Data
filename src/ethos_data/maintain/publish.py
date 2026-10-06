@@ -383,10 +383,15 @@ class Render:
             for p in files
             if len(p.parts) > 2 and p.parts[0] == "datasets"
         }
+        # Withheld are the datasets the tree leaves out, hidden ones among them;
+        # a withdrawn dataset is neither published nor withheld.
+        from .manifest import left_out
+
         publication.withheld = [
             dataset_name_for(root, directory)
             for directory in iter_dataset_dirs(root)
             if (directory / k.PACKAGE_FILE).is_file()
+            and not left_out(directory)
             and dataset_name_for(root, directory) not in published
         ]
         return []
@@ -489,6 +494,20 @@ class Write:
 
 
 PIPELINE: Pipeline[Publication] = Pipeline("publish", [Render(), Check(), Write()])
+
+
+def plan(
+    catalog_root: Path, target: Path
+) -> tuple[dict[Path, str | bytes], list[str], list[str]]:
+    """The public tree for ``target``, the datasets it withholds, and its leaks.
+
+    What ``render`` and ``check`` find, as ``catalog release`` checks it before
+    it publishes; nothing is written, and a leak is returned, not refused.
+    """
+    publication = Publication(catalog_root, Path(target), comparing=True)
+    Render().plan(publication)
+    Check().plan(publication)
+    return publication.files, publication.withheld, publication.leaked
 
 
 @report.reported
