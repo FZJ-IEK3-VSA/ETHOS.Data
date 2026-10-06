@@ -66,8 +66,8 @@ exposes through `tool_main`, without needing RESKit installed for this lesson.
 ```bash
 python data_cli.py staging add lesson-temperatures "$PWD/candidate" --note "local CSV lesson"
 python data_cli.py staging list
-python data_cli.py --catalog "$PWD/datacatalog.json" info example_input
-python data_cli.py --catalog "$PWD/datacatalog.json" info all
+python data_cli.py --catalog "$PWD/datacatalog.json" show example_input
+python data_cli.py --catalog "$PWD/datacatalog.json" show all
 ```
 
 Both collections resolve the same CSV; `all` aggregates the inputs this example

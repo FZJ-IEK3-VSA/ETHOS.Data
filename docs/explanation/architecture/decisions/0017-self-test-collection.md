@@ -1,6 +1,6 @@
 # 0017. Ship a self-test collection with the package
 
-**Status:** proposed · **Date:** 2026-10-02 · **Implemented by:** #18
+**Status:** implemented · **Date:** 2026-10-02 · **Implemented by:** #18
 
 ## Context
 

@@ -1125,7 +1125,7 @@ def _print_meta(catalog: Catalog, names: list[str]) -> None:
         if index:
             print()
         print(name)
-        for line in reader_description(catalog.dataset(name).descriptor, classes=True):
+        for line in reader_description(catalog.dataset(name).descriptor):
             print(f"  {line}")
 
 

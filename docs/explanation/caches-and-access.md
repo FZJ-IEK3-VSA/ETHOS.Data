@@ -110,10 +110,6 @@ copy once you have one; see
 [When a restricted input is missing](../how-to/data-users/use-data-in-a-script.md#licensed-input).
 `--meta` prints the dataset's full description.
 
-!!! warning "Gap: no `--meta`"
-    The code has no `--meta`, and no `report`. See [every input is
-    required](architecture/decisions/0013-every-input-is-required.md).
-
 ## Downloads never write through a link
 
 `locate` already routes a symbolic-link entry to "in place", so a download

@@ -97,10 +97,6 @@ that names the dataset and prints its `ethos:restriction`, `homepage` and
 who may obtain a copy, where, and under which terms.
 `ethos-data ls <name> --meta` prints the full description.
 
-!!! warning "Gap: no `--meta`"
-    `ls` has no `--meta`. See [every input is
-    required](../../explanation/architecture/decisions/0013-every-input-is-required.md).
-
 ## 2. Review it
 
 Settle every row before the file enters the catalogue:

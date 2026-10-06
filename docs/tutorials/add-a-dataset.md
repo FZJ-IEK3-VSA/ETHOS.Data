@@ -192,7 +192,7 @@ cache is the one the data was linked into:
 
 ```bash
 python data_cli.py --catalog public-catalogue/datacatalog.json \
-  --root public-cache plan temperatures
+  --root public-cache fetch temperatures --plan
 ```
 
 ```title="Output"

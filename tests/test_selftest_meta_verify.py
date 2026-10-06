@@ -198,6 +198,34 @@ class TestMeta:
         assert code == 0
         assert store.downloads() == []
 
+    def test_the_description_covers_every_user_facing_key(self):
+        """The format marks the keys --meta prints; each one is printed."""
+        from ethos_data.formats import dataset as dataset_format
+        from ethos_data.formats.derived import reader_description
+
+        described = {
+            "title": "GADM administrative areas",
+            "version": "3.6",
+            "description": "Boundaries of every country and its subdivisions.",
+            "homepage": "https://gadm.org",
+            "sources": [{"title": "GADM download", "path": "https://gadm.org/x"}],
+            "licenses": [{"name": "GADM-licence", "path": "https://gadm.org/l"}],
+            "ethos:access": "restricted",
+            "ethos:attribution": "GADM, version 3.6.",
+            "ethos:restriction": "Licensed for academic use.",
+            "ethos:upstream": {"status": "available", "note": "4.1 is current."},
+            "ethos:contact": "data-custodian@example.org",
+        }
+        printed = "\n".join(reader_description(described))
+
+        for key in dataset_format.USER_FACING:
+            value = described[key]
+            if isinstance(value, list):
+                value = value[0].get("title") or value[0]["name"]
+            elif isinstance(value, dict):
+                value = value["status"]
+            assert str(value) in printed, key
+
 
 class TestStagingWritesADescription:
     @pytest.fixture

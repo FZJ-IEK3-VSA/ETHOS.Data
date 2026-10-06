@@ -2,13 +2,11 @@
 # documentation. Every dataset it names is public and tiny, so the examples
 # can be run as written; the two collections together are under 200 KB.
 #
-# A package declares the catalogue versions it works with instead of a URL
-# (see "Write a collections file"):
+# A package declares the catalogue releases it works with (see "Write a
+# collections file"), for example:
 #   catalog:
-#     min_version: v2026.09.1
-# Until those keys exist, and until a release carries the current publication
-# root, this example follows the public catalogue's main branch.
-catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json
+#     min_version: v1.0.0
+# This file declares none, so it reads the public catalogue's main index.
 
 collections:
 

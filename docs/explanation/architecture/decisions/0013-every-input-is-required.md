@@ -1,6 +1,6 @@
 # 0013. Treat every input as required, and say what is missing
 
-**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #16, #18
+**Status:** implemented · **Date:** 2026-10-06 · **Implemented by:** #16, #18
 
 ## Context
 

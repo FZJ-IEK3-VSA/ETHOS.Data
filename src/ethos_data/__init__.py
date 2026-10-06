@@ -82,7 +82,7 @@ from .model.resource import Resource
 from .retrieval import DataFiles, NamedPaths, download, plan
 from .selection import Collections, load_collections
 from .selftest import EXAMPLE_COLLECTIONS, run_selftest
-from .staging import apply_staging, classify_staged, staged_only
+from .staging import classify_staged, staged_only
 from .verify import Finding, repair, verify
 
 __all__ = [
@@ -123,7 +123,6 @@ __all__ = [
     "Settings",
     "UnknownCollection",
     "UnknownDataset",
-    "apply_staging",
     "catalog",
     "classify_staged",
     "collections",

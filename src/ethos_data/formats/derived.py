@@ -59,15 +59,13 @@ def _entry(entry: object, *names: str) -> str:
     return name or where
 
 
-def reader_description(package: Mapping, *, classes: bool = False) -> list[str]:
-    """What somebody without a copy needs to know about a dataset, as lines.
+def reader_description(package: Mapping) -> list[str]:
+    """A dataset's full description, as the lines ``--meta`` prints.
 
     The keys the dataset.yaml specification marks user-facing, each as far as
-    the descriptor records it: what the data is, where it came from, under
-    which terms, why it is restricted and how to obtain it, and whom to ask.
-    The refusal for licensed data this machine cannot read prints these;
-    ``--meta`` prints them with ``classes``, which adds the access class and
-    the origin.
+    the descriptor records it -- what the data is, where it came from, under
+    which terms, why it is restricted and how to obtain it, and whom to ask --
+    with the access class and the origin.
     """
     lines: list[str] = []
     heading = str(package.get(k.TITLE) or package.get(k.NAME) or "")
@@ -79,11 +77,9 @@ def reader_description(package: Mapping, *, classes: bool = False) -> list[str]:
     if package.get(k.DESCRIPTION):
         lines.append(str(package[k.DESCRIPTION]).strip())
 
-    rows: list[tuple[str, str]] = []
-    if classes:
-        rows.append(("access", str(package.get(k.ACCESS, k.PUBLIC))))
-        if package.get(k.ORIGIN):
-            rows.append(("origin", str(package[k.ORIGIN])))
+    rows: list[tuple[str, str]] = [("access", str(package.get(k.ACCESS, k.PUBLIC)))]
+    if package.get(k.ORIGIN):
+        rows.append(("origin", str(package[k.ORIGIN])))
     if package.get(k.HOMEPAGE):
         rows.append(("homepage", str(package[k.HOMEPAGE])))
     for source in package.get(k.SOURCES) or []:
