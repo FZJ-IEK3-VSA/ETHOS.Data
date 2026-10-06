@@ -2,11 +2,6 @@
 
 Key concepts used across `ethos-data`.
 
-!!! warning "Gap: handoffs describe the target"
-    The **handoffs** describe the [target architecture](../explanation/architecture/glossary.md),
-    which the code does not have yet: it has no `propose`, `report` or
-    drafted notices.
-
 ## Data
 
 | Term | Meaning |

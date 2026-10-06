@@ -116,11 +116,13 @@ choose and its version; and every file, `downloaded`, `already present` or
 
 ## `report [key]` {#report}
 
-Draft a problem report: run `selftest`, `config show` and, for a key,
-`fetch <key> --plan`, and print their output in the report template, with
-tokens, credentials in URLs, the home directory and the account name
-removed. `--no-selftest` leaves out the self-test's download. A package's
-data command has the same, with its collections.
+Draft a problem report: run `selftest` and `config show` and, for a key,
+work out what a fetch would do, with the state of every listed restricted
+cache for its restricted data, and [`verify`](#verify) it by size. The
+report template holds their output, with tokens, credentials in URLs, the
+home directory and the account name removed, and names the tracker to post
+it at by access class. `--no-selftest` leaves out the self-test's download.
+A package's data command has the same, with its collections.
 
 ## `verify <key>` {#verify}
 

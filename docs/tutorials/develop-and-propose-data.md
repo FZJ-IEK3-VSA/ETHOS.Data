@@ -114,11 +114,12 @@ experiments and cannot establish that an input matches a released version.
 
 ## 4. Prepare a proposal
 
-Once the experiment works, preserve the candidate version and prepare a draft
-`dataset.yaml` for the reviewer:
+Once the experiment works, prepare the draft description for the reviewer.
+`staging add` wrote a minimal `candidate/dataset.yaml`; replace it with:
 
 ```yaml
 name: lesson-temperatures
+source_dir: .
 title: Synthetic temperatures for the local development lesson
 description: Two invented station observations used to exercise a CSV reader.
 ethos:origin: created
@@ -134,21 +135,21 @@ licenses:
 ```
 
 The licence here applies to the invented example; choose appropriate terms for
-real data. The catalogue maintainer will set `source_dir` to the candidate
-location they can read. For a minimal inventory to accompany this proposal:
+real data. `source_dir` names the directory that holds the bytes, relative to
+the draft; the catalogue maintainer reads them from there. Let the package's
+command check the draft and write the proposal:
 
-```python
-import hashlib
-from pathlib import Path
-
-candidate = Path("candidate/temperatures.csv")
-print(candidate.name, candidate.stat().st_size,
-      "sha256:" + hashlib.sha256(candidate.read_bytes()).hexdigest())
+```bash
+python data_cli.py propose candidate
 ```
 
-With real data, you would now hand the CSV, this inventory, the draft metadata,
-and the validation result to a catalogue maintainer. This teaching example stays
-on your machine.
+`propose` checks the draft as the catalogue's build would, inventories the
+bytes under `source_dir` and prints the proposal: the dataset, a new one, the
+file and its size, the collections `example_input` and `all`, which already
+name it, and the tracker to post it at. It also warns that the file can be
+written to: a candidate whose bytes may change cannot be reviewed. With real
+data you would now make the directory read-only, add the validation you ran
+to the proposal, and post it. This teaching example stays on your machine.
 
 ## 5. End the experiment
 
@@ -166,8 +167,8 @@ verified official copy.
 ## What you did
 
 You read an uncatalogued input through the same `fetch` call a package uses,
-saw that staging follows the files on disk without checksums, and prepared the
-metadata and inventory a catalogue maintainer reviews.
+saw that staging follows the files on disk without checksums, and drafted the
+proposal a catalogue maintainer reviews.
 
 ## Next
 

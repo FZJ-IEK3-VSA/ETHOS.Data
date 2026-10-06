@@ -324,16 +324,17 @@ ethos-data catalog remove old-dataset --reason "accepted by mistake" --dry-run
 ethos-data catalog remove old-dataset --reason "accepted by mistake"
 ```
 
-Two stages: `withdraw` records every dataset named as `withdrawn`, with the
-reason, and a family name stands for its members; `index` rebuilds the index,
-and the families above them, without them. From then on the build, `publish`
+Three stages: `withdraw` records every dataset named as `withdrawn`, with
+the reason, and a family name stands for its members; `index` rebuilds the
+index, and the families above them, without them; `notices` drafts the
+removal notice of each dataset withdrawn, for the packages that read it: the
+reason, the last release that describes it, its replacement, and that its
+bytes stay until a major release is recorded after the removal. From then on the build, `publish`
 and `link --all` leave a withdrawn dataset out, and a family whose members are
 all withdrawn. Its description, inventory and status file stay in the
 checkout, and its cache entries and bytes where they are, until a major
 release is recorded after the removal. Removing a withdrawn dataset again does
-nothing. Each dataset withdrawn gets a removal notice drafted for the packages
-that read it: the reason, the last release that describes it, and its
-replacement.
+nothing.
 
 `--purge` is the second half, once a major [release](#release-version) is
 recorded after the removal in the dataset's status file:
@@ -352,6 +353,7 @@ A purge interrupted half-way finishes when it is run again.
 |---|---|
 | `--reason TEXT` | why, for the record in `status.yaml` |
 | `--purge` | delete the cache entries, bytes and directory of withdrawn datasets, after a major release |
+| `--notices DIR` | also write the removal notices into this directory, `removal-<dataset>.md` each |
 | `--dry-run` | check and plan; write nothing |
 
 ## `check-source <dataset> <directory>` {#check-source}

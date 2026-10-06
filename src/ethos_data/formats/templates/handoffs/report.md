@@ -35,3 +35,11 @@ ${package}
 ```text
 ${plan}
 ```
+
+### What verify finds, by size
+
+```text
+${verify}
+```
+
+Post it at ${tracker}.

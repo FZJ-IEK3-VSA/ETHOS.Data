@@ -62,6 +62,7 @@ __all__ = [
     "cache_entries",
     "chain_for",
     "entry_for",
+    "entry_states",
     "Location",
     "locate",
     "restricted_entry",
@@ -319,11 +320,18 @@ def restricted_entry(
     return None, reasons
 
 
+def entry_states(caches: tuple[Path, ...], name: str) -> list[tuple[Path, str]]:
+    """The state of ``name``'s entry in every listed restricted cache, in reading order."""
+    return [(cache, _entry_state(cache, name)) for cache in caches]
+
+
 def restricted_states(caches: tuple[Path, ...], name: str) -> str:
     """The state of ``name`` in every listed restricted cache, for what only describes."""
     if not caches:
         return "restricted; this account lists no restricted cache"
-    states = "; ".join(f"{cache}: {_entry_state(cache, name)}" for cache in caches)
+    states = "; ".join(
+        f"{cache}: {state}" for cache, state in entry_states(caches, name)
+    )
     return f"restricted; no listed restricted cache has a readable entry ({states})"
 
 

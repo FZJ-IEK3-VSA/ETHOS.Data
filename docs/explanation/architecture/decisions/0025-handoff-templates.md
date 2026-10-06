@@ -1,6 +1,6 @@
 # 0025. Draft the handoffs between roles from templates
 
-**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #26
+**Status:** implemented · **Date:** 2026-10-06 · **Implemented by:** #26
 
 ## Context
 
@@ -18,7 +18,7 @@ fills it:
 | Handoff | Drafted by | Contents |
 |---|---|---|
 | Proposal | `<tool>-data propose DIR`, for a draft or a bundle | the draft checked as the build would check it; its inventory after `ethos:include` and `ethos:exclude`; files still writable, with the `chmod` to run; the kind (new dataset, revision or successor); the package's collections that name it; the tracker. For a bundle, the proposal covers the datasets that are ahead of the catalogue ([0021](0021-bundles-ahead-of-the-catalogue.md)), and every file must match `bundle.json`. |
-| Problem report | `report`, a library function behind `ethos-data report` and `<tool>-data report` | the self-test, the settings, the collections and the plan, with tokens, credentials in URLs, the home directory and the account name removed |
+| Problem report | `report`, a library function behind `ethos-data report` and `<tool>-data report` | the self-test, the settings, the collections, the plan with the state of every listed restricted cache, and a `verify` by size, with tokens, credentials in URLs, the home directory and the account name removed |
 | Release notice and answers | the `notices` stage of `catalog release` | what the release added, revised, superseded and withdrew; one answer per added dataset |
 | Removal notice | the `notices` stage of `catalog remove` | the reason, the last release that describes the dataset, and its successor if it has one |
 | Issue templates | `catalog publish` | `propose-a-dataset` and `report-a-problem` for the public catalogue's tracker |

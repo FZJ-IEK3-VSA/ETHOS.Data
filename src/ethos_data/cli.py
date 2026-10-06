@@ -9,8 +9,6 @@ such as <tool>-data, built with ethos_data.tool_main.
 from __future__ import annotations
 
 import argparse
-import contextlib
-import io
 import os
 import sys
 from dataclasses import replace
@@ -177,9 +175,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _build_tool_parser(prog: str, source: _ToolSource) -> argparse.ArgumentParser:
-    """A tool's collection, bundle, staging and config commands, no ``-c``.
+    """A tool's collection, bundle, staging, config and handoff commands, no ``-c``.
 
-    Six commands, and the two that carry the work are ``show`` and ``fetch``:
+    Eight commands, and the two that carry the work are ``show`` and ``fetch``:
     whatever a tool's user wants out of the catalogue, they ask for it through
     one of the collections the tool ships. Access by catalogue key
     (``ethos-data ls``, ``ethos-data fetch``) and cache maintenance
@@ -218,9 +216,10 @@ def _build_tool_parser(prog: str, source: _ToolSource) -> argparse.ArgumentParse
     proposer = sub.add_parser(
         "propose",
         help="check a candidate dataset or bundle and print its proposal",
-        description="Check a draft dataset.yaml, or a repository bundle, as the "
-        "catalogue's build would, inventory the bytes, warn about files still "
-        "writable, and print the proposal to submit.",
+        description="Check a draft dataset.yaml as the catalogue's build would, "
+        "inventory its bytes and warn about files still writable, or take the "
+        "datasets of a bundle that are ahead of the catalogue, and print the "
+        "proposal to submit.",
     )
     proposer.add_argument(
         "directory", help="the draft's dataset.yaml or its directory, or a bundle"
@@ -229,8 +228,9 @@ def _build_tool_parser(prog: str, source: _ToolSource) -> argparse.ArgumentParse
         "report",
         help="draft a problem report: versions, the self-test, the settings, a plan",
         description="Run the self-test, show the settings and the package's "
-        "collections and, for a collection, what a fetch would do, and print them "
-        "in the report template, with tokens and personal paths removed.",
+        "collections and, for a collection, what a fetch would do and what verify "
+        "finds by size, and print them in the report template, with tokens, "
+        "credentials, the home directory and the account name removed.",
     )
     reporter.add_argument(
         "collection", nargs="?", default=None, help="the collection that fails"
@@ -440,8 +440,9 @@ def _add_key_commands(sub) -> None:
         "report",
         help="draft a problem report: versions, the self-test, the settings, a plan",
         description="Run the self-test, show the settings and, for a key, what a "
-        "fetch would do, and print them in the report template, with tokens, "
-        "credentials, the home directory and the account name removed.",
+        "fetch would do and what verify finds by size, and print them in the report "
+        "template, with tokens, credentials, the home directory and the account "
+        "name removed.",
     )
     reporter.add_argument(
         "key", nargs="?", default=None, help="the catalogue key that fails"
@@ -870,100 +871,60 @@ def _readable_catalog(source, args):
         return None
 
 
-def _captured(run, argv: list[str]) -> str:
-    """What one of the commands prints, both streams, for a report."""
-    buffer = io.StringIO()
-    with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
-        try:
-            run(argv)
-        except EthosDataError as error:
-            print(f"error: {error.message}")
-        except SystemExit as stop:
-            if stop.code not in (0, None):
-                print(f"exited with {stop.code}")
-    return buffer.getvalue().rstrip() or "(nothing)"
-
-
-def _globals(args) -> list[str]:
-    found = []
-    for flag, value in (("--catalog", args.catalog), ("--root", args.root)):
-        if value:
-            found += [flag, value]
-    return found
-
-
-def _print_report(selftest: str, settings: str, package: str, plan: str) -> int:
-    import platform
-
+def _report_command(args) -> int:
+    """``ethos-data report [KEY]``: the report :func:`ethos_data.handoffs.report` drafts."""
     from . import __version__
-    from .handoffs import handoff, scrub
+    from .handoffs import report
 
     print(
-        scrub(
-            handoff(
-                "report",
-                versions=f"ETHOS.Data {__version__}, Python {platform.python_version()}, "
-                f"{platform.platform()}",
-                selftest=selftest,
-                settings=settings,
-                package=package,
-                plan=plan,
-            )
+        report(
+            args.key,
+            catalog=args.catalog,
+            root=args.root,
+            selftest=not args.no_selftest,
+            version=__version__,
         )
     )
     return 0
 
 
-def _report_command(args) -> int:
-    """``ethos-data report``: the facts a maintainer needs, in the report template."""
-    common = _globals(args)
-    selftest = (
-        "(left out)" if args.no_selftest else _captured(_main, [*common, "selftest"])
-    )
-    plan = (
-        _captured(_main, [*common, "fetch", args.key, "--plan"])
-        if args.key
-        else "(no key named)"
-    )
-    return _print_report(
-        selftest,
-        _captured(_main, [*common, "config", "show"]),
-        "(no package)",
-        plan,
-    )
-
-
 def _tool_report_command(args, source) -> int:
-    """``<tool>-data report``: the same, with the package's collections and plan."""
-    common = _globals(args)
+    """``<tool>-data report [COLLECTION]``: the same, with the package's collections.
 
-    def tool(argv: list[str]) -> int:
-        return _dispatch(_build_tool_parser(args.prog, source).parse_args(argv), source)
+    A handle that cannot be built is said on stderr, and the report goes
+    without the package: it is drafted most of all when something fails.
+    """
+    from . import __version__
+    from .handoffs import report
 
-    selftest = (
-        "(left out)" if args.no_selftest else _captured(_main, [*common, "selftest"])
+    try:
+        loaded = source.load(args)
+    except EthosDataError as error:
+        print(
+            f"warning: the package's collections are left out: {error.message}",
+            file=sys.stderr,
+            flush=True,
+        )
+        loaded = None
+    print(
+        report(
+            args.collection if loaded is not None else None,
+            collections=loaded,
+            catalog=args.catalog or source.catalog,
+            root=args.root,
+            test=args.test,
+            selftest=not args.no_selftest,
+            version=__version__,
+        )
     )
-    plan = "(no collection named)"
-    if args.collection:
-        flags = ["--test"] if args.test or args.test_global else []
-        plan = _captured(tool, [*common, "fetch", args.collection, "--plan", *flags])
-    return _print_report(
-        selftest,
-        _captured(tool, [*common, "config", "show"]),
-        _captured(tool, [*common, "show"]),
-        plan,
-    )
+    return 0
 
 
 def _propose_command(args, source) -> int:
     """``<tool>-data propose DIR``: check the candidate, print the proposal."""
     from .handoffs import propose
 
-    try:
-        loaded = source.load(args, None)
-    except EthosDataError:
-        loaded = None
-    proposal = propose(args.directory, loaded)
+    proposal = propose(args.directory, source.load(args))
     for finding in proposal.findings:
         print(f"warning: {finding}", file=sys.stderr, flush=True)
     print(proposal.text)
@@ -1005,7 +966,7 @@ def _dispatch(args, source) -> int:
     if args.command == "propose":
         return _propose_command(args, source)
     if args.command == "report":
-        args.test = bool(getattr(args, "test", False))
+        args.test = bool(args.test or args.test_global)
         return _tool_report_command(args, source)
     if args.command == "config":
         return _config_command(args)

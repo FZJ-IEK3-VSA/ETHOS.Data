@@ -21,8 +21,8 @@ stages:
 ``store``   with ``--upload``: put the public catalogue beside the data on the
             store, under ``<publication root>/catalogue/``, replacing the
             one before; the store keeps the latest release only
-``notices`` draft the release notice and the answer to every proposal the
-            release accepts, printed and, with ``--notices DIR``, written there
+``notices`` draft the release notice and an answer for every dataset the
+            release adds, printed and, with ``--notices DIR``, written there
 
 The version is the next patch, minor or major of the last release, at or above
 the smallest level the changes since need (see :func:`changes_since`), and the
@@ -609,8 +609,8 @@ class Notices:
         where = f", into {release.notices}" if release.notices is not None else ""
         return [
             Action(
-                f"draft the release notice and the answers to the proposals it "
-                f"accepts{where}",
+                f"draft the release notice and an answer for every dataset it "
+                f"adds{where}",
                 draft,
             )
         ]

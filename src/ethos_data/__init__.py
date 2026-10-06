@@ -260,10 +260,10 @@ def tool_main(
         mytool-data = "mytool.data:main"
 
     ``show``, ``fetch`` and ``verify`` for the file's collections, against the
-    catalogue the settings choose within its bounds, plus ``bundle``,
-    ``staging`` and ``config``. A single
-    catalogue key belongs to ``ethos-data``, not here -- which is what keeps
-    this to six commands whatever the tool.
+    catalogue release the settings choose within the file's release bounds,
+    plus ``bundle``, ``staging``, ``config``, ``propose`` and ``report``. A
+    single catalogue key belongs to ``ethos-data``, not here -- which is what
+    keeps this to eight commands whatever the tool.
     ``prog`` names the command in help and messages
     (default ``<tool>-data``); ``catalog`` is the tool's own catalogue override,
     applied below ``--catalog`` and above ``$ETHOS_DATA_CATALOG``. The handle

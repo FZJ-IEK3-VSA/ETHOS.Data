@@ -27,16 +27,17 @@ that fixes it. The common ones:
 ethos-data report <key>
 ```
 
-`report` runs the four checks below and prints their output in the report
+`report` runs the checks below and prints their output in the report
 template of step 3, with tokens, credentials in URLs, your home directory and
-your account name removed. `--no-selftest` leaves out the self-test's small
-download. The checks one by one:
+your account name removed, and names the tracker to post it at. `--no-selftest`
+leaves out the self-test's small download. The checks one by one:
 
 ```bash
 ethos-data selftest
 ethos-data config show
 <your-tool>-data show
 <your-tool>-data fetch <collection> --plan
+<your-tool>-data verify <collection>
 ```
 
 The [self-test](set-up-your-machine.md#check-a-download) fetches a small
@@ -45,7 +46,9 @@ the machine, its settings or the store rather than the package, and its
 output names the failing step. `config show` prints every setting and its
 origin. `show` names the catalogue the package actually reads and marks
 unresolvable collections. The plan says what a fetch would download and what
-is missing, without downloading.
+is missing, without downloading, and the state of every listed restricted
+cache for the collection's restricted data. `verify` compares sizes, which
+reads no file, and names a broken link in the public cache.
 
 To rule out a stale metadata cache without changing settings:
 

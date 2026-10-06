@@ -114,10 +114,13 @@ the templates in `ethos_data/formats/templates/handoffs/`.
       members:
         - propose
         - Proposal
-        - handoff
+        - report
+        - tracker
+        - answer
+        - release_notice
+        - removal_notice
         - issue_template
         - scrub
-        - names
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

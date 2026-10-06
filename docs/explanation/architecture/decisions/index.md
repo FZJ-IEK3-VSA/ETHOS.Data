@@ -43,9 +43,9 @@ dash means that the decision is implemented and needs no pull request.
 | 0021 | [Let a bundle be ahead of the catalogue, and warn until it is realigned](0021-bundles-ahead-of-the-catalogue.md) | implemented | #25 |
 | | **Maintaining the catalogue** | | |
 | 0022 | [Record each dataset's state in a status file](0022-dataset-status-files.md) | implemented | #21, #22, #23 |
-| 0023 | [Run every catalogue workflow that writes as a pipeline that plans before it acts](0023-maintenance-pipelines.md) | proposed | #20, #22, #42, #23, #26 |
+| 0023 | [Run every catalogue workflow that writes as a pipeline that plans before it acts](0023-maintenance-pipelines.md) | implemented | #20, #22, #42, #23, #26 |
 | 0024 | [Let unresolved licensing block distribution, not development](0024-licensing-gates-distribution.md) | implemented | #21, #25 |
-| 0025 | [Draft the handoffs between roles from templates](0025-handoff-templates.md) | proposed | #26 |
+| 0025 | [Draft the handoffs between roles from templates](0025-handoff-templates.md) | implemented | #26 |
 | | **Deployment** | | |
 | 0026 | [Serve the internal catalogue's latest release from one checkout on the cluster, and change it only through JuGit](0026-internal-catalogue-on-the-cluster.md) | proposed | #23; implemented once the first versioned release is served |
 | 0027 | [Release the public catalogue as a generated view, tagged on GitHub](0027-public-catalogue-releases-on-github.md) | proposed | #12, #19, #23, #26; implemented with the first versioned release |

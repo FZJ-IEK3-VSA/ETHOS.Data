@@ -122,7 +122,8 @@ an empty `--root` forces a download.
 A problem report:
 
 1. `<tool>-data report <collection>` or `ethos-data report [key]`: Handoffs
-   puts the self-test, `config show`, the package's collections and the plan
+   puts the self-test, `config show`, the package's collections, the plan
+   with the state of every listed restricted cache, and a `verify` by size
    into the report template, without tokens, credentials or personal paths.
 2. The user posts it where it says: on JuGit for restricted data or from a
    cluster installation, on GitHub otherwise.
