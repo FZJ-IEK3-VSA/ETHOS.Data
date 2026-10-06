@@ -27,8 +27,10 @@ before the push makes the push fail, and the release is rerun from the
 updated branch.
 
 !!! warning "Gap: releases are manual"
-    The code has no `catalog release`. Build, check and tag by hand, in the
-    source checkout:
+    The code has no `catalog release`. Set the release in `catalog.yaml`,
+    `version: v1.2.0`, which the build writes into the index, where packages
+    compare it with their release bounds. Then build, check and tag by hand,
+    in the source checkout:
 
     ```bash
     ethos-data catalog build

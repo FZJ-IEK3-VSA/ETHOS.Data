@@ -43,6 +43,19 @@ dataset or bundle may hold.
       show_root_toc_entry: false
       heading_level: 3
 
+## Catalogue releases
+
+::: ethos_data.model.versions
+    options:
+      members:
+        - Version
+        - Prefix
+        - Bounds
+        - releases
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
 ## Resource records
 
 A [`Resource`][ethos_data.model.resource.Resource] is one file of a dataset,

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 from ..errors import DescriptorError
+from ..model.versions import RELEASE_PATTERN, Version
 from . import keys as k
 from .fields import field
 
@@ -28,6 +29,11 @@ class CatalogMeta(BaseModel):
         description="Root of the public data store; a resource is <url>/<remote_prefix>/<path>.",
     )
     contact: str | None = field(k.CONTACT, description="Team or username.")
+    version: str | None = field(
+        k.VERSION,
+        description="The release this is, vMAJOR.MINOR.PATCH; the build writes it into the index.",
+        schema={"pattern": RELEASE_PATTERN},
+    )
     catalog_role: str = field(
         k.CATALOG_ROLE,
         k.ROLE_SOURCE,
@@ -44,6 +50,11 @@ def check(meta: dict) -> None:
     a wrong value is refused outright: a catalogue mislabelled ``published``
     would make every tool refuse to touch it.
     """
+    if meta.get(k.VERSION) is not None:
+        try:
+            Version.parse(meta[k.VERSION])
+        except ValueError as error:
+            raise DescriptorError(f"catalog.yaml: {k.VERSION}: {error}") from None
     role = meta.get(k.CATALOG_ROLE, k.ROLE_SOURCE)
     if role not in k.CATALOG_ROLES:
         raise DescriptorError(

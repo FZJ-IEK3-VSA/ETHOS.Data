@@ -36,8 +36,8 @@ afterwards. See [moveto](https://rclone.org/commands/rclone_moveto/).
 Update any unpublished descriptor's `ethos:remote_prefix`, rebuild, and check
 the intended URLs before releasing it.
 
-For released datasets, retain the old path for existing pins. Publish a new
-version at a new path rather than rename its storage. See
+For released datasets, retain the old path for the releases that describe
+it. Publish a new version at a new path rather than rename its storage. See
 [Licensing and immutability](../../explanation/licensing.md#paths-are-immutable).
 
 ## Delete an empty folder

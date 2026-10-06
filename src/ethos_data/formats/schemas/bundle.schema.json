@@ -19,7 +19,7 @@
             }
           ],
           "default": null,
-          "description": "The pinned revision, as given.",
+          "description": "The catalogue release or commit the exporter named, as given.",
           "title": "Revision"
         },
         "catalog_version": {

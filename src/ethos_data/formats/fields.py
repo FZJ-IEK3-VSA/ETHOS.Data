@@ -83,12 +83,19 @@ def keys(model: type[BaseModel]) -> tuple[str, ...]:
     return tuple(info.alias or name for name, info in model.model_fields.items())
 
 
-def describe(error: ValidationError) -> list[str]:
-    """One line per problem pydantic found, naming the key as written in the file."""
+def describe(error: ValidationError, within: tuple = ()) -> list[str]:
+    """One line per problem pydantic found, naming the key as written in the file.
+
+    ``within`` is where the validated value sits in its file, such as
+    ``("catalog",)``, so the place named is the place to look.
+    """
     lines = []
     for problem in error.errors():
-        where = _where(problem["loc"])
-        message = problem["msg"].removeprefix("Value error, ")
+        where = _where(within + tuple(problem["loc"]))
+        if problem["type"] in ("model_type", "dict_type"):
+            message = f"must be a mapping, got {type(problem['input']).__name__}"
+        else:
+            message = problem["msg"].removeprefix("Value error, ")
         lines.append(f"{where}: {message}" if where else message)
     return lines
 

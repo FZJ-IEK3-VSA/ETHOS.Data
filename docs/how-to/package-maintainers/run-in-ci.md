@@ -98,8 +98,8 @@ fetches the full data.
 
 ## 4. Record the inputs
 
-Log the package revision, the catalogue revision, the collections and the
-active overrides in the job output. Use a pinned catalogue for the baseline
+Log the package revision, the catalogue release, the collections and the
+active overrides in the job output. Use one exact release for the baseline
 job. A package that declares only a minimum catalogue version gets a second,
 latest-catalogue job that is allowed to fail and tells you when the catalogue
 moved under the package.

@@ -61,7 +61,7 @@ when it is read, and every problem is reported at once, naming the key.
 | `public_cache` | `config set-public-cache` | public data: read from, and downloaded into |
 | `restricted_caches` | `config add-restricted-cache`, `remove-restricted-cache` | a list of directories, read in order for restricted data, in place; none by default |
 | `staging_cache` | `config set-staging-cache` | work in progress that shadows the catalogue |
-| `catalog` | `config set-catalog` | the catalogue to use instead of a collections file's pin or the built-in public catalogue |
+| `catalog` | `config set-catalog` | the catalogue to use instead of the public one; a package checks it against its release bounds |
 | `publication_url` | `config set-publication-url` | fetch bytes from a different door than the catalogue declares |
 
 A settings file on the cluster, for a user whose groups admit one restricted
@@ -99,7 +99,7 @@ print(data.settings)
 
 ```text
 settings file      /home/me/.config/ethos-data/config.yaml  (your account)
-catalogue          https://.../datacatalog.json  (the pin in collections.yaml)
+catalogue          https://.../v1.2.0/datacatalog.json  (the public release v1.2.0, the newest within min_version v1.2)
 catalogue version  v1.2.0
 public cache       /home/me/.cache/ethos-data  (built-in default, the per-user cache directory)
 restricted caches  none listed: public data only
@@ -159,20 +159,26 @@ Every handle and command chooses the catalogue the same way, the first of:
 1. `--catalog` on the command line, or the location passed in Python.
 2. `ETHOS_DATA_CATALOG`.
 3. The `catalog` setting.
-4. For a collections file, its `catalog:` pin.
-5. The built-in public catalogue:
+4. The public catalogue. For a collections file with release bounds, the
+   release they select: a full `exact_version` reads that release's tag, any
+   other bounds the newest release they admit among those the public
+   catalogue lists. Without bounds, the built-in public catalogue:
    `https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json`.
 
-`ethos-data` reads no collections file, so it skips step 4. A package-specific override, such as
+`ethos-data` reads no collections file, so step 4 is the built-in public
+catalogue for it. A collections file refuses whichever catalogue steps 1 to 3
+chose when it is outside the file's bounds, or records no release, with
+`CatalogVersionError`. A package-specific override, such as
 `<YOUR_TOOL>_DATA_CATALOG` passed by the package through `catalog=`, ranks below the CLI's
 `--catalog` and above `ETHOS_DATA_CATALOG`. To compare a direct fetch with a
 package workflow, explicitly select the same catalogue.
 
-Relative pins are resolved relative to the collections file. Pin a revision in
-the URL path, for example `.../ETHOS.Data-Catalogue/COMMIT/datacatalog.json`.
-A legacy `@ref` suffix is stripped; it does not select a revision.
+Every release of the current major stays readable: data is purged only after
+a major release, so a package bounded to an older release keeps resolving the
+same bytes.
 
-Metadata fetched from version-pinned URLs is cached indefinitely. URLs naming
+Metadata fetched from URLs naming a release tag or a commit is cached
+indefinitely. URLs naming
 `main`, `master`, `HEAD`, `latest`, `dev` or `develop` are treated as moving and
 re-fetched. `ETHOS_CATALOG_NO_CACHE=1` bypasses metadata caching.
 
@@ -205,7 +211,7 @@ Every setter writes to the settings file in effect. Remove a setting with the
 matching `unset-*` command, and a restricted cache with
 `remove-restricted-cache`. Removing a setting does not move or delete data.
 
-`config show` reports the settings, not a package's pin, a package-specific
-environment override, or per-command options. `ethos-data ls` and a wrapper's
+`config show` reports the settings, not a package's release bounds, a
+package-specific environment override, or per-command options. `ethos-data ls` and a wrapper's
 `show` report the catalogue they actually selected, and a handle's `settings`
 reports both.

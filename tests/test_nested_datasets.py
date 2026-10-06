@@ -20,9 +20,10 @@ from pathlib import Path
 import pytest
 
 from ethos_data.access import cache_entries
-from ethos_data.maintain import dataset_name_for, is_namespace, iter_dataset_dirs
-from ethos_data.maintain.manifest import render_dataset, run as build_run
 from ethos_data.errors import DescriptorError
+from ethos_data.maintain import dataset_name_for, is_namespace, iter_dataset_dirs
+from ethos_data.maintain.manifest import render_dataset
+from ethos_data.maintain.manifest import run as build_run
 
 CATALOG = (
     "name: t\n"
@@ -287,7 +288,6 @@ class TestAddressing:
             build_run(catalog, [])
             collections = tmp / "collections.yaml"
             collections.write_text(
-                f"catalog: {catalog / 'datacatalog.json'}\n"
                 "collections:\n"
                 "  family:\n"
                 "    include:\n"
@@ -301,7 +301,9 @@ class TestAddressing:
             )
             from ethos_data.selection import load_collections
 
-            loaded = load_collections(str(collections))
+            loaded = load_collections(
+                str(collections), str(catalog / "datacatalog.json")
+            )
             whole = [r.key for r in loaded.resolve("family")]
             assert whole == ["family/alpha/one.txt", "family/beta/one.txt"]
             assert [r.key for r in loaded.resolve("one")] == ["family/alpha/one.txt"]

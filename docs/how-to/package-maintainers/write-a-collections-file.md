@@ -66,17 +66,6 @@ With no configured catalogue, a full `exact_version` reads that release, and
 any range, a prefix `exact_version` included, reads the list of public
 releases and takes the newest one the bounds admit.
 
-The served checkout on the cluster holds the latest release only, so a
-package that runs there bounds with `min_version` only. A purge never touches
-what the latest release describes, so such a package never notices a major
-release.
-
-!!! warning "Gap: no release bounds"
-    In the code, `catalog:` takes only a path or URL, and a catalogue index
-    carries no release. The example file used in
-    [Use data in a script](../data-users/use-data-in-a-script.md) therefore
-    names the public catalogue's URL.
-
 ## 2. Select the inputs
 
 ```yaml

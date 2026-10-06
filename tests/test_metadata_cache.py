@@ -52,10 +52,10 @@ def withdraw(store, ref: str) -> None:
 
 
 def test_a_pinned_catalogue_is_read_once_and_reused(serve, store):
-    url = serve("v2026.09.1")
+    url = serve("v1.2.0")
     assert list(ethos_data.load_catalog(url).dataset("flat").resources) == ["a.csv"]
 
-    withdraw(store, "v2026.09.1")
+    withdraw(store, "v1.2.0")
 
     again = ethos_data.load_catalog(url)
     assert list(again.dataset("flat").resources) == ["a.csv"], "index and descriptor"
@@ -72,14 +72,14 @@ def test_a_moving_branch_is_never_cached(serve, store):
 
 def test_the_cache_can_be_switched_off_for_one_shell(serve, store, monkeypatch):
     monkeypatch.setenv("ETHOS_CATALOG_NO_CACHE", "1")
-    url = serve("v2026.09.1")
+    url = serve("v1.2.0")
     ethos_data.load_catalog(url)
-    withdraw(store, "v2026.09.1")
+    withdraw(store, "v1.2.0")
 
     with pytest.raises(ethos_data.CatalogUnavailable):
         ethos_data.load_catalog(url)
 
 
 def test_an_index_the_store_does_not_serve_is_catalogue_unavailable(store, tmp_path):
-    with pytest.raises(ethos_data.CatalogUnavailable, match="v2099.01.1"):
-        ethos_data.load_catalog(f"{store.url}/v2099.01.1/datacatalog.json")
+    with pytest.raises(ethos_data.CatalogUnavailable, match="v99.0.0"):
+        ethos_data.load_catalog(f"{store.url}/v99.0.0/datacatalog.json")

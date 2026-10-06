@@ -35,10 +35,12 @@ settings file has no template: `ethos-data config set-*` writes it.
 Lives in the consuming package. Names *slices* of the catalogue, and contains
 no resource sizes, checksums, or download URLs. It can contain selection
 patterns, names for the inputs a workflow takes, a paired test and full
-selection, and a catalogue location.
+selection, and the catalogue releases the package works with. Which catalogue
+is read is a setting of the user's, never of this file.
 
 ```yaml
-catalog: https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/v1.0.0/datacatalog.json
+catalog:
+  min_version: v1.2.0
 
 collections:
   landcover:
@@ -81,7 +83,7 @@ Both variants of `onshore_wind` offer the handles `clc` (inherited from
 
 | Key | Type | |
 |---|---|---|
-| `catalog` | string | local path or `http(s)` URL to a `datacatalog.json`. A relative path is resolved against **this file**. Optional: uses a caller/config override or the built-in public catalogue. Pin a remote revision in the URL path; a legacy `@ref` suffix is stripped and does not select it. |
+| `catalog` | mapping | the release bounds: the catalogue releases the package works with, `min_version` and an optional `max_version`, or `exact_version`. Each is a release `vMAJOR.MINOR.PATCH`, such as `v1.2.0`, or a prefix, such as `v1` or `v1.3`: as `min_version` its first release, as `max_version` its last, as `exact_version` every one of them. A catalogue outside the bounds, or with no release, is refused with [`CatalogVersionError`][ethos_data.errors.CatalogVersionError], naming both. With no catalogue configured, a full `exact_version` reads that release's tag, and any other bounds read the newest public release they admit. Optional |
 | `collections` | mapping | collection name → definition |
 | `collections.<name>.title` | string | one line, shown by `ethos-data ls`. At the top level, also when the collection has variants |
 | `collections.<name>.include` | list | `{dataset, files}` entries |
@@ -91,17 +93,6 @@ Both variants of `onshore_wind` offer the handles `clc` (inherited from
 | `collections.<name>.paths` | mapping | handle → catalogue key. A key is `<dataset>/<file>`, `<dataset>/<folder>`, `<dataset>` or a family name — what [`Catalog.path`][ethos_data.catalogs.Catalog.path] accepts. A file must be selected by the collection's `include`; a folder, dataset or family must have at least one selected file under it, and resolves to the directory holding the collection's files there. Handles are inherited through `extends`; the collection's own entry wins; two parents handing down the same handle with different keys is a `CollectionError` unless the collection defines that handle itself. Resolved by [`ethos_data.paths`][ethos_data.paths] and `<your-tool>-data fetch --paths`. Optional |
 | `collections.<name>.test`, `collections.<name>.full` | mapping | the collection's two variants — exactly these two names — each holding its own `extends`, `include` and `paths`. A collection with variants has no `extends`, `include` or `paths` at the top level; `title` stays there. `full` is what every request resolves unless `test=True` / `--test` is given; asking for a variant the collection does not define is a `CollectionError`. When both exist they must offer the same set of `paths` handles, or resolving the collection is a `CollectionError` listing the differences. A collection without variants resolves identically for both flags unless a collection it extends has variants — the flag propagates, so a plain `all` extending `onshore_wind` selects `onshore_wind`'s `full` variant by default and its `test` variant with `test=True`. Optional |
 
-!!! warning "Gap: `catalog` is to hold release bounds"
-    With [numbered catalogue
-    releases](../explanation/architecture/decisions/0018-numbered-catalogue-releases.md),
-    `catalog:` bounds the catalogue releases a package accepts, with
-    `min_version`, an optional `max_version`, or `exact_version`. A version
-    is a release `vMAJOR.MINOR.PATCH`, such as `v1.2.0`, or a prefix, such
-    as `v1.3`, that stands for every release starting with it. Which
-    catalogue is read comes from the settings. See [Declare the catalogue
-    versions](../how-to/package-maintainers/write-a-collections-file.md#catalog-version).
-    To be implemented separately.
-
 Glob semantics: `*` matches within one path segment, `**` matches any number of
 segments including zero. Shapefile companions are added automatically.
 
@@ -109,9 +100,12 @@ Every `paths` handle is checked against the catalogue and the selection before
 anything is downloaded, and the variant check — the same handles under `test`
 and `full` — applies to every collection a resolution reaches through
 `extends`, not only the one asked for, so a plain collection that extends a
-lopsided one is refused too. A definition the reader cannot resolve raises
-[`CollectionError`][ethos_data.errors.CollectionError]; a name the file does
-not define raises [`UnknownCollection`][ethos_data.errors.UnknownCollection].
+lopsided one is refused too. The release bounds are checked through the
+format's model when the file is loaded, and each collection when it is first
+used; every problem is named with its place, and a mistake in one collection
+leaves the others usable. A definition the reader cannot check or resolve
+raises [`CollectionError`][ethos_data.errors.CollectionError]; a name the file
+does not define raises [`UnknownCollection`][ethos_data.errors.UnknownCollection].
 `ethos-data` prints both as `error: ...` and exits `2`.
 
 See [Write a collections file](../how-to/package-maintainers/write-a-collections-file.md).
@@ -198,7 +192,7 @@ their helpdesk, and what tells two deliveries apart.
 
 Record it whenever upstream has one. It is the field that makes a workflow
 reproducible *in prose as well as in bytes*: the catalogue already pins content
-by SHA-256 and a `collections.yaml` pins the catalogue by git tag, so a rerun is
+by SHA-256 and a `collections.yaml` bounds the catalogue release, so a rerun is
 already exact — but neither of those tells a reader of the resulting paper which
 upstream release was used, and neither survives being quoted in a methods
 section.
@@ -593,6 +587,7 @@ description: >-
 ethos:publication_url: https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ethos-data
 ethos:contact: iek-3-data
 ethos:catalog_role: source
+version: v1.2.0
 ```
 
 | Key | | |
@@ -601,6 +596,7 @@ ethos:catalog_role: source
 | `ethos:publication_url` | | root of the public data store. Every resource URL is `<publication_url>/<remote_prefix>/<resource path>`. Override per machine with `ethos-data config set-publication-url` |
 | `ethos:contact` | | team or username |
 | `ethos:catalog_role` | `source` \| `published` | always `source` in a hand-written file — `build` defaults it and **rejects** any other value. `ethos-data catalog publish` stamps `published` into the generated copy |
+| `version` | `vMAJOR.MINOR.PATCH` | the release this catalogue is, set before it is released; `build` refuses any other form and writes it into the index |
 
 ---
 
@@ -610,8 +606,11 @@ Never hand-edit these. `ethos-data catalog build --check` fails if any is stale.
 
 ### `datacatalog.json`
 
-The index: `catalog.yaml`'s keys plus a `datasets` array. Each entry carries
-everything that can be answered **without** loading an inventory:
+The index: `catalog.yaml`'s keys, its `version` among them, plus a `datasets`
+array. The published index also lists every public release in
+`ethos:releases`, the current one included, oldest first: `publish` adds the
+release it publishes to the ones the public catalogue already listed. Each
+entry carries everything that can be answered **without** loading an inventory:
 
 | Key | |
 |---|---|

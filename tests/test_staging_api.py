@@ -17,6 +17,7 @@ def workspace(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "load_config", lambda: ({}, {}))
     monkeypatch.setenv("ETHOS_DATA_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("ETHOS_STAGING_DIR", str(tmp_path / "staging"))
+    monkeypatch.setenv("ETHOS_DATA_CATALOG", str(tmp_path / "datacatalog.json"))
     monkeypatch.delenv("ETHOS_RESTRICTED_DIRS", raising=False)
 
     def no_network(*args, **kwargs):
@@ -29,7 +30,7 @@ def workspace(tmp_path, monkeypatch):
     (tmp_path / "datacatalog.json").write_text(json.dumps({"datasets": []}))
     collections = tmp_path / "collections.yaml"
     collections.write_text(
-        'catalog: datacatalog.json\ncollections:\n  test:\n    include:\n      - dataset: example\n        files: ["**"]\n'
+        'collections:\n  test:\n    include:\n      - dataset: example\n        files: ["**"]\n'
     )
     return tmp_path, collections, staged
 
@@ -50,9 +51,10 @@ def test_new_dataset_matches_cli_and_python(workspace):
     assert not (root / "cache" / "example").exists()
 
 
-def test_wrapper_staging_lifecycle_needs_no_catalogue(workspace, capsys):
+def test_wrapper_staging_lifecycle_needs_no_catalogue(workspace, capsys, monkeypatch):
     root, collections, source = workspace
-    collections.write_text("catalog: missing.json\ncollections: {}\n")
+    monkeypatch.setenv("ETHOS_DATA_CATALOG", str(root / "missing.json"))
+    collections.write_text("collections: {}\n")
 
     def run(*argv):
         return tool_main(collections, prog="sample-data", argv=list(argv))
@@ -123,7 +125,7 @@ def test_broken_staging_link_fails_python_and_cli(workspace, capsys):
         root / "missing-input", target_is_directory=True
     )
     collections.write_text(
-        "catalog: datacatalog.json\ncollections:\n  test:\n    include:\n      - dataset: broken\n"
+        "collections:\n  test:\n    include:\n      - dataset: broken\n"
     )
     for call in (
         lambda: ethos_data.fetch("test", collections, progressbar=False),

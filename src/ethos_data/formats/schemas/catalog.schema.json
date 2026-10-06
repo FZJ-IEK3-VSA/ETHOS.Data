@@ -90,6 +90,26 @@
         "user_facing": false
       }
     },
+    "version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The release this is, vMAJOR.MINOR.PATCH; the build writes it into the index.",
+      "pattern": "^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "title": "Version",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
     "ethos:catalog_role": {
       "default": "source",
       "description": "Always source in a hand-written file; publish stamps published.",

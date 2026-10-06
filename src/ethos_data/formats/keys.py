@@ -83,6 +83,17 @@ STAGING = "staging"
 DATASETS = "datasets"
 PUBLICATION_URL = "ethos:publication_url"
 CATALOG_ROLE = "ethos:catalog_role"
+#: Of the published index: every public release, the current one included.
+RELEASES = "ethos:releases"
+
+# -- collections.yaml: its release bounds and the variants of a collection ------
+
+MIN_VERSION = "min_version"
+MAX_VERSION = "max_version"
+EXACT_VERSION = "exact_version"
+VARIANT_TEST = "test"
+VARIANT_FULL = "full"
+VARIANTS = (VARIANT_TEST, VARIANT_FULL)
 
 # -- closed vocabularies -----------------------------------------------------------
 

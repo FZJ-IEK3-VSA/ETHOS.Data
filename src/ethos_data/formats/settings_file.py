@@ -13,7 +13,9 @@ class SettingsFile(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
     catalog: str | None = Field(
-        None, description="The catalogue to read; replaces the public one and any pin."
+        None,
+        description="The catalogue to read in place of the public one; checked "
+        "against a package's release bounds.",
     )
     public_cache: str | None = Field(
         None, description="Where public data is read and downloaded."

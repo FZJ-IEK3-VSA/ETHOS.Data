@@ -376,7 +376,7 @@ def export_bundle(
     catalogue publication URL. Staging and configured roots are ignored.
     The target must not exist; export never replaces an existing bundle.
 
-    source_revision records the caller's pinned catalogue commit or release.
+    source_revision records the catalogue release or commit the caller read.
     The exporter does not infer immutability or verify Git references.
     """
     from .formats.dataset import STRIPPED as STRIP_FROM_PACKAGE

@@ -15,13 +15,16 @@ In a terminal with your package's Python environment active:
 mkdir ethos-local-lesson
 cd ethos-local-lesson
 mkdir candidate
+export ETHOS_DATA_CONFIG="$PWD/lesson-settings.yaml"
 export ETHOS_STAGING_DIR="$PWD/.ethos-staging"
 export ETHOS_DATA_DIR="$PWD/.ethos-cache"
 ```
 
-These environment variables apply to this shell and its child processes. The
-staging directory holds development entries; the ordinary cache has a separate
-location.
+These environment variables apply to this shell and its child processes.
+`ETHOS_DATA_CONFIG` names the lesson's settings file: while it is named,
+ETHOS.Data reads it instead of the settings in your account, and writes any
+setting into it. The staging directory holds development entries; the ordinary
+cache has a separate location.
 
 Create the input and a minimal local catalogue index:
 
@@ -30,8 +33,7 @@ from pathlib import Path
 
 Path("candidate/temperatures.csv").write_bytes(b"station,value\nA,12.5\nB,13.0\n")
 Path("datacatalog.json").write_text('{"name": "local-lesson", "datasets": []}\n')
-Path("collections.yaml").write_text("""catalog: datacatalog.json
-collections:
+Path("collections.yaml").write_text("""collections:
   example_input:
     include:
       - dataset: lesson-temperatures
@@ -43,7 +45,16 @@ collections:
 
 The empty index deliberately does not describe `lesson-temperatures`. It is a
 local teaching fixture, not the generated index of an official catalogue. The
-next step supplies the dataset through staging.
+next step supplies the dataset through staging. Name it as the lesson's
+catalogue:
+
+```bash
+ethos-data config set-catalog "$PWD/datacatalog.json"
+```
+
+The catalogue is a setting of the user's, never of the collections file: a
+package's file only bounds which catalogue releases it accepts, and this one
+sets no bounds.
 
 Save this small package-style wrapper as `data_cli.py` beside `collections.yaml`:
 
@@ -66,14 +77,14 @@ exposes through `tool_main`, without needing RESKit installed for this lesson.
 ```bash
 python data_cli.py staging add lesson-temperatures "$PWD/candidate" --note "local CSV lesson"
 python data_cli.py staging list
-python data_cli.py --catalog "$PWD/datacatalog.json" show example_input
-python data_cli.py --catalog "$PWD/datacatalog.json" show all
+python data_cli.py show example_input
+python data_cli.py show all
 ```
 
 Both collections resolve the same CSV; `all` aggregates the inputs this example
-workflow uses. Naming the local
-catalogue explicitly also overrides any catalogue configured for your usual
-project. No remote metadata is needed for this lesson.
+workflow uses. The lesson's settings file names the local catalogue, so the
+catalogue configured for your usual work is not read. No remote metadata is
+needed for this lesson.
 
 ## 3. Use the same API your package will use
 
@@ -81,11 +92,9 @@ Run Python in this directory and shell:
 
 ```python
 import csv
-from pathlib import Path
 from ethos_data import fetch
 
-files = fetch("example_input", collections="collections.yaml",
-              catalog=str(Path("datacatalog.json").resolve()))
+files = fetch("example_input", collections="collections.yaml")
 with files.one("temperatures.csv").open() as handle:
     rows = list(csv.DictReader(handle))
 
@@ -145,7 +154,7 @@ on your machine.
 
 ```bash
 python data_cli.py staging remove lesson-temperatures
-unset ETHOS_STAGING_DIR ETHOS_DATA_DIR
+unset ETHOS_DATA_CONFIG ETHOS_STAGING_DIR ETHOS_DATA_DIR
 ```
 
 Removing this linked staging entry leaves `candidate/temperatures.csv` intact.

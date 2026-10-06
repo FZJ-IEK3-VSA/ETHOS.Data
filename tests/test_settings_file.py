@@ -144,7 +144,7 @@ class TestTheSnapshotOfAHandle:
 
         report = str(settings)
         assert settings.catalog == str(reader.index)
-        assert settings.catalog_source == "the pin in collections.yaml"
+        assert settings.catalog_source == "$ETHOS_DATA_CATALOG"
         assert "catalogue version  v1.2.0" in report
         assert f"public cache       {reader.cache}  ($ETHOS_DATA_DIR)" in report
         assert "restricted caches  none listed: public data only" in report

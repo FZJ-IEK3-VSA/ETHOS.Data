@@ -129,8 +129,13 @@ def strip(package: dict) -> dict:
     }
 
 
-def render(catalog_root: Path) -> dict[Path, str]:
-    """Build the complete public tree in memory: {relative path -> str | bytes}."""
+def render(catalog_root: Path, earlier: list[str] | None = None) -> dict[Path, str]:
+    """Build the complete public tree in memory: {relative path -> str | bytes}.
+
+    ``earlier`` are the releases the public catalogue had, which its index
+    keeps listing beside the one being published: a package that bounds its
+    catalogue version finds the newest public release within its bounds there.
+    """
     catalog_meta = read_catalog_meta(catalog_root)
     for key in STRIP_FROM_PACKAGE:
         catalog_meta.pop(key, None)
@@ -138,6 +143,10 @@ def render(catalog_root: Path) -> dict[Path, str]:
     # It is the only durable marker of that -- the public tree has no catalog.yaml,
     # so without it every tool has to guess from which files happen to be present.
     catalog_meta[k.CATALOG_ROLE] = k.ROLE_PUBLISHED
+    if catalog_meta.get(k.VERSION):
+        catalog_meta[k.RELEASES] = _releases(
+            [*(earlier or []), str(catalog_meta[k.VERSION])]
+        )
 
     files: dict[Path, str] = {}
     entries, rows = [], []
@@ -285,6 +294,26 @@ class PublishResult:
     @property
     def ok(self) -> bool:
         return not (self.stale or self.orphans or self.leaks)
+def _releases(names: list[str]) -> list[str]:
+    """Distinct releases, oldest first; anything not of the form vMAJOR.MINOR.PATCH dropped."""
+    from ..model.versions import releases
+
+    return [str(release) for release in releases(names)]
+
+
+def _published_releases(destination_root: Path) -> list[str]:
+    """The releases the public catalogue in ``destination_root`` lists, if any."""
+    index = destination_root / "datacatalog.json"
+    if not index.is_file():
+        return []
+    try:
+        published = json.loads(index.read_text(encoding="utf-8"))
+    except ValueError:
+        return []
+    names = list(published.get(k.RELEASES) or [])
+    if published.get(k.VERSION):
+        names.append(str(published[k.VERSION]))
+    return names
 
 
 @report.reported
@@ -299,7 +328,7 @@ def run(catalog_root: Path, target: str, check: bool = False) -> PublishResult:
             "not the public one; nothing was written. Point publish at the public "
             "catalogue's checkout."
         )
-    files = render(catalog_root)
+    files = render(catalog_root, _published_releases(destination_root))
 
     root = datasets_dir(catalog_root)
     all_datasets = [

@@ -18,17 +18,17 @@ Use the reporter's catalogue, collection and cache settings, not yours.
 
 | Symptom | Check and action |
 | --- | --- |
-| `CatalogUnavailable` | The location is wrong or the pinned revision does not exist yet. Check the pin in the package's `collections.yaml` and the served path. |
+| `CatalogUnavailable` | The location is wrong, or the release a package's bounds select is not tagged. Check the reporter's catalogue setting, the release bounds in the package's `collections.yaml` and the served path. |
 | `IncompleteCatalog`, descriptor or shard missing | The served copy is stale or partial: an index from one revision beside inventories from another. [Release](release-the-catalogue.md#internal) the complete version again; copying only the index is not a fix. |
 | Unknown dataset or unresolvable collection | Spelling, revision, a hidden dataset seen through the public catalogue, or a staging entry gone. |
 | Cluster catalogue unreadable | Filesystem permissions, or a checkout that was moved or is half-way through an update. |
 | Data read from an unexpected place | A staging entry, a bundle, or a link in one of the reporter's caches. `config show` and the plan name them. |
 | Download from an unexpected host | `ETHOS_PUBLICATION_URL`, or `publication_url` in the settings file `config show` names. |
 | Hash mismatch | Compare with the recorded inventory and keep the evidence before repairing. A linked copy was edited at its source; a downloaded copy was damaged; or the published object was replaced, which must never happen. |
-| Public view misses an accepted dataset | Visibility, the generated diff, whether the public revision was released, and which revision the package pins. |
+| Public view misses an accepted dataset | Visibility, the generated diff, whether the public revision was released, and which releases the package's bounds admit. |
 
-To rule out the metadata cache without changing the reporter's pin, set
-`ETHOS_CATALOG_NO_CACHE=1` for one command.
+To rule out the metadata cache without changing the reporter's catalogue,
+set `ETHOS_CATALOG_NO_CACHE=1` for one command.
 
 ## 2. Check the source and generated metadata
 

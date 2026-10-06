@@ -30,6 +30,7 @@ import textwrap
 import threading
 from pathlib import Path
 
+import pytest
 import yaml
 
 from ethos_data.cli import main
@@ -132,8 +133,14 @@ class ReaderCatalogue:
     called again after adding more.
     """
 
-    def __init__(self, root: Path, store: Store | None = None):
+    def __init__(
+        self,
+        root: Path,
+        store: Store | None = None,
+        environment: pytest.MonkeyPatch | None = None,
+    ):
         self.root = root / "catalogue"
+        self.environment = environment
         self.cache = root / "cache"
         self.store = store
         self.publication_url = store.url if store else "https://example.invalid"
@@ -235,11 +242,17 @@ class ReaderCatalogue:
         return self.index
 
     def collections(self, body: str, name: str = "collections.yaml") -> Path:
-        """A collections file that reads this catalogue, with ``body`` under ``collections:``."""
+        """A collections file with ``body`` under ``collections:``.
+
+        The catalogue it reads is this one, named by ``$ETHOS_DATA_CATALOG``
+        as a user's settings would name it.
+        """
         self.write()
+        assert self.environment is not None, "built without the reader fixture"
+        self.environment.setenv("ETHOS_DATA_CATALOG", str(self.index))
         path = self.root.parent / name
         path.write_text(
-            f"catalog: {self.index.as_posix()}\ncollections:\n"
+            "collections:\n"
             + textwrap.indent(textwrap.dedent(body).strip("\n") + "\n", "  "),
             encoding="utf-8",
         )

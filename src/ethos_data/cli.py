@@ -111,8 +111,8 @@ def run_tool(
     and catalogue maintenance belong to ``ethos-data``.
 
     The handle -- and with it the catalogue -- is built only when a command
-    needs it, so ``--help`` and ``config show`` work offline and a pin nobody
-    can reach can still be overridden with ``--catalog`` for one run.
+    needs it, so ``--help`` and ``config show`` work offline and a catalogue
+    nobody can reach can be overridden with ``--catalog`` for one run.
     ``catalog`` is the tool's own override (``$<TOOL>_DATA_CATALOG``), applied
     below ``--catalog`` and above the environment; ``loaded`` is a handle that
     already exists, reused when nothing overrides its catalogue.
@@ -222,7 +222,7 @@ def _add_common_options(
         "--catalog",
         default=None,
         help="datacatalog.json path or URL; overrides configuration"
-        + (" and the collections file's pin" if tool_commands else ""),
+        + (", within the collections file's release bounds" if tool_commands else ""),
     )
     parser.add_argument(
         "--root",
@@ -426,7 +426,7 @@ def _add_bundle_commands(sub) -> None:
     )
     exporter.add_argument(
         "--source-revision",
-        help="provenance label only; select the revision with --catalog or the collections pin",
+        help="provenance label only; select the release with --catalog",
     )
     for name in ("fetch", "verify"):
         reader = bundle_sub.add_parser(
@@ -649,7 +649,8 @@ class _ToolSource:
 
     The catalogue is chosen as :func:`ethos_data.collections` chooses it --
     the tool's own override, then the environment and configuration, then the
-    pin -- and only an explicit ``--catalog`` changes that, for one run. A
+    public release within the file's bounds -- and only an explicit
+    ``--catalog`` changes that, for one run. A
     handle the caller already has is reused when nothing overrides its choice.
     """
 
@@ -819,9 +820,7 @@ def _show_the_collections(loaded, roots) -> int:
                 print(f"  {label:<28} {'[unresolvable]':>17}   {_first_line(error)}")
                 continue
             total = sum(r.bytes for r in resources)
-            title = (
-                definition.get("title", "") if variant in (None, variants[0]) else ""
-            )
+            title = (definition.title or "") if variant in (None, variants[0]) else ""
             print(
                 f"  {label:<28} {len(resources):>4} files  {_human(total):>10}   {title}"
             )
@@ -841,7 +840,7 @@ def _show_one_collection(args, loaded) -> int:
         print()
         _print_meta(loaded.catalog, sorted({r.dataset for r in resources}))
         return 0
-    title = loaded.describe(args.collection).get("title", "")
+    title = loaded.describe(args.collection).title
     if title:
         print(f"  {title}")
     named = loaded.named_keys(args.collection, test=args.test)
@@ -1513,8 +1512,8 @@ def _config_command(args) -> int:
         print(f"catalog written to {path}")
         print(f"resolved now: {read_settings().catalog}")
         print(
-            "Package data commands keep their own collections and use this catalogue "
-            "instead of their pin, unless a package-specific override is set."
+            "Package data commands keep their own collections and read this catalogue "
+            "within their release bounds, unless a package-specific override is set."
         )
         return 0
 

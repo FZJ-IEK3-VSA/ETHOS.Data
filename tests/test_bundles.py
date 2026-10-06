@@ -38,7 +38,7 @@ def no_network(monkeypatch):
 
 
 @pytest.fixture
-def catalogue(tmp_path):
+def catalogue(tmp_path, monkeypatch):
     source = tmp_path / "existing-fixtures"
     source.mkdir()
     payloads = {
@@ -107,7 +107,6 @@ def catalogue(tmp_path):
     collections.write_text(
         yaml.safe_dump(
             {
-                "catalog": "datacatalog.json",
                 "collections": {
                     "shape": {
                         "include": [{"dataset": "fixture", "files": ["sites.shp"]}]
@@ -122,6 +121,8 @@ def catalogue(tmp_path):
             }
         )
     )
+    # Named as a user's settings would name it.
+    monkeypatch.setenv("ETHOS_DATA_CATALOG", str(index))
     return {
         "source": source,
         "collections": collections,
@@ -484,7 +485,7 @@ def test_fetch_leaves_read_only_bundle_unchanged(catalogue, tmp_path):
 # that cannot hold the test data it exists for.
 
 
-def build_family(tmp_path, *, members, document=None):
+def build_family(tmp_path, monkeypatch, *, members, document=None):
     """A small catalogue whose datasets are family members.
 
     ``members`` maps a dataset name to {relative path: bytes}. Descriptors sit
@@ -557,19 +558,20 @@ def build_family(tmp_path, *, members, document=None):
     collections.write_text(
         yaml.safe_dump(
             {
-                "catalog": "datacatalog.json",
                 "collections": {
                     "fixtures": {"include": [{"dataset": name} for name in packages]}
                 },
             }
         )
     )
+    monkeypatch.setenv("ETHOS_DATA_CATALOG", str(index))
     return collections, sources
 
 
-def test_family_members_bundle_under_their_namespace(tmp_path):
+def test_family_members_bundle_under_their_namespace(tmp_path, monkeypatch):
     collections, sources = build_family(
         tmp_path,
+        monkeypatch,
         members={
             "family/alpha": {"a.bin": b"alpha"},
             "family/beta": {"b.bin": b"beta"},
@@ -591,7 +593,7 @@ def test_family_members_bundle_under_their_namespace(tmp_path):
     assert load_bundle(bundle.path).fetch("fixtures")
 
 
-def test_dataset_living_under_another_dataset_is_refused(tmp_path):
+def test_dataset_living_under_another_dataset_is_refused(tmp_path, monkeypatch):
     """A committed manifest is the place this has to be caught.
 
     Selecting a namespace resolves to its members, so an export cannot
@@ -599,7 +601,7 @@ def test_dataset_living_under_another_dataset_is_refused(tmp_path):
     can, and that is what a package ships and reads back.
     """
     collections, sources = build_family(
-        tmp_path, members={"family/alpha": {"a.bin": b"alpha"}}
+        tmp_path, monkeypatch, members={"family/alpha": {"a.bin": b"alpha"}}
     )
     bundle = export_bundle(
         collections,
@@ -633,10 +635,11 @@ def test_dataset_living_under_another_dataset_is_refused(tmp_path):
 # -- archived licences travel with the bytes --------------------------------
 
 
-def test_license_document_is_copied_and_hash_checked(tmp_path):
+def test_license_document_is_copied_and_hash_checked(tmp_path, monkeypatch):
     terms = b"You may use these bytes for any purpose."
     collections, sources = build_family(
         tmp_path,
+        monkeypatch,
         members={"family/alpha": {"a.bin": b"alpha"}},
         document=("licenses/terms.txt", terms, hashlib.sha256(terms).hexdigest()),
     )
@@ -655,10 +658,11 @@ def test_license_document_is_copied_and_hash_checked(tmp_path):
         load_bundle(bundle.path)
 
 
-def test_license_document_not_matching_its_hash_is_refused(tmp_path):
+def test_license_document_not_matching_its_hash_is_refused(tmp_path, monkeypatch):
     terms = b"You may use these bytes for any purpose."
     collections, sources = build_family(
         tmp_path,
+        monkeypatch,
         members={"family/alpha": {"a.bin": b"alpha"}},
         document=(
             "licenses/terms.txt",

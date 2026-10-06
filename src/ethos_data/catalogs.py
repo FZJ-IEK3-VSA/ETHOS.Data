@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING
 from .errors import (
     AccessError,
     CatalogUnavailable,
+    CatalogVersionError,
     IncompleteCatalog,
     UnknownDataset,
     UnknownKey,
@@ -49,6 +50,7 @@ from .formats.derived import (
 )
 from .model import digest, names
 from .model.resource import Resource, extras_of, from_record, to_record, with_sidecars
+from .model.versions import Bounds, Version, releases
 
 if TYPE_CHECKING:
     from .config import Roots, Settings
@@ -574,7 +576,7 @@ class Catalog:
     # key; a collections file (:class:`ethos_data.Collections`) is the place to
     # ask for what a tool's workflow needs by name. ``ethos_data.catalog()``
     # builds a handle for the configured catalogue; ``Collections.catalog`` is
-    # the one a tool's collections file pins.
+    # the one a tool reads within its collections file's release bounds.
 
     def _roots(self, root: Roots | str | Path | None) -> Roots:
         """The roots of :attr:`settings`, or of one call that names its own."""
@@ -658,6 +660,47 @@ def catalog_for(settings: Settings, *, explicit: str | None = None) -> Catalog:
     return loaded
 
 
+def releases_of(catalog: Catalog) -> list[Version]:
+    """The releases a published index lists, its own included, oldest first."""
+    names = list(catalog.descriptor.get(keys.RELEASES) or [])
+    if catalog.version:
+        names.append(catalog.version)
+    return releases(names)
+
+
+def public_releases() -> list[Version]:
+    """The releases the public catalogue's ``main`` index lists, oldest first."""
+    from .config import DEFAULT_CATALOG
+
+    return releases_of(load_catalog(DEFAULT_CATALOG))
+
+
+def check_release(catalog: Catalog, bounds: Bounds, file_name: str) -> None:
+    """Refuse a catalogue that is not a release ``bounds`` accept, naming both."""
+    where = f"catalogue at {catalog.location}"
+    advice = (
+        "Read a catalogue release within the bounds with --catalog / catalog=, "
+        "or ask the package's maintainers to widen them."
+    )
+    if not catalog.version:
+        raise CatalogVersionError(
+            f"the {where} records no release, but {file_name} accepts only {bounds}.\n"
+            f"{advice}"
+        )
+    try:
+        release = Version.parse(catalog.version)
+    except ValueError:
+        raise CatalogVersionError(
+            f"the {where} records release {catalog.version!r}, which is not of the form "
+            f"vMAJOR.MINOR.PATCH; {file_name} accepts only {bounds}.\n{advice}"
+        ) from None
+    if not bounds.admits(release):
+        raise CatalogVersionError(
+            f"the {where} is release {release}, but {file_name} accepts only "
+            f"{bounds}.\n{advice}"
+        )
+
+
 def load_catalog(location: str) -> Catalog:
     """Load a datacatalog.json.  Dataset inventories are fetched on first use.
 
@@ -667,17 +710,16 @@ def load_catalog(location: str) -> Catalog:
     try:
         text, base = _read(location)
     except (FileNotFoundError, urllib.error.URLError) as error:
-        # HTTPError is a URLError: a 404 for a tag nobody has cut yet arrives
-        # here too, and reads as "HTTP Error 404: Not Found" -- which says
-        # nothing about *which* URL, or that a pin chose it.
+        # HTTPError is a URLError: a 404 for a release tag nobody has cut
+        # arrives here too, and reads as "HTTP Error 404: Not Found" -- which
+        # says nothing about *which* URL.
         reason = getattr(error, "reason", None) or error
         if isinstance(error, urllib.error.HTTPError):
             reason = f"HTTP {error.code} {error.reason}"
         raise CatalogUnavailable(
             f"cannot read the catalogue index at {location}: {reason}\n"
-            f"If a collections file pinned this location, its pin may name a revision or "
-            f"repository that does not exist (yet). Use another catalogue for this run with "
-            f"--catalog / catalog=, for this shell with $ETHOS_DATA_CATALOG, or for good with "
+            f"Use another catalogue for this run with --catalog / catalog=, for this "
+            f"shell with $ETHOS_DATA_CATALOG, or for good with "
             f"`ethos-data config set-catalog <datacatalog.json>`."
         ) from error
     descriptor = json.loads(text)
