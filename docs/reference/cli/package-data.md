@@ -276,44 +276,36 @@ with an empty, `.` or `..` segment is refused.
 
 ## `bundle`
 
-A bundle is a repository copy of selected catalogue resources plus generated
-metadata. dCache remains authoritative. Bundle reads use only local files and
-never overwrite fixtures or fall back to downloads.
+A bundle is data a package keeps in its repository: the files of a selection
+of catalogue datasets under `data/<dataset>/<path>`, each dataset's
+description and licence documents under `datasets/<dataset>/`, and
+`bundle.json`, which records each dataset's alignment with the catalogue,
+whether it holds every file or a selection, the changes recorded since the
+alignment, and every file's size and SHA-256. A bundle holds public, visible
+data with settled licensing only; anything else is refused with `BundleError`.
 
 ```bash
-<tool>-data bundle export tests/data-bundle test_suite --source-revision v1.0.0
-<tool>-data bundle verify tests/data-bundle test_suite
-<tool>-data bundle fetch tests/data-bundle test_suite
-<tool>-data bundle fetch tests/data-bundle test_suite --allow-modified
+<tool>-data bundle create tests/data-bundle --family your-tool-test-data
+<tool>-data bundle update tests/data-bundle
+<tool>-data bundle verify tests/data-bundle
+<tool>-data bundle export ../other-tool/test_data test_suite --test
 ```
 
 | Command/option | Behaviour |
 |---|---|
-| `export TARGET COLLECTION...` | Export to a new directory; refuses an existing target. Canonical metadata is selected without staging; a collection with variants is exported in its `full` variant. |
-| `export --source-root DATASET=PATH` | Use an existing local source and verify it against catalogue hashes; repeat for several datasets. |
-| `export --source-revision REF` | Record the source commit/tag as provenance; this label does not change the catalogue URL or select a revision. |
-| `verify DIRECTORY COLLECTION` | Report hash/presence findings; exits 1 for modified or missing fixtures. |
-| `fetch DIRECTORY COLLECTION` | Check hashes and report local paths; no network or repair. |
-| `fetch --allow-modified` | Explicit development override for changed bytes; warns and retains original metadata. Missing files still fail. |
+| `create DIRECTORY [--family NAME]` | Start a bundle from the directories under `DIRECTORY/data/`, each a dataset; `--family NAME` makes the subdirectories of `data/NAME/` the members of a family. Hashes every file, drafts each dataset's `dataset.yaml`, and writes `bundle.json`. Refuses a bundle that exists. |
+| `update DIRECTORY` | Record every changed, added and removed file, the descriptions and licence documents included, against each dataset's alignment, and every new dataset. With the catalogue readable, record the alignment of each dataset whose files, description and licence documents the catalogue holds as the bundle does. |
+| `update --from-catalog DATASET...` | Take the catalogue's files of the bundled selection, with the description and licence documents, and record the alignment. |
+| `export TARGET COLLECTION...` | Write a new bundle of what the package reads for the collections, through its handle: its bundles first, then the caches and the download, never staging. Each dataset keeps its description, licence documents and alignment; every file is checked as it is copied. Refuses an existing target. |
+| `export --test` | The collections' test variants. |
+| `verify DIRECTORY [DATASET_OR_KEY...]` | Report each file as `ok`, `modified`, `missing` or `unrecorded`, the descriptions and licence documents included, each dataset's alignment and state, and, with the catalogue readable, an aligned dataset the catalogue holds otherwise; exits 1 for any of these. |
+| `fetch DIRECTORY [DATASET_OR_KEY...]` | Check hashes and report local paths; no network and no repair. |
+| `fetch --allow-modified` | Read files changed without `bundle update`, with a warning naming them; the recorded hashes stay. A missing file fails all the same. |
 
-Global cache and staging settings do not redirect bundle reads.
-The package's collections file and `--catalog` select inputs for export only. Invalid bundle inputs exit 2.
-See [Keep data in the repository](../../how-to/package-maintainers/keep-data-in-the-repository.md).
-
-!!! warning "Gap: a bundle is to be authoritative for its package"
-    With [decision
-    0020](../../explanation/architecture/decisions/0020-repository-bundles.md)
-    and [bundles ahead of the
-    catalogue](../../explanation/architecture/decisions/0021-bundles-ahead-of-the-catalogue.md),
-    the package reads what its bundles hold, in place and before the
-    caches, even where a bundle is ahead of the catalogue; such a read warns
-    once per bundle until the bundle is realigned. One `bundle.json` format
-    holds public, visible data with settled licensing only, with each
-    dataset's description and licence documents. `bundle create` starts a
-    bundle, `bundle update` records a change or, with `--from-catalog`,
-    takes the catalogue's version, and `propose` drafts the proposal to the
-    catalogue. `bundle export` reads through the package's handle, takes
-    `--test`, and has no `--source-root`. To be implemented separately.
+A package's handle lists its bundles with `bundles=`, and reads go to them
+first, after staging: see [Keep data in the repository](../../how-to/package-maintainers/keep-data-in-the-repository.md#use-a-bundle).
+A bundle ahead of the catalogue is read with a `BundleAlignmentWarning`, once
+per bundle and process. Invalid bundle inputs exit 2.
 
 ## `config`
 

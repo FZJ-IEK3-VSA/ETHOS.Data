@@ -183,6 +183,20 @@ PACKAGE_FILE = "datapackage.json"
 #: The catalogue's generated index, at the catalogue's root.
 INDEX_FILE = "datacatalog.json"
 
+# -- a bundle ---------------------------------------------------------------------
+
+#: A bundle's manifest, at its root.
+BUNDLE_FILE = "bundle.json"
+#: The format id ``bundle.json`` states.
+BUNDLE_FORMAT = "ethos-data-bundle"
+#: Where a bundle keeps the files, ``data/<dataset>/<path>``.
+BUNDLE_DATA_DIR = "data"
+#: Where a bundle keeps each dataset's description and licence documents,
+#: ``datasets/<dataset>/``, the published catalogue's own layout.
+BUNDLE_DESCRIPTIONS_DIR = "datasets"
+#: A dataset's description in a bundle, as in a catalogue checkout.
+DESCRIPTION_FILE = "dataset.yaml"
+
 # -- records the tools write beside data -----------------------------------------
 
 #: In the staging root: who staged which directory under which name, and why.

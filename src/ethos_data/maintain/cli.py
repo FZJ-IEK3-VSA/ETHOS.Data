@@ -1,8 +1,9 @@
 """The ``ethos-data catalog ...`` subcommands.
 
-The pipelines ``add``, ``build``, ``upload``, ``record``, ``remove``,
-``check-source``, ``publish``, ``release`` and ``update-checkout``, which plan
-every stage before any of them acts, so ``--dry-run`` prints the plan;
+The pipelines ``add``, ``add-bundle``, ``build``, ``upload``, ``record``,
+``remove``, ``check-source``, ``publish``, ``release`` and ``update-checkout``,
+which plan every stage before any of them acts, so ``--dry-run`` prints the
+plan;
 ``status`` and ``migrate``, which show and write each dataset's
 ``status.yaml``; and ``check-store``.
 
@@ -130,6 +131,34 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     )
     adder.add_argument(
         "--dry-run", action="store_true", help="check and plan; write nothing"
+    )
+
+    bundler = catalog_sub.add_parser(
+        "add-bundle",
+        help="take a bundle's ahead datasets into the catalogue",
+        description="Take the datasets of a package's bundle that are ahead of the "
+        "catalogue, or the ones named: add new datasets, make the next revision of "
+        "changed ones while the catalogue is at the bundle's alignment, and take "
+        "changed descriptions. The files are copied into a build input the "
+        "catalogue maintainers own.",
+    )
+    bundler.add_argument("directory", help="the bundle directory, in a checkout")
+    bundler.add_argument(
+        "datasets", nargs="*", help="datasets of the bundle (default: every ahead one)"
+    )
+    bundler.add_argument(
+        "--into",
+        required=True,
+        metavar="DIR",
+        help="the directory of build inputs the catalogue maintainers own",
+    )
+    bundler.add_argument(
+        "--remove-missing",
+        action="store_true",
+        help="let files gone from the bundle go, keys and all",
+    )
+    bundler.add_argument(
+        "--dry-run", action="store_true", help="compare and plan; write nothing"
     )
 
     builder = catalog_sub.add_parser(
@@ -493,6 +522,20 @@ def dispatch(args) -> int:
         from . import migrate
 
         return _status(migrate.run(root, args.datasets, dry_run=args.dry_run))
+
+    if args.catalog_command == "add-bundle":
+        from . import bundle_intake
+
+        return _status(
+            bundle_intake.run(
+                root,
+                args.directory,
+                args.datasets,
+                into=args.into,
+                remove_missing=args.remove_missing,
+                dry_run=args.dry_run,
+            )
+        )
 
     if args.catalog_command == "add":
         from . import accept

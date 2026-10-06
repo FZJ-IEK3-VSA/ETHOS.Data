@@ -280,7 +280,14 @@ def download(
         )
 
     for dataset_name, items in sorted(to_download.items()):
-        dataset = catalog.dataset(dataset_name)
+        # A bundled file the download switch reads through the catalogue route
+        # comes from the catalogue's dataset, never the bundle's.
+        source = (
+            catalog.routes
+            if catalog.routes is not None and catalog.bundle_of(dataset_name)
+            else catalog
+        )
+        dataset = source.dataset(dataset_name)
         destination = roots.public / dataset.entry_name
         _refuse_to_write_through_a_link(roots.public, dataset.entry_name)
         items = _seeded(roots.public, dataset, items, files)
@@ -290,7 +297,7 @@ def download(
             by_revision.setdefault(location.resource.revision, []).append(location)
         for revision, group in sorted(by_revision.items()):
             fetched = downloader.fetch(
-                catalog.base_url_for(dataset, revision),
+                source.base_url_for(dataset, revision),
                 destination,
                 {loc.resource.path: loc.resource.hash for loc in group},
                 progressbar=progressbar,

@@ -106,26 +106,21 @@ record each file gets. The build inventories a `source_dir` with it.
 
 ## Repository test-data bundles
 
-!!! warning "Gap: a bundle is to be authoritative for its package"
-    With [decision
-    0020](../../explanation/architecture/decisions/0020-repository-bundles.md)
-    and [bundles ahead of the
-    catalogue](../../explanation/architecture/decisions/0021-bundles-ahead-of-the-catalogue.md),
-    the package's handle reads its bundles before the caches, even where a
-    bundle is ahead of the catalogue; such a read warns once per bundle, in
-    a warning category of its own exported from `ethos_data`. One
-    `bundle.json` format holds public, visible data with settled licensing
-    only, and `export_bundle` reads through the package's handle. To be
-    implemented separately.
-
 ::: ethos_data.bundles
     options:
       members:
-        - export_bundle
         - load_bundle
         - Bundle
         - BundleFinding
+        - BundleAlignmentWarning
         - ModifiedBundleWarning
+        - create_bundle
+        - BundleCreated
+        - update_bundle
+        - BundleUpdate
+        - differs_from_catalog
+        - export_bundle
+        - with_bundles
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

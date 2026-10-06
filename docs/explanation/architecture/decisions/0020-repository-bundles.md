@@ -1,6 +1,6 @@
 # 0020. Keep attributed data in bundles that are authoritative for their package
 
-**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #25
+**Status:** implemented · **Date:** 2026-10-06 · **Implemented by:** #25
 
 ## Context
 

@@ -10,8 +10,8 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from . import bundle
 from . import keys as k
-from .bundle import BundleManifest
 from .catalogue import CatalogMeta
 from .collections_file import CollectionsFile
 from .dataset import DatasetDescriptor, NamespaceDescriptor
@@ -67,8 +67,8 @@ FORMATS: dict[str, Format] = {
                "One shard of a sharded inventory."),
         Format("datacatalog", "datacatalog.json", CatalogIndex, "tool",
                "The generated index: catalog.yaml's keys and one row per dataset."),
-        Format("bundle", "bundle.json", BundleManifest, "tool",
-               "A repository copy of catalogue data."),
+        Format("bundle", bundle.FILENAME, bundle.BundleManifest, "tool",
+               "What a bundle holds: its datasets, their alignment and changes."),
         Format("staging", k.STAGING_REGISTRY_FILE, StagingRegistry, "tool",
                "Who staged which directory, and why."),
         Format("materialized", k.MATERIALIZED_RECORD_FILE, MaterializedRecord, "tool",

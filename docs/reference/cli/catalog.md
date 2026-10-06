@@ -56,7 +56,37 @@ builds.
 | `--name NAME` | the dataset's name, for a draft that states none |
 | `--dry-run` | check and plan; write nothing |
 
-## `build [datasets...]`
+## `add-bundle <directory> [datasets...]` {#add-bundle}
+
+Take a package's bundle's datasets that are ahead of the catalogue, or the
+ones named, into your own clone.
+
+```bash
+ethos-data catalog add-bundle /checkout/your_tool/test_data --into /projects/inputs --dry-run
+ethos-data catalog add-bundle /checkout/your_tool/test_data --into /projects/inputs
+```
+
+One stage, `update`, plans a step per dataset, each planned before any is
+taken: a dataset the catalogue does not describe, added and built as
+[`add`](#add-source) does from the bundle's description; a published dataset
+whose files changed, made its next [revision](#build-datasets), only while the
+catalogue is at the revision the bundle is aligned with; a dataset not
+published yet whose files changed, built again; a changed description or
+licence document, taken. The files are first copied into `--into`, a build
+input the catalogue maintainers own, `<into>/<dataset>` or
+`<into>/<dataset>@<revision>`, each checked against `bundle.json`, so the
+catalogue never reads a package checkout. A change of access or visibility
+that comes from a bundle is refused, as is a file gone from the bundle,
+unless `--remove-missing` says it is meant. The families above the datasets
+are built again last.
+
+| Flag | |
+|---|---|
+| `--into DIR` | the directory of build inputs the catalogue maintainers own; required |
+| `--remove-missing` | let files gone from the bundle go, keys and all |
+| `--dry-run` | compare and plan; write nothing |
+
+## `build [datasets...]` {#build-datasets}
 
 Regenerate `datapackage.json` (and `shards/*.json` for a sharded dataset)
 from each `dataset.yaml`, plus the catalogue-wide `datacatalog.json`.

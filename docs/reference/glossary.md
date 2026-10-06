@@ -2,11 +2,10 @@
 
 Key concepts used across `ethos-data`.
 
-!!! warning "Gap: some terms describe the target"
-    These terms describe the [target architecture](../explanation/architecture/glossary.md),
-    which the code does not have yet: one **bundle** format and a bundle
-    **ahead of the catalogue**, **release** with `catalog release`, and
-    **handoffs**. The code has only bundles exported from the catalogue.
+!!! warning "Gap: handoffs describe the target"
+    The **handoffs** describe the [target architecture](../explanation/architecture/glossary.md),
+    which the code does not have yet: it has no `propose`, `report` or
+    drafted notices.
 
 ## Data
 

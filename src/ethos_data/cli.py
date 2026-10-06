@@ -11,12 +11,13 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import yaml
 
 from .access import chain_for
-from .bundles import export_bundle, load_bundle
+from .bundles import load_bundle
 from .catalogs import Catalog, catalog_for, load_catalog
 from .config import (
     CATALOG_ENV_VAR,
@@ -36,7 +37,8 @@ from .config import (
     unset_option,
 )
 from .errors import (
-    BundleError,
+    CatalogUnavailable,
+    CatalogVersionError,
     CollectionError,
     EthosDataError,
     IncompleteCatalog,
@@ -100,6 +102,7 @@ def run_tool(
     catalog: str | None = None,
     argv: list[str] | None = None,
     loaded: Collections | None = None,
+    bundles: tuple | list = (),
 ) -> int:
     """A tool's own command: the collection commands bound to the file it ships.
 
@@ -118,7 +121,7 @@ def run_tool(
     already exists, reused when nothing overrides its catalogue.
     """
     prog = prog or (f"{tool}-data" if tool else "ethos-data")
-    source = _ToolSource(file, tool, catalog, loaded)
+    source = _ToolSource(file, tool, catalog, loaded, tuple(bundles))
     return _run(
         lambda: _dispatch(_build_tool_parser(prog, source).parse_args(argv), source)
     )
@@ -408,37 +411,77 @@ def _add_key_commands(sub) -> None:
 
 
 def _add_bundle_commands(sub) -> None:
-    bundle = sub.add_parser("bundle", help="repository copies of catalogued test data")
+    bundle = sub.add_parser(
+        "bundle", help="data the package keeps in its repository, with its descriptions"
+    )
     bundle_sub = bundle.add_subparsers(dest="bundle_command", required=True)
-    exporter = bundle_sub.add_parser(
-        "export", help="copy selected official data into a new bundle"
+    creator = bundle_sub.add_parser(
+        "create",
+        help="start a bundle from the data directories under DIR/data/",
+        description="Hash every file under DIR/data/<dataset>/, draft a dataset.yaml "
+        "for each new dataset, and write bundle.json. The datasets are ahead of the "
+        "catalogue until it accepts them.",
     )
-    exporter.add_argument("target", help="new directory for the bundle")
-    exporter.add_argument(
-        "bundle_collections", nargs="+", help="collections to include"
+    creator.add_argument("directory", help="the bundle directory in the repository")
+    creator.add_argument(
+        "--family",
+        default=None,
+        metavar="NAME",
+        help="the directory under data/ whose subdirectories are a family's members",
     )
-    exporter.add_argument(
-        "--source-root",
-        action="append",
+    updater = bundle_sub.add_parser(
+        "update",
+        help="record a bundle's changes, and its alignment with the catalogue",
+        description="Record every changed, added and removed file, the descriptions "
+        "and licence documents included, and every new dataset. With the catalogue "
+        "readable, record the alignment of each dataset the catalogue holds as the "
+        "bundle does.",
+    )
+    updater.add_argument("directory", help="the bundle directory")
+    updater.add_argument(
+        "--from-catalog",
+        nargs="+",
         default=[],
-        metavar="DATASET=PATH",
-        help="verified existing local copy (repeat for each dataset)",
+        metavar="DATASET",
+        help="take the catalogue's files of the bundled selection, with the "
+        "description and licence documents",
+    )
+    exporter = bundle_sub.add_parser(
+        "export",
+        help="write a new bundle of what the package reads for some collections",
+        description="Read through the package's handle: its bundles first, then the "
+        "caches and the download, never staging. Each dataset keeps its description, "
+        "licence documents and alignment. The target must not exist.",
+    )
+    exporter.add_argument("target", help="a new directory for the bundle")
+    exporter.add_argument(
+        "bundle_collections",
+        nargs="+",
+        metavar="COLLECTION",
+        help="collections to export",
     )
     exporter.add_argument(
-        "--source-revision",
-        help="provenance label only; select the release with --catalog",
+        "--test", action="store_true", help="the collections' test variants"
     )
     for name in ("fetch", "verify"):
         reader = bundle_sub.add_parser(
-            name, help="read or verify a bundle without network access"
+            name,
+            help="read the bundled files"
+            if name == "fetch"
+            else "check the bundled files, and compare them with the catalogue",
         )
         reader.add_argument("directory")
-        reader.add_argument("collection")
+        reader.add_argument(
+            "selection",
+            nargs="*",
+            metavar="DATASET_OR_KEY",
+            help="datasets or keys (default: everything the bundle holds)",
+        )
         if name == "fetch":
             reader.add_argument(
                 "--allow-modified",
                 action="store_true",
-                help="use changed fixture bytes for development, warning about divergence",
+                help="read files changed without `bundle update`, with a warning",
             )
 
 
@@ -658,11 +701,13 @@ class _ToolSource:
         tool: str | None,
         catalog: str | None,
         loaded: Collections | None = None,
+        bundles: tuple = (),
     ):
         self.file_path = Path(file)
         self.tool = tool
         self.catalog = catalog
         self._loaded = loaded
+        self.bundles = bundles
 
     def names(self) -> list[str]:
         """The collection names, read from the file alone -- for help text."""
@@ -686,7 +731,11 @@ class _ToolSource:
             return self._loaded
         settings = read_settings(root=args.root, catalog=args.catalog or self.catalog)
         loaded = load_collections(
-            self.file_path, roots=settings.roots, tool=self.tool, settings=settings
+            self.file_path,
+            roots=settings.roots,
+            tool=self.tool,
+            settings=settings,
+            bundles=self.bundles,
         )
         if not overridden:
             self._loaded = loaded
@@ -697,33 +746,87 @@ class _ToolSource:
 
 
 def _bundle_command(args, source) -> int:
-    if args.bundle_command == "export":
-        roots = {}
-        for item in args.source_root:
-            name, sep, directory = item.partition("=")
-            if not sep or not name or not directory or name in roots:
-                raise BundleError("--source-root must be a unique DATASET=PATH entry")
-            roots[name] = directory
-        bundle = export_bundle(
-            source.file(args),
-            args.bundle_collections,
-            args.target,
-            catalog=source.catalog_override(args),
-            dataset_roots=roots,
-            source_revision=args.source_revision,
+    from .bundles import (
+        create_bundle,
+        describe_bundle,
+        differs_from_catalog,
+        export_bundle,
+        update_bundle,
+    )
+
+    prog = f"{source.tool}-data" if source.tool else "<tool>-data"
+    if args.bundle_command == "create":
+        created = create_bundle(args.directory, family=args.family)
+        print(f"Bundle created at {created.path}: {', '.join(created.datasets)}.")
+        for name in created.drafted:
+            print(f"  drafted  {created.path / 'datasets' / name / 'dataset.yaml'}")
+        print(
+            "Fill the drafts in -- origin, sources, licence, attribution -- put the "
+            "licence documents beside them, run `bundle update`, then commit. The "
+            "datasets are ahead of the catalogue until it accepts them."
         )
-        print(f"Bundle created at {args.target}: {', '.join(bundle.names())}")
         return 0
-    bundle = load_bundle(args.directory)
+    if args.bundle_command == "update":
+        catalog = _readable_catalog(source, args)
+        settings = read_settings(root=args.root)
+        update = update_bundle(
+            args.directory,
+            catalog=catalog,
+            from_catalog=args.from_catalog,
+            roots=replace(settings.roots, staging=None),
+        )
+        for name, found in update.recorded.items():
+            for path, change in found:
+                print(f"  {change:<10} {name}/{path}")
+        for name in update.added:
+            print(f"  {'new':<10} {name}")
+        for name in update.dropped:
+            print(f"  {'dropped':<10} {name}")
+        for name in update.taken:
+            print(f"  {'taken':<10} {name}, the catalogue's version")
+        for name, revision in update.aligned.items():
+            print(f"  {'aligned':<10} {name}, revision {revision} of the catalogue")
+        bundle = load_bundle(update.path, prog=prog)
+        for line in describe_bundle(bundle):
+            print(f"  {line}")
+        return 0
+    if args.bundle_command == "export":
+        handle = source.load(args)
+        bundle = export_bundle(
+            handle, args.target, args.bundle_collections, test=args.test
+        )
+        print(f"Bundle created at {bundle.path}: {', '.join(bundle.names())}")
+        print(f"Read {bundle.path / 'datasets'} before committing it: the terms "
+              "under which that repository passes the files on.")  # fmt: skip
+        return 0
+    bundle = load_bundle(args.directory, prog=prog)
     if args.bundle_command == "verify":
-        findings = bundle.verify(args.collection)
+        findings = bundle.verify(*args.selection)
         for finding in findings:
             print(f"{finding.status}: {finding.key}")
-        return 1 if any(f.status != "ok" for f in findings) else 0
-    files = bundle.fetch(args.collection, allow_modified=args.allow_modified)
+        for line in describe_bundle(bundle):
+            print(f"  {line}")
+        catalog = _readable_catalog(source, args)
+        differs = differs_from_catalog(bundle, catalog) if catalog else {}
+        for name, why in differs.items():
+            print(f"differs: {name}: {why}")
+        return 1 if any(not f.ok for f in findings) or differs else 0
+    files = bundle.fetch(*args.selection, allow_modified=args.allow_modified)
     for key, path in files.items():
         print(f"{key}: {path}")
     return 0
+
+
+def _readable_catalog(source, args):
+    """The catalogue a package reads, without its bundles; None when it cannot be read."""
+    try:
+        return source.load(args).base_catalog()
+    except (CatalogUnavailable, IncompleteCatalog, CatalogVersionError) as error:
+        print(
+            "note: the catalogue could not be read, so the bundle is not compared "
+            f"with it: {_first_line(error)}"
+        )
+        return None
 
 
 def _main(argv: list[str] | None = None) -> int:

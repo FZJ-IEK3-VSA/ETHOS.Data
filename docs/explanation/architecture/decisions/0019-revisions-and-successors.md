@@ -1,6 +1,6 @@
 # 0019. Publish new versions as revisions or successors; published objects never change
 
-**Status:** proposed · **Date:** 2026-10-02 · **Implemented by:** #24, #25
+**Status:** implemented · **Date:** 2026-10-02 · **Implemented by:** #24, #25
 
 ## Context
 
