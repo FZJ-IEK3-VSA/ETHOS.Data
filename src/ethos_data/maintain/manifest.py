@@ -41,7 +41,7 @@ rather than reimplemented -- writer and reader must agree on it exactly.
 
 Hashing is the expensive part -- this catalogue's source_dirs run to hundreds
 of gigabytes on shared storage -- so each dataset directory keeps a
-``.ice2-hash-cache.json`` alongside its datapackage.json: a private, unpublished
+``.ethos-data-hash-cache.json`` alongside its datapackage.json: a private, unpublished
 map of relative path to the size/mtime last seen and the digest that went with
 them. A rebuild re-hashes a file only when its size or mtime has moved; the rest
 is a stat call. It is not a Data Package property (a maintainer's disk paths and
@@ -113,7 +113,7 @@ SHAPEFILE_SIDECAR_EXTS = [
 ]
 
 # Per-dataset, maintainer-local, never published -- see the module docstring.
-HASH_CACHE_NAME = ".ice2-hash-cache.json"
+HASH_CACHE_NAME = k.HASH_CACHE_FILE
 
 # Hashing waits on shared storage, not CPU, so this is sized for concurrent I/O
 # rather than core count. High enough to hide per-file latency, low enough that
@@ -580,8 +580,7 @@ def render_dataset(
 
     ``name`` is the dataset's catalogue name, which for a nested dataset is its
     path below ``datasets/`` rather than its directory name. It defaults to the
-    directory name, so a flat catalogue and every existing caller behave exactly
-    as before.
+    directory name, which is the catalogue name in a flat catalogue.
 
     ``namespace`` says this directory holds other datasets rather than files of
     its own; ``member_totals`` is the ``(bytes, files)`` of everything beneath it,

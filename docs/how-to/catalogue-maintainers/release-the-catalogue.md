@@ -220,7 +220,7 @@ that would leak fails before anybody publishes.
 | Uploaded or frozen, no `source_dir` | Only the checkout; the recorded inventory is preserved |
 
 The build keeps a size-and-mtime hash cache; for a review that must hash every
-byte, start from a checkout without `.ice2-hash-cache.json`. To check that
+byte, start from a checkout without `.ethos-data-hash-cache.json`. To check that
 uploaded bytes are still served without transferring anything:
 
 ```bash

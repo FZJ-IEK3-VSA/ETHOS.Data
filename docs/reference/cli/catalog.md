@@ -64,7 +64,7 @@ Emits `datacatalog.json`, each public `datasets/<name>/datapackage.json` with
 the keys the dataset.yaml format marks unpublished stripped (`source_dir`,
 `ethos:embargo`, `ethos:license_note`, `ethos:uploaded`, `ethos:frozen`), and
 the README table — for every dataset marked `ethos:visibility: public`.
-Anything it no longer generates is deleted from the target.
+Anything in the target that it does not generate is deleted, so `publish` refuses a target that holds a `catalog.yaml`, a source checkout.
 
 Before it compares or writes anything, it checks the generated tree for a
 leak: an unpublished key that is still there, or a withheld dataset named in

@@ -36,6 +36,7 @@ from ..errors import PublishError
 from ..formats import dataset as dataset_format
 from ..formats import keys as k
 from ..formats.derived import index_row
+from ..formats.registry import unpublished_keys
 from . import dataset_name_for, datasets_dir, iter_dataset_dirs
 
 #: Maintainer-only, never in the public catalogue: the keys the dataset.yaml
@@ -44,6 +45,10 @@ from . import dataset_name_for, datasets_dir, iter_dataset_dirs
 #: note, ``source_dir`` a path on somebody's workstation, ``ethos:uploaded`` and
 #: ``ethos:frozen`` bookkeeping about where the inventory came from.
 STRIP_FROM_PACKAGE = dataset_format.STRIPPED
+
+#: What the leak check looks for as a JSON key: every key any format's
+#: specification marks unpublished, not only the descriptor's.
+UNPUBLISHED_KEYS = unpublished_keys()
 
 # Written into the public tree so that a stray local artefact -- an oidc-agent
 # socket symlink, a __pycache__ -- cannot be committed by a careless `git add -A`.
@@ -233,7 +238,7 @@ _NAME_CHARACTER = r"[A-Za-z0-9_/-]"
 def leaks(files: dict[Path, str | bytes], withheld: list[str]) -> list[str]:
     """Where a generated public tree says something it must not.
 
-    The two things a release's leak check looks for: a key the dataset.yaml
+    The two things a release's leak check looks for: a key any format's
     specification marks unpublished, written as a JSON key, and a withheld
     dataset mentioned anywhere, in a descriptor, the index or the README, by
     its name or by its path under ``datasets/``. Licence documents are the
@@ -252,7 +257,7 @@ def leaks(files: dict[Path, str | bytes], withheld: list[str]) -> list[str]:
         if isinstance(content, bytes):
             continue
         where = Path(relative).as_posix()
-        for key in STRIP_FROM_PACKAGE:
+        for key in UNPUBLISHED_KEYS:
             if re.search(rf'"{re.escape(key)}"\s*:', content):
                 found.append(f"{where} carries {key}")
         for name, mention in mentions.items():
@@ -272,6 +277,14 @@ def _differs(path: Path, content: str | bytes) -> bool:
 
 def run(catalog_root: Path, target: str, check: bool = False) -> int:
     destination_root = Path(target).expanduser().resolve()
+    # Publishing deletes everything in its target but .git, so a source
+    # checkout, which holds catalog.yaml, is never one.
+    if (destination_root / "catalog.yaml").is_file():
+        raise PublishError(
+            f"{destination_root} holds a catalog.yaml, so it is a source catalogue, "
+            "not the public one; nothing was written. Point publish at the public "
+            "catalogue's checkout."
+        )
     files = render(catalog_root)
 
     root = datasets_dir(catalog_root)

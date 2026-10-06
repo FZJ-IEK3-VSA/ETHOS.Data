@@ -185,7 +185,7 @@ def test_a_frozen_dataset_needs_no_source_and_a_built_one_does():
         formats.dataset.check({})
 
 
-def test_defaults_are_written_in_the_order_the_descriptor_has_always_had_them():
+def test_defaults_are_written_in_the_fixed_key_order():
     meta = {"name": "x", "title": "X"}
     formats.dataset.apply_defaults(meta)
     assert list(meta) == [
@@ -220,6 +220,23 @@ def test_publish_strips_what_the_specification_marks_unpublished():
         "ethos:frozen",
         "ethos:embargo",
         "ethos:license_note",
+    }
+
+
+def test_an_index_row_holds_the_promoted_keys_and_what_the_build_counts():
+    package = {
+        **formats.dataset.apply_defaults({"name": "x", "title": "X"}),
+        "version": "1.0",
+        "ethos:total_bytes": 3,
+        "ethos:file_count": 1,
+    }
+
+    row = formats.index_row(package, "datasets/x/datapackage.json")
+
+    assert set(row) == set(formats.dataset.PROMOTED) | {
+        "path",
+        "ethos:total_bytes",
+        "ethos:file_count",
     }
 
 

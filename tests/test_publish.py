@@ -89,6 +89,16 @@ class TestWhatIsPublished:
         assert not (target / "stale.txt").exists()
         assert (target / ".git" / "HEAD").read_bytes() == b"ref: refs/heads/main\n"
 
+    def test_a_source_checkout_is_never_the_target(self, built, target):
+        (target / "catalog.yaml").write_bytes(b"name: a source catalogue\n")
+        before = everything_in(target)
+
+        code, _, err = built.publish(target)
+
+        assert code == 1
+        assert "holds a catalog.yaml" in err
+        assert everything_in(target) == before, "nothing is deleted or written"
+
     def test_licence_documents_travel_verbatim(self, source, target):
         source.dataset(
             "with-terms",
@@ -162,6 +172,13 @@ def test_a_published_index_row_says_what_the_source_row_says(source, target):
 
 class TestLeaks:
     """The release's leak check, run by publish itself rather than by hand."""
+
+    def test_every_key_a_format_marks_unpublished_is_looked_for(self):
+        from ethos_data.formats.registry import unpublished_keys
+        from ethos_data.maintain.publish import STRIP_FROM_PACKAGE, UNPUBLISHED_KEYS
+
+        assert UNPUBLISHED_KEYS == unpublished_keys()
+        assert set(STRIP_FROM_PACKAGE) <= set(UNPUBLISHED_KEYS)
 
     @pytest.fixture(
         params=[
