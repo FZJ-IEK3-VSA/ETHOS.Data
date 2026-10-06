@@ -98,8 +98,12 @@ revision of one such dataset from the corrected files, `--from DIR` or its
 `source_dir`: it compares them with the recorded inventory, names what
 changed, is new or is gone, and writes the inventory as the next revision,
 each changed and new file published under `<remote_prefix>@<revision>/` and
-each unchanged one kept where it is. A file that is gone is refused unless
-`--remove-missing` says so. See
+each unchanged one kept where it is, in two stages, `compare` and `revise`.
+A file that is gone is refused unless `--remove-missing` says so. The
+revision has no authoritative copy until a copy of its bytes is recorded, and
+a run interrupted after writing it records it when run again. A successor
+built by name rebuilds the dataset it replaces too, which records
+`ethos:superseded_by`. See
 [Publish a new version](../../how-to/catalogue-maintainers/publish-a-new-version.md).
 
 | Flag | |
@@ -109,7 +113,6 @@ each unchanged one kept where it is. A file that is gone is refused unless
 | `--revision` | make the next revision of one dataset |
 | `--from DIR` | with `--revision`: the corrected files (default: its `source_dir`) |
 | `--remove-missing` | with `--revision`: let files that are gone go, keys and all |
-| `--dry-run` | with `--revision`: compare and plan; write nothing |
 
 ## `publish <target>`
 

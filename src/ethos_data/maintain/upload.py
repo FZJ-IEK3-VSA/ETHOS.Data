@@ -318,8 +318,22 @@ class Upload:
     def url(self, plan: Plan) -> str:
         return resource_url(self.base_url, plan.prefix)
 
-    def namespace_path(self, plan: Plan) -> str:
-        return f"{self.options.vo_path}/{self.root}/{plan.prefix}"
+    def namespace_path(self, plan: Plan, revision: int = 1) -> str:
+        """The store path of one revision's folder of the dataset."""
+        folder = object_folder(plan.prefix, revision)
+        return f"{self.options.vo_path}/{self.root}/{folder}"
+
+
+def _by_revision(plan: Plan) -> dict[int, list[str]]:
+    """The paths of the dataset's files, by the revision their bytes were published in.
+
+    Each goes into its revision's folder. The folders of earlier revisions
+    hold their files already, and an immutable copy leaves them as they are.
+    """
+    found: dict[int, list[str]] = {}
+    for record in inventory_of(plan.name, plan.dataset_dir).records():
+        found.setdefault(int(record.get(k.REVISION, 1)), []).append(record[k.PATH])
+    return dict(sorted(found.items()))
 
 
 def _uploaded(status: StatusFile, location: str) -> bool:
@@ -398,28 +412,34 @@ class Transfer:
     def plan(self, upload: Upload) -> list[Action]:
         if upload.options.verify_only:
             return []
-        return [
-            Action(
-                f"copy {plan.package[k.FILE_COUNT]:,} files "
-                f"({plan.package[k.TOTAL_BYTES] / 1e6:,.1f} MB) of {plan.name} from "
-                f"{plan.source_dir} to {upload.options.remote}:{upload.root}/"
-                f"{plan.prefix}",
-                self._copy(upload, plan),
-                subject=plan.name,
+        actions = []
+        for plan in upload.plans:
+            folders = _by_revision(plan)
+            where = ", ".join(
+                f"{upload.root}/{object_folder(plan.prefix, revision)}"
+                for revision in folders
             )
-            for plan in upload.plans
-        ]
+            actions.append(
+                Action(
+                    f"copy {plan.package[k.FILE_COUNT]:,} files "
+                    f"({plan.package[k.TOTAL_BYTES] / 1e6:,.1f} MB) of {plan.name} from "
+                    f"{plan.source_dir} to {upload.options.remote}:{where}",
+                    self._copy(upload, plan, folders),
+                    subject=plan.name,
+                )
+            )
+        return actions
 
     @staticmethod
-    def _copy(upload: Upload, plan: Plan):
+    def _copy(upload: Upload, plan: Plan, folders: dict[int, list[str]]):
         def copy() -> None:
-            records = inventory_of(plan.name, plan.dataset_dir).records()
-            upload.store.copy(
-                plan.source_dir,
-                f"{upload.root}/{plan.prefix}",
-                [record[k.PATH] for record in records],
-                transfers=upload.options.transfers,
-            )
+            for revision, paths in folders.items():
+                upload.store.copy(
+                    plan.source_dir,
+                    f"{upload.root}/{object_folder(plan.prefix, revision)}",
+                    paths,
+                    transfers=upload.options.transfers,
+                )
 
         return copy
 
@@ -434,19 +454,20 @@ class Permissions:
             return []
         return [
             Action(
-                f"chmod 0755 {upload.namespace_path(plan)}",
-                self._chmod(upload, plan),
+                f"chmod 0755 {upload.namespace_path(plan, revision)}",
+                self._chmod(upload, plan, revision),
                 subject=plan.name,
             )
             for plan in upload.plans
+            for revision in _by_revision(plan)
         ]
 
     @staticmethod
-    def _chmod(upload: Upload, plan: Plan):
+    def _chmod(upload: Upload, plan: Plan, revision: int):
         def chmod() -> None:
             try:
                 upload.store.chmod(
-                    upload.namespace_path(plan), MODE_0755, upload.bearer()
+                    upload.namespace_path(plan, revision), MODE_0755, upload.bearer()
                 )
             except UploadError as error:
                 # The read-back that follows says whether it mattered.
@@ -503,10 +524,9 @@ class Verify:
                 )
 
             sample = resources[0][k.PATH]
+            folder = upload.namespace_path(plan, int(resources[0].get(k.REVISION, 1)))
             try:
-                where = upload.store.locality(
-                    f"{namespace_path}/{sample}", upload.bearer()
-                )
+                where = upload.store.locality(f"{folder}/{sample}", upload.bearer())
             except UploadError as error:
                 where = f"unknown ({error.message})"
             report.info(f"  storage locality of {sample}: {where}")

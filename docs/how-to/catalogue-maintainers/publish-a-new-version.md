@@ -12,9 +12,9 @@ change, so a new version is made beside the old one, in one of two ways:
 | Collections files | unchanged | new keys under the same handles |
 | The version before | readable through older catalogue releases | stays a dataset of its own, shown as superseded |
 
-Choose a revision when the keys still mean the same files. A dataset that is
-only linked has neither: it changes in place with its source, and a rebuild
-follows it.
+Choose a revision when the keys keep meaning the same files. A dataset that
+is only linked has neither: it changes in place with its source, and a
+rebuild follows it. Work in your own clone of the source catalogue.
 
 ## Make a revision {#revision}
 
@@ -42,7 +42,10 @@ ethos-data catalog record my-dataset
 
 `upload` puts the changed and new files under `<remote_prefix>@2/`, leaves the
 objects of the unchanged files where they are, and verifies every file at the
-address it is served from. Then [release](release-the-catalogue.md): a release
+address it is served from. Commit the dataset's directory on a branch and
+merge it by merge request on JuGit, then [release](release-the-catalogue.md):
+a revision changes data, so it needs at least a minor release, and the
+release refuses it until the upload of its new folder is verified. A release
 names one revision of each dataset. A reader of the new release keeps it in
 its own cache entry, `my-dataset@2/`, beside `my-dataset/`, and takes each
 unchanged file from the earlier entry instead of downloading it again; a
@@ -64,6 +67,7 @@ ethos:supersedes: my-dataset
 
 The build writes `ethos:superseded_by` into the replaced dataset's entry,
 `ethos-data ls` marks it as superseded, and a collection that still reads it
-warns. Tell the package maintainers who use it: their collections files map
-the same handles to the new keys, so their workflow code does not change. The
+warns. Commit both on a branch and merge them by merge request on JuGit.
+Tell the package maintainers who use it: their collections files map the same
+named paths to the new keys, so their workflow code does not change. The
 replaced dataset stays until it is [removed](withdraw-a-dataset.md).

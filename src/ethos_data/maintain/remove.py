@@ -325,9 +325,7 @@ class StoreBytes:
         return actions
 
     @staticmethod
-    def _gone(
-        removal: Removal, name: str, directory: Path, folder: str, revision: int
-    ):
+    def _gone(removal: Removal, name: str, directory: Path, folder: str, revision: int):
         """Whether one revision's folder is served after its purge, by a file it held."""
 
         def gone() -> str:

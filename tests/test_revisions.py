@@ -19,7 +19,7 @@ import ethos_data
 from ethos_data.adapters.fakes import FakeGit, FakeStore
 from ethos_data.catalogs import load_catalog
 from ethos_data.config import Roots
-from ethos_data.maintain import release, remove, upload
+from ethos_data.maintain import manifest, release, remove, revision, upload
 from ethos_data.selection import load_collections
 
 
@@ -145,7 +145,7 @@ class TestMakingARevision:
         code, out, _ = revise(catalogue, corrected, "--dry-run")
 
         assert code == 0
-        assert "write revision 2 of flat: 1 changed, 1 new, 0 gone" in out
+        assert "write and record revision 2 of flat: 1 changed, 1 new, 0 gone" in out
         assert catalogue.package("flat") == before
         assert catalogue.status("flat")["state"] == "frozen"
 
@@ -189,7 +189,7 @@ class TestWhatARevisionIsNot:
     def test_a_dataset_that_is_only_linked_changes_in_place(
         self, source, corrected, tmp_path
     ):
-        source.dataset("flat", {"a.csv": "1\n"}, ethos_access="internal")
+        source.dataset("flat", {"a.csv": "1\n"})
         assert source.build()[0] == 0
         index = str(source.root / "datacatalog.json")
         code, _, err = run_cli(
@@ -232,7 +232,7 @@ class TestWhatARevisionIsNot:
         public.mkdir()
         release.run(
             catalogue.root,
-            "v2026.10.1",
+            "v1.0.0",
             public,
             source_git=FakeGit(),
             public_git=FakeGit(),
@@ -241,6 +241,47 @@ class TestWhatARevisionIsNot:
         remove.run(catalogue.root, ["flat"], purge=True, store=dcache)
 
         assert dcache.purges == ["ethos-data/flat", "ethos-data/flat@2"]
+
+    def test_a_revision_has_no_authoritative_copy_yet(self, published, corrected):
+        catalogue, _ = published
+        assert catalogue.status("flat")["authority"]
+
+        assert revise(catalogue, corrected)[0] == 0
+
+        status = catalogue.status("flat")
+        assert (status["state"], status.get("authority")) == ("built", None)
+
+    def test_a_revision_interrupted_before_its_record_is_recorded_on_a_rerun(
+        self, published, corrected
+    ):
+        catalogue, _ = published
+        stopped = revision.Revision(catalogue.root, "flat", corrected)
+        revision.Compare().plan(stopped)
+        manifest.write_dataset(stopped.directory, stopped.files)
+
+        code, out, err = revise(catalogue, corrected)
+
+        assert code == 0, err
+        assert "record revision 2 of flat: written before an interruption" in out
+        assert catalogue.status("flat")["revision"] == 2
+
+    def test_link_all_links_the_revision_and_keeps_the_one_before(
+        self, published, corrected, tmp_path
+    ):
+        catalogue, _ = published
+        cache = tmp_path / "public"
+        (cache / "flat").parent.mkdir(parents=True)
+        (cache / "flat").symlink_to(catalogue.bytes / "flat", target_is_directory=True)
+        assert revise(catalogue, corrected)[0] == 0
+
+        code, _, err = run_cli(
+            ["link", "--all", "--prune", "--root", str(cache),
+             "--catalog-root", str(catalogue.root)]
+        )  # fmt: skip
+
+        assert code == 0, err
+        assert (cache / "flat@2").resolve() == corrected.resolve()
+        assert (cache / "flat").is_symlink(), "an earlier release may name it"
 
 
 class TestSuccessors:
@@ -277,7 +318,7 @@ class TestSuccessors:
         assert code == 1
         assert "ethos:supersedes names 'never-was'" in err
 
-    def test_a_reader_is_told(self, succeeded, tmp_path):
+    def test_a_reader_is_told(self, succeeded, tmp_path, monkeypatch):
         index = str(succeeded.root / "datacatalog.json")
 
         _, out, _ = run_cli(["--catalog", index, "ls"])
@@ -285,10 +326,10 @@ class TestSuccessors:
 
         collections = tmp_path / "collections.yaml"
         collections.write_text(
-            f"catalog: {index}\ncollections:\n  inputs:\n    include:\n"
-            "      - dataset: old\n",
+            "collections:\n  inputs:\n    include:\n      - dataset: old\n",
             encoding="utf-8",
         )
+        monkeypatch.setenv("ETHOS_DATA_CATALOG", index)
         loaded = load_collections(collections)
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")

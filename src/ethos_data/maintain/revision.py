@@ -11,7 +11,12 @@ and its unchanged ones left where they are. Two stages:
 ``compare``  build the inventory of the corrected files and compare it with
              the one recorded: the files that changed, the new ones, the gone
 ``revise``   write it as the next revision and record that; the dataset is
-             built again, its new bytes still to be made available
+             built again, its new bytes still to be made available, and its
+             authoritative copy is none until a copy of them is recorded
+
+Both inventories are read by the one inventory reader. Run again after an
+interruption between writing the revision and recording it, the command
+records what it wrote.
 
 A file that goes takes its key with it, and every collection that names the
 key breaks. That is refused unless ``--remove-missing`` says it is meant: a
@@ -30,12 +35,11 @@ from .. import report
 from ..errors import MaintenanceError
 from ..formats import keys as k
 from ..formats.status_file import StatusFile
-from ..model import lifecycle
-from . import datasets_dir, resources_of
+from . import datasets_dir
 from . import status as dataset_status
 from .pipeline import Action, Pipeline
 
-__all__ = ["PIPELINE", "Revision", "run"]
+__all__ = ["PIPELINE", "Revision", "RevisionResult", "run"]
 
 
 @dataclass
@@ -53,27 +57,17 @@ class Revision:
     changed: list[str] = field(default_factory=list)
     added: list[str] = field(default_factory=list)
     removed: list[str] = field(default_factory=list)
+    #: Written by an earlier run that stopped before recording it.
+    written: bool = False
 
     @property
     def summary(self) -> str:
+        if self.written:
+            return "written before an interruption"
         return (
             f"{len(self.changed)} changed, {len(self.added)} new, "
             f"{len(self.removed)} gone"
         )
-
-
-def _inventory(files: dict[str, str], directory: Path) -> dict[str, dict]:
-    """The resources a rendered descriptor and its shards hold, by path."""
-    package = json.loads(files["datapackage.json"])
-    if k.RESOURCES in package:
-        records = package[k.RESOURCES]
-    else:
-        records = [
-            record
-            for shard in package.get(k.SHARDS, [])
-            for record in json.loads(files[shard[k.PATH]])[k.RESOURCES]
-        ]
-    return {record[k.PATH]: record for record in records}
 
 
 class Compare:
@@ -84,13 +78,7 @@ class Compare:
 
         name = revision.dataset
         directory = dataset_status.dataset_dir_in(revision.catalog_root, name)
-        status = dataset_status.read(directory)
-        if status is None:
-            raise MaintenanceError(
-                f"{name} has no {dataset_status.STATUS} yet. Write one with\n"
-                f"    ethos-data catalog migrate {name}"
-            )
-        lifecycle.step("revise", status.state, name)
+        status = dataset_status.checked_status(directory, name, "revise")
         if not any(
             copy.kind in (k.COPY_UPLOADED, k.COPY_MATERIALIZED)
             for copy in status.copies
@@ -112,6 +100,14 @@ class Compare:
         if not source.is_dir():
             raise MaintenanceError(f"{source} is not a directory")
         number = status.revision + 1
+        revision.directory, revision.status = directory, status
+        revision.number, revision.source = number, source
+        package = json.loads((directory / k.PACKAGE_FILE).read_text("utf-8"))
+        if int(package.get(k.REVISION, 1)) == number:
+            # Written by a run that stopped before it recorded the revision.
+            revision.written = True
+            report.info(f"  {self.name:<12} revision {number} of {name} is written")
+            return []
         root = datasets_dir(revision.catalog_root)
         files = manifest.render_dataset(
             directory,
@@ -122,9 +118,8 @@ class Compare:
             source=source,
             revision=number,
         )
-        package = json.loads((directory / "datapackage.json").read_text("utf-8"))
-        before = {r[k.PATH]: r for r in resources_of(package, directory)}
-        after = _inventory(files, directory)
+        before = manifest.records_on_disk(name, directory)
+        after = manifest.rendered_records(name, directory, files)
         revision.changed = sorted(
             path
             for path in after
@@ -157,8 +152,7 @@ class Compare:
             report.info(f"  new          {path}")
         for path in revision.removed:
             report.info(f"  gone         {path}")
-        revision.directory, revision.status = directory, status
-        revision.number, revision.files, revision.source = number, files, source
+        revision.files = files
         return []
 
 
@@ -169,16 +163,21 @@ class Revise:
         def revise() -> None:
             from . import manifest
 
-            manifest.write_dataset(revision.directory, revision.files)
-            package = json.loads(revision.files["datapackage.json"])
+            if revision.files:
+                manifest.write_dataset(revision.directory, revision.files)
+            package = json.loads(
+                (revision.directory / k.PACKAGE_FILE).read_text(encoding="utf-8")
+            )
             dataset_status.take(
                 revision.directory,
                 revision.status,
                 "revise",
                 dataset=revision.dataset,
+                # The authoritative copy holds the bytes of the revision before.
                 changes={
                     "revision": revision.number,
                     "source_dir": str(revision.source),
+                    "authority": None,
                 },
                 note=f"revision {revision.number}: {revision.summary}",
                 files=package[k.FILE_COUNT],
@@ -186,9 +185,10 @@ class Revise:
             )
             manifest.write_index(revision.catalog_root)
 
+        verb = "record" if revision.written else "write and record"
         return [
             Action(
-                f"write revision {revision.number} of {revision.dataset}: "
+                f"{verb} revision {revision.number} of {revision.dataset}: "
                 f"{revision.summary}",
                 revise,
             )
@@ -196,6 +196,20 @@ class Revise:
 
 
 PIPELINE: Pipeline[Revision] = Pipeline("revision", [Compare(), Revise()])
+
+
+@dataclass(frozen=True)
+class RevisionResult:
+    """The revision ``catalog build --revision`` made, or would make."""
+
+    dataset: str
+    number: int
+    #: Whether it was written and recorded: not for a dry run.
+    made: bool
+
+    @property
+    def ok(self) -> bool:
+        return True
 
 
 @report.reported
@@ -206,7 +220,7 @@ def run(
     source: str | Path | None = None,
     remove_missing: bool = False,
     dry_run: bool = False,
-) -> int:
+) -> RevisionResult:
     """Make the next revision of ``dataset`` from ``source``, or its ``source_dir``."""
     revision = Revision(
         catalog_root,
@@ -220,4 +234,4 @@ def run(
             f"\n{dataset} is built as revision {revision.number}. Make its new bytes "
             "available, as for the first: `ethos-data catalog status` says how."
         )
-    return 0
+    return RevisionResult(dataset, revision.number, not dry_run)

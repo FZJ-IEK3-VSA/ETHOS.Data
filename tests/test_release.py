@@ -489,7 +489,7 @@ class TestReadiness:
     def test_an_upload_verified_before_the_last_change_does_not_count(self, released):
         catalogue, public, _ = released
         (catalogue.bytes / "flat" / "a.csv").write_bytes(b"11\n")
-        assert catalogue.build()[0] == 0
+        assert catalogue.catalog("build", "flat", "--revision")[0] == 0
         assert catalogue.status("flat")["state"] == "built"
 
         with pytest.raises(MaintenanceError, match="last inventory change: flat"):

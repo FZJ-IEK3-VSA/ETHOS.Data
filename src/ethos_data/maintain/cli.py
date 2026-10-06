@@ -448,17 +448,17 @@ def dispatch(args) -> int:
                 )
             from . import revision
 
-            return revision.run(
-                root,
-                args.datasets[0],
-                source=args.source,
-                remove_missing=args.remove_missing,
-                dry_run=args.dry_run,
+            return _status(
+                revision.run(
+                    root,
+                    args.datasets[0],
+                    source=args.source,
+                    remove_missing=args.remove_missing,
+                    dry_run=args.dry_run,
+                )
             )
-        if args.source or args.remove_missing or args.dry_run:
-            raise MaintenanceError(
-                "--from, --remove-missing and --dry-run go with --revision"
-            )
+        if args.source or args.remove_missing:
+            raise MaintenanceError("--from and --remove-missing go with --revision")
         from . import manifest
 
         return _status(

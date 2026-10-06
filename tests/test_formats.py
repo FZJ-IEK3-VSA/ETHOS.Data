@@ -224,6 +224,7 @@ def test_an_index_row_holds_the_promoted_keys_and_what_the_build_counts():
     package = {
         **formats.dataset.apply_defaults({"name": "x", "title": "X"}),
         "version": "1.0",
+        "ethos:supersedes": "x-old",
         "ethos:total_bytes": 3,
         "ethos:file_count": 1,
     }

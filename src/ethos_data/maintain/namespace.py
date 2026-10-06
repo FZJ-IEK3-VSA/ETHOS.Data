@@ -70,7 +70,7 @@ from ..formats.status_file import Copy
 from ..linking import LinkReport, raise_if_refused
 from ..linking import link as make_link
 from ..materialize import MaterializeReport, materialize, plan_materialize
-from ..model import lifecycle
+from ..model import lifecycle, names
 from . import (
     dataset_name_for,
     datasets_dir,
@@ -172,9 +172,14 @@ class Plan:
             # name says it is (``family/member``) rather than not at all.
             from ..access import cache_entries
 
-            names = {name for name, _ in declared}
+            # An entry of any revision of a dataset the catalogue describes
+            # stays: an earlier release may name that revision.
+            declared_names = {name for name, _ in declared}
             for name, existing in cache_entries(namespace.root):
-                if name in names or not existing.is_symlink():
+                if (
+                    names.of_entry(name)[0] in declared_names
+                    or not existing.is_symlink()
+                ):
                     continue
                 namespace.findings.append(
                     ("prune", name, "not in the catalogue any more")
@@ -190,7 +195,6 @@ class Plan:
         def leave(verb: str, detail: str) -> None:
             namespace.findings.append((verb, name, detail))
 
-        entry = namespace.root / name
         if meta.get(k.ACCESS, k.PUBLIC) == k.RESTRICTED:
             leave(
                 "skip",
@@ -228,6 +232,8 @@ class Plan:
             leave("missing", f"source_dir does not exist: {source}")
             return
 
+        # The entry of the revision the checkout describes.
+        entry = namespace.root / names.entry(name, built_from.status.revision)
         if entry.is_symlink():
             current = entry.readlink()
             if _same_target(current, source):

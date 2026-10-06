@@ -587,9 +587,7 @@ def run(
             f"{hint or '-'}"
         )
         if check and described:
-            found = evidence(
-                catalog_root, dataset_dir, name, status, store, superseded
-            )
+            found = evidence(catalog_root, dataset_dir, name, status, store, superseded)
             result.findings[name] = found
             for finding in found:
                 report.info(f"  {'':<{width}}    {finding}")

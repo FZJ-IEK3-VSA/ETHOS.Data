@@ -109,11 +109,6 @@ compete for one cache entry. Withdrawn data may be purged only after a major
 release. Data that is only linked, and restricted installations, change with
 their source.
 
-!!! warning "Gap: no revisions"
-    The code has no revisions. Changing only `ethos:remote_prefix` leaves the
-    cache path `<dataset>/<resource path>` unchanged, so two versions with
-    changed bytes need a new dataset name or new resource paths.
-
 Record the package revision, catalogue release, collections, and any local
 overrides used by an experiment. A configured catalogue is read instead of the
 public release the bounds select, and its release must lie within them; a

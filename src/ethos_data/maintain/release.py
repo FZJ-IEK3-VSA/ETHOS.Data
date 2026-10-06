@@ -66,7 +66,7 @@ __all__ = [
 ]
 
 #: The steps that change a dataset's data, which needs at least a minor release.
-DATA_STEPS = frozenset({"add", "build", "change", "remove"})
+DATA_STEPS = frozenset({"add", "build", "change", "revise", "remove"})
 #: The keys of an index row that say where and how a dataset's bytes are read.
 DATA_KEYS = (k.ACCESS, k.VISIBILITY, k.TOTAL_BYTES, k.FILE_COUNT, k.REMOTE_PREFIX)
 
@@ -117,7 +117,8 @@ def changes_since(
     """What changed in the clone at ``catalog_root`` since the release ``last``.
 
     From the steps recorded in the status files since each dataset's last
-    release: adding, building, changing or withdrawing a dataset changes data.
+    release: adding, building, changing, revising or withdrawing a dataset
+    changes data.
     From the index rows of both catalogues compared with ``last``, read from
     the tags through ``git`` and ``public_git``: a dataset that enters or leaves
     a catalogue, or whose access, visibility or bytes differ, changes data; any
@@ -338,7 +339,11 @@ def _upload_verified(status) -> bool:
     if status.state not in (lifecycle.AVAILABLE, lifecycle.FROZEN):
         return False
     changed = max(
-        (entry.at for entry in status.history if entry.step in ("build", "change")),
+        (
+            entry.at
+            for entry in status.history
+            if entry.step in ("build", "change", "revise")
+        ),
         default="",
     )
     return any(

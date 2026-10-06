@@ -426,7 +426,7 @@ def render_dataset(
         resources = [build_resource(p, source_dir, *hashes[p]) for p in selected]
         if source is None:
             _refuse_changed_publication(name, dataset_dir, status, resources)
-        _carry_revisions(resources, dataset_dir, revision)
+        _carry_revisions(name, resources, dataset_dir, revision)
 
     # After the inventory exists, because a narrowed licence has to be checked
     # against the files it claims to cover.
@@ -488,18 +488,30 @@ def render_dataset(
     return files
 
 
-def _recorded(dataset_dir: Path) -> dict[str, dict]:
-    """The inventory on disk, by path; empty before the first build."""
-    package_file = dataset_dir / "datapackage.json"
-    if not package_file.is_file():
+def records_on_disk(name: str, dataset_dir: Path) -> dict[str, dict]:
+    """The inventory on disk, by path, read by the one reader; empty before a build."""
+    if not (dataset_dir / k.PACKAGE_FILE).is_file():
         return {}
-    package = json.loads(package_file.read_text(encoding="utf-8"))
     return {
-        resource[k.PATH]: resource for resource in resources_of(package, dataset_dir)
+        record[k.PATH]: record for record in inventory_of(name, dataset_dir).records()
     }
 
 
-def _carry_revisions(resources: list[dict], dataset_dir: Path, revision: int) -> None:
+def rendered_records(
+    name: str, dataset_dir: Path, files: dict[str, str]
+) -> dict[str, dict]:
+    """The inventory the rendered ``files`` hold, by path, read by the one reader."""
+    base = dataset_dir.as_posix()
+    source = MemorySource(
+        {f"{base}/{relative}": text for relative, text in files.items()}
+    )
+    inventory = Inventory(name, source, f"{base}/{k.PACKAGE_FILE}")
+    return {record[k.PATH]: record for record in inventory.records()}
+
+
+def _carry_revisions(
+    name: str, resources: list[dict], dataset_dir: Path, revision: int
+) -> None:
     """Give each file the revision its bytes were published in.
 
     A file whose bytes the inventory on disk records keeps that record's
@@ -508,7 +520,7 @@ def _carry_revisions(resources: list[dict], dataset_dir: Path, revision: int) ->
     """
     if revision <= 1:
         return
-    before = _recorded(dataset_dir)
+    before = records_on_disk(name, dataset_dir)
     for resource in resources:
         earlier = before.get(resource[k.PATH])
         same = earlier is not None and earlier[k.HASH] == resource[k.HASH]
@@ -531,7 +543,9 @@ def _refuse_changed_publication(
         copy.kind in (k.COPY_UPLOADED, k.COPY_MATERIALIZED) for copy in status.copies
     ):
         return
-    before = {(r[k.PATH], r[k.HASH]) for r in _recorded(dataset_dir).values()}
+    before = {
+        (r[k.PATH], r[k.HASH]) for r in records_on_disk(name, dataset_dir).values()
+    }
     if before and before != {(r[k.PATH], r[k.HASH]) for r in resources}:
         raise DescriptorError(
             f"{name}: its files are not the ones its uploaded or materialized copy "
@@ -769,8 +783,9 @@ class Build:
     catalog_root: Path
     names: list[str]
     #: The dataset directories to build, members before the families above
-    #: them: set by ``check``.
+    #: them, and the successors of each dataset: set by ``check``.
     selected: list[Path] = field(default_factory=list)
+    superseded: dict[str, list[str]] = field(default_factory=dict)
     #: Each one's rendered files and descriptor: set by ``render``.
     files: dict[Path, dict[str, str]] = field(default_factory=dict)
     packages: dict[Path, dict] = field(default_factory=dict)
@@ -798,11 +813,20 @@ class Check:
     def plan(self, build: Build) -> list[Action]:
         catalog_meta(build.catalog_root)
         root = build.root
+        build.superseded = superseded_by_map(build.catalog_root)
         selected = (
             [root / name for name in build.names]
             if build.names
             else iter_dataset_dirs(root)
         )
+        if build.names:
+            # A successor built by name rebuilds the dataset it replaces too,
+            # whose descriptor says who replaces it.
+            for name in build.names:
+                old = read_descriptor(root / name).get(k.SUPERSEDES)
+                if old and (root / str(old) / DESCRIPTOR).is_file():
+                    selected.append(root / str(old))
+            selected = list(dict.fromkeys(selected))
         # Members before the namespaces that contain them: a namespace reports
         # the totals of everything beneath it, so it cannot be rendered until
         # they are known. Deepest first does that with no graph to walk.
@@ -840,6 +864,7 @@ class Render:
                 namespace=namespace,
                 member_totals=self._totals(build, dataset_dir) if namespace else None,
                 cache=cache,
+                superseded_by=build.superseded.get(build.name(dataset_dir)),
             )
             build.files[dataset_dir] = files
             package = build.packages[dataset_dir] = json.loads(files[k.PACKAGE_FILE])
@@ -995,14 +1020,9 @@ def _rendered_inventory(
     name: str, dataset_dir: Path, files: dict[str, str]
 ) -> set[tuple]:
     """The files the rendered descriptor lists, by path, size and hash."""
-    base = dataset_dir.as_posix()
-    source = MemorySource(
-        {f"{base}/{relative}": text for relative, text in files.items()}
-    )
-    inventory = Inventory(name, source, f"{base}/{k.PACKAGE_FILE}")
     return {
-        (resource.path, resource.bytes, resource.hash)
-        for resource in inventory.resources().values()
+        (record[k.PATH], record[k.BYTES], record[k.HASH])
+        for record in rendered_records(name, dataset_dir, files).values()
     }
 
 
