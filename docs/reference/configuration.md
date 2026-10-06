@@ -56,13 +56,11 @@ when it is read, and every problem is reported at once, naming the key.
 
 ## Keys
 
-| Key | Set with | |
-|---|---|---|
-| `public_cache` | `config set-public-cache` | public data: read from, and downloaded into |
-| `restricted_caches` | `config add-restricted-cache`, `remove-restricted-cache` | a list of directories, read in order for restricted data, in place; none by default |
-| `staging_cache` | `config set-staging-cache` | work in progress that shadows the catalogue |
-| `catalog` | `config set-catalog` | the catalogue to use instead of the public one; a package checks it against its release bounds |
-| `publication_url` | `config set-publication-url` | fetch bytes from a different door than the catalogue declares |
+The keys of the settings file, rendered from its specification
+(`ethos_data.formats.settings_file`; see [File formats](schemas.md)). The
+description of each key names the `config` command that sets it.
+
+<!-- ethos-data: table settings -->
 
 A settings file on the cluster, for a user whose groups admit one restricted
 cache:

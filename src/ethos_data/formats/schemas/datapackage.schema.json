@@ -5,20 +5,41 @@
       "description": "One file of a dataset's inventory.",
       "properties": {
         "name": {
+          "description": "Unique within the dataset; derived from the path.",
           "title": "Name",
-          "type": "string"
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         },
         "path": {
+          "description": "Relative to the dataset's folder, with `/`.",
           "title": "Path",
-          "type": "string"
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         },
         "bytes": {
+          "description": "The file's size.",
           "title": "Bytes",
-          "type": "integer"
+          "type": "integer",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         },
         "hash": {
           "default": null,
-          "description": "\"sha256:<hex>\", the convention pooch reads.",
+          "description": "`sha256:<hex>`, the convention pooch reads; a bare digest is read the same.",
           "title": "Hash",
           "type": "string",
           "x-ethos": {
@@ -30,8 +51,15 @@
         },
         "mediatype": {
           "default": "application/octet-stream",
+          "description": "The file's media type.",
           "title": "Mediatype",
-          "type": "string"
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         },
         "ethos:sidecars": {
           "default": [],
@@ -104,16 +132,30 @@
       "description": "One shard of a sharded inventory, as the descriptor lists it.",
       "properties": {
         "prefix": {
+          "description": "The directory the shard holds; `_root` for top-level files.",
           "title": "Prefix",
-          "type": "string"
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         },
         "path": {
+          "description": "The shard's file, relative to the dataset's.",
           "title": "Path",
-          "type": "string"
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         },
         "ethos:file_count": {
           "default": 0,
-          "description": "",
+          "description": "The files in the shard.",
           "title": "Ethos:File Count",
           "type": "integer",
           "x-ethos": {
@@ -125,7 +167,7 @@
         },
         "ethos:total_bytes": {
           "default": 0,
-          "description": "",
+          "description": "Their size together.",
           "title": "Ethos:Total Bytes",
           "type": "integer",
           "x-ethos": {
@@ -149,7 +191,7 @@
   "properties": {
     "$schema": {
       "default": "https://datapackage.org/profiles/2.0/datapackage.json",
-      "description": "",
+      "description": "The Data Package profile.",
       "title": "$Schema",
       "type": "string",
       "x-ethos": {
@@ -160,8 +202,15 @@
       }
     },
     "name": {
+      "description": "The dataset's name.",
       "title": "Name",
-      "type": "string"
+      "type": "string",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
     },
     "title": {
       "anyOf": [
@@ -173,7 +222,14 @@
         }
       ],
       "default": null,
-      "title": "Title"
+      "description": "From `dataset.yaml`.",
+      "title": "Title",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
     },
     "resources": {
       "anyOf": [
@@ -188,7 +244,14 @@
         }
       ],
       "default": null,
-      "title": "Resources"
+      "description": "Every file of the dataset, unless it is sharded.",
+      "title": "Resources",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
     },
     "ethos:shard_depth": {
       "anyOf": [
@@ -200,7 +263,7 @@
         }
       ],
       "default": null,
-      "description": "",
+      "description": "With `ethos:shards`: the depth the inventory is split at.",
       "title": "Ethos:Shard Depth",
       "x-ethos": {
         "inherited": false,
@@ -222,7 +285,7 @@
         }
       ],
       "default": null,
-      "description": "",
+      "description": "Instead of `resources`: the shards of the inventory.",
       "title": "Ethos:Shards",
       "x-ethos": {
         "inherited": false,
@@ -233,7 +296,7 @@
     },
     "ethos:namespace": {
       "default": false,
-      "description": "",
+      "description": "A family's descriptor: no files of its own.",
       "title": "Ethos:Namespace",
       "type": "boolean",
       "x-ethos": {
@@ -245,7 +308,7 @@
     },
     "ethos:total_bytes": {
       "default": 0,
-      "description": "",
+      "description": "The size of all files.",
       "title": "Ethos:Total Bytes",
       "type": "integer",
       "x-ethos": {
@@ -257,7 +320,7 @@
     },
     "ethos:file_count": {
       "default": 0,
-      "description": "",
+      "description": "How many files there are.",
       "title": "Ethos:File Count",
       "type": "integer",
       "x-ethos": {

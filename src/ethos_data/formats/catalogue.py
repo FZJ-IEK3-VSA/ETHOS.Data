@@ -51,7 +51,8 @@ class CatalogMeta(BaseModel):
     )
     publication_url: str | None = field(
         k.PUBLICATION_URL,
-        description="Root of the public data store; a resource is <url>/<remote_prefix>/<path>.",
+        description="Root of the public data store: a resource is "
+        "`<url>/<remote_prefix>/<path>`.",
     )
     contact: str | None = field(k.CONTACT, description="Team or username.")
     version: str | None = field(
@@ -62,7 +63,7 @@ class CatalogMeta(BaseModel):
     catalog_role: str = field(
         k.CATALOG_ROLE,
         k.ROLE_SOURCE,
-        description="Always source in a hand-written file; publish stamps published.",
+        description="Always `source` in a hand-written file; `publish` stamps `published`.",
         schema={"enum": list(k.CATALOG_ROLES)},
     )
     store: StoreSettings | None = field(

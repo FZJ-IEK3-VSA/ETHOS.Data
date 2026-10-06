@@ -69,7 +69,7 @@
           "type": "string"
         },
         "step": {
-          "description": "add, migrate, build, change, upload, verify, link, materialize, record, check-source, remove, purge or release.",
+          "description": "add, migrate, build, revise, change, upload, verify, link, materialize, record, check-source, remove, purge or release.",
           "title": "Step",
           "type": "string"
         },
@@ -101,6 +101,7 @@
             }
           ],
           "default": null,
+          "description": "Why, as the command was told: a removal's reason, a check's note.",
           "title": "Note"
         },
         "files": {

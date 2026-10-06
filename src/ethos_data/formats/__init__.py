@@ -12,6 +12,7 @@ the models. See the decision record "Every file format is specified once".
     formats.dataset.check(meta)               # the rules the build enforces
     formats.dataset.lint(meta)                # what the structure adds, as warnings
     formats.index_row(package, path)          # one dataset's datacatalog.json row
+    formats.reference.table("dataset")         # the reference table, in Markdown
 
 The schemas are committed under ``schemas/`` so editors can point at them; a
 test fails when one is out of date, and ``python -m ethos_data.formats``
@@ -38,6 +39,7 @@ _LAZY: dict[str, tuple[str, str | None]] = {
     "dataset": (".dataset", None),
     "package": (".package", None),
     "records": (".records", None),
+    "reference": (".reference", None),
     "registry": (".registry", None),
     "settings_file": (".settings_file", None),
     "status_file": (".status_file", None),
@@ -91,6 +93,7 @@ __all__ = [
     "package",
     "placeholders",
     "records",
+    "reference",
     "registry",
     "remote_prefix_of",
     "schema",

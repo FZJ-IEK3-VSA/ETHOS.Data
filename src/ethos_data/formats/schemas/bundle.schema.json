@@ -66,7 +66,7 @@
           "type": "array"
         },
         "resources": {
-          "description": "Every file under data/<dataset>/, with its size and SHA-256.",
+          "description": "Every file under `data/<dataset>/`, with its size and SHA-256.",
           "items": {
             "$ref": "#/$defs/ResourceRecord"
           },
@@ -75,7 +75,7 @@
         },
         "documents": {
           "default": [],
-          "description": "The description, dataset.yaml, and the licence documents.",
+          "description": "The description, `dataset.yaml`, and the licence documents.",
           "items": {
             "$ref": "#/$defs/DocumentRecord"
           },
@@ -94,7 +94,7 @@
       "description": "A family whose members the bundle holds: its own description.",
       "properties": {
         "documents": {
-          "description": "The family's dataset.yaml, and any licence document it names.",
+          "description": "The family's `dataset.yaml`, and any licence document it names.",
           "items": {
             "$ref": "#/$defs/DocumentRecord"
           },
@@ -118,6 +118,7 @@
           "type": "string"
         },
         "change": {
+          "description": "What became of the file or the document since the alignment.",
           "enum": [
             "changed",
             "added",
@@ -163,12 +164,13 @@
           "type": "string"
         },
         "bytes": {
+          "description": "Its size.",
           "minimum": 0,
           "title": "Bytes",
           "type": "integer"
         },
         "hash": {
-          "description": "\"sha256:<hex>\".",
+          "description": "`sha256:<hex>`.",
           "title": "Hash",
           "type": "string"
         }
@@ -186,20 +188,41 @@
       "description": "One file of a dataset's inventory.",
       "properties": {
         "name": {
+          "description": "Unique within the dataset; derived from the path.",
           "title": "Name",
-          "type": "string"
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         },
         "path": {
+          "description": "Relative to the dataset's folder, with `/`.",
           "title": "Path",
-          "type": "string"
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         },
         "bytes": {
+          "description": "The file's size.",
           "title": "Bytes",
-          "type": "integer"
+          "type": "integer",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         },
         "hash": {
           "default": null,
-          "description": "\"sha256:<hex>\", the convention pooch reads.",
+          "description": "`sha256:<hex>`, the convention pooch reads; a bare digest is read the same.",
           "title": "Hash",
           "type": "string",
           "x-ethos": {
@@ -211,8 +234,15 @@
         },
         "mediatype": {
           "default": "application/octet-stream",
+          "description": "The file's media type.",
           "title": "Mediatype",
-          "type": "string"
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
         },
         "ethos:sidecars": {
           "default": [],
@@ -287,6 +317,7 @@
     "format": {
       "const": "ethos-data-bundle",
       "default": "ethos-data-bundle",
+      "description": "What the file is; always `ethos-data-bundle`.",
       "title": "Format",
       "type": "string"
     },
@@ -294,7 +325,7 @@
       "additionalProperties": {
         "$ref": "#/$defs/BundledDataset"
       },
-      "description": "Each dataset by its name; a member of a family is <family>/<member>.",
+      "description": "Each dataset by its name; a member of a family is `<family>/<member>`.",
       "title": "Datasets",
       "type": "object"
     },

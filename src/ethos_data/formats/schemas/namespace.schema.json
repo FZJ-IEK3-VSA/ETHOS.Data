@@ -118,7 +118,7 @@
     },
     "ethos:visibility": {
       "default": "public",
-      "description": "",
+      "description": "Whether the family appears in the published catalogue.",
       "enum": [
         "public",
         "hidden"

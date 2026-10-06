@@ -15,10 +15,14 @@ class StagingEntry(BaseModel):
     target: str = Field(
         description="The directory the entry links to or was copied from."
     )
-    note: str = ""
-    added: str = ""
-    added_by: str = ""
-    copied: bool = False
+    note: str = Field("", description="What the entry is for.")
+    added: str = Field(
+        "", description="When it was staged, in local time with its UTC offset."
+    )
+    added_by: str = Field("", description="The account that staged it.")
+    copied: bool = Field(
+        False, description="A copy the staging root owns, rather than a link."
+    )
 
 
 class StagingRegistry(RootModel[dict[str, StagingEntry]]):
@@ -30,7 +34,7 @@ class MaterializedRecord(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    dataset: str
+    dataset: str = Field(description="The dataset the entry holds.")
     materialized_from: str = Field(
         description="The directory the bytes were copied from."
     )
@@ -38,10 +42,10 @@ class MaterializedRecord(BaseModel):
         None, description="The entry that was a link, or null when the copy created it."
     )
     catalog: str = Field(description="The catalogue the copy was checked against.")
-    files: int
-    bytes: int
+    files: int = Field(description="How many files were copied.")
+    bytes: int = Field(description="Their size together.")
     verified: bool = Field(
         description="Whether every copy was checked against its hash."
     )
-    when: str
-    by: str = ""
+    when: str = Field(description="When, in local time with its UTC offset.")
+    by: str = Field("", description="The account that made the copy.")

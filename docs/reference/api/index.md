@@ -10,7 +10,7 @@ key. The rest is here for completeness.
 | [Catalogue and collections](catalog.md) | `Catalog`, `Dataset`, `Resource`, `Collections`, `load_catalog`, `load_collections`; the errors `CatalogUnavailable`, `CatalogVersionError`, `UnknownDataset`, `IncompleteCatalog`, `CollectionError`, `UnknownCollection` |
 | [Configuration and access](configuration.md) | the settings snapshot, cache roots, provenance, `Location`, `locate`, `AccessError` |
 | [Integrity and staging](integrity.md) | `verify`, `repair`, `Finding`, `run_selftest`, `materialize`, the staging root |
-| [Shared model](model.md) | `ethos_data.model` — digests, dataset names and families, resource records |
+| [Shared model](model.md) | `ethos_data.formats` — the file formats, their schemas, templates and reference tables; `ethos_data.model` — digests, dataset names and families, releases, the lifecycle, resource records |
 | [Maintainer tooling](maintain.md) | `ethos_data.maintain` — building, publishing, uploading |
 | [Adapters](adapters.md) | `ethos_data.adapters` — dCache, downloads and git behind ports, each with a fake |
 | [Errors](errors.md) | `EthosDataError` and every refusal the library raises, with the exit status the command line gives each |

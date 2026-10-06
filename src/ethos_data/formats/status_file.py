@@ -53,14 +53,17 @@ class Event(_Record):
     at: str = Field(description="When, in UTC.")
     by: str = Field("", description="The account that took the step.")
     step: str = Field(
-        description="add, migrate, build, change, upload, verify, link, materialize, "
-        "record, check-source, remove, purge or release."
+        description="add, migrate, build, revise, change, upload, verify, link, "
+        "materialize, record, check-source, remove, purge or release."
     )
     previous: str | None = Field(
         None, alias="from", description="The state before, when the step changed it."
     )
     state: str = Field(alias="to", description="The state after.")
-    note: str | None = None
+    note: str | None = Field(
+        None,
+        description="Why, as the command was told: a removal's reason, a check's note.",
+    )
     files: int | None = Field(
         None, description="The inventory's file count, for a step that read it."
     )

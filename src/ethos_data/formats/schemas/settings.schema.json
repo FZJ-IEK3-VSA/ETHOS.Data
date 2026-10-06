@@ -12,7 +12,7 @@
         }
       ],
       "default": null,
-      "description": "The catalogue to read in place of the public one; checked against a package's release bounds.",
+      "description": "The catalogue to read in place of the public one; checked against a package's release bounds; `config set-catalog`.",
       "title": "Catalog"
     },
     "public_cache": {
@@ -25,12 +25,12 @@
         }
       ],
       "default": null,
-      "description": "Where public data is read and downloaded.",
+      "description": "Where public data is read and downloaded; `config set-public-cache`.",
       "title": "Public Cache"
     },
     "restricted_caches": {
       "default": [],
-      "description": "Where restricted data is read in place, in order; one directory per access combination, none by default.",
+      "description": "Where restricted data is read in place, in order; one directory per access combination, none by default; `config add-restricted-cache`, `config remove-restricted-cache`.",
       "items": {
         "type": "string"
       },
@@ -47,7 +47,7 @@
         }
       ],
       "default": null,
-      "description": "Where work in progress lives; shadows the catalogue.",
+      "description": "Where work in progress lives, shadowing the catalogue; `config set-staging-cache`.",
       "title": "Staging Cache"
     },
     "publication_url": {
@@ -60,7 +60,7 @@
         }
       ],
       "default": null,
-      "description": "Fetch bytes from another door of the published store.",
+      "description": "Fetch bytes from another door of the published store than the catalogue declares; `config set-publication-url`.",
       "title": "Publication Url"
     }
   },

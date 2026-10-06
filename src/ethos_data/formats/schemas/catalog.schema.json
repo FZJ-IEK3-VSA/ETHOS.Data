@@ -96,7 +96,7 @@
         }
       ],
       "default": null,
-      "description": "Root of the public data store; a resource is <url>/<remote_prefix>/<path>.",
+      "description": "Root of the public data store: a resource is `<url>/<remote_prefix>/<path>`.",
       "title": "Ethos:Publication Url",
       "x-ethos": {
         "inherited": false,
@@ -146,7 +146,7 @@
     },
     "ethos:catalog_role": {
       "default": "source",
-      "description": "Always source in a hand-written file; publish stamps published.",
+      "description": "Always `source` in a hand-written file; `publish` stamps `published`.",
       "enum": [
         "source",
         "published"

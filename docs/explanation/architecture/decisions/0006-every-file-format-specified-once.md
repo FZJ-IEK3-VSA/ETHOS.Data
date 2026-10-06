@@ -1,6 +1,6 @@
 # 0006. Specify every file format once
 
-**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #11, #12, #13, #27
+**Status:** implemented · **Date:** 2026-10-06 · **Implemented by:** #11, #12, #13, #27
 
 ## Context
 

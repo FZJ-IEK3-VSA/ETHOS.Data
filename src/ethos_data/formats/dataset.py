@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..errors import DescriptorError
 from ..model.names import relative
@@ -52,26 +52,37 @@ class _Part(BaseModel):
 class Source(_Part):
     """One entry of ``sources``: where the data came from, or what it was derived from."""
 
-    title: str | None = None
-    path: str | None = None
+    title: str | None = Field(None, description="What the source is called.")
+    path: str | None = Field(None, description="Where it is, a URL.")
 
 
 class Contributor(_Part):
     """One entry of ``contributors``; Data Package v2, so ``roles`` is a list."""
 
-    title: str
-    roles: list[str] = []
-    organization: str | None = None
-    path: str | None = None
-    email: str | None = None
+    title: str = Field(description="The person's or the group's name.")
+    roles: list[str] = Field(
+        [],
+        description="What they did; a list, as in Data Package v2.",
+        json_schema_extra={
+            "items": {"type": "string", "enum": list(k.CONTRIBUTOR_ROLES)}
+        },
+    )
+    organization: str | None = Field(None, description="Where they work.")
+    path: str | None = Field(None, description="A page about them, such as an ORCID.")
+    email: str | None = Field(None, description="How to reach them.")
 
 
 class License(_Part):
     """One entry of ``licenses``: an Open Definition ``name``, a ``path`` to the terms, or both."""
 
-    name: str | None = None
-    path: str | None = None
-    title: str | None = None
+    name: str | None = Field(
+        None, description="An Open Definition id, such as `CC-BY-4.0`; or give `path`."
+    )
+    path: str | None = Field(None, description="The terms' URL; or give `name`.")
+    title: str | None = Field(
+        None,
+        description="The licence's name, for terms that have no Open Definition id.",
+    )
     applies_to: list[str] | None = field(
         k.APPLIES_TO,
         description="Globs of the files this licence covers; omit to cover every file.",
@@ -89,9 +100,11 @@ class License(_Part):
 class Embargo(_Part):
     """Why a hidden dataset is hidden, and until when."""
 
-    until: str
-    reason: str | None = None
-    becomes: str | None = None
+    until: str = Field(
+        description='The date it becomes visible, quoted, or "unspecified" with a reason.'
+    )
+    reason: str | None = Field(None, description="Why it is hidden.")
+    becomes: str | None = Field(None, description="Its visibility after that date.")
 
 
 class Upstream(_Part):
@@ -102,8 +115,12 @@ class Upstream(_Part):
         description="Whether upstream still serves this delivery.",
         schema={"enum": list(k.UPSTREAM_STATUSES)},
     )
-    checked: str | None = None
-    note: str | None = None
+    checked: str | None = Field(
+        None, description="When somebody last verified this, quoted."
+    )
+    note: str | None = Field(
+        None, description="What was checked, and any route to the data that remains."
+    )
 
 
 _ACCESS_ENUM = {"enum": list(k.ACCESS_CLASSES)}
@@ -306,7 +323,12 @@ class NamespaceDescriptor(_Part):
         description="Handed to members that do not set their own.",
         inherited=True,
     )
-    visibility: str = field(k.VISIBILITY, k.PUBLIC, schema=_VISIBILITY_ENUM)
+    visibility: str = field(
+        k.VISIBILITY,
+        k.PUBLIC,
+        description="Whether the family appears in the published catalogue.",
+        schema=_VISIBILITY_ENUM,
+    )
 
 
 # -- the rules the build enforces ---------------------------------------------------
