@@ -13,7 +13,7 @@ a file and two lines of code and nothing has to be registered anywhere.
 
 A collections file names slices of the shared catalogue; it never repeats file
 paths, sizes or checksums. That is deliberate -- if two tools each carried their
-own inventory they would drift, and the shared cache would stop deduplicating.
+own inventory they would drift, and the public cache would stop deduplicating.
 
 Two things a collection may carry beyond its selection, both for the same
 reason -- a workflow's code should not have to know resource keys:

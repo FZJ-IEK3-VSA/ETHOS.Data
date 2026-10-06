@@ -10,6 +10,8 @@ ones and nothing reaches the network.
 
 from __future__ import annotations
 
+import os
+
 import pooch
 import pytest
 from support import Store
@@ -155,7 +157,7 @@ class TestWhereAFileIsRead:
         restricted = tmp_path / "restricted"
         (restricted / "licensed").mkdir(parents=True)
         (restricted / "licensed" / "secret.tif").write_bytes(b"s")
-        monkeypatch.setenv("ETHOS_RESTRICTED_DIR", str(restricted))
+        monkeypatch.setenv("ETHOS_RESTRICTED_DIRS", str(restricted))
         before = sorted(restricted.rglob("*"))
 
         path = catalogue(reader).path("licensed/secret.tif")
@@ -172,11 +174,33 @@ class TestWhereAFileIsRead:
             "licensed", {"secret.tif": "s"}, access="restricted", where="store"
         )
         restricted = tmp_path / "restricted"
-        restricted.mkdir()
-        monkeypatch.setenv("ETHOS_RESTRICTED_DIR", str(restricted))
+        (restricted / "licensed").mkdir(parents=True)
+        monkeypatch.setenv("ETHOS_RESTRICTED_DIRS", str(restricted))
 
         with pytest.raises(ethos_data.AccessError, match="secret.tif"):
             catalogue(reader).path("licensed/secret.tif")
+        assert store.downloads() == []
+
+    def test_a_restricted_dataset_no_listed_cache_holds_is_refused(
+        self, reader, store, tmp_path, monkeypatch
+    ):
+        reader.dataset(
+            "licensed", {"secret.tif": "s"}, access="restricted", where="store"
+        )
+        first, second = tmp_path / "first", tmp_path / "second"
+        first.mkdir()
+        second.mkdir()
+        monkeypatch.setenv(
+            "ETHOS_RESTRICTED_DIRS", os.pathsep.join([str(first), str(second)])
+        )
+
+        with pytest.raises(ethos_data.AccessError) as refusal:
+            catalogue(reader).path("licensed/secret.tif")
+
+        message = refusal.value.message
+        assert "dataset 'licensed' is restricted" in message
+        assert str(first) not in message, "a cache without an entry is no reason"
+        assert "ethos-data config add-restricted-cache DIR" in message
         assert store.downloads() == []
 
 

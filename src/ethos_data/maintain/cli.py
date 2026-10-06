@@ -3,7 +3,7 @@
 The maintainer group owns source metadata and publication operations. Local
 configuration, staging, and cache management also write files, but remain at the
 top level because consumers and package developers use them independently. That
-includes building a shared cache as links: ``ethos-data link --all`` reads a
+includes building the public cache as links: ``ethos-data link --all`` reads a
 checkout the way the commands here do, but the person filling a whole cache from
 one and the person pointing a single dataset at a directory are doing the same
 thing at different scale, and splitting them across two command groups made the

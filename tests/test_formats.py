@@ -118,10 +118,11 @@ class TestLint:
 # -- the rules, with the messages maintainers know -----------------------------
 
 BROKEN = [
-    ({"ethos:access": "secret"}, "ethos:access must be one of ('public', 'internal', 'restricted'), got 'secret'"),
+    ({"ethos:access": "secret"}, "ethos:access must be one of ('public', 'restricted'), got 'secret'"),
+    ({"ethos:access": "internal"}, "ethos:access must be one of ('public', 'restricted'), got 'internal'"),
     ({"ethos:visibility": "listed"}, "ethos:visibility must be one of ('public', 'hidden'), got 'listed'"),
     ({"ethos:visibility": "hidden", "ethos:access": "public"}, "access=public with visibility=hidden makes no sense"),
-    ({"ethos:visibility": "hidden", "ethos:access": "internal"}, "visibility=hidden needs an ethos:embargo block"),
+    ({"ethos:visibility": "hidden", "ethos:access": "restricted"}, "visibility=hidden needs an ethos:embargo block"),
     (
         {
             "ethos:access": "restricted",
@@ -196,8 +197,8 @@ def test_defaults_are_written_in_the_fixed_key_order():
         "ethos:origin",
     ]
     assert (
-        formats.dataset.apply_defaults({"ethos:access": "internal"})["ethos:access"]
-        == "internal"
+        formats.dataset.apply_defaults({"ethos:access": "restricted"})["ethos:access"]
+        == "restricted"
     )
 
 

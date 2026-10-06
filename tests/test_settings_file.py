@@ -28,7 +28,7 @@ class TestOneFile:
     def test_a_named_file_replaces_the_file_in_the_account(self, tmp_path, monkeypatch):
         run_cli(["config", "set-public-cache", str(tmp_path / "account-cache")])
         run_cli(
-            ["config", "set-restricted-cache", str(tmp_path / "account-restricted")]
+            ["config", "add-restricted-cache", str(tmp_path / "account-restricted")]
         )
         named = write(
             tmp_path / "named.yaml", public_cache=str(tmp_path / "named-cache")
@@ -39,7 +39,7 @@ class TestOneFile:
 
         assert (settings.file, settings.file_source) == (named, "$ETHOS_DATA_CONFIG")
         assert settings.roots.public == tmp_path / "named-cache"
-        assert settings.roots.restricted is None, "nothing is merged from the account"
+        assert settings.roots.restricted == (), "nothing is merged from the account"
 
     def test_a_named_file_that_is_missing_stops_every_command_but_a_setter(
         self, tmp_path, monkeypatch
@@ -72,11 +72,11 @@ class TestOneFile:
         self, tmp_path, monkeypatch
     ):
         monkeypatch.setenv("ETHOS_DATA_CONFIG", str(tmp_path / "lesson.yaml"))
-        run_cli(["config", "set-restricted-cache", str(tmp_path / "restricted")])
+        run_cli(["config", "add-restricted-cache", str(tmp_path / "restricted")])
         monkeypatch.delenv("ETHOS_DATA_CONFIG")
 
         assert not config.account_config_path().exists()
-        assert ethos_data.read_settings().roots.restricted is None
+        assert ethos_data.read_settings().roots.restricted == ()
 
     def test_the_setters_take_no_scope(self, tmp_path):
         code, _, err = run_cli(
@@ -118,7 +118,7 @@ class TestOneFile:
         assert set(SettingsFile.model_fields) == {
             k.SETTING_CATALOG,
             k.SETTING_PUBLIC_CACHE,
-            k.SETTING_RESTRICTED_CACHE,
+            k.SETTING_RESTRICTED_CACHES,
             k.SETTING_STAGING_CACHE,
             k.SETTING_PUBLICATION_URL,
         }
@@ -147,7 +147,7 @@ class TestTheSnapshotOfAHandle:
         assert settings.catalog_source == "the pin in collections.yaml"
         assert "catalogue version  v1.2.0" in report
         assert f"public cache       {reader.cache}  ($ETHOS_DATA_DIR)" in report
-        assert "restricted cache   not set" in report
+        assert "restricted caches  none listed: public data only" in report
         assert report.startswith(f"settings file      {config.account_config_path()}")
 
     def test_it_is_read_once_so_later_changes_do_not_move_the_cache(
@@ -196,4 +196,4 @@ class TestTheSnapshotOfAHandle:
             "path": str(reader.cache),
             "source": "$ETHOS_DATA_DIR",
         }
-        assert recorded["restricted_cache"] is None
+        assert recorded["restricted_caches"] == []

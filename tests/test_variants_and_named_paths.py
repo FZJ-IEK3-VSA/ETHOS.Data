@@ -85,7 +85,7 @@ def world(tmp_path, monkeypatch):
     for variable in (
         "ETHOS_DATA_CATALOG",
         "ETHOS_STAGING_DIR",
-        "ETHOS_RESTRICTED_DIR",
+        "ETHOS_RESTRICTED_DIRS",
         "ETHOS_SKIP_UNAVAILABLE",
         "ETHOS_PUBLICATION_URL",
     ):

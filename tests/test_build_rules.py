@@ -17,7 +17,10 @@ EMBARGO = {"until": "unspecified", "reason": "Not reviewed yet.", "becomes": "pu
 class TestClassification:
     def test_a_hidden_dataset_needs_an_embargo(self, source):
         source.dataset(
-            "draft", {"a.csv": "1"}, ethos_access="internal", ethos_visibility="hidden"
+            "draft",
+            {"a.csv": "1"},
+            ethos_access="restricted",
+            ethos_visibility="hidden",
         )
         code, _, err = source.build()
         assert code != 0
@@ -125,7 +128,7 @@ class TestStaleness:
 
 class TestWarnings:
     def test_an_unknown_ethos_key_is_named_and_the_build_goes_on(self, source):
-        source.dataset("flat", {"a.csv": "1"}, ethos_acess="internal")
+        source.dataset("flat", {"a.csv": "1"}, ethos_acess="restricted")
 
         code, _, err = source.build()
 

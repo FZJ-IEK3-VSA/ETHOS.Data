@@ -28,6 +28,9 @@ later read of a setting goes through it.
         - read_settings
         - Roots
         - resolve_skip_unavailable
+        - set_cache
+        - add_restricted_cache
+        - remove_restricted_cache
         - set_option
         - unset_option
         - config_path
@@ -43,6 +46,8 @@ later read of a setting goes through it.
     options:
       members:
         - locate
+        - entry_for
+        - restricted_entry
         - chain_for
         - Chain
         - Locator

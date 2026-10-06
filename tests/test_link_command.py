@@ -1,12 +1,11 @@
 """``ethos-data link``: pointing cache entries at data already on this machine.
 
 One command, two modes. ``link <dataset>`` registers a single entry by name;
-``link --all`` builds a whole public cache from a catalogue checkout. Those were
-two separate commands until the second was folded into the first, and the merge
-is why both now have to be tested here: the modes differ on purpose -- catalogue
-mode skips restricted datasets, dataset mode links one into the restricted cache
-deliberately -- and an asymmetry that cannot be read in one place is an asymmetry
-somebody eventually "fixes".
+``link --all`` builds a whole public cache from a catalogue checkout, in the
+cache its ``--root`` names. Both are tested here because the modes differ on
+purpose -- catalogue mode skips restricted datasets, dataset mode links one into
+a restricted cache deliberately -- and an asymmetry that cannot be read in one
+place is an asymmetry somebody eventually "fixes".
 
 The entry has to be a *symbolic link* specifically, because that is how the cache
 records that the bytes are borrowed: retrieval reads them in place and refuses to
@@ -179,7 +178,7 @@ def test_repointing_needs_force(workspace, tmp_path):
 def test_restricted_data_is_linked_in_the_restricted_root(workspace, tmp_path):
     cache, data, _ = workspace
     restricted = tmp_path / "restricted"
-    roots = Roots(public=cache, restricted=restricted)
+    roots = Roots(public=cache, restricted=(restricted,))
 
     link(_catalog("restricted"), "example", data, roots)
 
@@ -189,10 +188,53 @@ def test_restricted_data_is_linked_in_the_restricted_root(workspace, tmp_path):
 
 def test_restricted_data_without_a_restricted_cache_is_refused(workspace):
     cache, data, roots = workspace
-    with pytest.raises(LinkError, match="no restricted cache is configured"):
+    with pytest.raises(LinkError, match="lists no restricted cache") as refusal:
         link(_catalog("restricted"), "example", data, roots)
-    # Never the public cache: that is the one place licensed bytes may not go.
+    assert "ethos-data config add-restricted-cache DIR" in refusal.value.message
+    # Never the public cache: that is the one place restricted bytes may not go.
     assert not (cache / "example").exists()
+
+
+def test_with_several_restricted_caches_the_cache_is_named(workspace, tmp_path):
+    cache, data, _ = workspace
+    first, second = tmp_path / "first", tmp_path / "second"
+    roots = Roots(public=cache, restricted=(first, second))
+
+    with pytest.raises(LinkError, match="several restricted caches") as refusal:
+        link(_catalog("restricted"), "example", data, roots)
+    assert str(first) in refusal.value.message and str(second) in refusal.value.message
+
+    link(_catalog("restricted"), "example", data, roots, cache=second)
+    assert (second / "example").is_symlink()
+    assert not (first / "example").exists()
+
+
+def test_a_named_cache_must_suit_the_access_class(workspace, tmp_path):
+    cache, data, _ = workspace
+    restricted = tmp_path / "restricted"
+    roots = Roots(public=cache, restricted=(restricted,))
+
+    with pytest.raises(LinkError, match="not one of the restricted caches"):
+        link(_catalog("restricted"), "example", data, roots, cache=tmp_path / "other")
+    with pytest.raises(LinkError, match="never goes into one"):
+        link(_catalog("public"), "example", data, roots, cache=restricted)
+    assert not (restricted / "example").exists()
+
+
+def test_unlink_removes_a_public_datasets_entry_from_a_restricted_cache(
+    workspace, tmp_path
+):
+    """What verify reports after a dataset became public: its maintainer unlinks it."""
+    cache, data, _ = workspace
+    restricted = tmp_path / "restricted"
+    restricted.mkdir()
+    (restricted / "example").symlink_to(data, target_is_directory=True)
+    roots = Roots(public=cache, restricted=(restricted,))
+
+    unlink(_catalog("public"), "example", roots, cache=restricted)
+
+    assert not (restricted / "example").exists()
+    assert (data / "a.txt").is_file()
 
 
 def test_an_unknown_dataset_is_not_linked(workspace):
@@ -282,7 +324,7 @@ def test_a_dataset_the_checkout_does_not_have(workspace, tmp_path):
         link(_catalog(), "example", roots=roots, catalog_root=checkout)
 
 
-def test_cli_all_links_every_source_dir_into_the_configured_cache(
+def test_cli_all_links_every_source_dir_into_the_named_cache(
     tmp_path, monkeypatch, capsys
 ):
     cache = tmp_path / "cache"
@@ -296,15 +338,16 @@ def test_cli_all_links_every_source_dir_into_the_configured_cache(
         },
     )
 
-    assert main(["link", "--all", "--catalog-root", str(checkout), "--dry-run"]) == 0
+    argv = ["link", "--all", "--root", str(cache), "--catalog-root", str(checkout)]
+    assert main([*argv, "--dry-run"]) == 0
     assert not (cache / "one").exists()
 
-    assert main(["link", "--all", "--catalog-root", str(checkout)]) == 0
+    assert main(argv) == 0
     assert (cache / "one").is_symlink() and (cache / "two").is_symlink()
 
     # Run twice: an entry that is already right is left alone rather than
     # repointed, which on Windows means looking past the \\?\ prefix.
-    assert main(["link", "--all", "--catalog-root", str(checkout)]) == 0
+    assert main(argv) == 0
     assert "nothing to do" in capsys.readouterr().out
 
 
@@ -354,6 +397,31 @@ def test_cli_all_honours_an_explicit_root(tmp_path, monkeypatch):
     assert not decoy.exists()
 
 
+def test_cli_all_needs_a_named_cache(tmp_path, monkeypatch, capsys):
+    """Without --root the tree would land in whatever cache the account reads."""
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("ETHOS_DATA_DIR", str(cache))
+    checkout, _, _ = _two_dataset_checkout(tmp_path)
+
+    assert main(["link", "--all", "--catalog-root", str(checkout)]) == 2
+    assert "link --all needs --root" in capsys.readouterr().err
+    assert not cache.exists()
+
+
+def test_cli_all_refuses_a_listed_restricted_cache(tmp_path, monkeypatch, capsys):
+    restricted = tmp_path / "restricted"
+    monkeypatch.setenv("ETHOS_RESTRICTED_DIRS", str(restricted))
+    checkout, _, _ = _two_dataset_checkout(tmp_path)
+
+    code = main(
+        ["link", "--all", "--root", str(restricted), "--catalog-root", str(checkout)]
+    )
+
+    assert code == 2
+    assert "is a restricted cache" in capsys.readouterr().err
+    assert not restricted.exists()
+
+
 def test_cli_all_prune_removes_a_link_the_catalogue_no_longer_names(
     tmp_path, monkeypatch
 ):
@@ -369,15 +437,16 @@ def test_cli_all_prune_removes_a_link_the_catalogue_no_longer_names(
     monkeypatch.setenv("ETHOS_DATA_DIR", str(cache))
     checkout, _, _ = _two_dataset_checkout(tmp_path)
 
-    assert main(["link", "--all", "--catalog-root", str(checkout)]) == 0
+    argv = ["link", "--all", "--root", str(cache), "--catalog-root", str(checkout)]
+    assert main(argv) == 0
     assert (cache / "two").is_symlink()
 
     shutil.rmtree(checkout / "datasets" / "two")
 
-    assert main(["link", "--all", "--catalog-root", str(checkout)]) == 0
+    assert main(argv) == 0
     assert (cache / "two").is_symlink()
 
-    assert main(["link", "--all", "--prune", "--catalog-root", str(checkout)]) == 0
+    assert main([*argv, "--prune"]) == 0
     assert not (cache / "two").exists()
     assert (cache / "one").is_symlink()
 
@@ -397,7 +466,8 @@ def test_cli_all_prune_leaves_a_real_directory_alone(tmp_path, monkeypatch):
     owned.mkdir(parents=True)
     (owned / "a.txt").write_bytes(b"downloaded earlier")
 
-    assert main(["link", "--all", "--prune", "--catalog-root", str(checkout)]) == 0
+    argv = ["link", "--all", "--root", str(cache), "--catalog-root", str(checkout)]
+    assert main([*argv, "--prune"]) == 0
 
     assert not owned.is_symlink()
     assert (owned / "a.txt").read_bytes() == b"downloaded earlier"
@@ -410,12 +480,11 @@ def test_cli_all_prune_writes_nothing_on_a_dry_run(tmp_path, monkeypatch, capsys
     cache = tmp_path / "cache"
     monkeypatch.setenv("ETHOS_DATA_DIR", str(cache))
     checkout, _, _ = _two_dataset_checkout(tmp_path)
-    assert main(["link", "--all", "--catalog-root", str(checkout)]) == 0
+    argv = ["link", "--all", "--root", str(cache), "--catalog-root", str(checkout)]
+    assert main(argv) == 0
     shutil.rmtree(checkout / "datasets" / "two")
 
-    code = main(
-        ["link", "--all", "--prune", "--dry-run", "--catalog-root", str(checkout)]
-    )
+    code = main([*argv, "--prune", "--dry-run"])
 
     assert code == 0
     assert (cache / "two").is_symlink()
@@ -423,7 +492,7 @@ def test_cli_all_prune_writes_nothing_on_a_dry_run(tmp_path, monkeypatch, capsys
 
 
 def test_cli_all_skips_restricted_data_that_link_by_name_still_takes(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, capsys
 ):
     """The asymmetry between the two modes, asserted in one place on purpose.
 
@@ -453,14 +522,16 @@ def test_cli_all_skips_restricted_data_that_link_by_name_still_takes(
         },
     )
 
-    assert main(["link", "--all", "--catalog-root", str(checkout)]) == 0
+    argv = ["link", "--all", "--root", str(cache), "--catalog-root", str(checkout)]
+    assert main(argv) == 0
     assert (cache / "open").is_symlink()
     assert not (cache / "example").exists()
+    assert "link it by name into the restricted cache" in capsys.readouterr().out
 
     link(
         _catalog("restricted"),
         "example",
-        roots=Roots(public=cache, restricted=restricted),
+        roots=Roots(public=cache, restricted=(restricted,)),
         catalog_root=checkout,
     )
 
@@ -479,10 +550,8 @@ def test_cli_all_skips_restricted_data_that_link_by_name_still_takes(
         # person guessing which of the two modes they were actually in.
         #
         # One case per flag, and no case that varies something the guard does not
-        # read. `ethos-data link example somewhere --root elsewhere` was a fifth
-        # row here, and it could never fail while the row above it passed: the
-        # test is `args.cache_root is not None or args.prune`, which never looks
-        # at the positional directory at all.
+        # read: the guard is `args.cache_root is not None or args.prune`, which
+        # never looks at the positional directory.
         (["link", "--all", "--force"], "--force"),
         (["link", "example", "--root", "elsewhere"], "--root"),
         (["link", "example", "--prune"], "--prune"),
@@ -498,7 +567,7 @@ def test_cli_rejects_a_contradictory_invocation(
 
 def _cli_workspace(tmp_path, monkeypatch):
     monkeypatch.setenv("ETHOS_DATA_DIR", str(tmp_path / "cache"))
-    monkeypatch.delenv("ETHOS_RESTRICTED_DIR", raising=False)
+    monkeypatch.delenv("ETHOS_RESTRICTED_DIRS", raising=False)
     catalog = tmp_path / "datacatalog.json"
     catalog.write_text(
         json.dumps(

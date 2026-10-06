@@ -203,7 +203,7 @@ def test_dry_run_writes_nothing(workspace):
 def test_restricted_data_is_copied_into_the_restricted_root(workspace, tmp_path):
     cache, source, _ = workspace
     restricted = tmp_path / "restricted"
-    roots = Roots(public=cache, restricted=restricted)
+    roots = Roots(public=cache, restricted=(restricted,))
 
     reports = materialize(_catalog("restricted"), ["example"], roots, source=source)
 

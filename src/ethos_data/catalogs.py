@@ -787,8 +787,8 @@ def directory_of(
     """Where a folder, a dataset or a family ended up on this machine.
 
     Read off the files themselves rather than off a root setting: a dataset may
-    come from the public cache, the restricted cache, staging or its own root,
-    and each returned path already says which.
+    come from the public cache, a restricted cache or staging, and each
+    returned path already says which.
     """
     found = set()
     for resource in resources:

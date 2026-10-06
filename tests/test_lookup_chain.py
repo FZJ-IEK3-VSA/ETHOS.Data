@@ -2,8 +2,9 @@
 
 Characterisation tests for the lookup chain of the architecture decisions,
 and for ``fetch=False`` in [Use data in a script]. The places, in order, are
-the staging root, the restricted cache, the public cache (a link read in
-place, else a copy of the recorded size) and a download. A place that may not
+the staging root, the restricted caches (the first listed one with a
+readable entry), the public cache (a link read in place, else a copy of the
+recorded size) and a download. A place that may not
 serve a file refuses instead of letting it fall through to a later one.
 """
 
@@ -61,10 +62,11 @@ class TestTheOrder:
             "licensed", {"a.csv": "1\n"}, access="restricted", where="nowhere"
         )
         (tmp_path / "staging" / "licensed").mkdir(parents=True)
+        (tmp_path / "restricted" / "licensed").mkdir(parents=True)
         roots = Roots(
             public=reader.cache,
             staging=tmp_path / "staging",
-            restricted=tmp_path / "restricted",
+            restricted=(tmp_path / "restricted",),
         )
 
         assert place(reader, "licensed", "a.csv", roots) == (
@@ -106,7 +108,7 @@ class TestTheOrder:
         assert place(reader, "flat", "a.csv", roots) == (ORIGIN_DOWNLOAD, copy)
 
     def test_the_chain_names_each_place_in_order(self, tmp_path):
-        roots = Roots(public=tmp_path / "public", restricted=tmp_path / "restricted")
+        roots = Roots(public=tmp_path / "public", restricted=(tmp_path / "restricted",))
 
         places = [line.split(". ", 1)[1] for line in str(chain_for(roots)).splitlines()]
 
@@ -142,11 +144,56 @@ class TestFamiliesAndClasses:
         )
         assert files["family/member/a.csv"] == reader.cache / "family/member/a.csv"
 
-    def test_internal_data_is_never_downloaded(self, reader):
-        reader.dataset("held", {"a.csv": "1\n"}, access="internal", where="store")
 
-        with pytest.raises(AccessError, match="is internal: it is not published"):
-            place(reader, "held", "a.csv", Roots(public=reader.cache))
+class TestRestrictedCaches:
+    @pytest.fixture
+    def licensed(self, reader):
+        reader.dataset(
+            "licensed", {"a.csv": "1\n"}, access="restricted", where="nowhere"
+        )
+        return reader
+
+    def test_the_first_listed_cache_with_a_readable_entry_wins(
+        self, licensed, tmp_path
+    ):
+        first, second, third = (tmp_path / name for name in ("1", "2", "3"))
+        first.mkdir()
+        (second / "licensed").mkdir(parents=True)
+        (third / "licensed").mkdir(parents=True)
+        roots = Roots(public=licensed.cache, restricted=(first, second, third))
+
+        assert place(licensed, "licensed", "a.csv", roots) == (
+            ORIGIN_RESTRICTED,
+            second / "licensed" / "a.csv",
+        )
+
+    def test_a_dangling_entry_is_passed_over_and_named(self, licensed, tmp_path):
+        first, second = tmp_path / "1", tmp_path / "2"
+        first.mkdir()
+        link(first / "licensed", tmp_path / "moved-away")
+        roots = Roots(public=licensed.cache, restricted=(first, second))
+        (second / "licensed").mkdir(parents=True)
+
+        assert place(licensed, "licensed", "a.csv", roots)[0] == ORIGIN_RESTRICTED
+
+        roots = Roots(public=licensed.cache, restricted=(first,))
+        with pytest.raises(AccessError) as refusal:
+            place(licensed, "licensed", "a.csv", roots)
+        assert f"The entry in {first} is dangling" in refusal.value.message
+
+    def test_an_account_that_lists_none_is_told_so(self, licensed):
+        with pytest.raises(AccessError, match="This account lists no restricted cache"):
+            place(licensed, "licensed", "a.csv", Roots(public=licensed.cache))
+
+    def test_a_cache_that_cannot_be_reached_is_named(self, licensed, tmp_path):
+        unmounted = tmp_path / "unmounted"
+        roots = Roots(public=licensed.cache, restricted=(unmounted,))
+
+        with pytest.raises(AccessError) as refusal:
+            place(licensed, "licensed", "a.csv", roots)
+        assert f"The restricted cache {unmounted} cannot be reached" in (
+            refusal.value.message
+        )
 
 
 WIND = """

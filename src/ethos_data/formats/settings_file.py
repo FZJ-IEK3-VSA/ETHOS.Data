@@ -16,10 +16,12 @@ class SettingsFile(BaseModel):
         None, description="The catalogue to read; replaces the public one and any pin."
     )
     public_cache: str | None = Field(
-        None, description="Where public and internal data is read and downloaded."
+        None, description="Where public data is read and downloaded."
     )
-    restricted_cache: str | None = Field(
-        None, description="Where licensed data lives; read in place, never written."
+    restricted_caches: list[str] = Field(
+        [],
+        description="Where restricted data is read in place, in order; one directory "
+        "per access combination, none by default.",
     )
     staging_cache: str | None = Field(
         None, description="Where work in progress lives; shadows the catalogue."

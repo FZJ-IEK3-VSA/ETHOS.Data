@@ -751,7 +751,6 @@
       "description": "Who may read the bytes; picks the cache root.",
       "enum": [
         "public",
-        "internal",
         "restricted"
       ],
       "title": "Ethos:Access",

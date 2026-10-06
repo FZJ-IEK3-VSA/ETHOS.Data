@@ -1,7 +1,7 @@
 """Building the public cache as a namespace of links, from the catalogue.
 
-    ethos-data link --all --root /shared/ethos/public --dry-run
-    ethos-data link --all --root /shared/ethos/public
+    ethos-data link --all --root /shared/ethos/cache --dry-run
+    ethos-data link --all --root /shared/ethos/cache
 
 The result is one entry per dataset, named for the dataset, pointing at wherever
 that data already sits on this machine:
@@ -20,11 +20,11 @@ behind one is reorganised, exactly one link changes and every user follows.
 The command that drives this planner sits with the user-facing ``link`` rather
 than under ``catalog``, because filling a whole cache from a checkout and
 pointing one dataset at a directory are the same job at two scales. The planner
-itself still reads a source checkout, and that has not changed: ``source_dir``
-is never published -- it is a statement about one machine -- so the namespace is
-built once by somebody who knows where things are, and everybody else just
-points ``public_cache`` at the result. That is what keeps the user-facing
-configuration down to two settings.
+itself reads a source checkout: ``source_dir`` is never published -- it is a
+statement about one machine -- so the namespace is built by somebody who knows
+where things are, in practice in the cluster's public cache, which every
+cluster user's ``public_cache`` names. It holds public data only: a restricted
+dataset is linked by name into the restricted cache of its access combination.
 
 **Real directories are never touched.** An entry that has been downloaded from
 dCache, or materialised with ``ethos-data materialize``, is data the cache owns;
@@ -127,8 +127,8 @@ def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
                     name,
                     "skip",
                     entry,
-                    detail="restricted: belongs in the restricted cache as a real, owned copy, "
-                    "not as a link",
+                    detail="restricted: link it by name into the restricted cache of "
+                    "its access combination",
                 )
             )
             continue
@@ -143,7 +143,7 @@ def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
                     "skip",
                     entry,
                     detail="unresolved licensing: record the terms in dataset.yaml before "
-                    "linking it into a shared cache",
+                    "linking it into a cache other people read",
                 )
             )
             continue
@@ -227,15 +227,9 @@ def run(
 ) -> int:
     """Plan the namespace, report it, and -- unless ``dry_run`` -- build it.
 
-    ``root`` arrives already decided, and deliberately has no default. The
-    earlier signature took the argparse namespace and looked the public cache up
-    itself when ``--root`` was absent, which put a second cache lookup inside a
-    command that had already done one. The two could answer differently -- a
-    top-level ``--root`` the second lookup never saw, or ``$ETHOS_DATA_DIR`` read
-    at a different moment -- and the result was a full link tree built in a
-    directory the rest of the command had never mentioned, printed as a success.
-    Deciding once, in the caller, is what makes that impossible rather than
-    merely unlikely.
+    ``root`` is the public cache the caller names, and deliberately has no
+    default: a link tree built in a directory nobody named would still print as
+    a success.
     """
     actions = plan(catalog_root, root, prune=prune)
 

@@ -6,8 +6,9 @@ import urllib.request
 import pytest
 
 import ethos_data
-from ethos_data import config, tool_main
+from ethos_data import config, staging, tool_main
 from ethos_data.catalogs import Catalog, Dataset
+from ethos_data.config import Roots
 from ethos_data.model.resource import Resource
 
 
@@ -16,7 +17,7 @@ def workspace(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "load_config", lambda: ({}, {}))
     monkeypatch.setenv("ETHOS_DATA_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("ETHOS_STAGING_DIR", str(tmp_path / "staging"))
-    monkeypatch.delenv("ETHOS_RESTRICTED_DIR", raising=False)
+    monkeypatch.delenv("ETHOS_RESTRICTED_DIRS", raising=False)
     monkeypatch.delenv("ETHOS_SKIP_UNAVAILABLE", raising=False)
 
     def no_network(*args, **kwargs):
@@ -136,3 +137,18 @@ def test_broken_staging_link_fails_python_and_cli(workspace, capsys):
             call()
     assert tool_main(str(collections), prog="example-data", argv=["fetch", "test"]) == 2
     assert "staging entry 'broken'" in capsys.readouterr().err
+
+
+def test_an_entry_in_any_listed_restricted_cache_is_an_official_version(workspace):
+    root, _, _ = workspace
+    first, second = root / "group-a", root / "group-b"
+    first.mkdir()
+    (second / "example").mkdir(parents=True)
+    roots = Roots(
+        public=root / "cache", restricted=(first, second), staging=root / "staging"
+    )
+
+    [staged] = staging.classify_staged(roots)
+
+    assert not staged.is_new
+    assert staged.official == second / "example"

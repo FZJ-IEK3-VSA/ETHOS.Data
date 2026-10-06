@@ -34,12 +34,11 @@ used, exactly as ``ethos-data link`` uses it:
 
     ethos-data materialize licensed-example           # from its source_dir
 
-That is the restricted-data workflow in one command. Licensed data belongs in
-the restricted cache as a **real, owned copy** rather than a link -- which is
-why ``ethos-data link --all`` skips it -- so there is no link for a copy to
-follow and never was one. The entry still goes wherever the access class says,
-and ``--all`` still walks the public cache only: copying licensed bytes is
-subject to that installation's terms, and is something somebody names on purpose.
+The entry goes where :func:`ethos_data.access.entry_for` puts it: into the
+cache the global ``--root`` names, else a public dataset's into the public cache
+and a restricted dataset's into the only listed restricted cache. ``--all``
+walks the public cache only: copying restricted bytes is subject to that
+installation's terms, and is something somebody names on purpose.
 
 Only files the catalogue describes are copied. A cache is not a backup of
 somebody's project directory -- it holds the inventory the manifest lists, and
@@ -109,12 +108,15 @@ def plan_materialize(
     force: bool = False,
     source: "str | Path | None" = None,
     catalog_root: "str | Path | None" = None,
+    cache: str | Path | None = None,
 ) -> list[MaterializeReport]:
     """Classify each dataset without copying anything.
 
     ``source`` is a directory to copy from in place of whatever the entry points
     at. It also makes an *absent* entry copyable, which is the only way to fill
     one for a dataset that has no ``source_dir`` left to be linked from.
+    ``cache`` is the cache that holds the entries, as the global ``--root``
+    names it; see :func:`ethos_data.access.entry_for`.
 
     Note that this pulls the full inventory of every dataset named, including
     every shard of a sharded one -- that is what "how many bytes is this" costs.
@@ -124,7 +126,7 @@ def plan_materialize(
     reports = []
     for name in sorted(set(names)):
         try:
-            entry = entry_for(catalog, roots, name)
+            entry = entry_for(catalog, roots, name, cache)
         except UnknownDataset:
             # A cache directory accumulates links nobody remembers making, and
             # ``--all`` walks the directory rather than the catalogue. One
@@ -188,10 +190,7 @@ def plan_materialize(
             target = given
         elif not was_link:
             # Nothing in the cache and no --from: the source catalogue knows
-            # where the bytes are. This is the whole workflow for restricted
-            # data, which belongs in the restricted cache as a real, owned copy
-            # rather than a link -- so there is no link here for a copy to
-            # follow, and never was one.
+            # where the bytes are.
             try:
                 target = source_dir_for(name, catalog_root)
             except LinkError:
@@ -267,6 +266,7 @@ def materialize(
     on_file=None,
     source: "str | Path | None" = None,
     catalog_root: "str | Path | None" = None,
+    cache: str | Path | None = None,
 ) -> list[MaterializeReport]:
     """Replace symbolic-link cache entries with real, verified copies.
 
@@ -280,7 +280,13 @@ def materialize(
     """
     roots = roots if roots is not None else catalog.settings.roots
     planned = plan_materialize(
-        catalog, names, roots, force=force, source=source, catalog_root=catalog_root
+        catalog,
+        names,
+        roots,
+        force=force,
+        source=source,
+        catalog_root=catalog_root,
+        cache=cache,
     )
     if dry_run:
         return planned
