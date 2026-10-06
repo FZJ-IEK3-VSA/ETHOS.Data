@@ -180,9 +180,14 @@ def _require_settled_licence(catalog: Catalog, name: str) -> None:
     )
 
 
+def _on_windows() -> bool:
+    """Whether this is Windows, where a symbolic link needs a privilege."""
+    return os.name == "nt"
+
+
 def _refusal(name: str, target: Path, error: OSError) -> str:
     """Why the link could not be made, and what to do instead."""
-    if os.name != "nt":
+    if not _on_windows():
         return f"could not create the link: {error}"
     return (
         f"Windows would not create the link ({error}).\n"
