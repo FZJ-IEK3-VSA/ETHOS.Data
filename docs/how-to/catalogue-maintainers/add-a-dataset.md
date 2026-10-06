@@ -100,7 +100,7 @@ who may obtain a copy, where, and under which terms.
 !!! warning "Gap: the error prints only `ethos:restriction`"
     The code's error prints the `ethos:restriction` note without the
     homepage and the contact. To register a copy it offers
-    `config set-restricted-cache` and `config set-root`, and it offers
+    `config set-restricted-cache` and `ethos-data link`, and it offers
     `--skip-unavailable` to carry on without the dataset. `ls` has no
     `--meta`. See [every input is
     required](../../explanation/architecture/decisions/0013-every-input-is-required.md).

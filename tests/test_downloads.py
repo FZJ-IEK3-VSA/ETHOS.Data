@@ -1,8 +1,8 @@
 """Where a file is read from, and the real download path behind it.
 
 Characterisation tests for [Use data in a script] and [Caches, classes and
-roots]: the order in which a file is looked for (a dataset-root override, a
-link in the public cache, the restricted cache, a download), what a download
+roots]: the order in which a file is looked for (a link in the public
+cache, the restricted cache, a download), what a download
 checks, and what a plan reports. Downloads run against :class:`support.Store`,
 a local HTTP server, so pooch, the checksums and the cache layout are the real
 ones and nothing reaches the network.
@@ -132,20 +132,6 @@ class TestWhereAFileIsRead:
 
         assert path.samefile(project / "a.csv")
         assert store.downloads() == [], "a link is never downloaded into"
-
-    def test_a_dataset_root_override_wins_over_the_cache_and_the_store(
-        self, reader, store, tmp_path
-    ):
-        reader.dataset("flat", {"a.csv": "1,2\n"}, where="both")
-        private = tmp_path / "private"
-        private.mkdir()
-        (private / "a.csv").write_bytes(b"1,2\n")
-        ethos_data.set_dataset_root("flat", str(private))
-
-        path = catalogue(reader).path("flat/a.csv")
-
-        assert path.samefile(private / "a.csv")
-        assert store.downloads() == []
 
     def test_restricted_data_is_never_downloaded(self, reader, store):
         reader.dataset(

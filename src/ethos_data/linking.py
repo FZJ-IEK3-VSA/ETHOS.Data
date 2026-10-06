@@ -180,16 +180,21 @@ def _require_settled_licence(catalog: Catalog, name: str) -> None:
     )
 
 
+def _on_windows() -> bool:
+    """Whether this is Windows, where a symbolic link needs a privilege."""
+    return os.name == "nt"
+
+
 def _refusal(name: str, target: Path, error: OSError) -> str:
     """Why the link could not be made, and what to do instead."""
-    if os.name != "nt":
+    if not _on_windows():
         return f"could not create the link: {error}"
     return (
         f"Windows would not create the link ({error}).\n"
         "Symbolic links need Developer Mode (Settings > System > For developers), "
         "or an elevated shell.\n"
-        "Without either, point this one dataset at the directory instead:\n"
-        f"    ethos-data config set-root {name} {target}\n"
+        "Without either, make a verified copy in the cache instead:\n"
+        f"    ethos-data materialize {name} --from {target}\n"
         "Do not substitute a junction (mklink /J): it is reported as an ordinary "
         "directory, so the cache would treat borrowed data as a copy it owns and "
         "could write downloads into it."
@@ -221,7 +226,7 @@ def link(
     already a link and ``force`` is not set, or if the entry is a real directory
     -- which is never replaced, because it is data the cache owns.
     """
-    roots = Roots.coerce(roots)
+    roots = catalog._roots(roots)
     try:
         entry = entry_for(catalog, roots, name)
     except AccessError as error:
@@ -272,7 +277,7 @@ def unlink(
     the cache's own copy, and deleting somebody's downloaded or materialised
     dataset is not something a command called ``unlink`` should do.
     """
-    roots = Roots.coerce(roots)
+    roots = catalog._roots(roots)
     try:
         entry = entry_for(catalog, roots, name)
     except AccessError as error:

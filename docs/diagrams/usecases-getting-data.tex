@@ -20,7 +20,7 @@
 \node[cmd, right=13mm of see, align=left]   (c1)
   {reskit-data show\\reskit-data show \textit{name}};
 \node[cmd, right=13mm of where, align=left] (c2)
-  {ethos-data config show\\ethos-data config set-cache \textit{dir}};
+  {ethos-data config show\\ethos-data config set-public-cache \textit{dir}};
 \node[cmd, right=13mm of get, align=left]   (c3)
   {reskit-data fetch \textit{name} --plan\\reskit-data fetch \textit{name}};
 \node[cmd, right=13mm of trust, align=left] (c4)
@@ -44,7 +44,7 @@
   {Read data already here};
 \draw[link] (user.south) |- (inplace.west);
 \node[cmd, right=13mm of inplace, align=left] (c6)
-  {ethos-data config set-root \textit{ds dir}};
+  {ethos-data link \textit{dataset dir}};
 \draw[uses] (inplace) -- (c6);
 
 \begin{scope}[on background layer]

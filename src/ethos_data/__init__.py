@@ -31,8 +31,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .bundles import Bundle, export_bundle, load_bundle
 from .access import Location, locate
+from .bundles import Bundle, export_bundle, load_bundle
 from .catalogs import (
     Catalog,
     Dataset,
@@ -40,26 +40,16 @@ from .catalogs import (
 )
 from .config import (
     CATALOG_ENV_VAR,
+    CONFIG_ENV_VAR,
     DEFAULT_CATALOG,
     ENV_VAR,
     RESTRICTED_ENV_VAR,
     STAGING_ENV_VAR,
-    Resolved,
     Roots,
+    Settings,
     config_path,
-    config_sources,
-    dataset_roots,
-    find_project_config,
-    resolve_cache_dir,
-    resolve_catalog,
-    resolve_public_cache,
-    resolve_restricted_cache,
-    resolve_roots,
-    resolve_skip_unavailable,
-    resolve_staging_cache,
-    set_dataset_root,
+    read_settings,
     set_option,
-    unset_dataset_root,
     unset_option,
 )
 from .errors import (
@@ -81,10 +71,10 @@ from .errors import (
     UnknownKey,
     UploadError,
 )
-from .retrieval import DataFiles, NamedPaths, cache_dir, download, local_path, plan
-from .materialize import materialize
 from .linking import link, unlink
+from .materialize import materialize
 from .model.resource import Resource
+from .retrieval import DataFiles, NamedPaths, cache_dir, download, local_path, plan
 from .selection import Collections, load_collections
 from .staging import apply_staging, classify_staged, staged_only
 from .verify import Finding, repair, verify
@@ -104,6 +94,7 @@ __all__ = [
     "export_bundle",
     "load_bundle",
     "CATALOG_ENV_VAR",
+    "CONFIG_ENV_VAR",
     "Catalog",
     "CatalogUnavailable",
     "CollectionError",
@@ -118,10 +109,10 @@ __all__ = [
     "Finding",
     "NamedPaths",
     "RESTRICTED_ENV_VAR",
-    "Resolved",
     "Resource",
     "Roots",
     "STAGING_ENV_VAR",
+    "Settings",
     "UnknownCollection",
     "UnknownDataset",
     "apply_staging",
@@ -130,7 +121,6 @@ __all__ = [
     "classify_staged",
     "collections",
     "config_path",
-    "config_sources",
     "download",
     "fetch",
     "LinkError",
@@ -142,22 +132,13 @@ __all__ = [
     "materialize",
     "paths",
     "plan",
+    "read_settings",
     "repair",
     "resolve",
-    "resolve_public_cache",
-    "resolve_restricted_cache",
-    "resolve_roots",
-    "resolve_skip_unavailable",
-    "resolve_staging_cache",
-    "dataset_roots",
-    "find_project_config",
     "locate",
-    "resolve_cache_dir",
-    "set_dataset_root",
     "staged_only",
     "set_option",
     "tool_main",
-    "unset_dataset_root",
     "unset_option",
     "verify",
 ]
@@ -186,13 +167,16 @@ def collections(
     catalogue is ``catalog`` if given, else ``$ETHOS_DATA_CATALOG`` or a
     configured one, else the version the file pins, else the built-in public
     catalogue -- so a user can repoint every tool at once without any tool
-    knowing. ``root`` overrides the public cache directory. The file is read
-    once, here, and ``.catalog`` is the catalogue it resolved to, for access
-    by key.
+    knowing. ``root`` overrides the public cache directory. The file and the
+    settings are read once, here: ``.settings`` reports what every later call
+    uses, and ``.catalog`` is the catalogue it resolved to, for access by key.
     """
-    roots = Roots.coerce(root) if root is not None else None
+    settings = read_settings(
+        root=root, catalog=catalog if isinstance(catalog, str) else None
+    )
+    chosen = catalog if isinstance(catalog, Catalog) else settings.catalog
     return load_collections(
-        path, catalog=_configured_catalog(catalog), roots=roots, tool=tool
+        path, catalog=chosen, roots=settings.roots, tool=tool, settings=settings
     )
 
 
@@ -205,17 +189,22 @@ def catalog(
 
     ``location`` is a ``datacatalog.json`` path or URL; without one, the
     catalogue is ``$ETHOS_DATA_CATALOG`` or a configured one, else the
-    built-in public catalogue. The staging overlay is applied once, here. A
-    tool's pinned catalogue is ``ethos_data.collections(...).catalog``::
+    built-in public catalogue. The settings are read and the staging overlay
+    is applied once, here; ``.settings`` reports them. A tool's pinned
+    catalogue is ``ethos_data.collections(...).catalog``::
 
         era5 = ethos_data.catalog().path("era5/2015")
         files = ethos_data.catalog().resources("global-wind-atlas-v3")
     """
-    roots = Roots.coerce(root)
     if isinstance(location, Catalog):
+        roots = location.settings.roots if root is None else location._roots(root)
         return location.overlaid(roots)
-    chosen = _configured_catalog(location)
-    return load_catalog(chosen or DEFAULT_CATALOG).overlaid(roots)
+    settings = read_settings(root=root, catalog=location)
+    chosen = settings.catalog or DEFAULT_CATALOG
+    source = settings.catalog_source or "built-in public catalogue"
+    loaded = load_catalog(chosen)
+    loaded._settings = settings.with_catalog(chosen, source, loaded.version)
+    return loaded.overlaid(loaded.settings.roots)
 
 
 def tool_main(
@@ -325,15 +314,3 @@ def _handle(
     if isinstance(source, Collections):
         return source
     return collections(source, catalog=catalog, root=root)
-
-
-def _configured_catalog(catalog: str | Catalog | None) -> str | Catalog | None:
-    """An explicit catalogue, else ``$ETHOS_DATA_CATALOG`` or a configured one.
-
-    ``None`` leaves the choice to the collections file's pin, and after that to
-    the built-in public catalogue.
-    """
-    if catalog is not None:
-        return catalog
-    configured = resolve_catalog()
-    return configured[0] if configured else None

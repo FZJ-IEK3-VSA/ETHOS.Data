@@ -17,10 +17,6 @@ import pytest
 from ethos_data import config
 from ethos_data.cli import _unreachable, main
 
-pytestmark = pytest.mark.legacy(
-    "config show changes with one settings file per account and without skip_unavailable"
-)
-
 
 @pytest.fixture
 def public(monkeypatch, tmp_path) -> Path:
@@ -82,7 +78,7 @@ class TestTheListingIsOneDirectoryRead:
         public.mkdir()
         (public / "one").mkdir()
         out = show(capsys)
-        assert out.index("catalogue:") < out.index("public cache holds")
+        assert out.index("\ncatalogue ") < out.index("public cache holds")
 
     def test_links_are_listed_with_their_targets(self, public, tmp_path, capsys):
         public.mkdir()
@@ -106,7 +102,7 @@ class TestAnUnreachableCacheSaysWhy:
         out = show(capsys)
         assert "[not created yet -- the first download creates it]" in out
         assert "NOT REACHABLE" not in out
-        assert "catalogue:" in out
+        assert "\ncatalogue " in out
 
     def test_a_missing_restricted_cache_is_flagged(
         self, public, monkeypatch, tmp_path, capsys
@@ -136,30 +132,12 @@ class TestAnUnreachableCacheSaysWhy:
             "(The specified network name is no longer available)]"
         ) in out
         assert "public cache contents: not listed -- cannot be reached" in out
-        assert "catalogue:" in out
+        assert "\ncatalogue " in out
 
     def test_a_file_where_the_cache_should_be(self, public, capsys):
         public.write_text("not a directory")
         out = show(capsys)
         assert "[NOT REACHABLE -- is not a directory]" in out
-
-    def test_a_per_dataset_root_that_is_gone(
-        self, public, monkeypatch, tmp_path, capsys
-    ):
-        gone = tmp_path / "gone"
-        monkeypatch.setattr(
-            config,
-            "load_config",
-            lambda: (
-                {"dataset_roots": {"era5": str(gone)}},
-                {
-                    "dataset_roots": "user config x",
-                    "dataset_roots.era5": "user config x",
-                },
-            ),
-        )
-        out = show(capsys)
-        assert f"  {'era5':<28} {gone}   [MISSING -- does not exist]" in out
 
     @pytest.mark.skipif(os.name != "nt", reason="drive letters are a Windows concept")
     def test_a_disconnected_drive_is_named(self):

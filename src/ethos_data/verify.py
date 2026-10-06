@@ -25,7 +25,7 @@ from pathlib import Path
 
 from .access import ORIGIN_STAGING, RESTRICTED, Location, locate
 from .catalogs import Catalog
-from .config import Roots, dataset_roots
+from .config import Roots
 from .model import digest
 from .model.resource import Resource
 
@@ -109,8 +109,8 @@ def verify(
     the cost of one ``stat`` per file. With ``deep`` it compares checksums,
     which catches everything and reads every byte.
     """
-    roots = Roots.coerce(roots)
-    locations = locate(catalog, resources, roots, dataset_roots(), skip_unavailable)
+    roots = catalog._roots(roots)
+    locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)
 
     findings: list[Finding] = []
     link_state: dict[str, tuple[Path, Path] | None] = {}
@@ -213,7 +213,7 @@ def repair(
         download,
     )  # local: retrieval imports access, which imports config
 
-    roots = Roots.coerce(roots)
+    roots = catalog._roots(roots)
     broken = [f for f in findings if not f.ok]
 
     skipped: dict[str, str] = {

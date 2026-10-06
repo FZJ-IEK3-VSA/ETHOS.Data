@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from ..errors import DescriptorError
 from ..model.names import relative
 from . import keys as k
-from .fields import field, keys, keys_with
+from .fields import describe, field, keys, keys_with
 
 __all__ = [
     "Contributor",
@@ -626,26 +626,6 @@ def lint(meta: dict, *, namespace: bool = False) -> list[str]:
             f"got {upstream.get('status')!r}"
         )
     return warnings
-
-
-def describe(error: ValidationError) -> list[str]:
-    """One line per problem pydantic found, naming the key as written in the file."""
-    lines = []
-    for problem in error.errors():
-        where = _where(problem["loc"])
-        message = problem["msg"].removeprefix("Value error, ")
-        lines.append(f"{where}: {message}" if where else message)
-    return lines
-
-
-def _where(location: tuple) -> str:
-    parts: list[str] = []
-    for item in location:
-        if isinstance(item, int):
-            parts[-1:] = [f"{parts[-1]}[{item}]"] if parts else [f"[{item}]"]
-        else:
-            parts.append(str(item))
-    return ".".join(parts)
 
 
 #: Never published: stripped by ``publish``, looked for by its leak check.

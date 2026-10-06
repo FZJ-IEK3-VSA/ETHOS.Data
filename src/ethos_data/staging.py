@@ -41,7 +41,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .catalogs import Catalog, Dataset
-from .config import Roots, current_user, resolve_staging_cache
+from .config import Roots, current_user, read_settings
 from .errors import AccessError, StagingError
 from .formats import keys as k
 from .model import names
@@ -114,8 +114,9 @@ class StagedDataset:
 
 def staging_root(explicit: str | Path | None = None) -> Path | None:
     """The configured staging directory, or None if staging is not in use."""
-    resolved = resolve_staging_cache(explicit)
-    return resolved.value if resolved else None
+    if explicit is not None:
+        return Path(explicit).expanduser()
+    return read_settings().roots.staging
 
 
 def _require_root(explicit: str | Path | None = None) -> Path:
@@ -344,7 +345,7 @@ def classify_staged(
     datasets that still need describing, uploading, or deleting before anybody
     can rely on the catalogue being complete.
     """
-    roots = roots if roots is not None else Roots.coerce(None)
+    roots = roots if roots is not None else read_settings().roots
     staging = Path(root).expanduser() if root is not None else roots.staging
     if staging is None or not staging.is_dir():
         return []
@@ -469,7 +470,7 @@ def apply_staging(
 
     Returns the names that were shadowed or added.
     """
-    roots = roots if roots is not None else Roots.coerce(None)
+    roots = roots if roots is not None else catalog.settings.roots
     if roots.staging is None or not roots.staging.is_dir():
         return []
 

@@ -265,5 +265,5 @@ When you are done, delete the `catalogue-lesson` directory.
   verification.
 - [Add a dataset, restricted datasets](../how-to/catalogue-maintainers/add-a-dataset.md#restricted-installations)
   — data that is not uploaded publicly.
-- [Link existing data into the cache](../how-to/catalogue-maintainers/link-existing-data.md) — overrides, linking
-  and copying on real shared storage.
+- [Link existing data into the cache](../how-to/catalogue-maintainers/link-existing-data.md) — linking and
+  copying on real shared storage.

@@ -17,13 +17,10 @@ from __future__ import annotations
 
 import errno
 import socket
-import types
 
 import platformdirs
 import pytest
 from support import ReaderCatalogue, SourceCatalogue, Store
-
-from ethos_data import config
 
 #: Every variable that changes what ethos_data reads or where it writes.
 ETHOS_VARIABLES = (
@@ -70,14 +67,8 @@ def _isolated_settings(tmp_path_factory, monkeypatch):
         platformdirs, "user_config_dir", lambda *a, **k: str(home / "user-config")
     )
     monkeypatch.setattr(
-        platformdirs, "site_config_dir", lambda *a, **k: str(home / "site-config")
-    )
-    monkeypatch.setattr(
         platformdirs, "user_cache_dir", lambda *a, **k: str(home / "user-cache")
     )
-    # The environment scope lives under sys.prefix, which config reads for
-    # nothing else.
-    monkeypatch.setattr(config, "sys", types.SimpleNamespace(prefix=str(home / "env")))
     return home
 
 

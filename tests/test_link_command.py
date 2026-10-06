@@ -131,6 +131,27 @@ def test_refuses_a_directory_that_is_not_there(workspace, tmp_path):
     assert not (cache / "example").exists()
 
 
+def test_windows_without_symbolic_links_is_offered_a_verified_copy(
+    workspace, monkeypatch
+):
+    cache, data, roots = workspace
+
+    def refused(*args, **kwargs):
+        raise OSError("A required privilege is not held by the client")
+
+    # Not os.name: changed for the whole process, it would make every Path
+    # built after it a WindowsPath, which only Windows can create.
+    monkeypatch.setattr("ethos_data.linking._on_windows", lambda: True)
+    monkeypatch.setattr("pathlib.Path.symlink_to", refused)
+
+    with pytest.raises(LinkError) as refusal:
+        link(_catalog(), "example", data, roots)
+
+    assert f"ethos-data materialize example --from {data}" in refusal.value.message
+    assert "mklink /J" in refusal.value.message
+    assert not (cache / "example").exists()
+
+
 def test_will_not_replace_a_directory_the_cache_owns(workspace):
     cache, data, roots = workspace
     owned = cache / "example"

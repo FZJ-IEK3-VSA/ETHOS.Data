@@ -15,16 +15,15 @@ down, and re-pointing a link migrates every user at once.
 
 Resolution order for one dataset:
 
-  1. ``dataset_roots`` -- the per-dataset escape hatch, for a private copy
-  2. the staging root -- work in progress, shadowing the catalogue during
+  1. the staging root -- work in progress, shadowing the catalogue during
      development.  Never applies to restricted data.
-  3. the restricted root, for restricted datasets: always in place, never
+  2. the restricted root, for restricted datasets: always in place, never
      downloaded, never written to
-  4. the public root, for everything else: in place if the entry is a symbolic
+  3. the public root, for everything else: in place if the entry is a symbolic
      link, downloaded otherwise
 
-The rule that matters, unchanged: restricted data is never written into a shared
-cache and never silently downloaded. If there is nowhere to read it from, asking
+The rule that matters: restricted data is never written into a shared cache and
+never silently downloaded. If there is nowhere to read it from, asking
 for it fails with an explanation instead of doing something surprising.
 """
 
@@ -47,7 +46,6 @@ __all__ = [
     "locate",
     "requires_local_root",
     "unavailable",
-    "ORIGIN_CONFIGURED",
     "ORIGIN_STAGING",
     "ORIGIN_RESTRICTED",
     "ORIGIN_LINK",
@@ -64,7 +62,6 @@ STAGING = "staging"
 
 #: Why a location resolved the way it did -- carried so that error messages and
 #: a package's ``verify`` command can say something more useful than "not found".
-ORIGIN_CONFIGURED = "configured root"
 ORIGIN_STAGING = "staging"
 ORIGIN_RESTRICTED = "restricted cache"
 ORIGIN_LINK = "namespace link"
@@ -172,14 +169,11 @@ def _restricted_location(
         lines.append(f"  {note}")
     lines.append("No restricted cache is configured on this machine.")
     lines.append("")
-    lines.append("If you have a copy, say where it is:")
+    lines.append("If you have a copy, register it:")
     lines.append(
         "    ethos-data config set-restricted-cache /path/to/ethos_data_restricted"
     )
-    lines.append(
-        f"    ethos-data config set-root {dataset.name} /path/to/{dataset.name}"
-        "    # just this one"
-    )
+    lines.append(f"    ethos-data link {dataset.name} /path/to/{dataset.name}")
     lines.append("")
     lines.append("If you do not, carry on without it:")
     lines.append("    ethos-data ... --skip-unavailable")
@@ -197,13 +191,12 @@ def locate(
     catalog: Catalog,
     resources: list[Resource],
     roots: "Roots | str | Path | None" = None,
-    dataset_roots: dict[str, str | Path] | None = None,
     skip_unavailable: bool | None = None,
 ) -> list[Location]:
     """Work out where every resource should be read from.
 
-    ``roots`` accepts a :class:`~ethos_data.config.Roots`, or a bare path meaning
-    the public cache -- which is what a lone cache directory always meant.
+    ``roots`` is a :class:`~ethos_data.config.Roots`, or a bare path naming the
+    public cache; without either, the roots of the catalogue's settings.
 
     ``skip_unavailable`` decides what happens to licensed data this machine has
     no access to: ``False`` raises, ``True`` marks it "unavailable" and carries
@@ -213,12 +206,9 @@ def locate(
     Raises AccessError -- naming the dataset and what to configure -- rather than
     falling back to the cache or to a download when neither is permitted.
     """
-    roots = Roots.coerce(roots)
+    roots = catalog._roots(roots)
     if skip_unavailable is None:
         skip_unavailable = resolve_skip_unavailable()[0]
-    configured = {
-        name: Path(path).expanduser() for name, path in (dataset_roots or {}).items()
-    }
     located: list[Location] = []
     warned: set[str] = set()
 
@@ -226,16 +216,7 @@ def locate(
         dataset = catalog.dataset(resource.dataset)
         access = access_class(dataset)
 
-        # 1. The per-dataset escape hatch wins over everything, including
-        #    staging: it is the most specific thing anybody can have said.
-        root = configured.get(dataset.name)
-        if root is not None:
-            located.append(
-                Location(resource, root / resource.path, "in-place", ORIGIN_CONFIGURED)
-            )
-            continue
-
-        # 2. Staging shadows the catalogue -- but never for restricted data,
+        # 1. Staging shadows the catalogue -- but never for restricted data,
         #    whose licence terms are not a development concern.
         if access != RESTRICTED:
             staged = _staged(roots, dataset.name)
@@ -257,14 +238,14 @@ def locate(
                 )
                 continue
 
-        # 3. Restricted data lives in its own root and is only ever read.
+        # 2. Restricted data lives in its own root and is only ever read.
         if access == RESTRICTED:
             located.append(
                 _restricted_location(roots, dataset, resource, skip_unavailable)
             )
             continue
 
-        # 4. Everything else comes from the public cache. A symbolic link means
+        # 3. Everything else comes from the public cache. A symbolic link means
         #    the data is already on this machine and must not be written to.
         entry = roots.public / dataset.name
         if entry.is_symlink():
@@ -280,10 +261,7 @@ def locate(
                 f"from.\n"
                 f"Either set ethos:publication_url in catalog.yaml, or, while the data is "
                 f"not yet uploaded, point at the copy on this machine:\n"
-                f"    ethos-data link {dataset.name} /path/to/{dataset.name}\n"
-                f"or, for this one dataset only:\n"
-                f"    ethos-data config set-root {dataset.name} /path/to/{dataset.name} "
-                f"--scope environment"
+                f"    ethos-data link {dataset.name} /path/to/{dataset.name}"
             )
 
         located.append(

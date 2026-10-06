@@ -157,9 +157,6 @@ def test_portable_snapshot_with_sidecars_and_provenance(
     (staging / "sites.shp").write_bytes(b"uncatalogued development")
     monkeypatch.setenv("ETHOS_STAGING_DIR", str(staging.parent))
     monkeypatch.setenv("ETHOS_DATA_DIR", str(tmp_path / "empty-cache"))
-    (tmp_path / "ethos-data.yaml").write_text(
-        "dataset_roots:\n  fixture: /missing/ambient/override\n"
-    )
     monkeypatch.chdir(tmp_path)
     bundle = export(catalogue, tmp_path / "bundle")
     assert bundle.names() == ["shape", "test_suite"]
