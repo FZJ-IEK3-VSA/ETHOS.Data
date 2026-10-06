@@ -1071,9 +1071,12 @@ def run(
     )
     if check:
         if build.stale:
-            report.warning("Out of date (re-run `ethos-data catalog build`):")
-            for path in build.stale:
-                report.warning(f"  {path.relative_to(catalog_root)}")
+            report.warning(
+                "Out of date (re-run `ethos-data catalog build`):"
+                + "".join(
+                    f"\n  {path.relative_to(catalog_root)}" for path in build.stale
+                )
+            )
         else:
             report.info("All manifests up to date.")
     return result

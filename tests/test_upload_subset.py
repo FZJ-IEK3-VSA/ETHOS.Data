@@ -23,6 +23,7 @@ from ethos_data.adapters.fakes import FakeStore
 from ethos_data.errors import TransitionError, UploadError
 from ethos_data.maintain import upload
 from ethos_data.maintain.manifest import run as build_run
+from ethos_data.report import NullReporter, RecordingReporter
 
 CATALOG = (
     "name: t\n"
@@ -179,7 +180,8 @@ class TestUploadingTheSubset:
     def test_the_result_names_each_failure_with_rclones_status(self, workspace, store):
         make_catalog(workspace, {"a": {}})
         store.copy_status = 7
-        (why,) = upload.run(workspace, *make_args(["a"])).failed.values()
+        result = upload.run(workspace, *make_args(["a"]), reporter=NullReporter())
+        (why,) = result.failed.values()
         assert "rclone exited 7" in why
 
     def test_a_failure_is_reported_per_dataset_and_fails_the_run(
@@ -187,9 +189,14 @@ class TestUploadingTheSubset:
     ):
         make_catalog(workspace, {"a": {}, "b": {}})
         store.copy_status = 7
-        result = upload.run(workspace, *make_args(["a", "b"]))
+        recorded = RecordingReporter()
+        result = upload.run(workspace, *make_args(["a", "b"]), reporter=recorded)
         assert not result.ok
         assert sorted(result.failed) == ["a", "b"]
+        assert [warning.split(":")[0] for warning in recorded.warnings] == [
+            "upload, transfer, a",
+            "upload, transfer, b",
+        ]
 
     def test_one_failed_dataset_does_not_stop_the_others(self, workspace, store):
         make_catalog(workspace, {"a": {}, "b": {}})
@@ -202,7 +209,7 @@ class TestUploadingTheSubset:
 
         store.copy = refuse_a
 
-        result = upload.run(workspace, *make_args(["a", "b"]))
+        result = upload.run(workspace, *make_args(["a", "b"]), reporter=NullReporter())
 
         assert list(result.failed) == ["a"]
         states = {

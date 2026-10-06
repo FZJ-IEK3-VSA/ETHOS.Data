@@ -212,7 +212,10 @@ class TestReading:
 
         with pytest.raises(BundleError, match="Record the change"):
             bundle.fetch("sites")
-        with pytest.warns(ModifiedBundleWarning, match="sites/a.csv"):
+        with (
+            pytest.warns(BundleAlignmentWarning, match="not in the catalogue"),
+            pytest.warns(ModifiedBundleWarning, match="sites/a.csv"),
+        ):
             files = bundle.fetch("sites", allow_modified=True)
         assert files["sites/a.csv"].read_bytes() == b"9\n"
         assert next(f.status for f in bundle.verify("sites/a.csv")) == "modified"
@@ -372,7 +375,8 @@ class TestTheDownloadSwitch:
         )
         data = ethos_data.collections(collections, bundles=[root], download=True)
 
-        files = data.fetch("inputs")
+        with pytest.warns(BundleAlignmentWarning, match="ahead of the catalogue"):
+            files = data.fetch("inputs")
 
         assert files["sites/a.csv"] == reader.cache / "sites" / "a.csv"
         assert files["sites/b.csv"] == root / "data" / "sites" / "b.csv"
