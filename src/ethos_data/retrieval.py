@@ -36,9 +36,11 @@ from .access import (
     locate,
     unavailable,
 )
-from .catalogs import Catalog, Resource
+from .catalogs import Catalog
 from .config import ENV_VAR, Roots, dataset_roots, resolve_public_cache
 from .errors import AccessError
+from .formats import keys as k
+from .model.resource import Resource
 
 __all__ = [
     "DataFiles",
@@ -299,7 +301,7 @@ def _warn_about_licensing(catalog: Catalog, resources: list[Resource]) -> None:
         }
     )
     for name in unresolved:
-        note = catalog.dataset(name).descriptor.get("ethos:license_note", "")
+        note = catalog.dataset(name).descriptor.get(k.LICENSE_NOTE, "")
         warnings.warn(
             f"dataset {name!r} has unresolved licensing; redistribution terms "
             f"have not been confirmed. {note}".strip(),

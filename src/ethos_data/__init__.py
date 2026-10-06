@@ -36,7 +36,6 @@ from .access import Location, locate
 from .catalogs import (
     Catalog,
     Dataset,
-    Resource,
     load_catalog,
 )
 from .config import (
@@ -85,6 +84,7 @@ from .errors import (
 from .retrieval import DataFiles, NamedPaths, cache_dir, download, local_path, plan
 from .materialize import materialize
 from .linking import link, unlink
+from .model.resource import Resource
 from .selection import Collections, load_collections
 from .staging import apply_staging, classify_staged, staged_only
 from .verify import Finding, repair, verify

@@ -13,10 +13,11 @@ import json
 
 import pytest
 
-from ethos_data.catalogs import Catalog, Dataset, Resource
+from ethos_data.catalogs import Catalog, Dataset
 from ethos_data.cli import main
 from ethos_data.config import Roots
 from ethos_data.materialize import PROVENANCE_FILE, materialize, plan_materialize
+from ethos_data.model.resource import Resource
 
 CONTENT = {"a.txt": b"first file", "sub/b.txt": b"second file"}
 

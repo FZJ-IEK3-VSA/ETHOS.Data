@@ -22,7 +22,7 @@ package defines. Neither form changes anything.
 | `dangling` | A cache link points nowhere: its target moved. Tell the cache maintainer. |
 | `missing`, `unreadable` | The file is absent or you lack permission. Check the expected location and your group membership. |
 | `unavailable here` | A restricted dataset this account cannot read. The output gives the reason and the state of each restricted cache. |
-| `unverifiable` | A staged development copy without catalogue checksums. Remove the staging entry before an official run. |
+| `unverifiable` | A staged development copy without catalogue checksums: not a failure, but remove the staging entry before an official run. For a catalogue file, the catalogue records no SHA-256 for it: a failure that repair cannot fix. [Report it](report-a-problem.md) to the catalogue maintainers. |
 
 ## Repair downloaded data
 

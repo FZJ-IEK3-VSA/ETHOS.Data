@@ -8,21 +8,23 @@ An explicit allow_modified development override never changes original hashes.
 
 from __future__ import annotations
 
-import hashlib
 import json
-import re
 import shutil
 import tempfile
 import warnings
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath
 from typing import Iterable, Mapping, Sequence
 
 import pooch
 import yaml
 
-from .catalogs import Catalog, Resource, _join, _read_binary
+from .catalogs import Catalog, _join, _read_binary
 from .errors import BundleError
+from .formats import keys as k
+from .formats.derived import resource_url
+from .model import digest, names
+from .model.resource import Resource, checked, to_record
 from .retrieval import DataFiles
 from .selection import load_collections
 
@@ -39,7 +41,6 @@ FORMAT = "ethos-data-bundle-v1"
 #: Where archived licence documents sit, mirroring the published catalogue's
 #: own ``datasets/<name>/<document>`` layout so the two are read the same way.
 METADATA_DIR = "datasets"
-_SHA256 = re.compile(r"sha256:[0-9a-fA-F]{64}\Z")
 
 
 class ModifiedBundleWarning(UserWarning):
@@ -64,18 +65,11 @@ class BundleFinding:
 
 
 def _relative(value: str, label: str = "path") -> PurePosixPath:
-    # Check spelling before PurePath normalizes away '.' and empty components.
-    if (
-        not isinstance(value, str)
-        or not value
-        or "\\" in value
-        or "\x00" in value
-        or PurePosixPath(value).is_absolute()
-        or PureWindowsPath(value).drive
-        or any(part in ("", ".", "..") for part in value.split("/"))
-    ):
-        raise BundleError(f"unsafe {label}: {value!r}; expected a relative path")
-    return PurePosixPath(value)
+    """:func:`ethos_data.model.names.relative`, refusing as a bundle refuses."""
+    try:
+        return names.relative(value, label)
+    except ValueError as error:
+        raise BundleError(str(error)) from None
 
 
 def _inside(root: Path, relative: str) -> Path:
@@ -87,15 +81,7 @@ def _inside(root: Path, relative: str) -> Path:
     return path
 
 
-def _digest(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return "sha256:" + digest.hexdigest()
-
-
-def _distinct_datasets(names: Iterable[str]) -> None:
+def _distinct_datasets(datasets: Iterable[str]) -> None:
     """Refuse a dataset that lives underneath another dataset.
 
     A name may contain "/" -- a family member is spelled
@@ -109,16 +95,13 @@ def _distinct_datasets(names: Iterable[str]) -> None:
     rejects absolute, empty, ``.``, ``..`` and backslash components, and
     ``_inside`` confirms containment afterwards.
     """
-    present = set(names)
-    for name in sorted(present):
-        parts = name.split("/")
-        for depth in range(1, len(parts)):
-            ancestor = "/".join(parts[:depth])
-            if ancestor in present:
-                raise BundleError(
-                    f"dataset {name!r} lives under dataset {ancestor!r}; "
-                    "their bundled files would share a path"
-                )
+    found = names.nested(datasets)
+    if found is not None:
+        name, ancestor = found
+        raise BundleError(
+            f"dataset {name!r} lives under dataset {ancestor!r}; "
+            "their bundled files would share a path"
+        )
 
 
 def _license_documents(package: Mapping) -> list[str]:
@@ -129,14 +112,14 @@ def _license_documents(package: Mapping) -> list[str]:
     them back.
     """
     documents = []
-    for entry in package.get("licenses", []):
+    for entry in package.get(k.LICENSES, []):
         if not isinstance(entry, Mapping):
             raise BundleError("invalid licences entry")
-        document = entry.get("ethos:document")
+        document = entry.get(k.DOCUMENT)
         if not document:
             continue
         if not isinstance(document, str):
-            raise BundleError(f"invalid ethos:document: {document!r}")
+            raise BundleError(f"invalid {k.DOCUMENT}: {document!r}")
         _relative(document, "licence document")
         documents.append(document)
     return documents
@@ -155,16 +138,16 @@ def _collect_documents(dataset, package: Mapping, catalog_location: str) -> dict
     if not wanted:
         return {}
     try:
-        descriptor_location = _join(dataset.base, dataset.entry["path"])
+        descriptor_location = _join(dataset.base, dataset.entry[k.PATH])
     except (KeyError, TypeError) as error:
         raise BundleError(
             f"cannot locate the descriptor of {dataset.name!r} to read its licences"
         ) from error
     base = descriptor_location.rsplit("/", 1)[0] + "/"
     expected = {
-        entry["ethos:document"]: entry.get("ethos:document_sha256")
-        for entry in package.get("licenses", [])
-        if entry.get("ethos:document")
+        entry[k.DOCUMENT]: entry.get(k.DOCUMENT_SHA256)
+        for entry in package.get(k.LICENSES, [])
+        if entry.get(k.DOCUMENT)
     }
     collected = {}
     for document in wanted:
@@ -180,13 +163,9 @@ def _collect_documents(dataset, package: Mapping, catalog_location: str) -> dict
         if declared is not None:
             if not isinstance(declared, str):
                 raise BundleError(
-                    f"invalid ethos:document_sha256 for {dataset.name!r}: {declared!r}"
+                    f"invalid {k.DOCUMENT_SHA256} for {dataset.name!r}: {declared!r}"
                 )
-            # Descriptors spell this one bare, while resource hashes carry a
-            # "sha256:" prefix; accept either rather than depend on which.
-            if hashlib.sha256(raw).hexdigest() != declared.lower().removeprefix(
-                "sha256:"
-            ):
+            if not digest.matches(declared, digest.of_bytes(raw)):
                 raise BundleError(
                     f"licence document {document!r} of {dataset.name!r} does not "
                     f"match its catalogued hash"
@@ -196,52 +175,11 @@ def _collect_documents(dataset, package: Mapping, catalog_location: str) -> dict
 
 
 def _resource(record: dict, dataset: str) -> Resource:
+    """:func:`ethos_data.model.resource.checked`, refusing as a bundle refuses."""
     try:
-        name, path, size, digest = (
-            record["name"],
-            record["path"],
-            record["bytes"],
-            record["hash"],
-        )
-    except (KeyError, TypeError):
-        raise BundleError(f"incomplete resource metadata for {dataset!r}") from None
-    _relative(path, "resource path")
-    if (
-        not isinstance(name, str)
-        or not isinstance(size, int)
-        or isinstance(size, bool)
-        or size < 0
-    ):
-        raise BundleError(f"invalid resource metadata for {dataset}/{path}")
-    if not isinstance(digest, str) or not _SHA256.fullmatch(digest):
-        raise BundleError(f"{dataset}/{path} needs its catalogue sha256 hash")
-    sidecars = record.get("ethos:sidecars", [])
-    if not isinstance(sidecars, list):
-        raise BundleError(f"invalid sidecars for {dataset}/{path}")
-    for sidecar in sidecars:
-        _relative(sidecar, "sidecar path")
-    return Resource(
-        dataset,
-        name,
-        path,
-        size,
-        digest,
-        record.get("mediatype", "application/octet-stream"),
-        tuple(sidecars),
-    )
-
-
-def _record(resource: Resource) -> dict:
-    record = {
-        "name": resource.name,
-        "path": resource.path,
-        "bytes": resource.bytes,
-        "hash": resource.hash,
-        "mediatype": resource.mediatype,
-    }
-    if resource.sidecars:
-        record["ethos:sidecars"] = list(resource.sidecars)
-    return record
+        return checked(dataset, record)
+    except ValueError as error:
+        raise BundleError(str(error)) from None
 
 
 @dataclass
@@ -290,17 +228,23 @@ class Bundle:
                         )
                     )
                     continue
-                size, digest = path.stat().st_size, _digest(path)
+                size, actual = path.stat().st_size, digest.of_file(path)
             except OSError as error:
                 raise BundleError(f"cannot read fixture {key}: {error}") from error
             status = (
                 "ok"
-                if size == resource.bytes and digest.lower() == resource.hash.lower()
+                if size == resource.bytes and digest.matches(resource.hash, actual)
                 else "modified"
             )
             findings.append(
                 BundleFinding(
-                    key, path, status, resource.hash, digest, resource.bytes, size
+                    key,
+                    path,
+                    status,
+                    resource.hash,
+                    digest.recorded(actual),
+                    resource.bytes,
+                    size,
                 )
             )
         return findings
@@ -369,16 +313,16 @@ def load_bundle(path: str | Path) -> Bundle:
     for name, package in datasets.items():
         _relative(name, "dataset name")
         if not isinstance(package, dict) or not isinstance(
-            package.get("resources"), list
+            package.get(k.RESOURCES), list
         ):
             raise BundleError(f"missing resource metadata for {name!r}")
         if (
-            package.get("ethos:access", "public") != "public"
-            or package.get("ethos:visibility", "public") != "public"
-            or package.get("ethos:staged")
+            package.get(k.ACCESS, k.PUBLIC) != k.PUBLIC
+            or package.get(k.VISIBILITY, k.PUBLIC) != k.PUBLIC
+            or package.get(k.STAGED)
         ):
             raise BundleError(f"{name!r} is not a public catalogue snapshot")
-        for record in package["resources"]:
+        for record in package[k.RESOURCES]:
             resource = _resource(record, name)
             if resource.key in resources:
                 raise BundleError(f"duplicate resource metadata: {resource.key}")
@@ -465,20 +409,11 @@ def export_bundle(
             resources = {resource.key: resource for resource in loaded.resolve(name)}
         except (KeyError, OSError, ValueError) as error:
             raise BundleError(f"cannot resolve collection {name!r}: {error}") from error
-        pending = list(resources.values())
-        while pending:
-            resource = pending.pop()
-            for sidecar in resource.sidecars:
-                companion = loaded.catalog.dataset(resource.dataset).resource_at(
-                    sidecar
-                )
-                if companion is None:
-                    raise BundleError(
-                        f"missing catalogue sidecar metadata: {resource.dataset}/{sidecar}"
-                    )
-                if companion.key not in resources:
-                    resources[companion.key] = companion
-                    pending.append(companion)
+        # Every sidecar, and theirs: a bundle is read offline, so a companion
+        # left behind here cannot be fetched later.
+        resources, missing = loaded.catalog.with_sidecars(list(resources.values()))
+        if missing:
+            raise BundleError(f"missing catalogue sidecar metadata: {missing[0]}")
         if not resources:
             raise BundleError(f"collection {name!r} selects no resources")
         selected.update(resources)
@@ -489,52 +424,46 @@ def export_bundle(
     for resource in selected.values():
         dataset = loaded.catalog.dataset(resource.dataset)
         _relative(dataset.name, "dataset name")
-        _resource(_record(resource), dataset.name)
-        if dataset.descriptor.get("ethos:staged") or dataset.access == "staging":
+        _resource(to_record(resource), dataset.name)
+        if dataset.descriptor.get(k.STAGED) or dataset.access == k.STAGING:
             raise BundleError(f"cannot export staged dataset {dataset.name!r}")
-        if dataset.access != "public" or dataset.visibility != "public":
+        if dataset.access != k.PUBLIC or dataset.visibility != k.PUBLIC:
             raise BundleError(
                 f"{dataset.name!r} is {dataset.access}/{dataset.visibility}; portable fixture bundles require public data"
             )
         if (
-            dataset.descriptor.get("ethos:access", "public") != "public"
-            or dataset.descriptor.get("ethos:visibility", "public") != "public"
+            dataset.descriptor.get(k.ACCESS, k.PUBLIC) != k.PUBLIC
+            or dataset.descriptor.get(k.VISIBILITY, k.PUBLIC) != k.PUBLIC
         ):
             raise BundleError(f"{dataset.name!r} descriptor is not public")
         if resource.dataset not in packages:
             package = dict(dataset.descriptor)
-            for field in (
-                "resources",
-                "ethos:shards",
-                "ethos:shard_depth",
-                *STRIP_FROM_PACKAGE,
-            ):
+            for field in (k.RESOURCES, k.SHARDS, k.SHARD_DEPTH, *STRIP_FROM_PACKAGE):
                 package.pop(field, None)
-            package["resources"] = []
+            package[k.RESOURCES] = []
             packages[resource.dataset] = package
             documents.update(
                 _collect_documents(dataset, package, loaded.catalog.location)
             )
-        record = dataset.resource_descriptor(resource.path) or _record(resource)
+        record = dataset.resource_descriptor(resource.path) or to_record(resource)
         for field in STRIP_FROM_PACKAGE:
             record.pop(field, None)
-        packages[resource.dataset]["resources"].append(record)
+        packages[resource.dataset][k.RESOURCES].append(record)
     _distinct_datasets(packages)
     for package in packages.values():
-        package["resources"].sort(key=lambda record: record["path"])
-        package["ethos:file_count"] = len(package["resources"])
-        package["ethos:total_bytes"] = sum(
-            record["bytes"] for record in package["resources"]
-        )
+        package[k.RESOURCES].sort(key=lambda record: record[k.PATH])
+        package[k.FILE_COUNT] = len(package[k.RESOURCES])
+        package[k.TOTAL_BYTES] = sum(record[k.BYTES] for record in package[k.RESOURCES])
 
     source = {
         "catalog": loaded.catalog.location,
         "revision": source_revision,
         "catalog_version": loaded.catalog.descriptor.get("version"),
-        "catalog_descriptor_sha256": "sha256:"
-        + hashlib.sha256(
-            json.dumps(loaded.catalog.descriptor, sort_keys=True).encode("utf-8")
-        ).hexdigest(),
+        "catalog_descriptor_sha256": digest.recorded(
+            digest.of_bytes(
+                json.dumps(loaded.catalog.descriptor, sort_keys=True).encode("utf-8")
+            )
+        ),
     }
     document = {
         "format": FORMAT,
@@ -556,18 +485,18 @@ def export_bundle(
                 origin = _inside(roots[resource.dataset], resource.path)
                 if not origin.is_file():
                     raise BundleError(f"missing input fixture {key}: {origin}")
-                if (
-                    origin.stat().st_size != resource.bytes
-                    or _digest(origin).lower() != resource.hash.lower()
+                if origin.stat().st_size != resource.bytes or not digest.matches(
+                    resource.hash, digest.of_file(origin)
                 ):
                     raise BundleError(
                         f"input fixture differs from the catalogue: {key}"
                     )
                 shutil.copyfile(origin, destination)
             else:
-                publication = loaded.catalog.descriptor.get(
-                    "ethos:publication_url", ""
-                ).rstrip("/")
+                # From the URL the catalogue itself declares, never this
+                # machine's override: a bundle is a copy of the authoritative
+                # publication, whoever exports it.
+                publication = loaded.catalog.descriptor.get(k.PUBLICATION_URL, "")
                 if not publication.startswith(("https://", "http://")):
                     raise BundleError(
                         f"no HTTP(S) publication URL for {key}; supply dataset_roots"
@@ -575,7 +504,7 @@ def export_bundle(
                 prefix = loaded.catalog.dataset(resource.dataset).remote_prefix
                 _relative(prefix, "remote prefix")
                 pooch.retrieve(
-                    url=f"{publication}/{prefix}/{resource.path}",
+                    url=resource_url(publication, prefix, resource.path),
                     known_hash=resource.hash,
                     fname=destination.name,
                     path=destination.parent,

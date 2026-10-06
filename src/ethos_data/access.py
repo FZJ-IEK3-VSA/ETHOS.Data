@@ -34,9 +34,11 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
-from .catalogs import Catalog, Dataset, Resource
+from .catalogs import Catalog, Dataset
 from .config import Roots, resolve_skip_unavailable
 from .errors import AccessError
+from .formats import keys as k
+from .model.resource import Resource
 
 __all__ = [
     "cache_entries",
@@ -53,9 +55,9 @@ __all__ = [
     "UNAVAILABLE",
 ]
 
-PUBLIC = "public"
-INTERNAL = "internal"
-RESTRICTED = "restricted"
+PUBLIC = k.PUBLIC
+INTERNAL = k.INTERNAL
+RESTRICTED = k.RESTRICTED
 #: Synthesised for a dataset that exists only in the staging root. Never
 #: appears in a real catalogue, so it can never be uploaded or published.
 STAGING = "staging"
@@ -164,7 +166,7 @@ def _restricted_location(
     if skip_unavailable:
         return Location(resource, None, UNAVAILABLE, ORIGIN_RESTRICTED)
 
-    note = dataset.descriptor.get("ethos:restriction", "")
+    note = dataset.descriptor.get(k.RESTRICTION, "")
     lines = [f"dataset {dataset.name!r} is restricted and is never downloaded."]
     if note:
         lines.append(f"  {note}")

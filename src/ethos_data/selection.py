@@ -335,14 +335,15 @@ class Collections:
                 patterns = rule.get("files") or ["**"]
                 # resources_matching narrows a sharded dataset to the shards these
                 # patterns can reach; the glob below is still the real filter.
-                for resource in list(dataset.resources_matching(patterns).values()):
-                    if not any(path_matches(resource.path, p) for p in patterns):
-                        continue
-                    selected[resource.key] = resource
-                    for sidecar in resource.sidecars:
-                        companion = dataset.resource_at(sidecar)
-                        if companion is not None:
-                            selected[companion.key] = companion
+                matched = [
+                    resource
+                    for resource in list(dataset.resources_matching(patterns).values())
+                    if any(path_matches(resource.path, p) for p in patterns)
+                ]
+                # A sidecar the inventory lacks is left out: the files that are
+                # there are still the ones the rule asked for.
+                with_companions, _ = self.catalog.with_sidecars(matched)
+                selected.update(with_companions)
 
         return sorted(selected.values(), key=lambda r: r.key)
 

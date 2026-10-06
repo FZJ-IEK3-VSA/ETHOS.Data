@@ -36,11 +36,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
-
 from ..formats import keys as k
 from ..formats.derived import license_settled
-from . import dataset_name_for, datasets_dir, is_namespace, iter_dataset_dirs
+from . import (
+    dataset_name_for,
+    datasets_dir,
+    is_namespace,
+    iter_dataset_dirs,
+    read_descriptor,
+    source_dir_of,
+)
 
 __all__ = ["Action", "plan", "apply", "run"]
 
@@ -89,22 +94,8 @@ def _declared(catalog_root: Path) -> list[tuple[str, dict]]:
     for directory in iter_dataset_dirs(root):
         if is_namespace(directory):
             continue
-        meta = (
-            yaml.safe_load((directory / "dataset.yaml").read_text(encoding="utf-8"))
-            or {}
-        )
-        found.append((dataset_name_for(root, directory), meta))
+        found.append((dataset_name_for(root, directory), read_descriptor(directory)))
     return found
-
-
-def _source_of(catalog_root: Path, name: str, meta: dict) -> Path | None:
-    raw = meta.get("source_dir")
-    if not raw:
-        return None
-    source = Path(str(raw)).expanduser()
-    if not source.is_absolute():
-        source = (datasets_dir(catalog_root) / name / source).resolve()
-    return source
 
 
 def _same_target(current: Path, source: Path) -> bool:
@@ -157,7 +148,7 @@ def plan(catalog_root: Path, root: Path, prune: bool = False) -> list[Action]:
             )
             continue
 
-        source = _source_of(catalog_root, name, meta)
+        source = source_dir_of(datasets_dir(catalog_root) / name, meta)
         if source is None:
             actions.append(
                 Action(name, "skip", entry, detail="no source_dir in dataset.yaml")

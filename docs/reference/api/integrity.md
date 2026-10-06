@@ -22,7 +22,6 @@ See [Check and repair the cache](../../how-to/data-users/verify-and-repair.md) a
         - repair
         - Finding
         - summarise
-        - sha256_of
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

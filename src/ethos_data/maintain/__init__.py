@@ -19,7 +19,10 @@ install extra to remember.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
+
+import yaml
 
 from ..errors import CatalogueRootError, DescriptorError
 from ..formats import keys as k
@@ -34,10 +37,9 @@ GENERATED_MARKER = "datacatalog.json"
 def catalogue_role(path: Path) -> str | None:
     """The role a directory's ``datacatalog.json`` declares, if it has one.
 
-    Read rather than inferred. The old guess -- index present, ``catalog.yaml``
-    absent -- happened to be right, but it could not tell a published catalogue
-    from a source checkout someone had half-deleted, and it had nothing to say
-    about a catalogue that is neither.
+    Read rather than inferred: an index without a ``catalog.yaml`` beside it
+    may be a published catalogue or a source checkout someone half-deleted, and
+    says nothing about a catalogue that is neither.
     """
     index = path / GENERATED_MARKER
     if not index.is_file():
@@ -114,6 +116,60 @@ def resolve_catalog_root(explicit: str | None, start: Path | None = None) -> Pat
 
 def datasets_dir(catalog_root: Path) -> Path:
     return catalog_root / "datasets"
+
+
+#: The hand-written description of one dataset, in its directory under
+#: ``datasets/``.
+DESCRIPTOR = "dataset.yaml"
+
+
+def _read_mapping(path: Path) -> dict:
+    """A hand-written YAML file as its keys and values; an empty file has none."""
+    try:
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as error:
+        raise DescriptorError(f"{path} is not valid YAML: {error}") from None
+    if document is None:
+        return {}
+    if not isinstance(document, dict):
+        raise DescriptorError(
+            f"{path} must hold keys and their values, not a {type(document).__name__}."
+        )
+    return document
+
+
+def read_descriptor(dataset_dir: Path) -> dict:
+    """A dataset's ``dataset.yaml``, as every command reads it.
+
+    One reader, so an empty file means the same to all of them: a descriptor
+    with no keys, which the build then refuses for what it lacks.
+    """
+    return _read_mapping(dataset_dir / DESCRIPTOR)
+
+
+def read_catalog_meta(catalog_root: Path) -> dict:
+    """The catalogue's ``catalog.yaml``, read as :func:`read_descriptor` reads."""
+    return _read_mapping(catalog_root / CATALOG_MARKER)
+
+
+def source_dir_of(dataset_dir: Path, meta: Mapping) -> Path | None:
+    """Where a dataset's bytes are read from, or None if it states no ``source_dir``.
+
+    Resolved against the dataset's own directory, never the current one, so a
+    relative ``source_dir`` means the same thing to every command wherever it
+    runs: otherwise an upload could take its bytes from somewhere the build
+    never saw. Only a relative one is resolved, and only to make it absolute.
+    An absolute one is used as written, symbolic links and all: when it names
+    the curated namespace, that is the path worth recording, because it stays
+    correct when the storage behind it moves.
+    """
+    raw = meta.get(k.SOURCE_DIR)
+    if not raw:
+        return None
+    source = Path(str(raw)).expanduser()
+    if not source.is_absolute():
+        source = (dataset_dir / source).resolve()
+    return source
 
 
 #: Where a sharded dataset keeps its split inventory, beside its own
@@ -221,17 +277,18 @@ def resources_of(package: dict, dataset_dir: Path) -> list[dict]:
     without re-reading source_dir) and the uploader (finding what to copy and
     verify) so the two can never disagree about what a sharded package contains.
     """
-    if "resources" in package:
-        return package["resources"]
+    if k.RESOURCES in package:
+        return package[k.RESOURCES]
+    name = package[k.NAME]
     resources: list[dict] = []
-    for shard in package.get("ethos:shards", []):
-        shard_file = dataset_dir / shard["path"]
+    for shard in package.get(k.SHARDS, []):
+        shard_file = dataset_dir / shard[k.PATH]
         if not shard_file.is_file():
             raise DescriptorError(
-                f"{package['name']}: shard {shard['path']} is missing. Run:\n"
-                f"    ethos-data catalog build {package['name']}"
+                f"{name}: shard {shard[k.PATH]} is missing. Run:\n"
+                f"    ethos-data catalog build {name}"
             )
         resources.extend(
-            json.loads(shard_file.read_text(encoding="utf-8"))["resources"]
+            json.loads(shard_file.read_text(encoding="utf-8"))[k.RESOURCES]
         )
     return resources
