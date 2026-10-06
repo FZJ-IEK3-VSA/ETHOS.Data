@@ -1,6 +1,6 @@
 # 0009. Reach dCache, downloads, metadata sources and git through ports with fakes
 
-**Status:** proposed · **Date:** 2026-10-02 · **Implemented by:** #20, a new PR (inventory reader: the metadata-source port), #23
+**Status:** proposed · **Date:** 2026-10-02 · **Implemented by:** #20, #40 (the metadata-source port), #23
 
 ## Context
 
