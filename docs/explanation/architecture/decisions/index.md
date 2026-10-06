@@ -34,7 +34,7 @@ dash means that the decision is implemented and needs no pull request.
 | 0013 | [Treat every input as required, and say what is missing](0013-every-input-is-required.md) | proposed | #16, #18 |
 | 0014 | [Name workflow inputs in the collection and pair test and full variants](0014-named-inputs-and-test-full-variants.md) | implemented | — |
 | 0015 | [Let each package's data command own its collection workflows](0015-package-commands-own-collections.md) | implemented | — |
-| 0016 | [Give one link command two modes](0016-one-link-command-two-modes.md) | proposed | a new PR (caches) |
+| 0016 | [Give one link command two modes](0016-one-link-command-two-modes.md) | implemented | a new PR (caches) |
 | 0017 | [Ship a self-test collection with the package](0017-self-test-collection.md) | proposed | #18 |
 | | **Versions** | | |
 | 0018 | [Number catalogue releases `vMAJOR.MINOR.PATCH`, purge data only after a major release, and let collections files bound them](0018-numbered-catalogue-releases.md) | proposed | #19, #23 |
@@ -49,4 +49,4 @@ dash means that the decision is implemented and needs no pull request.
 | | **Deployment** | | |
 | 0026 | [Serve the internal catalogue's latest release from one checkout on the cluster, and change it only through JuGit](0026-internal-catalogue-on-the-cluster.md) | proposed | #23; implemented once the first versioned release is served |
 | 0027 | [Release the public catalogue as a generated view, tagged on GitHub](0027-public-catalogue-releases-on-github.md) | proposed | #12, #19, #23, #26; implemented with the first versioned release |
-| 0028 | [Share one public cache on the cluster](0028-one-public-cache-on-the-cluster.md) | proposed | a new PR (caches) |
+| 0028 | [Share one public cache on the cluster](0028-one-public-cache-on-the-cluster.md) | implemented | a new PR (caches) |

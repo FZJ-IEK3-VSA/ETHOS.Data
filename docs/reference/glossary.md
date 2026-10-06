@@ -4,14 +4,11 @@ Key concepts used across `ethos-data`.
 
 !!! warning "Gap: some terms describe the target"
     These terms describe the [target architecture](../explanation/architecture/glossary.md),
-    which the code does not have yet: several **restricted caches**, one
-    **bundle** format and a bundle **ahead of the catalogue**, a **repair**
-    that never touches a link, **release** and **withdraw** with
+    which the code does not have yet: one **bundle** format and a bundle
+    **ahead of the catalogue**, **release** and **withdraw** with
     `catalog release` and `catalog remove`, **status files** and **dataset
-    states**, **pipelines**, **handoffs** and the one **settings file**. The
-    code reads one restricted cache, has only bundles exported from the
-    catalogue, replaces a broken link with a copy on repair, and has none of
-    those commands.
+    states**, **pipelines** and **handoffs**. The code has only bundles
+    exported from the catalogue, and none of those commands.
 
 ## Data
 

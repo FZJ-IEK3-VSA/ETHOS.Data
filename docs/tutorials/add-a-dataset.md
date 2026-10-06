@@ -138,14 +138,15 @@ No output means no leak. You now have both views of the catalogue: the
 internal one in `source-catalogue/datacatalog.json`, and the public one in
 `public-catalogue`. A hidden dataset would appear only in the first.
 
-## 5. Link the data into a shared cache
+## 5. Link the data into the public cache
 
-On a machine that several people or projects share, data already on disk does
-not need to be downloaded at all. Link it into the cache everybody uses:
+On the cluster, every user's public cache is one shared directory, and data
+already on disk there is never downloaded: a maintainer links it into that
+cache. Do the same for the lesson's public cache, `public-cache`:
 
 ```bash
-ethos-data link --all --root ../shared-cache --dry-run
-ethos-data link --all --root ../shared-cache
+ethos-data link --all --root ../public-cache --dry-run
+ethos-data link --all --root ../public-cache
 cd ..
 ```
 
@@ -155,7 +156,7 @@ cd ..
 1 change(s) applied.
 ```
 
-`shared-cache/station-temperatures` is now a symbolic link to
+`public-cache/station-temperatures` is now a symbolic link to
 `incoming/station-temperatures`. Nothing was copied.
 
 ## 6. Read the dataset as a data user
@@ -186,16 +187,16 @@ It provides the same collection, bundle and staging commands a consuming package
 exposes through `tool_main`, without needing RESKit installed for this lesson.
 
 
-Plan the collection the way a data user would, with the shared cache as the
-public cache:
+Plan the collection the way a data user on the cluster would, whose public
+cache is the one the data was linked into:
 
 ```bash
 python data_cli.py --catalog public-catalogue/datacatalog.json \
-  --root shared-cache plan temperatures
+  --root public-cache plan temperatures
 ```
 
 ```title="Output"
-public cache:    shared-cache
+public cache:    public-cache
 used in place:      1 files        28 B  (namespace link, never copied)
 already cached:     0 files         0 B
 to download:        0 files         0 B
@@ -207,9 +208,9 @@ collection and check it against the catalogue:
 
 ```bash
 python data_cli.py --catalog public-catalogue/datacatalog.json \
-  --root shared-cache fetch temperatures
+  --root public-cache fetch temperatures
 python data_cli.py --catalog public-catalogue/datacatalog.json \
-  --root shared-cache verify temperatures --deep
+  --root public-cache verify temperatures --deep
 ```
 
 The fetch reports `1 used in place`, and verification ends with
@@ -223,16 +224,16 @@ owns:
 
 ```bash
 ethos-data --catalog public-catalogue/datacatalog.json \
-  --root shared-cache materialize station-temperatures --dry-run
+  --root public-cache materialize station-temperatures --dry-run
 ethos-data --catalog public-catalogue/datacatalog.json \
-  --root shared-cache materialize station-temperatures
+  --root public-cache materialize station-temperatures
 ```
 
 ```title="Output (abridged)"
   materialized   station-temperatures  1 files, 28 bytes copied from …/catalogue-lesson/incoming/station-temperatures
 ```
 
-`shared-cache/station-temperatures` is now a real directory, and
+`public-cache/station-temperatures` is now a real directory, and
 `.ethos-data-materialized.json` inside it records where the copy came from. Run
 the `fetch --plan` command from step 6 again: the file is now `already cached` rather
 than `used in place`. `incoming/station-temperatures` is still there;
@@ -245,7 +246,7 @@ than `used in place`. `incoming/station-temperatures` is still there;
 | `ethos-data catalog build` | inventoried `source_dir`, left out the excluded log, hashed the rest |
 | `ethos-data catalog build --check` | compared the inventory with the files, and wrote nothing |
 | `ethos-data catalog publish` | generated the public view without maintainer-only fields |
-| `ethos-data link --all` | linked data already on disk into a shared cache |
+| `ethos-data link --all` | linked data already on disk into the public cache |
 | `ethos-data materialize` | replaced that link with a verified copy |
 
 A real catalogue has one more step between building and publishing:

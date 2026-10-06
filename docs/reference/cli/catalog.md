@@ -6,9 +6,9 @@ read-only; `check-store` creates temporary remote objects.
 
 Cache links are not in this group: one dataset or a whole catalogue,
 they are [`ethos-data link`](ethos-data.md#link-dataset-directory). Building a
-namespace is site administration on the machine that holds the data, not
-catalogue maintenance, and having had it in both places only ever raised the
-question of which one you were supposed to type.
+namespace fills a public cache, in practice the cluster's public cache, which is
+cache administration on the machine that holds the data, not catalogue
+maintenance.
 
 ```
 ethos-data catalog [--catalog-root DIR] <command> ...
@@ -143,9 +143,10 @@ the maintainer records that after verification.
 !!! warning "Gap: `--allow-internal` is to be removed"
     With [decision
     0011](../../explanation/architecture/decisions/0011-access-class-picks-the-root.md),
-    there is no `internal` class. Data the institute holds without
-    publishing it is restricted data, which `upload` refuses: it never has a
-    copy on dCache. To be implemented separately.
+    there is no `internal` class, so the option has nothing left to permit.
+    Data the institute holds without publishing it is restricted data, which
+    `upload` refuses: it never has a copy on dCache. To be implemented
+    separately.
 
 Use `--verify-only --no-chmod` to recheck without changing permissions.
 

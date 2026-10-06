@@ -79,12 +79,9 @@ links your copy into it, and the copy is read in place.
 
 Every input a workflow names is required; no setting lets it run without one.
 
-!!! warning "Gap: one restricted cache, and inputs can be left out"
-    The code reads one restricted cache, set with
-    `config set-restricted-cache DIR`; `config add-restricted-cache` and
-    `config remove-restricted-cache` do not exist. Its refusal names the
-    dataset and prints the `ethos:restriction` note only, and it offers to
-    carry on without the dataset, through `--skip-unavailable`,
+!!! warning "Gap: inputs can be left out"
+    The code's refusal names the dataset and prints the `ethos:restriction`
+    note only, and it offers to carry on without the dataset, through `--skip-unavailable`,
     `skip_unavailable=True`, `config set-skip-unavailable` or
     `ETHOS_SKIP_UNAVAILABLE`. See [every input is
     required](../../explanation/architecture/decisions/0013-every-input-is-required.md).
@@ -110,7 +107,7 @@ ethos-data config add-restricted-cache /shared/ethos/restricted/<group>
 | Setting | What it does |
 | --- | --- |
 | catalogue | Selects the internal catalogue, which describes every dataset, including those the public catalogue hides. It replaces the public catalogue and any version a package declares. |
-| public cache | The cluster's public cache, one directory that every cluster user shares. Public data lies there as links into project storage or as copies, and a public file it lacks is downloaded into it, once for everyone. |
+| public cache | The cluster's public cache, one directory that every cluster user shares and may write. Public data lies there as links into project storage or as copies, and a public file it lacks is downloaded into it, once for everyone. |
 | restricted caches | One directory per access combination, for example every member of the institute or one licence group. Retrieval reads them in place and never writes to them. |
 
 A user who works with public data only adds no restricted cache, and every
@@ -120,15 +117,6 @@ access.
 
 A broken link in the cluster's public cache stops every user's read of that
 dataset until a catalogue maintainer repairs it; [report it](report-a-problem.md).
-
-!!! warning "Gap: one restricted cache, and repair can remove a link"
-    The code reads one restricted cache, set with
-    `config set-restricted-cache DIR`, instead of a list. Its
-    `verify --repair` can replace a link in the cluster's public cache with
-    a downloaded copy, which every cluster user then reads; run it with
-    `--dry-run` first, as [Check and repair the cache](verify-and-repair.md)
-    says. See [decision
-    0028](../../explanation/architecture/decisions/0028-one-public-cache-on-the-cluster.md).
 
 Record the catalogue version that `ethos-data config show` and
 `<your-tool>-data show` print with your results.
@@ -241,10 +229,6 @@ lists restricted caches separated by `:`, on Windows by `;`, and replaces
 the list in the settings file; nothing is merged. For one command, put
 `--catalog LOCATION` or `--root DIR` before the subcommand of `ethos-data` or of
 your package's `<your-tool>-data` command.
-
-!!! warning "Gap: `ETHOS_RESTRICTED_DIRS` is not implemented"
-    The variable is ignored. The code reads one restricted cache from
-    `ETHOS_RESTRICTED_DIR`.
 
 ## Remove a setting {#check-and-remove-settings}
 

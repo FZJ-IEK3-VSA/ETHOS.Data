@@ -203,27 +203,27 @@ unless `--repair` is given.
 | `--all` | every collection in the file, in every variant (the default when no collection is named); one that cannot be resolved is reported as skipped |
 | `--test` | the named collection's `test` variant |
 | `--deep` | compare checksums, not just sizes — reads every byte |
-| `--repair` | re-fetch whatever no longer matches, from dCache |
+| `--repair` | download again, into the public cache, the copies it owns that no longer match; never a link |
 | `--dry-run` | with `--repair`: say what would be re-fetched, change nothing |
 | `-q`, `--quiet` | only report problems |
 
 Statuses, worst first: `dangling`, `wrong checksum`, `wrong size`, `missing`,
-`unreadable`, `unavailable here`, `unverifiable`, `ok`.
+`unreadable`, `unavailable here`, `unverifiable`, `note`, `ok`.
 `unverifiable` fails the check for a catalogue file whose record holds no
-SHA-256, and only reports a staged file; `--repair` skips both.
+SHA-256, and only reports a staged file; `--repair` skips both. A `note` is
+about a cache rather than a file and never fails the check: an entry the lookup
+passed over in a restricted cache listed before the one it read, or a public
+dataset's entry in a restricted cache. A broken link names its cache.
+
+`--repair` never removes or replaces a link: a broken link, and a file read
+through a link that does not match, are reported for whoever maintains the
+link. It never touches restricted or staged data.
 
 `--all` prints `skipped <name> [<variant>]: <reason>` for every collection or
 variant it cannot resolve — a dataset this catalogue does not describe, an
 incomplete catalogue copy, a faulty definition — and verifies the rest. It
 exits `1` if anything was skipped, even when every checked file matches: the
 check was not complete, and a CI job must not read it as one.
-
-!!! warning "Gap: `--repair` is to leave links alone"
-    With [one public cache on the
-    cluster](../../explanation/architecture/decisions/0028-one-public-cache-on-the-cluster.md),
-    `--repair` downloads a damaged copy again into the public cache and
-    never removes or replaces a link; a broken link is only reported. To be
-    implemented separately.
 
 See [Check and repair the cache](../../how-to/data-users/verify-and-repair.md).
 

@@ -43,14 +43,6 @@ maintainer's checkout of it may exist as the `publish` target until then).
 Staging roots are personal, set by each developer in their own
 configuration, never shared.
 
-!!! warning "Gap: one restricted cache, and repair removes links"
-    The code reads one restricted cache per account, set with
-    `config set-restricted-cache DIR`; `config add-restricted-cache` does not
-    exist, and `link` and `materialize` put a restricted dataset's entry into
-    that one cache whatever `--root` names. Its `verify --repair` removes a
-    dangling link in the public cache and downloads the dataset in its place,
-    which changes `cache` for every user.
-
 ## 2. Serve the catalogue
 
 ```bash

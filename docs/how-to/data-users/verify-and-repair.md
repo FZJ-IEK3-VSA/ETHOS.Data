@@ -19,10 +19,11 @@ package defines. Neither form changes anything.
 | --- | --- |
 | `ok` | The file matches. Only a deep check establishes a hash match. |
 | `wrong size`, `wrong checksum` | The bytes differ from the catalogue. Repair a downloaded copy, or tell the owner of a linked copy. |
-| `dangling` | A cache link points nowhere: its target moved. Tell the cache maintainer. |
+| `dangling` | A cache link points nowhere: its target moved. The line names the cache; tell its maintainer. |
 | `missing`, `unreadable` | The file is absent or you lack permission. Check the expected location and your group membership. |
 | `unavailable here` | A restricted dataset this account cannot read. The output gives the reason and the state of each restricted cache. |
 | `unverifiable` | A staged development copy without catalogue checksums: not a failure, but remove the staging entry before an official run. For a catalogue file, the catalogue records no SHA-256 for it: a failure that repair cannot fix. [Report it](report-a-problem.md) to the catalogue maintainers. |
+| `note` | About a cache, not the file that was read: an entry passed over in a restricted cache listed before the one read, or a public dataset's entry in a restricted cache. Not a failure; tell that cache's maintainer. |
 
 ## Repair downloaded data
 
@@ -38,14 +39,6 @@ and never touches restricted or staged data: a broken link, or a linked or
 restricted copy that does not match, is only reported. Its owner repairs it;
 on the cluster, [report it](report-a-problem.md) to the catalogue
 maintainers. The final check must report every file as `ok`.
-
-!!! warning "Gap: repair replaces a link"
-    The code's `verify --repair` removes a dataset's link in the public
-    cache when a file behind the link is broken or does not match, and
-    downloads a copy in its place; `--dry-run` lists the links it would
-    remove. On the cluster, every user then reads that copy, not the linked
-    data. Report such a link rather than repairing it. See [decision
-    0028](../../explanation/architecture/decisions/0028-one-public-cache-on-the-cluster.md).
 
 ## Check a whole dataset fetched by key {#verify-complete-dataset}
 

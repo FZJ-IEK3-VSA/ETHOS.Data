@@ -1,6 +1,6 @@
 # 0016. Give one link command two modes
 
-**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** a new PR (caches)
+**Status:** implemented · **Date:** 2026-10-06 · **Implemented by:** a new PR (caches)
 
 ## Context
 
