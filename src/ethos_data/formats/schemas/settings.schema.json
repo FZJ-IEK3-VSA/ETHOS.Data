@@ -28,19 +28,6 @@
       "description": "Where public and internal data is read and downloaded.",
       "title": "Public Cache"
     },
-    "cache_dir": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "The older name of public_cache; still read.",
-      "title": "Cache Dir"
-    },
     "restricted_cache": {
       "anyOf": [
         {
@@ -79,41 +66,6 @@
       "default": null,
       "description": "Fetch bytes from another door of the published store.",
       "title": "Publication Url"
-    },
-    "dataset_roots": {
-      "additionalProperties": {
-        "type": "string"
-      },
-      "default": {},
-      "description": "Dataset name to a directory of your own, read in place.",
-      "title": "Dataset Roots",
-      "type": "object"
-    },
-    "skip_unavailable": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "To be removed: every input is required.",
-      "title": "Skip Unavailable"
-    },
-    "collections": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "No longer read: a package ships its own collections file.",
-      "title": "Collections"
     }
   },
   "title": "config.yaml",

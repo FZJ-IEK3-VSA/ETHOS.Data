@@ -25,7 +25,8 @@ file whose first line names one:
 The files people write have templates beside the models, in
 `ethos_data/formats/templates/`: `dataset.yaml` for downloaded, derived,
 created and restricted data and a minimal one for staging, `catalog.yaml` and
-`collections.yaml`. The annotated `dataset.yaml` below is one of them.
+`collections.yaml`. The annotated `dataset.yaml` below is one of them. The
+settings file has no template: `ethos-data config set-*` writes it.
 
 ---
 

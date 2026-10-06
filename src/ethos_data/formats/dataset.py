@@ -10,8 +10,8 @@ Three things live here, for the one file:
   already know. The first broken rule raises :class:`~ethos_data.errors.DescriptorError`.
 * :func:`lint`, what the structure says beyond those rules: a value of the
   wrong type, an ``ethos:`` key the format does not know, a value outside a
-  closed vocabulary. Reported as warnings, because the build has accepted all
-  of these so far and a catalogue that built yesterday must build today.
+  closed vocabulary. Reported as warnings: the build names each one and goes
+  on.
 
 The messages carry no dataset name; the caller, which knows it, prefixes one.
 """
@@ -321,8 +321,8 @@ class NamespaceDescriptor(_Part):
 def apply_defaults(meta: dict) -> dict:
     """Write the defaulted keys into ``meta``, as the generated descriptor carries them.
 
-    In this order and appended where absent, so a rebuilt descriptor keeps the
-    bytes it had: access and visibility, then origin.
+    Appended where absent, in the fixed key order the specification sets:
+    access and visibility, then origin.
     """
     meta.setdefault(k.ACCESS, k.PUBLIC)
     meta.setdefault(k.VISIBILITY, k.PUBLIC)
@@ -396,7 +396,7 @@ def _classification(meta: dict) -> str | None:
     if access == k.RESTRICTED and meta.get(k.REMOTE_PREFIX):
         return (
             "restricted data must not declare ethos:remote_prefix -- "
-            "it is never uploaded. Configure dataset_roots on each machine instead."
+            "it is never uploaded. Each machine reads it from a restricted cache."
         )
     if access == k.RESTRICTED and meta.get(k.UPLOADED):
         # The freeze this asks for is right; the claim attached to it is not.

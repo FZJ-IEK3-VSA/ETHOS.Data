@@ -550,7 +550,7 @@ def validate_classification(name: str, meta: dict) -> tuple[str, str]:
     if access == "restricted" and meta.get("ethos:remote_prefix"):
         raise DescriptorError(
             f"{name}: restricted data must not declare ethos:remote_prefix -- "
-            "it is never uploaded. Configure dataset_roots on each machine instead."
+            "it is never uploaded. Each machine reads it from a restricted cache."
         )
     if access == "restricted" and meta.get(UPLOADED_KEY):
         # The freeze this asks for is right; the claim attached to it is not.

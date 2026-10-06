@@ -56,7 +56,6 @@ docs = [
 # One executable. The maintainer commands are `ethos-data catalog ...`; they need
 # no extra Python dependencies -- only `rclone` and `oidc-agent` on PATH, and
 # only for `upload` / `check-store` -- so there is no install extra to gate them.
-# There was a second entry point, `ice2-catalog`, until the two were unified.
 ethos-data = "ethos_data.cli:main"
 
 [tool.hatch.version]

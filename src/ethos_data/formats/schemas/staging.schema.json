@@ -41,7 +41,7 @@
     "$ref": "#/$defs/StagingEntry"
   },
   "description": "Who staged which directory, and why.",
-  "title": ".ice2-staging.json",
+  "title": ".ethos-data-staging.json",
   "type": "object",
   "$schema": "https://json-schema.org/draft/2020-12/schema"
 }

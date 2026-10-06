@@ -1,8 +1,8 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data/main/src/ethos_data/formats/schemas/dataset.schema.json
 #
 # A licensed dataset that may not be redistributed. It is never uploaded; a
-# user without a copy reads title, description, sources, licences,
-# attribution, restriction and contact in the error, so write them for them.
+# user without a copy reads its restriction, homepage and contact in the
+# error, so write them for that person.
 name: ${name}
 title: ${title}
 description: What it contains and which release.

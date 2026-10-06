@@ -10,6 +10,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from . import keys as k
 from .bundle import BundleManifest
 from .catalogue import CatalogMeta
 from .collections_file import CollectionsFile
@@ -64,9 +65,9 @@ FORMATS: dict[str, Format] = {
                "The generated index: catalog.yaml's keys and one row per dataset."),
         Format("bundle", "bundle.json", BundleManifest, "tool",
                "A repository copy of catalogue data."),
-        Format("staging", ".ice2-staging.json", StagingRegistry, "tool",
+        Format("staging", k.STAGING_REGISTRY_FILE, StagingRegistry, "tool",
                "Who staged which directory, and why."),
-        Format("materialized", ".ethos-data-materialized.json", MaterializedRecord, "tool",
+        Format("materialized", k.MATERIALIZED_RECORD_FILE, MaterializedRecord, "tool",
                "Where a materialised cache entry was copied from."),
     )
 }  # fmt: skip

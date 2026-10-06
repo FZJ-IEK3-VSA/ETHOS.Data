@@ -6,8 +6,7 @@ Four properties, read by the code that would otherwise keep its own list:
                  the public catalogue (and the leak check looks for it there)
 ``promoted``     ``build`` copies the key into the dataset's index row, so a
                  reader answers it without loading the descriptor
-``user_facing``  printed by ``--meta``, and by the error for a licensed dataset
-                 this machine cannot read
+``user_facing``  printed by ``--meta``, the dataset's full description
 ``inherited``    a member of a family takes it from the family's
                  ``dataset.yaml`` when it does not set the key itself
 

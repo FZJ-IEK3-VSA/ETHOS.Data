@@ -1,9 +1,8 @@
 """The format specifications: templates, schemas, rules and what they derive.
 
-The parity tests compare the specifications with the code that still enforces
-the same rules today (``maintain.manifest`` and ``maintain.publish``). They
-are what makes switching that code over to the specifications safe, and they
-go when it has switched.
+The parity tests compare the specifications with the rules ``maintain.manifest``
+and ``maintain.publish`` enforce, so that code can take its rules from the
+specifications safely.
 """
 
 from __future__ import annotations
@@ -111,7 +110,7 @@ class TestLint:
             "ethos:mood is not a key of the dataset.yaml format; a typo?"
         ]
 
-    def test_keys_the_catalogue_used_before_the_reference_named_them_are_known(self):
+    def test_provenance_tiling_and_input_keys_are_known(self):
         meta = {
             "source_dir": ".",
             "ethos:provenance": "Copied unchanged from the archive.",

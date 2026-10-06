@@ -22,7 +22,7 @@ class StagingEntry(BaseModel):
 
 
 class StagingRegistry(RootModel[dict[str, StagingEntry]]):
-    """``.ice2-staging.json`` in the staging root: name to entry."""
+    """``.ethos-data-staging.json`` in the staging root: name to entry."""
 
 
 class MaterializedRecord(BaseModel):

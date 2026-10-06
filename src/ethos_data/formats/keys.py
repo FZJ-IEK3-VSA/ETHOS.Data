@@ -114,3 +114,10 @@ UNSPECIFIED = "unspecified"
 
 DATAPACKAGE_PROFILE = "https://datapackage.org/profiles/2.0/datapackage.json"
 DATACATALOG_PROFILE = "https://datapackage.org/profiles/2.0/datacatalog.json"
+
+# -- records the tools write beside data -----------------------------------------
+
+#: In the staging root: who staged which directory under which name, and why.
+STAGING_REGISTRY_FILE = ".ethos-data-staging.json"
+#: In a materialised cache entry: where its bytes were copied from.
+MATERIALIZED_RECORD_FILE = ".ethos-data-materialized.json"

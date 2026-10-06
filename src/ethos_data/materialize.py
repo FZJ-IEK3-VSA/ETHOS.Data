@@ -64,13 +64,14 @@ from .access import entry_for
 from .catalogs import Catalog, Resource
 from .errors import AccessError, LinkError, UnknownDataset
 from .config import Roots, current_user
+from .formats import keys as k
 from .linking import source_dir_for
 from .verify import sha256_of, _expected_digest
 
 __all__ = ["MaterializeReport", "materialize", "plan_materialize", "PROVENANCE_FILE"]
 
 #: Written into a materialised directory so the copy can be traced back.
-PROVENANCE_FILE = ".ethos-data-materialized.json"
+PROVENANCE_FILE = k.MATERIALIZED_RECORD_FILE
 
 #: Refuse if the copy would leave less than this fraction of the filesystem
 #: free. A cache that fills the disk it lives on takes everyone else down too.
