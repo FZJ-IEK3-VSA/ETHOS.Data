@@ -107,6 +107,7 @@ class TestSelfTest:
         assert result.failed == "settings"
         assert "does not exist" in result.error
 
+    @pytest.mark.repository
     def test_the_documentation_uses_the_file_that_ships(self):
         shipped = ethos_data.EXAMPLE_COLLECTIONS.read_bytes()
         documented = (

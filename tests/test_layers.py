@@ -16,7 +16,10 @@ from pathlib import Path
 
 import pytest
 
-PACKAGE = Path(__file__).resolve().parents[1] / "src" / "ethos_data"
+import ethos_data
+
+#: The package as imported, so a packaged test run checks what it installed.
+PACKAGE = Path(ethos_data.__file__).resolve().parent
 
 MODEL, ADAPTERS, SERVICES, PRESENTATION = range(4)
 NAMES = ("model", "adapters", "services", "presentation")

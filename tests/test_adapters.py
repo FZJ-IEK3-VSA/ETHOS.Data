@@ -90,6 +90,7 @@ class TestDcache:
             adapter.served(missing)
         assert store.requests[-1] == ("HEAD", "/ethos-data/flat/b.csv")
 
+    @pytest.mark.repository
     def test_the_login_hint_matches_the_guide(self, monkeypatch):
         """The redirect port the guide forwards is the one the hint registers."""
         monkeypatch.setattr(

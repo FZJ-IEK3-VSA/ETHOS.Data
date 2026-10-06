@@ -108,6 +108,7 @@ class TestLifecycle:
 
 
 class TestPages:
+    @pytest.mark.repository
     def test_every_block_a_page_asks_for_renders(self):
         hook = load_hook()
         asked = []
