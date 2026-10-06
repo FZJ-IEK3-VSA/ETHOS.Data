@@ -36,7 +36,6 @@ See [Check and repair the cache](../../how-to/data-users/verify-and-repair.md) a
         - unlink
         - source_dir_for
         - LinkReport
-        - LinkError
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3
@@ -93,7 +92,6 @@ See [Check and repair the cache](../../how-to/data-users/verify-and-repair.md) a
         - load_bundle
         - Bundle
         - BundleFinding
-        - BundleError
         - ModifiedBundleWarning
       show_root_heading: false
       show_root_toc_entry: false

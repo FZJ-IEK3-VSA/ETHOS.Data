@@ -61,9 +61,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .access import entry_for
-from .catalogs import Catalog, Resource, UnknownDataset
+from .catalogs import Catalog, Resource
+from .errors import AccessError, LinkError, UnknownDataset
 from .config import Roots, current_user
-from .linking import LinkError, source_dir_for
+from .linking import source_dir_for
 from .verify import sha256_of, _expected_digest
 
 __all__ = ["MaterializeReport", "materialize", "plan_materialize", "PROVENANCE_FILE"]
@@ -137,8 +138,8 @@ def plan_materialize(
                 )
             )
             continue
-        except ValueError as error:
-            reports.append(MaterializeReport(name, "cannot", str(error)))
+        except AccessError as error:
+            reports.append(MaterializeReport(name, "cannot", error.message))
             continue
 
         was_link = entry.is_symlink()

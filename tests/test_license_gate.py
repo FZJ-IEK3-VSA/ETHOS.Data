@@ -17,10 +17,12 @@ import yaml
 
 from ethos_data.catalogs import Catalog, Dataset, Resource, license_settled
 from ethos_data.config import Roots
-from ethos_data.linking import LinkError, link
+from ethos_data.errors import LinkError
+from ethos_data.linking import link
 from ethos_data.maintain import namespace
 from ethos_data.maintain.manifest import render_dataset, write_dataset
 from ethos_data.maintain.upload import preflight
+from ethos_data.errors import UploadError
 
 PAYLOAD = b"first file"
 RESOLVED = {"licenses": [{"name": "CC-BY-4.0"}]}
@@ -168,7 +170,7 @@ def _package(extra: dict) -> dict:
 def test_upload_refuses_it(tmp_path):
     source = tmp_path / "src"
     source.mkdir()
-    with pytest.raises(SystemExit, match="unresolved licensing"):
+    with pytest.raises(UploadError, match="unresolved licensing"):
         preflight(
             "example",
             _package({"ethos:license_status": "unresolved"}),
@@ -182,7 +184,7 @@ def test_upload_refuses_a_descriptor_that_says_nothing_at_all(tmp_path):
     """The default has to be "nobody has looked", not "nothing applies"."""
     source = tmp_path / "src"
     source.mkdir()
-    with pytest.raises(SystemExit, match="unresolved licensing"):
+    with pytest.raises(UploadError, match="unresolved licensing"):
         preflight(
             "example", _package({}), source, allow_internal=False, verify_only=False
         )

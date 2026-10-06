@@ -16,15 +16,9 @@ from pathlib import Path
 
 import yaml
 
-from .access import AccessError, cache_entries
-from .bundles import BundleError, export_bundle, load_bundle
-from .catalogs import (
-    Catalog,
-    CatalogUnavailable,
-    IncompleteCatalog,
-    UnknownDataset,
-    load_catalog,
-)
+from .access import cache_entries
+from .bundles import export_bundle, load_bundle
+from .catalogs import Catalog, load_catalog
 from .config import (
     DEFAULT_CATALOG,
     ENV_VAR,
@@ -52,14 +46,15 @@ from .config import (
 from .maintain.cli import add_catalog_parser
 from .maintain.cli import dispatch as _catalog_dispatch
 from .retrieval import plan
-from .selection import (
+from .errors import (
+    BundleError,
     CollectionError,
-    Collections,
-    CollectionsNotFound,
-    UnknownCollection,
-    load_collections,
-    variant_name,
+    ConfigurationError,
+    EthosDataError,
+    IncompleteCatalog,
+    UnknownDataset,
 )
+from .selection import Collections, load_collections, variant_name
 
 
 def _human(num_bytes: int) -> str:
@@ -184,29 +179,22 @@ def _retired_command(prog: str, argv: list[str] | None) -> int | None:
 def _run(command) -> int:
     """Run a parsed command, turning a refusal into a message, not a traceback.
 
-    An AccessError is the catalogue working as designed -- restricted bytes, or
-    a local root that is not set up -- and it already carries the sentence the
-    user needs plus the command that fixes it. Wrapped in a stack trace, that
-    reads like a crash and the advice gets lost in the noise.
+    Every refusal the library raises on purpose is an
+    :class:`~ethos_data.errors.EthosDataError`, and it already carries the
+    sentence the user needs plus the command that fixes it. Wrapped in a stack
+    trace, that reads like a crash and the advice gets lost in the noise. The
+    error says which status to exit with: ``2`` when the request could not be
+    served, ``1`` when a maintenance command refused its input. Anything else
+    is a bug and keeps its traceback.
     """
     _use_utf8_output()
     try:
         return command()
-    except (
-        AccessError,
-        UnknownDataset,
-        IncompleteCatalog,
-        CatalogUnavailable,
-        BundleError,
-        CollectionsNotFound,
-        UnknownCollection,
-        CollectionError,
-    ) as error:
-        # UnknownDataset stringifies like a KeyError (quoted), which reads badly
-        # on a terminal line that already says "error:".
-        message = error.args[0] if error.args else error
-        print(f"error: {message}", file=sys.stderr)
-        return 2
+    except EthosDataError as error:
+        # ``message`` rather than str(): the KeyError subclasses stringify
+        # quoted, which reads badly on a line that already says "error:".
+        print(f"error: {error.message}", file=sys.stderr)
+        return error.exit_code
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -1035,11 +1023,7 @@ def _paths_command(args, loaded, roots) -> int:
 
 def _path_command(args, catalog: Catalog, roots) -> int:
     """Fetch a catalogue key and print a path suitable for shell use."""
-    try:
-        print(catalog.path(args.key, root=roots))
-    except KeyError as error:
-        print(f"error: {error.args[0] if error.args else error}", file=sys.stderr)
-        return 2
+    print(catalog.path(args.key, root=roots))
     return 0
 
 
@@ -1050,11 +1034,7 @@ def _ls_command(args, catalog: Catalog) -> int:
         for name, dataset in sorted(catalog.datasets.items()):
             print(f"  {name:<40} {dataset.access:<12} {dataset.title}")
         return 0
-    try:
-        resources = catalog.resources(args.key)
-    except KeyError as error:
-        print(f"error: {error.args[0] if error.args else error}", file=sys.stderr)
-        return 2
+    resources = catalog.resources(args.key)
     print(
         f"{args.key}: {len(resources)} files, {_human(sum(r.bytes for r in resources))}\n"
     )
@@ -1203,11 +1183,7 @@ def _link_all_command(args, roots) -> int:
     from .maintain import namespace as namespace_module
     from .maintain import resolve_catalog_root
 
-    try:
-        catalog_root = resolve_catalog_root(args.catalog_root)
-    except SystemExit as error:
-        print(f"error: {error}", file=sys.stderr)
-        return 2
+    catalog_root = resolve_catalog_root(args.catalog_root)
 
     # Decided only once there is a checkout to link from. A run that ends in
     # "no catalogue here" has chosen nothing, and a line above that error
@@ -1234,7 +1210,7 @@ def _link_all_command(args, roots) -> int:
 
 
 def _link_command(args, roots) -> int:
-    from .linking import LinkError, link, unlink
+    from .linking import link, unlink
 
     if args.command == "link":
         if args.all:
@@ -1274,21 +1250,17 @@ def _link_command(args, roots) -> int:
             return 2
 
     catalog = _cache_catalog(args)
-    try:
-        if args.command == "link":
-            report = link(
-                catalog,
-                args.dataset,
-                args.directory,
-                roots,
-                force=args.force,
-                catalog_root=args.catalog_root,
-            )
-        else:
-            report = unlink(catalog, args.dataset, roots)
-    except (LinkError, UnknownDataset) as error:
-        print(f"error: {error}", file=sys.stderr)
-        return 2
+    if args.command == "link":
+        report = link(
+            catalog,
+            args.dataset,
+            args.directory,
+            roots,
+            force=args.force,
+            catalog_root=args.catalog_root,
+        )
+    else:
+        report = unlink(catalog, args.dataset, roots)
 
     # Flushed, because the warning below goes to stderr: unflushed, the two
     # streams arrive in the opposite order and the warning reads as being about
@@ -1468,13 +1440,13 @@ def _resolve_catalog_location(location: str) -> str:
         auto = candidate / "datacatalog.json"
         if auto.is_file():
             return str(auto)
-        raise SystemExit(
+        raise ConfigurationError(
             f"{candidate} is a directory with no datacatalog.json in it.\n"
             "Point at the generated index file itself, e.g.:\n"
             f"    ethos-data config set-catalog {auto}"
         )
     if not candidate.is_file():
-        raise SystemExit(
+        raise ConfigurationError(
             f"no such file: {candidate}\n"
             "Expected the generated datacatalog.json inside a catalogue checkout "
             "-- not catalog.yaml (that's hand-written metadata, not the loadable index)."

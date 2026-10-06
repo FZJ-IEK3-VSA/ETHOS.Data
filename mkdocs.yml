@@ -273,4 +273,5 @@ nav:
                 - Configuration and access: reference/api/configuration.md
                 - Integrity and staging: reference/api/integrity.md
                 - Maintainer tooling: reference/api/maintain.md
+                - Errors: reference/api/errors.md
           - Glossary: reference/glossary.md

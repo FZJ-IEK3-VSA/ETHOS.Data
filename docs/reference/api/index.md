@@ -11,6 +11,7 @@ key. The rest is here for completeness.
 | [Configuration and access](configuration.md) | cache roots, scopes, provenance, `Location`, `locate`, `AccessError` |
 | [Integrity and staging](integrity.md) | `verify`, `repair`, `Finding`, `materialize`, the staging root |
 | [Maintainer tooling](maintain.md) | `ethos_data.maintain` — building, publishing, uploading |
+| [Errors](errors.md) | `EthosDataError` and every refusal the library raises, with the exit status the command line gives each |
 
 Consumers usually need no `ethos_data.maintain` imports. The public API includes
 local download, cache, staging, and configuration operations as well as reads.
@@ -31,7 +32,7 @@ same for the catalogue the file pins — so `fetch()` and `.catalog.path()` on
 one handle read the same catalogue. The one-call forms `fetch()`, `paths()`
 and `resolve()` take the file's path and build a handle each time. A catalogue
 index that cannot be read raises
-[`CatalogUnavailable`][ethos_data.catalogs.CatalogUnavailable].
+[`CatalogUnavailable`][ethos_data.errors.CatalogUnavailable].
 
 ::: ethos_data
     options:
@@ -47,11 +48,9 @@ index that cannot be read raises
       heading_level: 3
 
 A collection defined in a way that cannot be resolved raises
-[`CollectionError`][ethos_data.selection.CollectionError]; a name the file does
-not define raises [`UnknownCollection`][ethos_data.selection.UnknownCollection];
-a command run where no collections file can be found raises
-[`CollectionsNotFound`][ethos_data.selection.CollectionsNotFound]. All are
-documented with [`Collections`](catalog.md#collections).
+[`CollectionError`][ethos_data.errors.CollectionError]; a name the file does
+not define raises [`UnknownCollection`][ethos_data.errors.UnknownCollection].
+Both are documented with the other [errors](errors.md).
 
 ## Downloading
 

@@ -22,6 +22,7 @@ import pytest
 from ethos_data.access import cache_entries
 from ethos_data.maintain import dataset_name_for, is_namespace, iter_dataset_dirs
 from ethos_data.maintain.manifest import render_dataset, run as build_run
+from ethos_data.errors import DescriptorError
 
 CATALOG = (
     "name: t\n"
@@ -99,7 +100,7 @@ class TestDiscovery:
             directory.joinpath("dataset.yaml").write_text(
                 "name: something-else\n" + text
             )
-            with pytest.raises(SystemExit, match="the directory it is in makes it"):
+            with pytest.raises(DescriptorError, match="the directory it is in makes it"):
                 render_dataset(directory, name="family/alpha")
 
 
@@ -133,7 +134,7 @@ class TestNamespaces:
                 NAMESPACE + f"source_dir: {tmp / 'stray'}\n"
             )
             with pytest.raises(
-                SystemExit, match="cannot also describe files of its own"
+                DescriptorError, match="cannot also describe files of its own"
             ):
                 build_run(catalog, [])
 
@@ -144,7 +145,7 @@ class TestNamespaces:
                 {"alpha": PUBLIC_MEMBER},
                 namespace=NAMESPACE + "licenses:\n  - name: CC-BY-4.0\n",
             )
-            with pytest.raises(SystemExit, match="must not carry licensing"):
+            with pytest.raises(DescriptorError, match="must not carry licensing"):
                 build_run(catalog, [])
 
     def test_a_namespace_may_not_declare_an_access_class(self):
@@ -154,7 +155,7 @@ class TestNamespaces:
                 {"alpha": PUBLIC_MEMBER},
                 namespace=NAMESPACE + "ethos:access: internal\n",
             )
-            with pytest.raises(SystemExit, match="must not declare ethos:access"):
+            with pytest.raises(DescriptorError, match="must not declare ethos:access"):
                 build_run(catalog, [])
 
 

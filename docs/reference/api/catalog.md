@@ -11,12 +11,12 @@ patterns could reach.
 ## Catalogue
 
 Three errors say what went wrong:
-[`CatalogUnavailable`][ethos_data.catalogs.CatalogUnavailable] when the index
+[`CatalogUnavailable`][ethos_data.errors.CatalogUnavailable] when the index
 itself cannot be read — a wrong location, or a pinned revision or repository
 that does not exist; its message names the location and says how to point at
-another catalogue — [`UnknownDataset`][ethos_data.catalogs.UnknownDataset] for
+another catalogue — [`UnknownDataset`][ethos_data.errors.UnknownDataset] for
 a dataset the catalogue does not describe, and
-[`IncompleteCatalog`][ethos_data.catalogs.IncompleteCatalog] for a dataset the
+[`IncompleteCatalog`][ethos_data.errors.IncompleteCatalog] for a dataset the
 index lists whose descriptor or shard is missing.
 
 !!! warning "Gap: `UnknownDataset` is to list no datasets and give no hint"
@@ -39,9 +39,6 @@ second. `ethos_data.catalog()` builds the handle for the configured catalogue;
         - Catalog
         - Dataset
         - Resource
-        - CatalogUnavailable
-        - UnknownDataset
-        - IncompleteCatalog
         - shard_key
         - describe_catalog
       show_root_heading: false
@@ -71,9 +68,6 @@ process. The file format is in
         - load_collections
         - catalog_pin
         - Collections
-        - CollectionError
-        - UnknownCollection
-        - CollectionsNotFound
         - variant_name
         - path_matches
       show_root_heading: false

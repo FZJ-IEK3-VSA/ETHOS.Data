@@ -40,12 +40,9 @@ from pathlib import Path
 from .access import entry_for
 from .catalogs import LICENSE_RESOLVED, Catalog
 from .config import Roots
+from .errors import AccessError, CatalogueRootError, LinkError
 
-__all__ = ["LinkError", "LinkReport", "link", "source_dir_for", "unlink"]
-
-
-class LinkError(RuntimeError):
-    """Raised when an entry cannot be created or removed, and why."""
+__all__ = ["LinkReport", "link", "source_dir_for", "unlink"]
 
 
 @dataclass
@@ -92,11 +89,11 @@ def source_dir_for(name: str, catalog_root: str | Path | None = None) -> Path:
         root = resolve_catalog_root(
             str(catalog_root) if catalog_root is not None else None
         )
-    except SystemExit as error:
+    except CatalogueRootError as error:
         # `resolve_catalog_root` is written for the maintainer commands, which
         # exit on a missing checkout. Here it is one way of answering a question,
         # so it becomes the same error every other failure in this module raises.
-        raise LinkError(str(error)) from None
+        raise LinkError(error.message) from None
     descriptor = datasets_dir(root) / name / "dataset.yaml"
     if not descriptor.is_file():
         raise LinkError(f"no dataset called {name!r} in {datasets_dir(root)}")
@@ -227,8 +224,8 @@ def link(
     roots = Roots.coerce(roots)
     try:
         entry = entry_for(catalog, roots, name)
-    except ValueError as error:
-        raise LinkError(str(error)) from None
+    except AccessError as error:
+        raise LinkError(error.message) from None
 
     _require_settled_licence(catalog, name)
 
@@ -278,8 +275,8 @@ def unlink(
     roots = Roots.coerce(roots)
     try:
         entry = entry_for(catalog, roots, name)
-    except ValueError as error:
-        raise LinkError(str(error)) from None
+    except AccessError as error:
+        raise LinkError(error.message) from None
 
     if entry.is_symlink():
         target = entry.readlink()

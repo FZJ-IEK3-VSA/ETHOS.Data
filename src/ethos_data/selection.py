@@ -52,6 +52,7 @@ from .catalogs import (
     select_key,
     split_key,
 )
+from .errors import CollectionError, UnknownCollection
 from .retrieval import DataFiles, NamedPaths
 
 if TYPE_CHECKING:
@@ -64,10 +65,7 @@ __all__ = [
     "VARIANTS",
     "VARIANT_FULL",
     "VARIANT_TEST",
-    "CollectionError",
     "Collections",
-    "CollectionsNotFound",
-    "UnknownCollection",
     "catalog_pin",
     "load_collections",
     "path_matches",
@@ -93,26 +91,6 @@ SELECTION_KEYS = ("extends", "include", PATHS_KEY)
 def variant_name(test: bool) -> str:
     """The variant a ``test=`` flag selects."""
     return VARIANT_TEST if test else VARIANT_FULL
-
-
-class UnknownCollection(KeyError):
-    """A name the collections file does not define.
-
-    Subclasses KeyError so ``except KeyError`` handlers written against the
-    old behaviour keep working; the CLI catches the specific type to print a
-    message rather than a traceback.
-    """
-
-
-class CollectionError(ValueError):
-    """A collection is defined in a way that cannot be resolved.
-
-    A maintainer's mistake in ``collections.yaml`` -- a variant that does not
-    exist, selection keys both inside and outside the variants, a ``paths``
-    handle naming a file the collection does not include, or two variants that
-    disagree about which handles they offer. Subclasses ValueError, which is
-    what the circular-``extends`` check always raised.
-    """
 
 
 @dataclass
@@ -721,9 +699,3 @@ def catalog_pin(path: str | Path, document: dict | None = None) -> str | None:
 
 #: The conventional name of the file a tool ships beside its data module.
 COLLECTIONS_FILENAME = "collections.yaml"
-
-
-class CollectionsNotFound(LookupError):
-    """No collections file where one was asked for: a path with no file behind
-    it, or a command run where none is configured and none lies in the current
-    directory."""

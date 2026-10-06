@@ -31,15 +31,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .bundles import Bundle, BundleError, export_bundle, load_bundle
-from .access import AccessError, Location, locate
+from .bundles import Bundle, export_bundle, load_bundle
+from .access import Location, locate
 from .catalogs import (
     Catalog,
-    CatalogUnavailable,
     Dataset,
-    IncompleteCatalog,
     Resource,
-    UnknownDataset,
     load_catalog,
 )
 from .config import (
@@ -66,20 +63,42 @@ from .config import (
     unset_dataset_root,
     unset_option,
 )
+from .errors import (
+    AccessError,
+    BundleError,
+    CatalogUnavailable,
+    CatalogueRootError,
+    CollectionError,
+    ConfigurationError,
+    DescriptorError,
+    EthosDataError,
+    IncompleteCatalog,
+    LinkError,
+    MaintenanceError,
+    PublishError,
+    StagingError,
+    UnknownCollection,
+    UnknownDataset,
+    UnknownKey,
+    UploadError,
+)
 from .retrieval import DataFiles, NamedPaths, cache_dir, download, local_path, plan
 from .materialize import materialize
-from .linking import LinkError, link, unlink
-from .selection import (
-    CollectionError,
-    Collections,
-    CollectionsNotFound,
-    UnknownCollection,
-    load_collections,
-)
+from .linking import link, unlink
+from .selection import Collections, load_collections
 from .staging import apply_staging, classify_staged, staged_only
 from .verify import Finding, repair, verify
 
 __all__ = [
+    "CatalogueRootError",
+    "ConfigurationError",
+    "DescriptorError",
+    "EthosDataError",
+    "MaintenanceError",
+    "PublishError",
+    "StagingError",
+    "UnknownKey",
+    "UploadError",
     "Bundle",
     "BundleError",
     "export_bundle",
@@ -89,7 +108,6 @@ __all__ = [
     "CatalogUnavailable",
     "CollectionError",
     "Collections",
-    "CollectionsNotFound",
     "DEFAULT_CATALOG",
     "Dataset",
     "AccessError",

@@ -18,6 +18,7 @@ import pytest
 from ethos_data.maintain.manifest import render_dataset
 from ethos_data.maintain.manifest import run as build_run
 from ethos_data.maintain.manifest import write_dataset
+from ethos_data.errors import DescriptorError
 
 TERMS = b"You may use these bytes, with attribution.\n"
 DIGEST = hashlib.sha256(TERMS).hexdigest()
@@ -84,7 +85,7 @@ def test_a_stale_pin_stops_the_build_and_says_what_to_do(tmp_path):
             f"    ethos:document_sha256: {stale}",
         ),
     )
-    with pytest.raises(SystemExit) as stopped:
+    with pytest.raises(DescriptorError) as stopped:
         _package(root)
     message = str(stopped.value)
     assert DIGEST in message and stale in message
@@ -101,19 +102,19 @@ def test_an_unquoted_all_digit_pin_is_refused_rather_than_misread(tmp_path):
             "    ethos:document_sha256: " + "0" * 64,
         ),
     )
-    with pytest.raises(SystemExit, match="in quotes"):
+    with pytest.raises(DescriptorError, match="in quotes"):
         _package(root)
 
 
 def test_a_missing_document_fails_in_the_build_not_in_publish(tmp_path):
     root = _catalogue(tmp_path, _licence("    ethos:document: licenses/absent.txt"))
-    with pytest.raises(SystemExit, match="licenses/absent.txt"):
+    with pytest.raises(DescriptorError, match="licenses/absent.txt"):
         _package(root)
 
 
 def test_a_hash_with_no_document_to_hash_is_refused(tmp_path):
     root = _catalogue(tmp_path, _licence(f"    ethos:document_sha256: {DIGEST}"))
-    with pytest.raises(SystemExit, match="ethos:document"):
+    with pytest.raises(DescriptorError, match="ethos:document"):
         _package(root)
 
 
@@ -122,7 +123,7 @@ def test_a_hash_with_no_document_to_hash_is_refused(tmp_path):
 )
 def test_a_document_outside_the_dataset_directory_is_refused(tmp_path, outside):
     root = _catalogue(tmp_path, _licence(f"    ethos:document: {outside}"))
-    with pytest.raises(SystemExit, match="relative path inside the dataset directory"):
+    with pytest.raises(DescriptorError, match="relative path inside the dataset directory"):
         _package(root)
 
 
