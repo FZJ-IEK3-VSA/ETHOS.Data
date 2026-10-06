@@ -65,7 +65,7 @@ download path runs with real checksums and no network. Prefer them, and the
 public entry points they go through, to building `Dataset` objects by hand.
 
 A test marked `legacy` pins behaviour that a [decision
-record](explanation/architecture/decisions.md) replaces. It keeps running
+record](explanation/architecture/decisions/index.md) replaces. It keeps running
 until the change it describes is made, and the pull request making that change
 rewrites it:
 

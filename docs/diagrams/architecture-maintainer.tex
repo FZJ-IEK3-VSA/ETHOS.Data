@@ -1,39 +1,197 @@
-% Level 2 of the maintainer side. The boundary is the `ethos-data catalog` group
-% and nothing else: `dispatch()` in maintain/cli.py routes build, publish, upload
-% and check-store, and has no branch that reaches the namespace builder. That
-% builder is drawn OUTSIDE the boundary, with the command that does reach it,
-% because a figure that keeps it inside is the one thing a reader would take from
-% this page that the code no longer supports -- and it contradicts the paragraph
-% printed beside it.
-\begin{tikzpicture}
-\node[actor, text width=37mm, minimum height=15mm] (manifest) at (0,0) {Manifest builder};
-\node[actor, text width=37mm, minimum height=15mm] (upload) at (6,0) {Uploader};
-\node[actor, text width=37mm, minimum height=15mm] (publish) at (0,-3) {Public-view generator};
-\node[artifact, text width=97mm, minimum height=13mm] (helpers) at (3,-5.5) {Maintainer helpers\\catalogue roots / dataset layout / resource expansion};
-\node[artifact, text width=37mm, minimum height=15mm] (matching) at (-6,0) {Selection / Catalogue model\\shared rules};
-\node[artifact, text width=37mm, minimum height=15mm] (public) at (-6,-3) {Public catalogue\\filesystem output};
-\node[artifact, text width=37mm, minimum height=15mm] (remote) at (12,0) {rclone / oidc-agent\\dCache HTTP interfaces\\external};
-% Beside the boundary rather than inside it, and at the height of the commands it
-% is a peer of: it reads the same checkout and the same helpers, but it is
-% reached from the top-level `link`, never from `catalog`.
-\node[actor, text width=37mm, minimum height=15mm] (namespace) at (12,-3) {Namespace builder};
-% Spelled -{}-all because a bare `--` is read as an en-dash ligature here, which
-% renders a flag nobody can copy. Same reason as in usecases-maintainer.tex.
-\node[cmd, above=2mm of namespace] (namespace-c) {ethos-data link -{}-all};
-\node[artifact, text width=37mm, minimum height=15mm] (links) at (12,-6) {Shared-cache links\\filesystem output};
-\draw[flow] (manifest) -- node[edgelabel,above]{matching / format} (matching);
-\draw[flow] (upload) -- node[edgelabel,above]{transfer / verify} (remote);
-\draw[flow] (publish) -- node[edgelabel,above]{generate} (public);
-\draw[flow] (namespace) -- node[edgelabel,right]{plan / apply} (links);
-\draw[flow] (manifest.south) -- ++(0,-6mm) -- ++(22mm,0) -- (2.2,-4.78);
-\draw[flow] (publish) -- (0,-4.78);
-\draw[flow] (upload) -- (6,-4.78);
-% The one edge that crosses the boundary inwards: the builder outside it still
-% uses the catalogue-root and dataset-layout helpers, which is why those are a
-% block of their own rather than part of any one command.
-\draw[flow] (namespace.west) -- ++(-8mm,0) |- (helpers.east);
+% C4 level 3, catalogue maintenance (arc42 5.3.2): the components of the service
+% group ethos_data.maintain, the components and ports they use, and the stores
+% and systems those reach. Every catalogue workflow that writes is a pipeline;
+% its stages are the chips in its box. An arrow that leaves the pipelines'
+% boundary stands for the pipelines its label names.
+% Rows, from the top: presentation; catalogue maintenance; the components and
+% ports maintenance uses; the stores; the systems outside. Arrows run down
+% between the rows; an arrow that skips a row passes through a gap in it.
+% Cylinders are placed by their centre: with the border rotated, their compass
+% anchors are rotated too.
+\begin{tikzpicture}[
+  x=1mm, y=1mm,
+  % A stage chip. Drawn as a picture inside its component's text, so it resets
+  % what the component's node set: size, width and alignment.
+  stage/.style={draw=muted, fill=paper, text=ink, rounded corners=0.5mm,
+    font=\sffamily\scriptsize, inner xsep=0.55mm, inner ysep=0.45mm,
+    text height=1.5ex, text depth=0.3ex, minimum height=0pt, minimum width=0pt,
+    text width={}, align=center, line width=0.5pt},
+  stagekey/.style={stage, minimum width=7mm, minimum height=3.6mm},
+  pipe/.style={c4component, anchor=north west, text width=32.6mm, minimum height=#1},
+  pipe/.default=17mm,
+  wide/.style={c4component, anchor=north west, text width=71.1mm, minimum height=#1},
+  wide/.default=14mm,
+  used/.style={c4component, anchor=north west, minimum height=17.5mm, inner sep=1.2mm},
+  % A cylinder #1 mm wide; its caps stay the same height at any width.
+  st/.style={c4db, minimum height=17mm, inner sep=0.6mm,
+    font=\sffamily\scriptsize, minimum width=#1mm, text width=\dimexpr#1mm-2mm\relax,
+    /utils/exec={\pgfmathsetmacro\cylaspect{3.9/#1}}, shape aspect=\cylaspect},
+  sys/.style={c4systemext, anchor=north west, minimum height=10.5mm, inner sep=1.2mm},
+  lbl/.style={c4rellabel, align=left},
+]
+\newcommand{\stg}[1]{\tikz[baseline=(s.base)]\node[stage](s){#1};}
+\newcommand{\pipeline}[3]{{\bfseries #1}\\[-0.3ex]{\scriptsize\color{muted}[Component: #2]}\\[0.5ex]#3}
+% A wide pipeline: name and kind on the left, the chip rows on the right.
+\newcommand{\widepipe}[4]{%
+  \parbox[c]{#1}{\centering{\bfseries #2}\\[-0.3ex]{\scriptsize\color{muted}[Component: #3]}}%
+  \hspace{1.5mm}%
+  \parbox[c]{\dimexpr71.1mm-#1-1.5mm\relax}{\centering #4}}
+\newcommand{\rows}[1]{{\scriptsize\begin{tabular}{@{}r@{\enspace}l@{}}#1\end{tabular}}}
+\newcommand{\cmd}[1]{{\ttfamily #1}}
+\newcommand{\store}[2]{{\bfseries #1}\\[-0.2ex]{\color{muted}[#2]}}
+
+% -- presentation ---------------------------------------------------------------
+\node[c4component, text width=40.8mm, anchor=north west] (pr3) at (2,0)
+  {\elementshort{Catalogue command group}{Component: maintain.cli}};
+\node[c4component, text width=40.8mm, anchor=north west] (pr2) at (98,0)
+  {\elementshort{Command line}{Component: cli}};
+
+% -- catalogue maintenance ------------------------------------------------------
+\def\top{-22}
+\node[c4component, text width=36mm, anchor=north west, minimum height=16mm] (sm1) at (64,-26)
+  {\element{Pipeline runner}{Component: maintain.pipeline}{Plans every stage, then acts}};
+\node[c4component, text width=28.8mm, anchor=north west, minimum height=16mm] (sm16) at (125,-26)
+  {\element{Migrator}{Component: maintain.migrate}{\texttt{catalog migrate}, once}};
+
+% the pipelines: four columns of 35.8 mm, 2.6 mm apart
+\def\ca{3}\def\cb{41.4}\def\cc{79.8}\def\cd{118.2}
+\def\ra{-50}\def\rb{-69.6}\def\rc{-91.2}\def\rd{-107.8}
+\node[pipe] (sm4) at (\ca,\ra) {\pipeline{Accept}{maintain.accept}{\stg{intake}\,\stg{place}\,\stg{build}}};
+\node[pipe] (sm5) at (\cb,\ra) {\pipeline{Bundle intake}{maintain.bundle\_intake}{\stg{update}}};
+\node[pipe] (sm6) at (\cc,\ra) {\pipeline{Inventory builder}{maintain.manifest}{\stg{check}\,\stg{render}\,\stg{write}\,\stg{record}}};
+\node[pipe] (sm11) at (\cd,\ra) {\pipeline{Provenance}{maintain.provenance}{\stg{compare}\,\stg{record}}};
+\node[wide=19mm] (sm8) at (\ca,\rb) {\widepipe{22mm}{Uploader}{maintain.upload}{%
+  \stg{check}\,\stg{transfer}\,\stg{permissions}\\[0.6ex]\stg{verify}\,\stg{record}}};
+\node[wide=19mm] (sm9) at (\cc,\rb) {\widepipe{24mm}{Cache-copy recorder and namespace builder}{maintain.namespace}{\rows{%
+  \cmd{link} & \stg{check}\,\stg{link}\,\stg{record}\\[0.3ex]
+  \cmd{materialize} & \stg{check}\,\stg{copy}\,\stg{verify}\,\stg{record}\\[0.3ex]
+  \cmd{link -{}-all} & \stg{plan}\,\stg{apply}\,\stg{record}}}};
+\node[pipe=14mm] (sm10) at (\ca,\rc) {\pipeline{Freeze}{maintain.freeze}{\stg{check}\,\stg{freeze}}};
+\node[pipe=14mm] (sm7) at (\cb,\rc) {\pipeline{Revision}{maintain.revision}{\stg{compare}\,\stg{revise}}};
+\node[pipe=14mm] (sm12) at (\cc,\rc) {\pipeline{Public-view generator}{maintain.publish}{\stg{render}\,\stg{check}\,\stg{write}}};
+\node[pipe=14mm] (sm14) at (\cd,\rc) {\pipeline{Checkout updater}{maintain.checkout}{\stg{fetch}\,\stg{advance}\,\stg{check}}};
+\node[wide] (sm13) at (\ca,\rd) {\widepipe{20mm}{Release}{maintain.release}{%
+  \stg{check}\,\stg{stamp}\,\stg{commit}\,\stg{public}\\[0.6ex]\stg{push}\,\stg{store}\,\stg{notices}}};
+\node[wide] (sm15) at (\cc,\rd) {\widepipe{19mm}{Removal}{maintain.remove}{\rows{%
+  \cmd{remove} & \stg{withdraw}\,\stg{index}\,\stg{notices}\\[0.3ex]
+  \cmd{-{}-purge} & \stg{check}\,\stg{cache}\,\stg{store}\,\stg{tombstone}}}};
+
 \begin{scope}[on background layer]
-\node[boundarybox, fit=(manifest)(upload)(publish)(helpers), label={[boundarylabel]above:Catalogue maintenance -- level 2}] {};
+  \node[c4boundary, inner sep=1.8mm, fit=(sm4)(sm11)(sm13)(sm15)] (pipes) {};
 \end{scope}
-\node[note, text width=140mm] at (3,-7.9) {\texttt{ethos-data catalog} reaches only the commands inside the boundary; the namespace builder is reached only by \texttt{ethos-data link -{}-all}.\\Source files and generated inventories are filesystem inputs shared across commands.};
+\node[c4boundarylabel] at (pipes.north west) {Pipelines [every catalogue workflow that writes]};
+
+\def\rA{-129.5}
+\node[c4component, text width=19.8mm, anchor=north west] (sm3) at (1.2,\rA)
+  {\elementshort{Status recorder}{Component: maintain.status}};
+\node[c4component, text width=16.8mm, anchor=north west] (sm2) at (30,\rA)
+  {\elementshort{Checkout access}{Component: maintain}};
+
+\begin{scope}[on background layer]
+  \node[c4boundary, inner sep=1.2mm, fit={(sm1)(sm16)(pipes)(sm3)(sm2)(1.2,\top+1.2)(160.7,\top+1.2)}] (maint) {};
+\end{scope}
+\node[c4boundarylabel, anchor=north west] at (maint.north west) {Catalogue maintenance [Service group: ethos\_data.maintain]};
+
+% -- what maintenance uses ----------------------------------------------------
+\def\ru{-151.5}
+\node[used, text width=16.6mm] (m9) at (6,\ru) {\elementshort{Lifecycle}{Component: model.lifecycle}};
+\node[used, text width=18mm] (m10) at (30,\ru) {\elementshort{Inventory reader}{Component: model.inventory}};
+\node[used, text width=17.8mm] (git) at (53,\ru) {\elementshort{GitRepository}{Adapter: git}};
+\node[used, text width=18mm] (sa9) at (75,\ru) {\elementshort{Cache entries}{Component: linking, materialize}};
+\node[used, text width=14.4mm] (sa11) at (97.5,\ru) {\elementshort{Handoffs}{Component: handoffs}};
+\node[used, text width=14.4mm] (sa12) at (120.2,\ru) {\elementshort{Local files}{Component: files}};
+\node[used, text width=20mm] (store) at (138.5,\ru) {\element{DcacheStore}{Adapter: rclone, REST, HTTPS}{copy, sync, purge; chmod, locality; read-back}};
+\node[c4port, anchor=south] (gitport) at (git.north) {Git};
+\node[c4port, anchor=south] (storeport) at (store.north) {Store};
+
+% -- stores -----------------------------------------------------------------------
+% \rj: the junctions under the used row; \rt: the stores' centres.
+% The caches are the cluster's: the public cache every cluster user shares, and
+% the restricted caches, one per access combination.
+\def\rj{-173.5}\def\rt{-187.5}
+\node[st=15] (d10) at (7.5,\rt) {\store{Status files}{YAML, in the clone}};
+\node[st=28] (d9) at (31,\rt) {\store{Maintainer's clone of the source catalogue}{git working tree, in the maintainer's own account}};
+\node[st=13] (d12) at (55,\rt) {\store{Public catalogue checkout}{git}};
+\node[st=13.6] (d11) at (71,\rt) {\store{Served checkout}{git, latest release}};
+\node[st=17] (d18) at (87.7,\rt) {\store{The cluster's public cache}{shared directory}};
+\node[st=16.3] (d4) at (105.75,\rt) {\store{Restricted caches}{one per access combination}};
+\node[st=15.4] (d17) at (123,\rt) {\store{Notices directory}{\texttt{-{}-notices}}};
+\node[st=16.8] (d15) at (140.5,\rt) {\store{Build inputs}{\texttt{source\_dir}}};
+
+% -- systems ----------------------------------------------------------------------
+% \rk: the junctions under the stores; \rs: the systems' tops.
+\def\rk{-200.5}\def\rs{-206}
+\node[sys, text width=17.6mm] (s5) at (30,\rs) {\elementshort{JuGit}{Software system: source catalogue}};
+\node[sys, text width=17.6mm] (s4) at (53,\rs) {\elementshort{GitHub}{Software system: public catalogue}};
+\node[sys, text width=14.6mm] (s3) at (112,\rs) {\elementshort{Helmholtz ID}{Software system}};
+\node[sys, text width=19.4mm] (s2) at (139,\rs) {\elementshort{dCache at DESY (HIFIS)}{Software system: publication root}};
+
+% -- arrows: into and inside maintenance -------------------------------------------
+\draw[c4rel] (pr3.south -| 22,0) -- node[lbl, right] {dispatches} (maint.north -| 22,0);
+\draw[c4rel] (pr2.south -| 116.9,0) -- (sm9.north -| 116.9,0);
+\node[lbl, anchor=west] at (117.4,-16) {\texttt{link}, \texttt{materialize}};
+\draw[c4rel] (pipes.north -| sm1) -- node[lbl, right] {run on} (sm1);
+\draw[c4rel] (pipes.south -| 8,0) -- node[lbl, right] {take each step} (sm3.north -| 8,0);
+\draw[c4rel] (pipes.south -| 40,0) -- node[lbl, right] {read} (sm2.north -| 40,0);
+
+% -- arrows: to what maintenance uses, labelled with the pipelines that use it --------
+\def\lp{0.3}
+\draw[c4rel] (sm3.south -| 3,0) -- (d10.north -| 3,0);
+\node[lbl, anchor=west] at (3.4,-148.1) {write};
+\draw[c4rel] (sm3.south -| 15.5,0) -- (m9.north -| 15.5,0);
+\draw[c4rel] (sm2.south -| 40,0) -- (m10.north -| 40,0);
+\draw[c4rel] (pipes.south -| 27.5,0) -- (d9.north -| 27.5,0);
+\node[lbl, anchor=west] at (27.9,-148.1) {write};
+\node[lbl, anchor=west] at (15.9,-148.1) {check};
+\draw[c4rel] (pipes.south -| gitport) -- node[lbl, right, pos=\lp] {Release,\\Checkout\\updater} (gitport);
+\draw[c4rel] (pipes.south -| 78,0) -- node[lbl, right, pos=\lp] {Cache-copy\\recorder,\\Removal} (sa9.north -| 78,0);
+\draw[c4rel] (pipes.south -| 100.5,0) -- node[lbl, right, pos=\lp] {Public-view\\generator,\\Release,\\Removal} (sa11.north -| 100.5,0);
+\draw[c4rel] (pipes.south -| 119,0) -- node[lbl, right, pos=0.16] {Release,\\Removal} (d17.north -| 119,0);
+\draw[c4rel] (pipes.south -| 131,0) -- node[lbl, right, pos=\lp] {Inventory\\builder} (sa12.north -| 131,0);
+\draw[c4rel] (pipes.south -| storeport) -- node[lbl, right, pos=\lp] {Uploader,\\Freeze,\\Release,\\Removal} (storeport);
+
+% -- arrows: to the stores and systems ---------------------------------------------
+\draw[c4rel] (m10.south -| 36,0) -- (d9.north -| 36,0);
+\draw[c4rel] (git.south -| 55,0) -- (55,\rj) -| (d9.north -| 42,0);
+\draw[c4rel] (55,\rj) -- (d12.north);
+\node[lbl, anchor=south east] at (54.6,\rj+0.2) {commit, tag};
+\draw[c4rel] (git.south -| 71,0) -- (d11.north -| 71,0);
+\node[lbl, anchor=west] at (71.4,\rj-0.2) {fast-forward};
+\draw[c4rel] (git.south -| 63,0) -- (63,\rk-1.5) -| (s5.north);
+\draw[c4rel] (63,\rk-1.5) -- (s4.north -| 63,0);
+\node[lbl, anchor=west] at (63.4,\rk+1.4) {push; fetch};
+\draw[c4rel] (sa9.south -| 87.7,0) -- (d18.north);
+\draw[c4rel] (87.7,\rj) -| (d4.north);
+\node[lbl, anchor=south west] at (88.1,\rj+0.2) {links, copies};
+\draw[c4rel] (sa12.south -| 135.5,0) -- node[lbl, left] {walk, hash} (d15.north -| 135.5,0);
+\draw[c4maint] (store.south -| 154.5,0) -- (s2.north -| 154.5,0);
+\draw[c4download] (store.south -| 158.6,0) -- (s2.north -| 158.6,0);
+\draw[c4rel] (store.south -| 150.4,0) -- (150.4,\rk+0.5) -| (s3.north);
+\node[lbl, anchor=south west] at (122,\rk+0.7) {token};
+
+% -- the key -----------------------------------------------------------------------
+\begin{scope}[shift={(0,-225.5)}]
+  \keytitle{Key}
+  \keynode{1}{c4component}{Component}
+  \node[stagekey] at (4.5,-13) {stage};
+  \node[keytext] at (11.5,-13) {Stage of a pipeline};
+\end{scope}
+\begin{scope}[shift={(40,-225.5)}]
+  \node[c4port, minimum width=7mm] at (4.5,-6.5) {port};
+  \node[keytext] at (11.5,-6.5) {Port of an adapter};
+  \keystore{2}{brand}{fillbrand}{Data store}
+\end{scope}
+\begin{scope}[shift={(80,-225.5)}]
+  \keynode{1}{c4systemext}{External system}
+  \node[c4boundary, inner sep=0pt, minimum width=9mm, minimum height=4.2mm] at (4.5,-13) {};
+  \node[keytext] at (11.5,-13) {Boundary};
+\end{scope}
+\begin{scope}[shift={(117,-225.5)}]
+  \keyline{1}{c4rel}{Uses, reads, writes}
+  \keyline{2}{c4maint}{Authenticated, to dCache}
+  \keyline{3}{c4download}{Anonymous, from dCache}
+\end{scope}
+\node[note, anchor=north west, align=left, text width=112mm] at (0,-242.5)
+  {An arrow from the pipelines' boundary names the pipelines that use what it points at.\\
+  Catalogue maintenance uses data access; data access never uses catalogue maintenance. \texttt{tests/test\_layers.py} checks it.};
 \end{tikzpicture}

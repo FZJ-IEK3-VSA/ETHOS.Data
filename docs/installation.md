@@ -79,7 +79,7 @@ mamba install -c conda-forge rclone oidc-agent
     `bash` on `PATH`; the one Git for Windows ships will do.
 
 Everything else in the group — `build` and `publish` — needs only the package,
-and so does `ethos-data link`, which builds shared cache links from a top-level
+and so does `ethos-data link`, which builds cache links from a top-level
 command rather than a `catalog` subcommand: filling a cache on the machine that
 already holds the data touches no remote storage, so it asks nothing of
 `rclone` or `oidc-agent`.

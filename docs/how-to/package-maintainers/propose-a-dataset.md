@@ -5,16 +5,17 @@ accepted, published where its terms allow, and used by your package. The
 dataset may be something you downloaded or something you created. You need no
 catalogue write access and no dCache credentials.
 
-Test data that lives in your repository as a [bundle](keep-data-in-the-repository.md)
-is proposed the same way; the bundle already carries a description for each
-of its datasets, and the maintainer imports it as a new bundle version.
+Data that lives in your repository as a [bundle](keep-data-in-the-repository.md)
+is proposed the same way. The bundle already carries a description for each
+of its datasets, and the maintainer takes in what is ahead of the catalogue:
+new datasets, revisions and changed descriptions.
 
 ## 1. Decide what kind of change it is
 
 | Situation | Propose |
 | --- | --- |
 | Data the catalogue does not have | A new dataset with its own name |
-| A changed version of a catalogued dataset, for example test data for a changed function | A new dataset name or versioned resource paths. Published paths never change, so changed bytes need new paths; unchanged files keep theirs and are not downloaded again. |
+| A changed version of a catalogued dataset, for example test data for a changed function | A revision of the dataset: its keys stay, changed files are published beside the old ones, and unchanged files are not downloaded again. A changed layout is a successor, a new dataset that names the one it replaces. |
 | More files for an existing dataset, unchanged otherwise | An addition to the existing dataset |
 | A tiny synthetic fixture your package owns | Nothing: keep it in the package |
 
@@ -48,7 +49,7 @@ chmod -R a-w /projects/shared/candidates/my-dataset
 Every edit after the inventory was built invalidates its checksums; if you do
 change something, say so and the reviewer rebuilds.
 
-Where the directory lives depends on your installation. On the ICE-2 cluster computer
+Where the directory lives depends on your installation. On the ICE-2 cluster
 computer, a project directory the maintainer can read is enough; say how long
 it stays. From a public installation, attach an archive to the proposal or
 give a download link, and keep the directory until acceptance.
@@ -114,7 +115,8 @@ facts in the proposal. Which facts depend on where the data came from.
 
 If the terms are unclear, write `ethos:license_status: unresolved` and the
 question in `ethos:license_note`; do not guess a licence. Data that may not be
-redistributed is `ethos:access: restricted` and is never uploaded; see
+redistributed, or that the institute holds without publishing it, is
+`ethos:access: restricted` and is never uploaded; see
 [Add restricted data](../catalogue-maintainers/add-restricted-data.md). The
 full key list is in [Add a dataset](../catalogue-maintainers/add-a-dataset.md#write-the-description)
 and the [format reference](../../reference/schemas.md#datasetyaml).
@@ -124,8 +126,7 @@ and the [format reference](../../reference/schemas.md#datasetyaml).
 Open an issue, with the items below, at:
 
 - <https://jugit.fz-juelich.de/iek-3/shared-code/ethos-data-catalog-internal>
-  from a cluster installation, or for any dataset that is internal or
-  restricted;
+  from a cluster installation, or for restricted data;
 - <https://github.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/issues> from a public
   installation, for public data.
 
@@ -144,13 +145,13 @@ release that contains it.
 
 1. Raise `catalog.min_version` in `collections.yaml` to that release and add
    or update the collection.
-2. Remove the [staging entry](stage-development-data.md#4-remove-it) and any
-   dataset-root override used during development.
+2. Remove the [staging entry](stage-development-data.md#4-remove-it) used
+   during development.
 3. Fetch and run the affected workflow against the released catalogue and
    check that no staging warning remains.
 4. If the data lives in your repository as a bundle, run
-   [`bundle update`](keep-data-in-the-repository.md#sync) once more so it
-   records the release and its warning stops.
+   [`bundle update`](keep-data-in-the-repository.md#sync) with the catalogue
+   readable: it records the new alignment, and the warning stops.
 5. Commit the collections file, the bundle and the tests together.
 
 Continue with [Run tests and examples in CI](run-in-ci.md).

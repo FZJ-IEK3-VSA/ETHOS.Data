@@ -1,9 +1,9 @@
 # Run tests and examples in CI
 
-Run the required tests from the repository copies without any network, run
+Run the required tests from the package's bundles without any network, run
 the live tests against the catalogue in a separate job, and choose per job
-whether bundled data is read from the repository or downloaded. For choosing
-fixtures, see [Test data and reproducibility](../../explanation/test-data.md).
+whether bundled data is read from the bundle or through the catalogue. For
+choosing fixtures, see [Test data and reproducibility](../../explanation/test-data.md).
 
 ## 1. Split the tests
 
@@ -17,7 +17,7 @@ markers =
 ```
 
 ```bash
-pytest -m "not data_network"     # required: repository copies and package-owned fixtures only
+pytest -m "not data_network"     # required: bundles and package-owned fixtures only
 pytest -m data_network           # live: catalogue and downloads
 ```
 
@@ -27,31 +27,45 @@ never be skipped.
 
 ## 2. Choose the source of bundled data {#download-switch}
 
-Data the package ships as a [repository copy](keep-data-in-the-repository.md)
-is read from there by default. To make a job download the same data from the
-catalogue instead, and so test the download route, set the shared switch:
+Data the package keeps in a [bundle](keep-data-in-the-repository.md) is read
+from there by default. To make a job read it through the catalogue route
+instead, and so test the download, set the download switch:
 
 ```bash
 ETHOS_DATA_DOWNLOAD=1 pytest -m data_network
 ```
 
-Run the required job with the switch off and one live job with it on. A
-bundled file that is missing or altered is an error in both modes, not a
-reason to download, and the live job fails on a bundle version the catalogue
-does not hold yet.
+A bundled file whose recorded SHA-256 the catalogue holds for the same key is
+then read from the public cache, or downloaded; every other bundled file is
+read from the bundle. Run the required job with the switch off and one live
+job with it on. In both, a bundled file that is missing, or changed without
+`bundle update` recording it, is an error, not a reason to download.
 
-!!! warning "Gap: no shared download switch"
-    `ETHOS_DATA_DOWNLOAD` does not exist; one package has a variable of its
-    own for the purpose. See
+Nothing fails because a bundle is ahead of the catalogue: it warns once per
+bundle in every job that reads it, the required one included. If your tests
+turn warnings into errors, keep this one a warning:
+
+```ini
+[pytest]
+filterwarnings =
+    error
+    default::ethos_data.BundleAlignmentWarning
+```
+
+!!! warning "Gap: no shared download switch and no bundle warning"
+    `ETHOS_DATA_DOWNLOAD` and `ethos_data.BundleAlignmentWarning` do not
+    exist; one package has a variable of its own for the switch. See
     [Keep data in the repository](keep-data-in-the-repository.md#use-a-bundle).
 
 ## 3. Download public data the repository does not hold
 
 A live job fetches what its collections select from the published store. A
-package on a public installation can download public datasets only; internal
-and restricted data need a runner on the cluster computer with the shared caches
-configured. Retain the cache between runs with the CI provider's cache
-facility:
+package on a public installation can download public datasets only.
+Restricted data needs a runner on the cluster computer whose settings list the
+restricted caches it needs, and whose public cache is the cluster's public
+cache or its own (see [Cluster users](../data-users/set-up-your-machine.md#cluster-users)).
+A job that reads public data only lists no restricted cache. Retain the cache
+between runs with the CI provider's cache facility:
 
 ```bash
 export ETHOS_DATA_DIR="$PWD/.cache/ethos-data"
@@ -77,9 +91,8 @@ ETHOS.Data then reads only that file and the environment variables; see
 [Use another settings file](../data-users/set-up-your-machine.md#another-settings-file).
 
 !!! warning "Gap: `selftest` and `ETHOS_DATA_CONFIG` are not implemented"
-    Both are planned and to be implemented separately. Until then, set an
-    environment variable for every setting the job depends on; they win over
-    every settings file.
+    The code has neither. Set an environment variable for every setting the
+    job depends on instead; they win over every settings file.
 
 Key the cache on the hash of `collections.yaml` and any catalogue override. A
 restored cache reuses matching files; an empty runner downloads. For a

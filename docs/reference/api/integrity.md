@@ -8,6 +8,13 @@ See [Check and repair the cache](../../how-to/data-users/verify-and-repair.md) a
 
 ## Verification
 
+!!! warning "Gap: `repair` is to leave links alone"
+    With [one public cache on the
+    cluster](../../explanation/architecture/decisions/0028-one-public-cache-on-the-cluster.md),
+    `repair` downloads a damaged copy again into the public cache and never
+    removes or replaces a link; a broken link is only reported. To be
+    implemented separately.
+
 ::: ethos_data.verify
     options:
       members:
@@ -66,6 +73,18 @@ See [Check and repair the cache](../../how-to/data-users/verify-and-repair.md) a
       heading_level: 3
 
 ## Repository test-data bundles
+
+!!! warning "Gap: a bundle is to be authoritative for its package"
+    With [decision
+    0020](../../explanation/architecture/decisions/0020-repository-bundles.md)
+    and [bundles ahead of the
+    catalogue](../../explanation/architecture/decisions/0021-bundles-ahead-of-the-catalogue.md),
+    the package's handle reads its bundles before the caches, even where a
+    bundle is ahead of the catalogue; such a read warns once per bundle, in
+    a warning category of its own exported from `ethos_data`. One
+    `bundle.json` format holds public, visible data with settled licensing
+    only, and `export_bundle` reads through the package's handle. To be
+    implemented separately.
 
 ::: ethos_data.bundles
     options:

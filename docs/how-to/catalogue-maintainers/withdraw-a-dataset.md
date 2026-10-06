@@ -1,77 +1,87 @@
 # Remove a dataset
 
 Take a dataset that should not have been added out of the catalogue, the
-shared caches and dCache. Removal is for data that must stop existing: a
+cluster's caches and dCache. Removal is for data that must stop existing: a
 wrongly accepted candidate, a licence that turned out to forbid what was done,
 test data nobody needs. A correction is not a removal; it is a new version at
 new paths, see [Licensing and immutability](../../explanation/licensing.md).
 
 The order is the reverse of publishing: **metadata first, bytes second**.
-A catalogue that points at deleted bytes breaks every reader half-way.
+A catalogue that points at deleted bytes breaks every reader half-way. The
+bytes go only after a major release, because the releases of the current
+major made before the withdrawal still describe the dataset.
 
-## 1. Remove the catalogue entry
+## 1. Withdraw it and release
 
-In the source checkout, delete the dataset's directory and rebuild:
+In your own clone of the source catalogue:
 
 ```bash
-git rm -r datasets/<name>
-ethos-data catalog build
-ethos-data catalog publish ../ETHOS.Data-Catalogue
+ethos-data catalog remove <name> --reason "<why>" --dry-run
+ethos-data catalog remove <name> --reason "<why>"
 ```
+
+`remove` records the dataset as withdrawn in its `status.yaml`, with the
+reason, and rebuilds the index without it; a family name withdraws every
+member. Its description, its status file, its cache entries and its bytes
+stay. Commit, merge on JuGit, then [release](release-the-catalogue.md) the
+internal and the public catalogue: a withdrawal needs a minor release. Note
+why the dataset was removed and what replaces it in the commit and in the
+issue.
 
 If only the public listing was wrong, keep the dataset and hide it instead:
-`ethos:visibility: hidden` with an embargo block that says why. Review both
-diffs, then [release](release-the-catalogue.md) the internal version and the
-public revision. Note why the dataset was removed and what replaces it in the
-commit and in the issue.
+`ethos:visibility: hidden` with an embargo block that says why.
 
-## 2. Remove the cache entries
+## 2. Purge it after a major release
 
-```bash
-ethos-data --root /shared/ethos/public unlink <name>
-```
-
-`unlink` removes a link and leaves its target alone. A materialized entry is a
-real directory the cache owns; `unlink` refuses it, so remove it by hand after
-checking that nothing else reads it:
+After the next major release:
 
 ```bash
-ls -ld /shared/ethos/public/<name>
-rm -r /shared/ethos/public/<name>
+ethos-data catalog remove <name> --purge --dry-run
+ethos-data catalog remove <name> --purge
 ```
 
-A restricted entry lives in the restricted cache; treat it the same way.
+Before it deletes anything, `--purge` refuses when no major release is
+recorded after the removal, when another dataset's folder on dCache lies in or
+around this one, and when a recorded entry lies in a cache your account cannot
+write; it names the dataset and the cache. Whoever purges therefore needs
+write access to every cache that holds the dataset, the restricted cache of
+its group included.
 
-## 3. Delete the bytes on dCache
+Then it deletes the links and copies recorded in the cluster's public cache
+and in the restricted caches, purges the dataset's folders on dCache, which
+has no trash area, and deletes the dataset's directory except its
+`status.yaml`. That file stays as a tombstone, so `catalog add` refuses the
+name for other bytes. Entries nobody recorded, such as downloads in the
+cluster's public cache or links made without `--catalog-root`, are reported,
+not deleted. Public caches on other machines are never touched. Commit and
+merge the deletion.
 
-Only after the new catalogue is released. Find the exact remote prefix from
-the removed descriptor and check that no other dataset shares it:
+A purge deletes withdrawn datasets only. Earlier revisions of a dataset that
+is still in the catalogue stay as long as the dataset does. If the bytes must
+go at once, for example because a licence forbids further distribution, make
+an unplanned major release.
 
-```bash
-rclone lsf -R HIFIS:ethos-data/<remote prefix>
-rclone purge HIFIS:ethos-data/<remote prefix> --dry-run
-rclone purge HIFIS:ethos-data/<remote prefix>
-```
-
-`purge` removes the folder and everything in it without a trash area. Never
-target the publication root to clean one dataset. See
-[Manage dCache folders](manage-dcache-folders.md).
-
-## 4. Check and tell people
+## 3. Check and tell people
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ethos-data/<remote prefix>/<one file>
-ethos-data --catalog /shared/ethos/catalogue/current/datacatalog.json ls | grep <name>
+ethos-data --catalog /shared/ethos/catalogue/datacatalog.json ls | grep <name>
 ```
 
-Expect `404` and no listing. Then tell the maintainers of every package that
-pinned the dataset: the removed name, the reason, the last revision that
-still describes it, and the replacement. Older pinned catalogue revisions
-still describe the dataset, and copies on users' machines remain; removal
-notifies nobody and corrects no earlier result.
+Expect `404` and no listing. Then tell the maintainers of every package whose
+collections name the dataset: the removed name, the reason, the last release
+that describes it, and the replacement. Releases before the major release
+still describe the dataset, but its bytes are gone, and copies on users' own
+machines remain; removal notifies nobody by itself and corrects no earlier
+result.
 
-!!! warning "Gap: removal is four manual steps"
-    No command removes a dataset from the catalogue, the caches and dCache
-    together, and nothing checks the order. A `catalog remove <dataset>` that
-    refuses to delete bytes while a released catalogue still lists them would
-    encode the rule above.
+!!! warning "Gap: removal is manual"
+    The code has no `catalog remove`. Take the same steps by hand: delete
+    `datasets/<name>`, rebuild, publish and release. After the next major
+    release, remove its cache entries with
+    `ethos-data --root <cache> unlink <name>`, or `rm -r` for a copy the
+    cache owns, and its folder on dCache with
+    `rclone purge HIFIS:ethos-data/<remote prefix>`, once you have checked
+    that no other dataset shares it; see
+    [Manage dCache folders](manage-dcache-folders.md). Nothing checks the
+    order.

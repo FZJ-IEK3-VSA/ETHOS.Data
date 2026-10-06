@@ -11,7 +11,8 @@ staging is not needed: ask for it by key with `data.catalog_path(KEY)`, see
 [Use data in a script](../data-users/use-data-in-a-script.md#by-key). Test
 data that should end up in the catalogue is better created as a
 [bundle](keep-data-in-the-repository.md) in the repository, which carries its
-description with it.
+description with it. A bundle holds public data with settled licensing only;
+data whose licensing is unsettled is developed here, in staging.
 
 A staged dataset is a directory registered under a name. While it is
 registered, that name resolves to the directory instead of to the catalogue,
@@ -36,8 +37,8 @@ caches.
 
 Registration links to the directory by default, so later edits there are
 seen at once. `--copy` copies it instead, which turns the entry into a
-snapshot. Restricted datasets are never shadowed: their licence terms are not
-a development concern.
+snapshot. Restricted datasets are never shadowed: who may read them is not a
+development concern.
 
 `staging add` also writes a minimal `dataset.yaml` into the directory, unless
 one is there already:
@@ -53,7 +54,7 @@ the source, licence and origin as you learn them. Staging itself does not
 read it.
 
 !!! warning "Gap: `staging add` writes no `dataset.yaml`"
-    A staging entry is a name and a directory today.
+    In the code, a staging entry is a name and a directory.
 
 ## 3. Use it
 

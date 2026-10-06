@@ -1,0 +1,171 @@
+% C4 level 2: the containers and data stores of ETHOS.Data (arc42 section 5.1).
+%
+% Three lanes inside the system boundary: the data user's side on the left (the
+% library over the stores on every user's machine and the package repository),
+% the cluster's shared storage in the middle (the cluster's public cache, the
+% served checkout and, in a group of their own marked optional, the restricted
+% caches), a maintainer's own clones on the right. The maintainer folders lie in
+% a row under the middle and right lanes. The library's lines to the package
+% repository, GitHub and dCache run down the channel left of the middle lane.
+% The catalogue command's lines run down the right edge and turn left: above the
+% folders into the shared storage and the folders, under them to GitHub and
+% dCache, so that no line crosses another. dCache and Helmholtz ID sit well below
+% the dCache line's turn, so that the token label stands clear of it.
+\begin{tikzpicture}[
+  x=1mm, y=1mm,
+  % a strut keeps a two-line name clear of the head
+  person/.style={c4person, minimum width=27mm, text width=24mm, execute at begin node={\rule{0pt}{3.4ex}}},
+  sys/.style={c4systemext, text width=23mm},
+  cont/.style={c4container, text width=23mm},
+  st/.style={c4db, text width=17mm, minimum width=20mm, minimum height=12mm},
+  stm/.style={c4db, text width=21mm, minimum width=24mm, minimum height=12mm},
+  stmx/.style={c4dbext, text width=21mm, minimum width=24mm, minimum height=12mm},
+  grp/.style={c4boundary, inner sep=2mm},
+  grplabel/.style={c4boundarylabel, anchor=north west, inner sep=1mm},
+  lab/.style={c4rellabel, text width=#1},
+  lab/.default=26mm,
+  dot/.style={circle, fill=brand, inner sep=0pt, minimum size=1.2mm},
+]
+% ---- people and the systems at the top ------------------------------------------------
+\node[sys, text width=21mm] (pkg) at (12,-2) {\element{Consuming package}{Software system: Python package}{Declares the data it needs}};
+\node[person] (pmaint) at (42,0)  {\elementshort{Package maintainer}{Person}};
+\node[person] (user)   at (76,0)  {\elementshort{Data user}{Person}};
+\node[person] (cmaint) at (110,0) {\elementshort{Catalogue maintainer}{Person}};
+\node[sys, text width=22mm] (jugit) at (145,-8) {\element{JuGit}{Software system: GitLab}{The source catalogue, one tag per release}};
+% ---- containers ---------------------------------------------------------------------------
+\node[cont] (tool) at (40,-58)  {\element{\texttt{<tool>-data}}{Container: package command}{A package's collections}};
+\node[cont] (cli)  at (70,-58)  {\element{\texttt{ethos-data}}{Container: console script}{Keys, self-test, report, settings, cache entries}};
+\node[cont, text width=27mm] (cat) at (125,-58) {\element{\texttt{ethos-data catalog}}{Container: the same script}{The source catalogue, in a maintainer's own clone}};
+\begin{scope}[on background layer]
+  \node[grp, fit={(tool)(cli)(cat)($(cat.north)+(0,4)$)}] (cmds) {};
+\end{scope}
+\node[grplabel] at (cmds.north west) {Command lines};
+\node[cont, text width=34mm] (lib) at (19,-95.6) {\element{\texttt{ethos\_data} library}{Container: Python package}{Model, adapters, services and the facade, in the caller's process}};
+% ---- stores: every user's machine ----------------------------------------------------------
+\node[st] (settings) at (9.5,-139)  {\elementshort{Settings file}{YAML}};
+\node[st] (pub)      at (31.5,-141) {\element{Public cache}{directory tree}{personal; on the cluster, shared}};
+\node[st] (stage)    at (9.5,-165)  {\elementshort{Staging root}{directory, registry}};
+\node[st] (meta)     at (31.5,-167) {\element{Metadata cache}{directory}{in the public cache}};
+\begin{scope}[on background layer]
+  \node[grp, fit={(settings)(pub)(stage)(meta)($(pub.north)+(0,4)$)}] (gu) {};
+\end{scope}
+\node[grplabel] at (gu.north west) {Every user's machine};
+% ---- stores: the package repository -----------------------------------------------------------
+\node[st] (coll) at (9.5,-213)  {\elementshort{Collections file}{YAML}};
+\node[st] (bun)  at (31.5,-213) {\element{Bundles}{directories, \texttt{bundle.json}}{attributed public data}};
+\begin{scope}[on background layer]
+  \node[grp, fit={(coll)(bun)($(bun.north)+(0,4)$)}] (gp) {};
+\end{scope}
+\node[grplabel] at (gp.north west) {Package repository};
+% ---- stores: the cluster's shared storage ----------------------------------------------------
+\node[stm] (cpub)   at (69,-107) {\element{The cluster's public cache}{directory tree}{shared by every cluster user}};
+\node[stm] (served) at (69,-136) {\element{Served internal catalogue checkout}{git working tree}{the latest release only}};
+\node[st, text width=19mm, minimum width=22mm] (rcache) at (69,-172) {\element{Restricted caches}{directory trees}{one per access combination}};
+\begin{scope}[on background layer]
+  \node[grp, fit={(rcache)($(rcache.north)+(0,4)$)}] (gopt) {};
+  \node[grp, fit={(cpub)(served)(gopt)($(cpub.north)+(0,4)$)}] (gc) {};
+\end{scope}
+\node[grplabel] at (gopt.north west) {Optional};
+\node[grplabel] at (gc.north west) {Cluster shared storage};
+% ---- stores: a maintainer's own clones ----------------------------------------------------------
+\node[st, text width=21mm, minimum width=24mm] (clone) at (102,-108.3) {\element{Maintainer's clone of the source catalogue}{git working tree}{one per maintainer}};
+\node[st] (status) at (125,-102.3) {\element{Status files}{YAML}{in the clone}};
+\node[st] (pubco)  at (125,-126.9) {\elementshort{Public catalogue checkout}{git working tree}};
+\begin{scope}[on background layer]
+  \node[grp, fit={(clone)(status)(pubco)($(clone.north)+(0,4)$)}] (gm) {};
+\end{scope}
+\node[grplabel] at (gm.north west) {A maintainer's own clones};
+% ---- stores: maintainer folders, in a row under the middle and right lanes ----------------------
+\node[stmx] (inputs) at (69,-207)  {\elementshort{Build inputs}{directories}};
+\node[stmx] (valid)  at (97,-207)  {\elementshort{Validation folder}{directory}};
+\node[stm]  (notes)  at (125,-207) {\elementshort{Notices directory}{directory}};
+\begin{scope}[on background layer]
+  \node[grp, fit={(inputs)(valid)(notes)($(valid.north)+(0,4)$)}] (gf) {};
+\end{scope}
+\node[grplabel] at (gf.north west) {Maintainer folders};
+% ---- the system boundary -----------------------------------------------------------------------
+\begin{scope}[on background layer]
+  \node[c4boundary, inner sep=2.5mm, fit={(cmds)(lib)(gu)(gp)(gc)(gf)(gm)(155,-80)($(cmds.north)+(0,4)$)}] (s0) {};
+\end{scope}
+\node[c4boundarylabel, anchor=north west, align=left] at ($(s0.north west)+(9,0)$) {ETHOS.Data\\{}[Software system]};
+% ---- external systems at the bottom ----------------------------------------------------------
+\node[sys, text width=31mm] (gh) at (94,-245) {\element{GitHub\\ETHOS.Data-Catalogue}{Software system}{The published public catalogue, one tag per release}};
+\node[sys, text width=76mm] (dcache) at (88,-290) {\element{dCache at DESY}{Software system: HIFIS}{The publication root: the published bytes and the latest public catalogue}};
+\node[sys, text width=18mm] (idp) at (146,-290) {\element{Helmholtz ID}{Software system: OIDC}{Issues tokens}};
+% ======================================================================================
+% Relationships
+% ---- people use the containers ---------------------------------------------------------
+% the package calls the library in its own process
+\draw[c4rel] (4,0 |- pkg.south) -- (4,0 |- lib.north);
+\node[lab=27mm, anchor=north west, align=left] at (5.5,-14.5) {\rel{\texttt{collections()}, \texttt{paths}, \texttt{fetch}, \texttt{catalog.path}, \texttt{tool\_main}}{Python, in-process}};
+% data users and package maintainers run the package command
+\draw[c4rel] (36,0 |- pmaint.south) -- (36,0 |- tool.north);
+\draw[c4rel, -] (66,0 |- user.south) |- (36,-12);
+\node[dot] at (36,-12) {};
+\node[lab=27mm, anchor=north west, align=left] at (37.5,-13.5) {\rel{\texttt{show}, \texttt{fetch}, \texttt{verify}, \texttt{bundle}~\dots, \texttt{staging}~\dots, \texttt{propose}, \texttt{report}, \texttt{config}}{CLI}};
+% data users run ethos-data
+\draw[c4rel] (76,0 |- user.south) -- (76,0 |- cli.north);
+\node[lab=19mm, anchor=north west, align=left] at (77.5,-8) {\rel{\texttt{ls}, \texttt{fetch KEY}, \texttt{verify KEY}, \texttt{selftest}, \texttt{report}, \texttt{config}}{CLI}};
+% catalogue maintainers run ethos-data for the cluster's public cache and the restricted caches
+\draw[c4rel] (100,0 |- cmaint.south) |- (81,-30) -- (81,0 |- cli.north);
+\node[lab=15mm, anchor=north west, align=left] at (101.5,-9) {\rel{\texttt{link}, \texttt{link -{}-all}, \texttt{unlink}, \texttt{materialize}}{CLI}};
+% and ethos-data catalog
+\draw[c4rel] (117,0 |- cmaint.south) -- (117,0 |- cat.north);
+\node[lab=12mm, anchor=north west, align=left] at (118.5,-9) {\rel{\texttt{catalog}~\dots}{CLI}};
+% the merge request on JuGit
+\draw[c4manual] (cmaint.east |- 0,-1) -- (jugit.west |- 0,-1);
+\node[lab=33mm, anchor=south west, align=left] at (124.5,4) {\rel{commits their clone on a branch; merge request}{git, JuGit}};
+% the catalogue command and JuGit
+\draw[c4rel] (136,0 |- cat.north) -- (136,0 |- jugit.south);
+\node[lab=20mm, anchor=north west, align=left] at (137.5,-20.4) {\rel{pushes the release commit and tag; fetches tags}{git}};
+% ---- the commands use the library ---------------------------------------------------------
+\draw[c4rel] (30,0 |- cmds.south) -- (30,0 |- lib.north);
+\node[lab=22mm, anchor=north east, align=right] at (28.5,-72.5) {\rel{call the services}{Python, in-process}};
+% ---- the library and the user's stores ----------------------------------------------------
+\draw[c4rel] (35,0 |- lib.south) -- (35,0 |- gu.north);
+\node[lab=37mm, anchor=north east, align=right] at (33.5,-106.3) {\rel{reads settings once, \texttt{config} writes them; reads, downloads, links, repairs; stages}{file system, symlinks}};
+% the cluster's shared storage
+\draw[c4rel] (lib.east |- 0,-92.5) -- (gc.west |- 0,-92.5);
+\node[lab=17mm, anchor=south west, align=left] at (38.2,-91.8) {\rel{reads in place; downloads into the cluster's public cache}{file system}};
+% the package repository, GitHub and dCache, down the channel
+\draw[c4rel] (lib.east |- 0,-103) -| (46,-206) -- (gp.north east |- 0,-206);
+\node[lab=44mm, anchor=north west, align=left] at (-1.5,-182.5) {\rel{reads the collections file; reads bundles in place; \texttt{bundle} commands write}{YAML, JSON}};
+\draw[c4rel] (lib.east |- 0,-96) -| (52.5,0 |- gh.west) -- (gh.west);
+\draw[c4download] (lib.east |- 0,-99.5) -| (49.25,0 |- dcache.north);
+\node[lab=23mm, anchor=south west, align=left] at (53.5,-244.3) {\rel{reads the published catalogue}{HTTPS}};
+\node[lab=23mm, anchor=north west, align=left] at (51,-249) {\rel{downloads files}{anonymous HTTPS}};
+% ---- ethos-data fills the cluster's caches and records in the own clone --------------------
+\draw[c4rel] (60,0 |- cli.south) -- (60,0 |- gc.north);
+\node[lab=36mm, anchor=north west, align=left] at (61.5,-72.5) {\rel{\texttt{link}, \texttt{materialize}: fill the cluster's public cache; register installations in restricted caches}{file system, symlinks}};
+\draw[c4rel] (cli.east |- 0,-62) -| (99,0 |- gm.north);
+\node[lab=25mm, anchor=south west, align=left] at (84.2,-61.3) {\rel{\texttt{-{}-catalog-root}: records a copy}{file system}};
+% ---- ethos-data catalog -------------------------------------------------------------------
+% the own clones
+\draw[c4rel] (122,0 |- cat.south) -- (122,0 |- gm.north);
+\node[lab=18mm, anchor=north west, align=left] at (123.5,-72.5) {\rel{reads; writes JSON, status, the public view}{file system}};
+% down the right edge: the shared storage, the folders, GitHub, dCache, Helmholtz ID
+\draw[c4rel]   (cat.east |- 0,-66) -| (142,-157) -- (gc.east |- 0,-157);
+\draw[c4rel]   (cat.east |- 0,-62) -| (145,-188) -- (101,-188) -- (101,0 |- gf.north);
+\draw[c4rel]   (cat.east |- 0,-58) -| (148,0 |- gh.east) -- (gh.east);
+\draw[c4maint] (cat.east |- 0,-54) -| (151,-261) -- (118,-261) -- (118,0 |- dcache.north);
+\draw[c4rel]   (cat.east |- 0,-50) -| (154,0 |- idp.north);
+\node[lab=52mm, anchor=south west, align=left] at (86,-156.3) {\rel{\texttt{update-checkout} fast-forwards the checkout; \texttt{remove -{}-purge} deletes recorded cache entries}{git; file system}};
+\node[lab=40mm, anchor=south west, align=left] at (102,-187.3) {\rel{hashes build inputs; compares re-downloads; drafts notices}{file system}};
+\node[lab=34mm, anchor=south west, align=left] at (112.5,-244.3) {\rel{pushes the public catalogue and tag}{git}};
+\node[lab=31mm, anchor=south west, align=left] at (119,-260.3) {\rel{copies, syncs, purges; \texttt{chmod}, locality; reads back}{rclone/WebDAV, REST, token; HTTPS}};
+\node[lab=20mm, anchor=south east, align=right] at (152.5,-280.5) {\rel{tokens}{oidc-agent}};
+% ---- key -----------------------------------------------------------------------------------
+\begin{scope}[shift={(-4,-232)}]
+  \keytitle{Key}
+  \keynode{1}{c4personkey}{Person}
+  \keynode{2}{c4container}{Container}
+  \keystore{3}{brand}{fillbrand}{Data store}
+  \keystore{4}{muted}{fillsoft}{External data store}
+  \keynode{5}{c4systemext}{External system}
+  \keynode{6}{c4boundary}{System boundary or group}
+  \keyline{7}{c4rel}{Request or dependency}
+  \keyline{8}{c4manual}{Handoff a person makes}
+  \keyline{9}{c4download}{Anonymous download}
+  \keyline{10}{c4maint}{Authenticated maintenance}
+\end{scope}
+\end{tikzpicture}

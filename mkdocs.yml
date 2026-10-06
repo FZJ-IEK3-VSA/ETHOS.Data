@@ -148,11 +148,6 @@ exclude_docs: |
   /branding/
   /font/
 
-# Compatibility pages retain previously shared architecture URLs.
-not_in_nav: |
-  /explanation/architecture/lifecycle.md
-  /explanation/architecture/quality-and-risks.md
-
 extra:
     generator: false
 
@@ -231,7 +226,36 @@ nav:
                 - 6. Runtime View: explanation/architecture/runtime.md
                 - 7. Deployment View: explanation/architecture/deployment.md
                 - 8. Crosscutting Concepts: explanation/architecture/crosscutting-concepts.md
-                - 9. Architectural Decisions: explanation/architecture/decisions.md
+                - 9. Architectural Decisions:
+                      - explanation/architecture/decisions/index.md
+                      - 0001. arc42, C4 and one file per decision: explanation/architecture/decisions/0001-arc42-c4-one-file-per-decision.md
+                      - 0002. Clean break: explanation/architecture/decisions/0002-clean-break-during-the-beta.md
+                      - 0003. One catalogue, many collections: explanation/architecture/decisions/0003-one-catalogue-many-collections.md
+                      - 0004. Cache paths from identity: explanation/architecture/decisions/0004-cache-paths-from-resource-identity.md
+                      - 0005. Lazy index and shards: explanation/architecture/decisions/0005-lazy-index-descriptors-and-shards.md
+                      - 0006. File formats specified once: explanation/architecture/decisions/0006-every-file-format-specified-once.md
+                      - 0007. One inventory reader: explanation/architecture/decisions/0007-one-inventory-reader.md
+                      - 0008. Four layers: explanation/architecture/decisions/0008-four-layers.md
+                      - 0009. Ports and fakes: explanation/architecture/decisions/0009-ports-and-fakes-for-external-systems.md
+                      - 0010. One settings file per account: explanation/architecture/decisions/0010-one-settings-file-per-account.md
+                      - 0011. The access class picks the root: explanation/architecture/decisions/0011-access-class-picks-the-root.md
+                      - 0012. One lookup chain: explanation/architecture/decisions/0012-one-lookup-chain.md
+                      - 0013. Every input required, say what is missing: explanation/architecture/decisions/0013-every-input-is-required.md
+                      - 0014. Named inputs and variants: explanation/architecture/decisions/0014-named-inputs-and-test-full-variants.md
+                      - 0015. Package commands own collections: explanation/architecture/decisions/0015-package-commands-own-collections.md
+                      - 0016. One link command, two modes: explanation/architecture/decisions/0016-one-link-command-two-modes.md
+                      - 0017. Self-test collection: explanation/architecture/decisions/0017-self-test-collection.md
+                      - 0018. Numbered releases, purge and bounds: explanation/architecture/decisions/0018-numbered-catalogue-releases.md
+                      - 0019. Revisions and successors: explanation/architecture/decisions/0019-revisions-and-successors.md
+                      - 0020. Bundles authoritative for their package: explanation/architecture/decisions/0020-repository-bundles.md
+                      - 0021. Bundles ahead of the catalogue: explanation/architecture/decisions/0021-bundles-ahead-of-the-catalogue.md
+                      - 0022. Dataset status files: explanation/architecture/decisions/0022-dataset-status-files.md
+                      - 0023. Maintenance pipelines: explanation/architecture/decisions/0023-maintenance-pipelines.md
+                      - 0024. Licensing gates distribution: explanation/architecture/decisions/0024-licensing-gates-distribution.md
+                      - 0025. Handoff templates: explanation/architecture/decisions/0025-handoff-templates.md
+                      - 0026. Internal catalogue on the cluster: explanation/architecture/decisions/0026-internal-catalogue-on-the-cluster.md
+                      - 0027. Public catalogue on GitHub: explanation/architecture/decisions/0027-public-catalogue-releases-on-github.md
+                      - 0028. One public cache on the cluster: explanation/architecture/decisions/0028-one-public-cache-on-the-cluster.md
                 - 10. Quality Requirements: explanation/architecture/quality-requirements.md
                 - 11. Risks and Technical Debt: explanation/architecture/risks-and-technical-debt.md
                 - 12. Glossary: explanation/architecture/glossary.md

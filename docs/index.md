@@ -94,8 +94,8 @@ The [how-to overview](how-to/index.md) lists tasks by role, including
   [Why one catalogue](explanation/deduplication.md).
 - **Almost no configuration.** The public catalogue is built in and each
   package ships its own collections. Set the cache location once, or keep the
-  standard per-user cache directory — there are
-  [configuration scopes](how-to/data-users/set-up-your-machine.md#public-installation-users). Every dataset
+  standard per-user cache directory — see
+  [Set up your machine](how-to/data-users/set-up-your-machine.md#public-installation-users). Every dataset
   keeps the same position relative to the cache on every machine, so nothing
   else has to be configured to use the data.
 - **Inputs by name, on test data or the real thing.** A package names the
@@ -112,7 +112,7 @@ The [how-to overview](how-to/index.md) lists tasks by role, including
   work on several ETHOS projects on one machine, or share a workstation or
   compute server with colleagues who also use ETHOS tools and workflows, each
   dataset needs to be there only once. Data that is already on the machine is
-  read [where it lies](how-to/catalogue-maintainers/link-existing-data.md#dataset-root-overrides), and every project
+  read [where it lies](how-to/catalogue-maintainers/link-existing-data.md#cache-links), and every project
   and every user reads that same copy — nothing is downloaded again or
   duplicated into a second cache.
 - **Non-redistributable data is declared, not shipped.** Proprietary or
@@ -124,8 +124,9 @@ The [how-to overview](how-to/index.md) lists tasks by role, including
   [Work with restricted data](how-to/data-users/set-up-your-machine.md#public-installation-users).
 - **Integrity is checked, not assumed.** Downloads are verified against the
   manifest by [pooch](https://www.fatiando.org/pooch/); data read in place can
-  be audited and re-fetched with
-  [`<your-tool>-data verify --repair`](how-to/data-users/verify-and-repair.md).
+  be audited with
+  [`<your-tool>-data verify`](how-to/data-users/verify-and-repair.md), and
+  `verify --repair` downloads a damaged copy again.
 - **Large datasets stay cheap to query.** A catalogue is loaded lazily and a
   big inventory is [sharded](explanation/catalogue-format.md#sharding), so
   selecting one ERA5 tile parses that tile's 664 resources rather than all

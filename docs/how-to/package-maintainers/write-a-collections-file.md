@@ -22,16 +22,23 @@ if __name__ == "__main__":
 
 ## 1. Declare the catalogue versions {#catalog-version}
 
-The file has two top-level keys: `catalog`, which says which versions of the
-catalogue the package works with, and `collections`. Catalogue releases are
-numbered `vYYYY.MM.N`, where `N` counts the releases within a month, so
-`v2026.09.2` is the second release of September 2026 and versions compare
-component by component.
+The file has two top-level keys: `catalog`, which says which catalogue
+releases the package works with, and `collections`. A release is named
+`vMAJOR.MINOR.PATCH`: three numbers without leading zeros, compared part by
+part as numbers, from `v1.0.0` on. A patch release never changes the bytes a
+key resolves to; a minor release may change data; a major release lets
+withdrawn data be purged (see [Choose the
+version](../catalogue-maintainers/release-the-catalogue.md#version)).
+
+All data that any release of the current major describes is kept on dCache;
+data is purged only after a major release. So a release of the current major
+keeps resolving, and a patch release never changes the bytes your package
+reads.
 
 ```yaml
 catalog:
-  min_version: v2026.09.1     # the oldest release the package was tested with
-  max_version: v2026.12.9     # optional: refuse anything newer
+  min_version: v1.2.0     # the oldest release the package was tested with
+  max_version: v1.3       # optional: refuse anything after the last v1.3 release
 collections:
   ...
 ```
@@ -40,25 +47,35 @@ or, for a package that must resolve to the same bytes release after release:
 
 ```yaml
 catalog:
-  exact_version: v2026.09.2
+  exact_version: v1.3     # every v1.3 release: the same bytes, the newest metadata
 collections:
   ...
 ```
 
+A version may be a prefix, such as `v1` or `v1.3`, that stands for every
+release starting with it: as `min_version` its first release, as
+`max_version` its last, as `exact_version` all of them. A full version, such
+as `exact_version: v1.2.0`, admits that one release only.
+
 Which catalogue is read stays a user setting: a cluster user's configured
 internal catalogue, or the public catalogue for everyone else. The file only
-bounds its version. A catalogue outside the bounds is refused with both
-versions in the message, on the command line and in Python alike. With no
-configured catalogue, `exact_version` selects that public release and
-`min_version` the newest public release within the bounds.
+bounds the release. A catalogue outside the bounds, or with no release, is
+refused with `CatalogVersionError`, naming its release and the bounds, on the
+command line and in Python alike; malformed bounds raise `CollectionError`.
+With no configured catalogue, a full `exact_version` reads that release, and
+any range, a prefix `exact_version` included, reads the list of public
+releases and takes the newest one the bounds admit.
 
-!!! warning "Gap: version keys are not implemented"
-    Today `catalog:` takes only a path or URL, and a catalogue index carries
-    no version stamp. This needs `build` and `publish` to write the release
-    into `datacatalog.json`, the loader to read the three keys and compare,
-    and a way to find the public release for a version. The example file
-    used in [Use data in a script](../data-users/use-data-in-a-script.md)
-    therefore still pins a URL.
+The served checkout on the cluster holds the latest release only, so a
+package that runs there bounds with `min_version` only. A purge never touches
+what the latest release describes, so such a package never notices a major
+release.
+
+!!! warning "Gap: no release bounds"
+    In the code, `catalog:` takes only a path or URL, and a catalogue index
+    carries no release. The example file used in
+    [Use data in a script](../data-users/use-data-in-a-script.md) therefore
+    names the public catalogue's URL.
 
 ## 2. Select the inputs
 
@@ -91,9 +108,12 @@ collection to `all.extends`, directly or indirectly. This `all` means every
 input used by **this package**, not every dataset in the catalogue. Repeated
 resources are deduplicated.
 
-A collection that names an internal dataset resolves only on a cluster
-installation; keep such collections separate from the ones public
-installations need, so `show` marks only those as `[unresolvable]` elsewhere.
+Keep collections that need more than public data separate from the ones
+public installations need. A collection that names a hidden dataset resolves
+only against the internal catalogue; elsewhere `show` marks it
+`[unresolvable]`. A collection that names restricted data is fetched only by
+an account that lists a restricted cache holding that data; elsewhere the
+fetch stops before any download and says how to obtain it.
 
 ## 3. Name the inputs a workflow takes
 
@@ -181,8 +201,10 @@ python data_cli.py fetch my_workflow --test --paths
 
 `show` prints one row per variant. If the two variants disagree about their
 handles, `show` marks the collection `[unresolvable]` and every other command
-refuses it, saying `only in test: ...; only in full: ...`. A collection that
-merely extends it is refused too.
+refuses it, naming each handle only one variant offers:
+`collection 'my_workflow': the named path 'gwa_100m' is in its full variant only`.
+A collection that merely extends it is refused too, and the message names
+both collections.
 
 ## 5. Inspect the selection
 

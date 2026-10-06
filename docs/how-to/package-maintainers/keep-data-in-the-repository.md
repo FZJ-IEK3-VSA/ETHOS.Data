@@ -1,34 +1,48 @@
 # Keep data in the repository
 
-Create test data inside your package's repository as a **bundle**, work with
-it at once, and have the catalogue updated from it, version by version. A
-bundle is one dataset family with sub-datasets, laid out like
-`your-tool-test-data/era5`, `your-tool-test-data/placements`, that lives in
-the repository so tests run offline and small inputs the software cannot do
-without never depend on a download. A package may ship several bundles, for
-example `test_data` beside the collections file and `wind/core/data` beside
-the code that reads it.
+Keep the data your package's required tests and examples read in its
+repository, as a **bundle**, so they run offline and the data stays properly
+attributed. A bundle holds the files of a selection of catalogue datasets,
+whole datasets or some of their files, with each dataset's description,
+licence documents and attribution. Work with it at once, ahead of the
+catalogue if need be, realign it with the catalogue soon after, and export it
+to another repository with similar data requirements. A package may ship
+several bundles, for example `test_data` beside the collections file and
+`wind/core/data` beside the code that reads it.
 
-The repository is the source of truth for a bundle. Its files change the way
-every file in a repository changes, by commit and pull; the catalogue holds
-published versions of the bundle and is updated from the repository, never
-the other way round.
+The package reads what its bundle holds, even where the bundle is ahead of
+the catalogue, and you are warned to realign it soon
+([0020](../../explanation/architecture/decisions/0020-repository-bundles.md)).
+A bundle's files change the way every file in a repository changes, by commit
+and pull.
 
 A bundle directory holds:
 
 | Path | Content |
 | --- | --- |
-| `bundle.json` | The family name, the bundle version, every file with size and SHA-256, and the catalogue release the version is published in, if any |
-| `data/<family>/<member>/<path>` | The bytes |
-| `datasets/<family>/<member>/dataset.yaml` | One description per sub-dataset, with the licence documents it names beside it |
+| `bundle.json` | For each dataset: its alignment with the catalogue, whether it holds every file or a selection, the changes recorded since the alignment, and every file's size and SHA-256, the descriptions and licence documents included |
+| `data/<dataset>/<path>` | The bytes; a member of a family is `<family>/<member>` |
+| `datasets/<dataset>/` | The dataset's description, `dataset.yaml`, with the licence documents it names; a family's description lies under `datasets/<family>/` |
 
-The metadata stays next to the data because a repository redistributes it,
-and several datasets require attribution when redistributed.
+A dataset's alignment is the catalogue revision it was last aligned with, none
+for a dataset the catalogue does not describe yet, and the release it was
+taken from, which is only shown.
+
+The descriptions stay next to the data because a repository redistributes it,
+and several datasets require attribution when redistributed. For the same
+reason a bundle holds only public, visible data with settled licensing;
+anything else is refused with `BundleError`, naming the dataset and what is
+missing.
+
+Develop data whose licensing is unsettled in
+[staging](stage-development-data.md). Licensed fixtures belong in restricted
+CI, not in a bundle; see
+[Run tests and examples in CI](run-in-ci.md#3-download-public-data-the-repository-does-not-hold).
 
 ## 1. Create a bundle
 
-Put the files under `data/<family>/<member>/`, then let the tool inventory
-them:
+Put each dataset's files under `data/<dataset>/`, the members of a family
+under `data/<family>/<member>/`, then let the tool inventory them:
 
 ```bash
 mkdir -p your_tool/data/test_data/data/your-tool-test-data/era5
@@ -36,20 +50,22 @@ cp /scratch/me/era5-cut/*.nc your_tool/data/test_data/data/your-tool-test-data/e
 <your-tool>-data bundle create your_tool/data/test_data --family your-tool-test-data
 ```
 
-`bundle create` hashes every file, writes `bundle.json` as version 1, not yet
-published, and drafts a `dataset.yaml` per member with its name and
-`source_dir`. Fill the drafts in, origin, sources, licence, attribution, and
-put the licence documents beside them, as for any
-[proposal](propose-a-dataset.md#3-draft-the-description). Commit the whole
+`bundle create` hashes every file, writes `bundle.json` and drafts a
+`dataset.yaml` for each new dataset; `--family NAME` drafts the members of one
+family. Fill the drafts in, origin, sources, licence, attribution, and put the
+licence documents beside them, as for any
+[proposal](propose-a-dataset.md#3-draft-the-description): a bundle whose
+licensing is not settled is refused when it is read. The new datasets are
+ahead of the catalogue until the catalogue accepts them. Commit the whole
 directory. Keep every bundle small: Git hosts refuse files over 100 MiB, and
 every revision of a fixture stays in the history.
 
 !!! warning "Gap: `bundle create` does not exist"
-    A bundle can only be exported from data that is already in the
-    catalogue. Creating one from local files, with drafted descriptions and
-    a version, is the missing first step of this lifecycle.
+    In the code, a bundle can only be exported from data the catalogue
+    already holds. Nothing creates one from local files or drafts its
+    descriptions.
 
-## 2. Work with it, published or not {#use-a-bundle}
+## 2. Work with it {#use-a-bundle}
 
 List the bundle in the package's data module (see
 [Use ETHOS.Data in your package](use-from-a-package.md#3-build-the-handle-and-the-command)):
@@ -59,113 +75,150 @@ BUNDLES = (Path(__file__).with_name("test_data"),)
 ```
 
 `paths()`, `fetch()` and `catalog_path()` then answer from whichever bundle
-holds what was asked for, hash-checked once per process, and go to the
-catalogue only for what no bundle holds. A bundled file that is missing or
-altered is an error, not a reason to download.
+holds what was asked for, hash-checked against `bundle.json` once per
+process, and go to the catalogue only for what no bundle holds. A handle whose
+bundles hold every input reads no catalogue index, so the required tests run
+offline. A bundled file that is missing, or changed without `bundle update`
+recording it, raises `BundleError`; it is never downloaded instead.
 
-A bundle version that is not in the catalogue yet keeps working. Every
-process that reads it warns once:
+A bundle is ahead of the catalogue when it holds changes that `bundle update`
+recorded, or a dataset the catalogue does not describe. It is read all the
+same, so development never waits for the catalogue. Every process that reads
+one of its datasets warns once per bundle, offline included, so your required
+tests show it, and your package's users see it too:
 
 ```text
-your_tool/data/test_data version 2 is not in the catalogue yet; propose it so it can be published.
+warning: bundle your_tool/data/test_data is ahead of the catalogue:
+your-tool-test-data/era5 (2 files changed), your-tool-test-data/placements (not in the catalogue).
+Realign it soon: <your-tool>-data propose your_tool/data/test_data, or take the catalogue's version:
+<your-tool>-data bundle update your_tool/data/test_data --from-catalog your-tool-test-data/era5
 ```
 
-That is the deliberate window in which a package maintainer develops against
-new test data without waiting for the catalogue. It is not meant to last:
-the live CI job fails on a bundle version the catalogue does not hold, see
-[Run tests and examples in CI](run-in-ci.md).
+Where the handle reads the catalogue index anyway, for a dataset no bundle
+holds or with the download switch, it also compares each bundled dataset's
+recorded revision with the catalogue's. A later revision there means the
+bundle is behind, and it warns the same way. A bundled dataset the catalogue
+has withdrawn is named too: drop it from the bundle, or switch to its
+successor. `bundle verify` and `bundle update` compare the files, descriptions
+and licence documents with the catalogue, so they also find a description the
+catalogue corrected in a patch release.
 
-To force the catalogue route instead of the bundle, for example to test the
-download, pass `download=True` or set `ETHOS_DATA_DOWNLOAD=1`.
+The warning has its own category, exported from `ethos_data`, so a package can
+filter it. [Run tests and examples in CI](run-in-ci.md#download-switch) shows
+how to keep it a warning when tests turn warnings into errors.
+
+To read through the catalogue route instead, for example to test the
+download, pass `download=True` or set `ETHOS_DATA_DOWNLOAD=1`. A bundled file
+whose recorded SHA-256 the catalogue holds for the same key is then read from
+the public cache, or downloaded into it; every other bundled file is still
+read from the bundle, with the warning. The switch changes where a file is
+read from, never which bytes, and a bundle's own bytes never enter a cache.
 
 !!! warning "Gap: bundle-first reads, the warning and the download switch are not in ETHOS.Data"
-    `ethos_data.collections` takes no `bundles=`, nothing warns about an
-    unpublished bundle version, and there is no `ETHOS_DATA_DOWNLOAD`. One
-    package implements bundle-first reads and a download switch for itself
-    today.
+    `ethos_data.collections` takes no `bundles=`, nothing compares a bundle
+    with the catalogue or warns about one that is ahead of it, and there is
+    no `ETHOS_DATA_DOWNLOAD`. One package implements bundle-first reads and a
+    download switch for itself.
 
-## 3. Change it: extend, or copy {#update-data}
+## 3. Change it {#update-data}
 
-Edit the files as you edit anything in the repository, then re-inventory:
+Edit the files as you edit anything in the repository, then record the
+change:
 
 ```bash
 <your-tool>-data bundle update your_tool/data/test_data
 ```
 
-| Change | What `bundle update` does |
-| --- | --- |
-| Files added, or a new member dataset | Records them in the current version. An extension does not change published files, so it needs no new version. |
-| The bytes of a published file changed under its path | Refused. Published paths never change: put the new bytes under a new path, a copy, and keep or drop the old file as the tests need. `bundle update` then starts the next bundle version. |
-| A file removed | Recorded; the file stays in the published versions on dCache. |
+`bundle update` records every changed, added and removed file, the
+descriptions and licence documents included, and every new dataset. The
+bundle is then ahead of the catalogue: it is read as recorded, with the
+warning, until you realign it. A change that `bundle update` has not recorded
+is refused when it is read.
 
-Reproducing a bug with a temporarily edited fixture stays possible without
-a version: `load_bundle(DIR).fetch(collection, allow_modified=True)` in the
-affected test only, and `bundle verify` keeps reporting `modified` until the
-file is restored.
+To reproduce a bug with a temporarily edited file, record nothing: read it
+with `load_bundle(DIR).fetch(…, allow_modified=True)` in the affected test
+only. That read warns with the changed keys and keeps the recorded hashes;
+nothing repairs, republishes or updates dCache, and `bundle verify` reports
+the file as `modified` until it is restored.
 
-## 4. Have the catalogue updated from the bundle {#sync}
+## 4. Realign it with the catalogue {#sync}
 
-Propose the bundle as under [Propose a dataset](propose-a-dataset.md), naming
-the bundle directory: its `datasets/` holds the descriptions and licence
-documents and its `data/` the bytes, which is everything the maintainer
-needs. The maintainer imports it:
+Realign a bundle soon after it is ahead, in one of two ways.
+
+**The catalogue takes the bundle's version.** Draft the proposal for the
+datasets that are ahead and submit it as under
+[Propose a dataset](propose-a-dataset.md#4-submit):
+
+```bash
+<your-tool>-data propose your_tool/data/test_data
+```
+
+The bundle's `datasets/` holds the descriptions and licence documents and its
+`data/` the bytes, which is everything the catalogue maintainer needs. The
+maintainer takes the ahead datasets in:
 
 ```bash
 ethos-data catalog add-bundle /path/to/checkout/your_tool/data/test_data
 ```
 
-`add-bundle` compares the bundle with the version of the family the
-catalogue already holds and writes the difference as the bundle's version:
-new members and new files are added, changed files appear under their new
-paths, unchanged files keep the paths and remote objects they have. The
-maintainer builds, uploads what is new and [releases](../catalogue-maintainers/release-the-catalogue.md).
-Once the release is out, raise `catalog.min_version` in your collections
-file and run `bundle update` once more: it records the release in
-`bundle.json`, and the warning stops.
+`add-bundle` takes new datasets, revisions of changed ones and changed
+descriptions, and copies the files into a build input the catalogue
+maintainers own, so the catalogue never reads your checkout. It takes a
+revision only while the catalogue is still at the bundle's alignment. The
+maintainer then builds, uploads, records, merges and
+[releases](../catalogue-maintainers/release-the-catalogue.md). Once the
+release is out, raise `catalog.min_version` in your collections file and run
+`bundle update` with the catalogue readable: it records the new alignment,
+and the warning stops.
 
-A later change to the bundle goes the same way and becomes the next version.
-Older versions stay on dCache for the packages that still use them; the
-repository holds the current one.
-
-!!! warning "Gap: no bundle versions, no `bundle update`, no `catalog add-bundle`"
-    `bundle.json` carries no version and no published-release field,
-    `bundle export` refuses an existing target, and nothing on the
-    maintainer side imports a bundle into the catalogue or compares it with
-    the version already there. How a bundle version is encoded in dataset
-    names and resource paths, so that two versions can share a cache, is the
-    design question behind this feature.
-
-## 5. Reuse test data from the catalogue in another tool
-
-The reverse direction: export what a collection selects from the catalogue
-into a new bundle, for example to seed a new tool's test suite with data
-another tool already published:
+**The bundle takes the catalogue's version.** To drop your changes to a
+dataset, or to catch up with a later revision, take what the catalogue holds:
 
 ```bash
-<your-tool>-data bundle export your_tool/data/test_data test_suite_public
-<your-tool>-data bundle verify your_tool/data/test_data test_suite_public
+<your-tool>-data bundle update your_tool/data/test_data --from-catalog your-tool-test-data/era5
 ```
 
-The target must not exist. An exported bundle starts published, with the
-catalogue's descriptors and licence documents in place; read
-`datasets/<family>/<member>/` before committing, because it states the terms
-under which your repository now redistributes the files. To take the bytes
-from a copy already on the machine, add `--source-root DATASET=/absolute/path`
-per dataset; the copy must match the catalogue's hashes.
+It takes the catalogue's files of the bundled selection, with the description
+and licence documents, and records the alignment.
 
-Tests may also read a bundle directly and explicitly:
+A later change makes the bundle ahead again and goes the same way.
 
-```python
-from pathlib import Path
-from ethos_data import load_bundle
+!!! warning "Gap: no `bundle update`, no `propose`, no `catalog add-bundle`"
+    In the code, `bundle.json` records no alignment and no changes, and
+    `bundle verify` compares the files with `bundle.json` only. Nothing
+    records a change to a bundle, drafts a proposal from it, or takes it into
+    the catalogue.
 
-BUNDLE = Path(__file__).resolve().parents[1] / "your_tool" / "data" / "test_data"
+## 5. Export it to another repository
 
-def test_my_workflow():
-    files = load_bundle(BUNDLE).fetch("test_suite_public")
-    run(files.one("aachenShapefile.shp"))
+`bundle export` writes a new bundle of what your package reads for some of
+its collections, into a new directory in this or another repository, for
+example to give another tool's tests the data yours already use:
+
+```bash
+<your-tool>-data bundle export ../other-tool/other_tool/data/test_data my_workflow --test
 ```
+
+Export reads through your package's handle: its bundles first, then the
+caches and the download, never staging. `--test` selects the test variants.
+Each dataset keeps its description, licence documents and alignment. Export
+checks every file's size and SHA-256 as it copies, and downloads from the
+publication URL your settings give, like every other download. The target
+must not exist. To export from a copy already on the machine, make it a cache
+entry first, with
+[`ethos-data link NAME DIR`](../../reference/cli/ethos-data.md#link-dataset-directory)
+or `ethos-data materialize NAME --from DIR`.
+
+Read `datasets/` in the new bundle before committing it: it states the terms
+under which that repository redistributes the files. The other package lists
+the bundle in its `bundles=`, like any bundle.
+
+!!! warning "Gap: export reads the catalogue only"
+    In the code, `bundle export` reads the catalogue, never the package's
+    bundles or caches, and has no `--test`. It downloads each file, or copies
+    it from a local copy named with `--source-root DATASET=PATH`, and the
+    bundle it writes records no alignment.
 
 See [Run tests and examples in CI](run-in-ci.md) for the CI wiring and the
 [bundle reference](../../reference/cli/package-data.md#bundle) for the
-options that exist today.
+options the code has.

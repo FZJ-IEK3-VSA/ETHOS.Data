@@ -19,6 +19,14 @@ a dataset the catalogue does not describe, and
 [`IncompleteCatalog`][ethos_data.catalogs.IncompleteCatalog] for a dataset the
 index lists whose descriptor or shard is missing.
 
+!!! warning "Gap: `UnknownDataset` is to list no datasets and give no hint"
+    With [every input is
+    required](../../explanation/architecture/decisions/0013-every-input-is-required.md),
+    the message names the dataset and where it was asked for: "collection
+    'onshore_wind': the dataset 'era5-lnd' cannot be found. Maybe it was
+    mistyped, or it is not published." It lists no datasets and gives no
+    withdrawal hint. To be implemented separately.
+
 `Catalog.path` and `Catalog.resources` answer for a key — one file, a folder,
 a dataset or a family — fetching in the first case and only reading in the
 second. `ethos_data.catalog()` builds the handle for the configured catalogue;

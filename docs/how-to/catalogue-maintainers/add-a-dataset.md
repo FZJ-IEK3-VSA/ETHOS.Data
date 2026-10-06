@@ -56,13 +56,20 @@ dataset ends up published empty. For a large inventory set
 ### Datasets that are not ready to publish {#not-ready}
 
 ```yaml
-ethos:access: internal
+ethos:access: restricted
 ethos:visibility: hidden
+ethos:restriction: >-
+  Not published before the accompanying paper. Every institute member may
+  read it on the cluster computer.
 ethos:embargo:
   until: "2027-06-30"           # or "unspecified", with a reason
   reason: Pending publication of the accompanying paper.
   becomes: public
 ```
+
+Data the institute holds without publishing it is restricted data that every
+member of the institute may read. When the embargo ends,
+[release it as public data](release-the-catalogue.md#embargo).
 
 ### Restricted datasets {#restricted-installations}
 
@@ -84,16 +91,19 @@ A restricted dataset has no `ethos:remote_prefix` and is never marked
 `ethos:uploaded`. With the custodian's approval it may be listed publicly
 without offering bytes.
 
-A user whose workflow needs the dataset and who has no copy sees its
-description in the error: title and description, `homepage` and `sources`,
-`licenses` and `ethos:attribution`, `ethos:restriction` and `ethos:contact`.
-Write them for that person: say where a copy can be obtained and under which
-terms.
+A user whose workflow needs the dataset and who has no copy gets an error
+that names the dataset and prints its `ethos:restriction`, `homepage` and
+`ethos:contact`, then how to register a copy. Write them for that person:
+who may obtain a copy, where, and under which terms.
+`ethos-data ls <name> --meta` prints the full description.
 
 !!! warning "Gap: the error prints only `ethos:restriction`"
-    The rest of the description is planned with [every input is
-    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
-    to be implemented separately.
+    The code's error prints the `ethos:restriction` note without the
+    homepage and the contact. To register a copy it offers
+    `config set-restricted-cache` and `config set-root`, and it offers
+    `--skip-unavailable` to carry on without the dataset. `ls` has no
+    `--meta`. See [every input is
+    required](../../explanation/architecture/decisions/0013-every-input-is-required.md).
 
 ## 2. Review it
 
@@ -104,7 +114,7 @@ Settle every row before the file enters the catalogue:
 | What is it, and for which workflows | Name, version, title and purpose are agreed. A revision of existing data gets new paths, never the old ones. |
 | Where does it come from | `ethos:origin` is right. Downloaded data names its source and retrieval date and [matches that source](verify-provenance.md). Created or derived data names its authors, inputs and method. |
 | May it be redistributed | A `licenses:` entry, or an explicit `resolved` status, based on terms somebody read. Unclear terms stay `ethos:license_status: unresolved` with the question in `ethos:license_note`, which blocks linking and upload until answered. Attribution text is recorded where the licence requires it. |
-| Who may read it | `ethos:access` and `ethos:visibility` are right, and a hidden dataset has an embargo block. |
+| Who may read it | `ethos:access` and `ethos:visibility` are right, a hidden dataset has an embargo block, and a restricted dataset says in `ethos:restriction` who may obtain it and how. |
 | Which files | The selection covers the files the workflows need, their sidecars, and nothing unrelated. |
 | Does it work | The proposer ran the affected workflow or tests against the staged or bundled candidate. |
 
@@ -118,10 +128,14 @@ ethos-data catalog build my-dataset --check
 git diff -- datasets/my-dataset datacatalog.json
 ```
 
-A family from a bundle is imported with `ethos-data catalog add-bundle <bundle
-directory>`, which writes one directory per member,
-`datasets/your-tool-test-data/era5/dataset.yaml`, with the family's own
-`dataset.yaml` above them, as the bundle's next version; see
+Datasets from a package's bundle come in through
+`ethos-data catalog add-bundle <bundle directory> [DATASET...]`. It takes the
+bundle's datasets that are ahead of the catalogue: new datasets, revisions
+(only while the catalogue is still at the bundle's alignment) and changed
+descriptions. It writes one directory per dataset, a family's members below
+the family's own `dataset.yaml`
+(`datasets/your-tool-test-data/era5/dataset.yaml`), and copies the files into
+a build input the catalogue maintainers own; see
 [Keep data in the repository](../package-maintainers/keep-data-in-the-repository.md#sync). The build walks `source_dir`, hashes every
 selected file and writes `datapackage.json` beside the description; never
 hand-edit the generated JSON. Check the generated paths, counts, sizes and
@@ -133,14 +147,14 @@ Which step depends on the access class:
 
 | Access | Do |
 | --- | --- |
-| `public` | [Upload the dataset](upload-a-dataset.md) to dCache and verify it anonymously. |
-| `internal` | [Link the directory into the public cache](link-existing-data.md) on the cluster computer. Internal data is read there in place and is not uploaded. |
-| `restricted` | [Register the authorised installation in the restricted cache](add-restricted-data.md). Nothing is copied or uploaded. |
+| `public` | [Upload the dataset](upload-a-dataset.md) to dCache and verify it anonymously. On the cluster computer, [link it into the cluster's public cache](link-existing-data.md) as well if users should read it there in place. |
+| `restricted` | [Register the authorised installation](add-restricted-data.md) by name in the restricted cache of its access combination. Nothing is uploaded. |
 
-Internal data has no download route, by decision: it is available on cluster
-installations only, and a dataset that should be downloadable is made
-`public`. A dataset that is `internal` until an embargo ends is linked now and
-uploaded when it becomes public.
+Restricted data has no copy on dCache: it is read in place, where a
+restricted cache holds it. A dataset that should be downloadable is made
+`public`. A dataset that is restricted until an embargo ends is registered in
+the restricted cache that admits every institute member, and uploaded once it
+becomes public.
 
 ## 5. Record the authoritative copy
 
@@ -157,7 +171,7 @@ original directory is the build input; when it is later
 consumers only after this step; a successful build alone publishes nothing.
 
 Then tell the proposer the accepted dataset name and the release that holds
-it. Ask them to raise their `catalog.min_version`, remove staging entries and
-root overrides, run `bundle update` so their bundle records the release,
-and run their workflow against the released catalogue. Keep the proposal, the review findings, the upload report
+it. Ask them to raise their `catalog.min_version`, remove their staging
+entries, run `bundle update` so their bundle records its new alignment with
+the catalogue, and run their workflow against the released catalogue. Keep the proposal, the review findings, the upload report
 and the release identifiers together in the issue.

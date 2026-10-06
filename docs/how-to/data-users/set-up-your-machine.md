@@ -9,11 +9,12 @@ who you are:
 | --- | --- | --- |
 | Machine | A laptop, a workstation or a CI runner, anywhere outside the ICE-2 cluster computer | The ICE-2 cluster computer |
 | Catalogue | The public catalogue, built in, or the version a package declares | The internal catalogue on the cluster computer, which includes every public entry |
-| Caches | Your own public cache; no restricted cache | The shared public and restricted caches |
-| Restricted data | Not reachable, unless you register your own authorised copy | Read in place, if you are in the dataset's group |
+| Caches | Your own public cache; a restricted cache only if you register a copy of restricted data | The cluster's public cache, which every cluster user shares; restricted caches only if your groups admit them |
+| Restricted data | Not reachable, unless you register your own authorised copy | Read in place from the restricted caches you list |
 
 An ICE-2 member working on a laptop is a public installation user: the
-internal catalogue and the shared caches exist only on the cluster computer.
+internal catalogue, the cluster's public cache and its restricted caches
+exist only on the cluster computer.
 
 ## Where the settings are stored {#settings-file}
 
@@ -37,7 +38,7 @@ needs, and which catalogue versions it accepts, come from the package's
 collections file.
 
 !!! warning "Gap: settings are read from four files"
-    The current release reads four files, first match wins: an
+    The code reads four files, first match wins: an
     `ethos-data.yaml` found by searching upward from the working directory,
     the file in your account, a file inside the Python environment
     (`<sys.prefix>/etc/ethos-data/config.yaml`) and a machine-wide file. The
@@ -45,9 +46,8 @@ collections file.
     among them, and `ETHOS_DATA_CONFIG` does not exist. On Windows the file
     in your account is `%LOCALAPPDATA%\ethos-data\ethos-data\config.yaml`
     and the default cache is `%LOCALAPPDATA%\ethos-data\ethos-data\Cache`.
-    The planned change, [one settings file per
-    account](../../explanation/architecture/decisions.md#one-settings-file-per-account-2026-10-02),
-    is to be implemented separately.
+    See [one settings file per
+    account](../../explanation/architecture/decisions/0010-one-settings-file-per-account.md).
 
 ## Check what is in effect
 
@@ -56,8 +56,10 @@ ethos-data config show
 ```
 
 The command prints the settings file it read, the catalogue and cache
-settings, and where each came from. It needs no network and loads no
-catalogue. Run it before and after every change below.
+settings, and where each came from. It numbers the restricted caches and
+marks one it cannot reach; if you list none, it says so, which is a normal
+set-up. It needs no network and loads no catalogue. Run it before and after
+every change below.
 
 ## Public installation users {#public-installation-users}
 
@@ -72,48 +74,73 @@ To put the cache on a disk with room:
 ethos-data config set-public-cache /data/ethos/public
 ```
 
-Licensed datasets are described in the public catalogue but never downloaded.
-A workflow that needs one stops with an error that describes the dataset:
-what it is, where it came from, its licence and attribution, and how to
-obtain a copy, as far as the catalogue records them. Obtain your own copy
-under its terms and register it:
+Restricted datasets, licensed ones for example, may be described in the
+public catalogue, but they are never downloaded. A workflow that needs one
+stops before anything is downloaded, with an error that names the dataset and
+says how to obtain it, as far as the catalogue records that;
+[`--meta`](use-data-in-a-script.md#metadata) prints its full description.
+Obtain your own copy under its terms and register it:
 
 ```bash
-ethos-data config set-restricted-cache /data/ethos/restricted
+ethos-data config add-restricted-cache /data/ethos/restricted
 ethos-data link gadm-3.6 /data/licensed/gadm36_levels_shp
 ```
 
+The first command lists a restricted cache in your settings, once. The second
+links your copy into it, and the copy is read in place.
+
 Every input a workflow names is required; no setting lets it run without one.
 
-!!! warning "Gap: the error does not describe the dataset, and inputs can be left out"
-    The error names the dataset and prints its `ethos:restriction` note
-    only. It also offers to carry on without the dataset, through
-    `--skip-unavailable`, `skip_unavailable=True`,
-    `config set-skip-unavailable` or `ETHOS_SKIP_UNAVAILABLE`. The planned
-    change, [every input is
-    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
-    is to be implemented separately.
+!!! warning "Gap: one restricted cache, and inputs can be left out"
+    The code reads one restricted cache, set with
+    `config set-restricted-cache DIR`; `config add-restricted-cache` and
+    `config remove-restricted-cache` do not exist. Its refusal names the
+    dataset and prints the `ethos:restriction` note only, and it offers to
+    carry on without the dataset, through `--skip-unavailable`,
+    `skip_unavailable=True`, `config set-skip-unavailable` or
+    `ETHOS_SKIP_UNAVAILABLE`. See [every input is
+    required](../../explanation/architecture/decisions/0013-every-input-is-required.md).
 
 ## Cluster users {#cluster-users}
 
 Work on the ICE-2 cluster computer, in the environment your package is
-installed in. Take the three locations below from the ICE-2 wiki; the paths
-here are placeholders.
-
+installed in. Take the locations below from the ICE-2 wiki; the paths here
+are placeholders. Every cluster user sets the catalogue and the public cache:
 
 ```bash
 ethos-data config set-catalog /shared/ethos/catalogue/datacatalog.json
-ethos-data config set-public-cache /shared/ethos/public
-ethos-data config set-restricted-cache /shared/ethos/restricted
+ethos-data config set-public-cache /shared/ethos/cache
+```
+
+If your groups admit restricted data, add the restricted cache of each such
+group:
+
+```bash
+ethos-data config add-restricted-cache /shared/ethos/restricted/<group>
 ```
 
 | Setting | What it does |
 | --- | --- |
-| catalogue | Selects the internal catalogue, which includes every public entry plus the internal and restricted ones. It replaces the public catalogue and any version a package declares. |
-| public cache | The shared directory where public and internal data already lies, as links or copies, and where downloads land. |
-| restricted cache | The shared directory holding the licensed datasets the institute may use. Retrieval reads it in place and never writes to it. |
+| catalogue | Selects the internal catalogue, which describes every dataset, including those the public catalogue hides. It replaces the public catalogue and any version a package declares. |
+| public cache | The cluster's public cache, one directory that every cluster user shares. Public data lies there as links into project storage or as copies, and a public file it lacks is downloaded into it, once for everyone. |
+| restricted caches | One directory per access combination, for example every member of the institute or one licence group. Retrieval reads them in place and never writes to them. |
 
-The settings locate data; they grant no permission, which have to requested from the owner or a cluster administrator.
+A user who works with public data only adds no restricted cache, and every
+workflow that needs no restricted data runs. The settings locate data; they
+grant no permission. Ask the dataset's owner or a cluster administrator for
+access.
+
+A broken link in the cluster's public cache stops every user's read of that
+dataset until a catalogue maintainer repairs it; [report it](report-a-problem.md).
+
+!!! warning "Gap: one restricted cache, and repair can remove a link"
+    The code reads one restricted cache, set with
+    `config set-restricted-cache DIR`, instead of a list. Its
+    `verify --repair` can replace a link in the cluster's public cache with
+    a downloaded copy, which every cluster user then reads; run it with
+    `--dry-run` first, as [Check and repair the cache](verify-and-repair.md)
+    says. See [decision
+    0028](../../explanation/architecture/decisions/0028-one-public-cache-on-the-cluster.md).
 
 Record the catalogue version that `ethos-data config show` and
 `<your-tool>-data show` print with your results.
@@ -145,8 +172,9 @@ directory.
 The self-test selects the catalogue the way a package's data command does:
 `--catalog`, then `ETHOS_DATA_CATALOG` or the configured catalogue, then the
 public one. The internal catalogue includes the same test files, so on the
-cluster computer they are usually already in the shared cache and nothing is
-downloaded. To force a download, give a new, empty directory as the cache:
+cluster computer they are usually read in place from the cluster's public
+cache, and nothing is downloaded. To force a download, give a new, empty
+directory as the cache:
 
 ```bash
 ethos-data --root selftest-download selftest
@@ -171,18 +199,17 @@ work with.
     `ethos-data selftest`, `ethos_data.EXAMPLE_COLLECTIONS` and the
     `settings` attribute do not exist, and the example collections file is
     only in the documentation, as
-    [collections.yaml](../../assets/examples/collections.yaml). Until they
-    are implemented, `ethos-data fetch
+    [collections.yaml](../../assets/examples/collections.yaml). With the
+    code, `ethos-data fetch
     reskit-test-data/placements/turbine_placements.csv` checks a single
-    download. The [planned
-    change](../../explanation/architecture/decisions.md#a-self-test-collection-ships-with-the-package-2026-10-02)
-    is to be implemented separately.
+    download. See [the self-test
+    collection](../../explanation/architecture/decisions/0017-self-test-collection.md).
 
 ## Use another settings file {#another-settings-file}
 
 Name a file in `ETHOS_DATA_CONFIG` to use it instead of the one in your
-account. ETHOS.Data then reads only that file, and the `config set-*` and
-`unset-*` commands write to it:
+account. ETHOS.Data then reads only that file, and the `config` commands that
+change a setting write to it:
 
 === "Bash"
 
@@ -200,12 +227,13 @@ This keeps a CI job, a container or a batch job independent of the account
 it runs under, and lets a team keep one file for a shared machine. To tie a
 file to one conda environment, store the variable in the environment with
 `conda env config vars set ETHOS_DATA_CONFIG=PATH` and activate the
-environment again. The file must exist; only `config set-*` creates it.
-Every other command stops and names the missing file.
+environment again. The file must exist; only `config set-*` and
+`config add-restricted-cache` create it. Every other command stops and names
+the missing file.
 
 !!! warning "Gap: `ETHOS_DATA_CONFIG` is not implemented"
     The variable is ignored. It is part of [one settings file per
-    account](../../explanation/architecture/decisions.md#one-settings-file-per-account-2026-10-02),
+    account](../../explanation/architecture/decisions/0010-one-settings-file-per-account.md),
     which is to be implemented separately.
 
 ## Override one shell or one run {#temporary-overrides}
@@ -215,7 +243,7 @@ Every other command stops and names the missing file.
     ```bash
     export ETHOS_DATA_CATALOG=/shared/ethos/catalogue/datacatalog.json
     export ETHOS_DATA_DIR=/scratch/me/ethos-public
-    export ETHOS_RESTRICTED_DIR=/shared/ethos/restricted
+    export ETHOS_RESTRICTED_DIRS=/shared/ethos/restricted/group-a:/shared/ethos/restricted/group-b
     ```
 
 === "PowerShell"
@@ -223,22 +251,29 @@ Every other command stops and names the missing file.
     ```powershell
     $env:ETHOS_DATA_CATALOG = "D:/catalogue/datacatalog.json"
     $env:ETHOS_DATA_DIR = "D:/ethos/public"
-    $env:ETHOS_RESTRICTED_DIR = "D:/ethos/restricted"
+    $env:ETHOS_RESTRICTED_DIRS = "D:/ethos/restricted;E:/licensed"
     ```
 
-Environment variables win over the settings file. For one command, put
+Environment variables win over the settings file. `ETHOS_RESTRICTED_DIRS`
+lists restricted caches separated by `:`, on Windows by `;`, and replaces
+the list in the settings file; nothing is merged. For one command, put
 `--catalog LOCATION` or `--root DIR` before the subcommand of `ethos-data` or of
 your package's `<your-tool>-data` command.
+
+!!! warning "Gap: `ETHOS_RESTRICTED_DIRS` is not implemented"
+    The variable is ignored. The code reads one restricted cache from
+    `ETHOS_RESTRICTED_DIR`.
 
 ## Remove a setting {#check-and-remove-settings}
 
 ```bash
 ethos-data config unset-catalog
 ethos-data config unset-public-cache
-ethos-data config unset-restricted-cache
+ethos-data config remove-restricted-cache /data/ethos/restricted
 ```
 
-Each command removes the setting from the settings file in effect. Unsetting
-changes configuration only; no data is moved or deleted. Clear the matching
-environment variables too. Continue with
+Each command removes a setting from the settings file in effect;
+`remove-restricted-cache` removes one directory from the list of restricted
+caches. Removing a setting changes configuration only; no data is moved or
+deleted. Clear the matching environment variables too. Continue with
 [Use data in a script](use-data-in-a-script.md).

@@ -33,9 +33,9 @@ PATH_COAST_DISTANCE = str(INPUTS["coast_distance"])
 `paths` fetches whatever the collection selects and this machine does not have
 yet, checks every file against the catalogue's checksums, and returns
 `{handle: absolute path}`. Data that already lies on the machine, as a bundle
-in the package, a shared cache link or a restricted installation, is returned
-where it is and never copied. Call it right before the workflow; no shell
-command has to run first.
+in the package, a link in the public cache or an entry in a restricted cache,
+is returned where it is and never copied. Call it right before the workflow;
+no shell command has to run first.
 
 ## Know which catalogue and caches a script uses {#settings}
 
@@ -57,14 +57,13 @@ package, the same object is `your_tool.data.handle().settings`.
 
 !!! warning "Gap: the settings are not read once and cannot be printed"
     There is no `settings` attribute. A handle fixes its catalogue when it is
-    built but looks up the caches again on every call, and the current
-    release also reads an `ethos-data.yaml` found by searching upward from
-    the working directory. The same script can therefore use different
-    caches depending on where it is started. Until this changes,
-    `ethos-data config show`, run in the script's environment and working
-    directory, reports the settings the script reads. The [planned
-    change](../../explanation/architecture/decisions.md#one-settings-file-per-account-2026-10-02)
-    is to be implemented separately.
+    built but looks up the caches again on every call, and the code also
+    reads an `ethos-data.yaml` found by searching upward from the working
+    directory. The same script can therefore use different caches depending
+    on where it is started. `ethos-data config show`, run in the script's
+    environment and working directory, reports the settings the script
+    reads. See [one settings file per
+    account](../../explanation/architecture/decisions/0010-one-settings-file-per-account.md).
 
 ## See what a fetch will download {#plan}
 
@@ -115,44 +114,52 @@ python data_cli.py fetch offshore_siting --plan    # what a fetch would download
 ## Run on test data or the full data {#test-variant}
 
 Collections that serve tests and examples come in two sizes with the same
-handles. The full data is the default; the small variant is opt-in:
+named paths. The full data is the default; the small variant is opt-in:
 
 ```python
 inputs = data.paths("my_workflow", test=True)
 ```
 
-Because both variants offer the same handles, the workflow call does not
+Because both variants offer the same named paths, the workflow call does not
 change when `test=True` is dropped. On the command line the flag is `--test`.
-The example file defines no variants.
+A collection without the variant asked for is refused:
+`collection 'my_workflow' has no test variant`. The example file defines no
+variants.
 
-## When a licensed input is missing {#licensed-input}
+## When a restricted input is missing {#licensed-input}
 
 Every input a collection names is required. A collection may name a
-restricted dataset that this machine has no copy of, or one you may not read.
-The call then stops before anything is downloaded, with an error that
-describes the dataset from its catalogue entry:
+restricted dataset, licensed data for example, that this account cannot read.
+The call then stops before anything is downloaded, the public files of the
+same call included, and says what is missing:
 
-- its title, description and version;
-- where it came from: its homepage and sources;
-- its licences and the attribution they require;
-- why it is restricted and how somebody entitled to it obtains a copy;
-- whom to ask about it.
+```text
+error: the dataset 'gadm-3.6' is restricted.
+  Obtain it: <ethos:restriction>
+  Homepage: <homepage>
+  Contact: <ethos:contact>
+  This account lists no restricted cache.
+  Once you have a copy you may use, register it:
+    ethos-data config add-restricted-cache DIR
+    ethos-data link gadm-3.6 DIR
+```
 
-Each item appears as far as the catalogue records it; it is the same
-information as [`--meta`](#metadata) prints. The error closes with the commands
-that register a copy you have, which
+The lines "Obtain it", "Homepage" and "Contact" appear only where the
+catalogue records them. The reason line appears only when something other
+than a missing copy is wrong: the account lists no restricted cache, an entry
+dangles or cannot be read, or a listed cache cannot be reached.
+[`--meta`](#metadata) prints the dataset's full description, and
 [Set up your machine](set-up-your-machine.md#public-installation-users)
-explains. A workflow cannot run without one of its inputs, so no option leaves
-one out.
+explains the two commands. A workflow cannot run without one of its inputs,
+so no option leaves one out.
 
-!!! warning "Gap: the error does not describe the dataset, and inputs can be left out"
-    The error names the dataset and prints its `ethos:restriction` note
-    only. `skip_unavailable=True`, `--skip-unavailable`,
-    `config set-skip-unavailable true` and `ETHOS_SKIP_UNAVAILABLE` still
-    drop an unreachable handle from the mapping with a warning, and the
-    error suggests them. The planned change, [every input is
-    required](../../explanation/architecture/decisions.md#every-input-is-required-2026-10-02),
-    is to be implemented separately.
+!!! warning "Gap: inputs can be left out"
+    The code's refusal names the dataset and prints its `ethos:restriction`
+    note only. Under `skip_unavailable=True`, `--skip-unavailable`,
+    `config set-skip-unavailable true` or `ETHOS_SKIP_UNAVAILABLE`, the code
+    leaves an unreachable named path out of the mapping with a warning, and
+    the refusal suggests these options. See [every input is
+    required](../../explanation/architecture/decisions/0013-every-input-is-required.md).
 
 ## Try catalogue data that is not in a collection yet {#by-key}
 

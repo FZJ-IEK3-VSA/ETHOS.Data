@@ -4,7 +4,7 @@ The catalogue-maintenance group of [`ethos-data`](ethos-data.md). It builds
 metadata, generates the public view, and uploads bytes. Check modes can be
 read-only; `check-store` creates temporary remote objects.
 
-Shared cache links are not in this group: one dataset or a whole catalogue,
+Cache links are not in this group: one dataset or a whole catalogue,
 they are [`ethos-data link`](ethos-data.md#link-dataset-directory). Building a
 namespace is site administration on the machine that holds the data, not
 catalogue maintenance, and having had it in both places only ever raised the
@@ -130,6 +130,13 @@ An internal upload can succeed in transfer yet fail anonymous verification.
 authenticated consumer downloads. The command does not set `ethos:uploaded`;
 the maintainer records that after verification.
 
+!!! warning "Gap: `--allow-internal` is to be removed"
+    With [decision
+    0011](../../explanation/architecture/decisions/0011-access-class-picks-the-root.md),
+    there is no `internal` class. Data the institute holds without
+    publishing it is restricted data, which `upload` refuses: it never has a
+    copy on dCache. To be implemented separately.
+
 Use `--verify-only --no-chmod` to recheck without changing permissions.
 
 With a single dataset the exit code is rclone's own on a transfer failure, or
@@ -163,7 +170,7 @@ checkout.
 - [Create, rename, and delete folders](../../how-to/catalogue-maintainers/manage-dcache-folders.md) — uses
   rclone directly; there are no equivalent ETHOS.Data subcommands.
 
-- [`ethos-data link --all`](ethos-data.md#link-dataset-directory) — build the shared
+- [`ethos-data link --all`](ethos-data.md#link-dataset-directory) — build a public
   cache as links to data already on this machine. It reads `source_dir` from the
   same source checkout these commands do.
 - [Add a dataset](../../how-to/catalogue-maintainers/add-a-dataset.md)
@@ -172,5 +179,5 @@ checkout.
 - [API: maintainer tooling](../api/maintain.md)
 
 
-For the complete cluster migration, see [Link existing data into the cache](../../how-to/catalogue-maintainers/link-existing-data.md), which covers overrides, cache links and
+To make data already on the cluster computer available through its caches, see [Link existing data into the cache](../../how-to/catalogue-maintainers/link-existing-data.md), which covers cache links and
 [materialized copies](../../how-to/catalogue-maintainers/materialize-linked-data.md#materialize-copies) in one guide. Restricted entries are registered through [Add a dataset, restricted datasets](../../how-to/catalogue-maintainers/add-a-dataset.md#restricted-installations).

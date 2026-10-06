@@ -32,6 +32,7 @@
   \definecolor{fillbrand}{HTML}{16324A}
   \definecolor{fillaccent}{HTML}{123B39}
   \definecolor{boundary}{HTML}{55606B}
+  \definecolor{paper}{HTML}{1E2029}      % the page ground of the dark theme
 \else
   \definecolor{ink}{HTML}{1B1F23}
   \definecolor{muted}{HTML}{5A6673}
@@ -41,6 +42,7 @@
   \definecolor{fillbrand}{HTML}{DCE7F1}
   \definecolor{fillaccent}{HTML}{D8EEEC}
   \definecolor{boundary}{HTML}{AAB4BF}
+  \definecolor{paper}{HTML}{FFFFFF}
 \fi
 
 \tikzset{
@@ -91,3 +93,178 @@
   cmd/.style={font=\ttfamily\scriptsize, text=ink},
   note/.style={text=muted, font=\sffamily\scriptsize, align=center},
 }
+
+% -- C4 vocabulary for the architecture views ---------------------------
+% Elements follow the C4 model (c4model.com): people, software systems,
+% containers, components and data stores, each with a name, a [kind:
+% technology] line and a short responsibility. Write their text with \element:
+%   \node[c4container, text width=44mm] (lib)
+%     {\element{ethos\_data library}{Container: Python package}{Selects, locates and fetches files}};
+% Blue is ETHOS.Data, teal its components, grey everything outside it.
+\newcommand{\element}[3]{%
+  {\bfseries #1}\\[-0.3ex]{\scriptsize\color{muted}[#2]}\\[0.2ex]{\scriptsize #3}}
+% An element with a name and kind only, for crowded views.
+\newcommand{\elementshort}[2]{{\bfseries #1}\\[-0.3ex]{\scriptsize\color{muted}[#2]}}
+% A relationship label: what is exchanged, then the technology, if any.
+\newcommand{\rel}[2]{#1\ifx\relax#2\relax\else\\{\color{muted}[#2]}\fi}
+
+\tikzset{
+  c4base/.style={
+    text=ink, align=center, font=\sffamily\footnotesize, inner sep=1.6mm,
+    rounded corners=1.2mm, minimum height=12mm,
+  },
+  % A person: a body with a round head on top.
+  c4person/.style={
+    c4base, draw=brand, fill=fillbrand, rounded corners=4mm, minimum width=30mm,
+    label={[circle, draw=brand, fill=fillbrand, minimum size=6.5mm,
+            anchor=south, yshift=-2.4mm]north:{}},
+  },
+  c4personext/.style={
+    c4base, draw=muted, fill=fillsoft, rounded corners=4mm, minimum width=30mm,
+    label={[circle, draw=muted, fill=fillsoft, minimum size=6.5mm,
+            anchor=south, yshift=-2.4mm]north:{}},
+  },
+  % The software system in scope, drawn heavier than everything around it.
+  c4system/.style={c4base, draw=brand, fill=fillbrand, line width=1.3pt},
+  c4systemext/.style={c4base, draw=muted, fill=fillsoft},
+  c4container/.style={c4base, draw=brand, fill=fillbrand},
+  c4component/.style={c4base, draw=accent, fill=fillaccent},
+  % Data stores. The external one is a store ETHOS.Data does not own.
+  c4db/.style={store, draw=brand, fill=fillbrand, align=center, inner sep=1.4mm},
+  c4dbext/.style={store, align=center, inner sep=1.4mm},
+  % A boundary around the elements of one system, container or layer. Its
+  % label names it and its kind, e.g. "ETHOS.Data [Software system]".
+  c4boundary/.style={
+    draw=boundary, dash pattern=on 3pt off 2pt, rounded corners=2.5mm,
+    inner sep=5mm,
+  },
+  c4boundarylabel/.style={
+    text=muted, font=\sffamily\scriptsize\bfseries, inner sep=1.4mm,
+    anchor=south west,
+  },
+  % Relationships: a request or dependency, and the data it returns.
+  c4rel/.style={draw=brand, ->},
+  c4relaccent/.style={draw=accent, ->},
+  c4relmuted/.style={draw=muted, ->},
+  c4rellabel/.style={
+    text=ink, font=\sffamily\scriptsize, align=center, inner sep=1.2pt,
+  },
+  % A label on the page ground, for labels that sit on top of other lines.
+  c4rellabelbg/.style={c4rellabel, fill=paper},
+  % A person's handoff (posted by hand: a proposal, a report, a notice).
+  c4manual/.style={draw=brand, ->, dash pattern=on 3pt off 2pt},
+  % dCache: anonymous download (solid) and authenticated maintenance (dashed).
+  c4download/.style={draw=accent, ->, line width=0.9pt},
+  c4maint/.style={draw=accent, ->, line width=0.9pt, dash pattern=on 3pt off 1.6pt},
+  % A port: the contract an adapter implements, drawn as a chip on a component.
+  c4port/.style={
+    draw=accent, fill=paper, text=ink, rounded corners=0.8mm,
+    font=\sffamily\scriptsize, inner sep=1mm, minimum height=5mm, align=center,
+  },
+  % A deployment node (a machine, a service, a runner). Nodes nest with fit.
+  c4node/.style={
+    draw=muted, double, double distance=0.7pt, rounded corners=2mm,
+    inner sep=4mm,
+  },
+  c4nodelabel/.style={
+    text=ink, font=\sffamily\scriptsize\bfseries, inner sep=1.4mm,
+    anchor=north west, align=left,
+  },
+  % Sequence views: one lifeline per participant, time running down.
+  lifeline/.style={draw=boundary, dash pattern=on 2pt off 2pt},
+  activation/.style={draw=brand, fill=fillbrand, minimum width=2mm, inner sep=0pt},
+  message/.style={draw=brand, ->},
+  reply/.style={draw=muted, ->, dash pattern=on 2pt off 1.5pt},
+  refusal/.style={draw=accent, ->, line width=1pt},
+  % A frame around an alternative or optional part of a sequence.
+  seqframe/.style={draw=boundary, rounded corners=1mm},
+  seqframelabel/.style={
+    draw=boundary, fill=paper, text=muted, font=\sffamily\scriptsize\bfseries,
+    inner sep=1mm, anchor=north west,
+  },
+  % A step number, "(3)", on an arrow of a dynamic view.
+  stepno/.style={
+    circle, draw=brand, fill=paper, text=ink, font=\sffamily\scriptsize\bfseries,
+    inner sep=0.4pt, minimum size=4.2mm,
+  },
+  % State machines.
+  c4state/.style={
+    c4base, draw=brand, fill=fillbrand, rounded corners=3mm, minimum width=24mm,
+    minimum height=9mm,
+  },
+  c4stateend/.style={c4state, draw=muted, fill=fillsoft},
+  initialstate/.style={circle, fill=ink, minimum size=3mm, inner sep=0pt},
+  finalstate/.style={
+    circle, draw=ink, fill=ink, double=paper, double distance=0.8pt,
+    minimum size=3.4mm, inner sep=0pt,
+  },
+  transition/.style={draw=brand, ->},
+  transitionlabel/.style={
+    text=ink, font=\ttfamily\scriptsize, align=center, inner sep=1.5pt,
+  },
+  % Decision flows: a question, its outcomes, and the two kinds of answer.
+  decision/.style={
+    draw=brand, fill=fillsoft, text=ink, diamond, aspect=2.4,
+    align=center, font=\sffamily\scriptsize, inner sep=0.6mm,
+  },
+  outcome/.style={
+    draw=accent, fill=fillaccent, text=ink, rounded corners=1.2mm,
+    align=center, font=\sffamily\scriptsize, inner sep=1.4mm, minimum height=8mm,
+  },
+  outcomedownload/.style={outcome, draw=brand, fill=fillbrand},
+  stop/.style={outcome, draw=muted, fill=fillsoft},
+  yes/.style={flow, draw=accent},
+  no/.style={flow, draw=muted},
+  % A horizontal band that groups the components of one layer.
+  layerband/.style={
+    draw=boundary, fill=fillsoft, rounded corners=2.5mm, inner sep=4mm,
+  },
+  layerlabel/.style={
+    text=muted, font=\sffamily\scriptsize\bfseries, rotate=90, anchor=south,
+  },
+  % The key. The SVG's text is outlined, so the page cannot add a legend:
+  % every C4 view carries its own, built from these entries.
+  keysample/.style={
+    minimum width=9mm, minimum height=4.2mm, text width={}, inner sep=0pt,
+    font=\tiny, line width=0.7pt,
+  },
+  c4personkey/.style={
+    draw=brand, fill=fillbrand, rounded corners=1.6mm, minimum width=7mm,
+    minimum height=3.4mm, inner sep=0pt,
+    label={[circle, draw=brand, fill=fillbrand, minimum size=2.6mm, inner sep=0pt,
+            anchor=south, yshift=-0.9mm]north:{}},
+  },
+  keytext/.style={anchor=west, text=ink, font=\sffamily\scriptsize, inner sep=0pt},
+}
+
+% Key entries, placed inside a scope shifted to where the key goes. Row 0
+% holds the title; entries go in rows 1, 2, ...
+%   \begin{scope}[shift={(150mm,-10mm)}]
+%     \keytitle{Key}
+%     \keynode{1}{c4personkey}{Person}
+%     \keynode{2}{c4system}{ETHOS.Data}
+%     \keystore{3}{brand}{fillbrand}{Data store}
+%     \keyline{4}{c4rel}{Request or dependency}
+%   \end{scope}
+\newcommand{\keytitle}[1]{%
+  \node[anchor=west, text=muted, font=\sffamily\scriptsize\bfseries, inner sep=0pt]
+    at (0,0) {#1};}
+\newcommand{\keynode}[3]{%
+  \node[#2, keysample] at (4.5mm,{-#1*6.5mm}) {};%
+  \node[keytext] at (11.5mm,{-#1*6.5mm}) {#3};}
+\newcommand{\keyline}[3]{%
+  \draw[#2] (0,{-#1*6.5mm}) -- (9mm,{-#1*6.5mm});%
+  \node[keytext] at (11.5mm,{-#1*6.5mm}) {#3};}
+% A data store in the key: a small cylinder in the given rim and fill colours,
+% brand/fillbrand for ETHOS.Data's stores, muted/fillsoft for external ones.
+%   \keystore{6}{brand}{fillbrand}{Data store}
+\newcommand{\keystore}[4]{%
+  \begin{scope}[shift={(4.5mm,{-#1*6.5mm})}]
+    \filldraw[draw=#2, fill=#3] (-3mm,1.5mm) -- (-3mm,-1.5mm)
+      arc[start angle=180, end angle=360, x radius=3mm, y radius=0.8mm]
+      -- (3mm,1.5mm)
+      arc[start angle=0, end angle=180, x radius=3mm, y radius=0.8mm] -- cycle;
+    \draw[draw=#2] (-3mm,1.5mm)
+      arc[start angle=180, end angle=360, x radius=3mm, y radius=0.8mm];
+  \end{scope}%
+  \node[keytext] at (11.5mm,{-#1*6.5mm}) {#4};}

@@ -5,12 +5,14 @@ often holds more than one role. For guided practice on local data, start with
 the [tutorials](../tutorials/index.md).
 
 Two kinds of installation run through every guide. A **cluster installation**
-is an account on the ICE-2 cluster computer: it reads the internal catalogue
-and the shared public and restricted caches. A **public installation** is
-everything else, a laptop, a workstation or a CI runner, whoever owns it: it
-reads the public catalogue and its own cache, and reaches no restricted data.
-The locations on the cluster computer are on the ICE-2 wiki and never in
-these pages; the guides use clearly marked example paths instead.
+is an account on the ICE-2 cluster computer: it reads the internal catalogue,
+the cluster's public cache, which all cluster users share, and the restricted
+caches it lists, if any. A **public installation** is everything else, a
+laptop, a workstation or a CI runner, whoever owns it: it reads the public
+catalogue and its own public cache, and restricted data only where its user
+registers a copy. The locations on the cluster computer are on the ICE-2 wiki
+and never in these pages; the guides use clearly marked example paths
+instead.
 
 Every package built on ETHOS.Data ships the same data command under its own
 name. The guides write it as `<your-tool>-data` and the matching Python module
@@ -46,20 +48,20 @@ You wire data into a package: its workflows, examples and tests.
 | Select catalogue data for your workflows, name their inputs, pair test and full data, bound the catalogue version | [Write a collections file](package-maintainers/write-a-collections-file.md) |
 | Work with data that is not catalogued yet | [Stage development data](package-maintainers/stage-development-data.md) |
 | Hand a new or changed dataset, downloaded or self-created, to the catalogue maintainer | [Propose a dataset](package-maintainers/propose-a-dataset.md) |
-| Create test data in the repository as a bundle, work with it, and have the catalogue updated from it version by version | [Keep data in the repository](package-maintainers/keep-data-in-the-repository.md) |
+| Keep attributed data in the repository as a bundle, work with it ahead of the catalogue, realign it, and export it to another repository | [Keep data in the repository](package-maintainers/keep-data-in-the-repository.md) |
 | Run tests and examples in CI, from the repository copy or from the catalogue | [Run tests and examples in CI](package-maintainers/run-in-ci.md) |
 
 ## Catalogue maintainers
 
-You look after the catalogue, the shared caches on the cluster computer and
-the published bytes on dCache.
+You look after the catalogue, the cluster's public cache and the restricted
+caches on the cluster computer, and the published bytes on dCache.
 
 Setup, done once:
 
 | Task | Guide |
 | --- | --- |
 | Get credentials and an rclone remote for dCache | [Set up dCache access](catalogue-maintainers/set-up-dcache-access.md) |
-| Create the catalogue checkout and the shared caches on the cluster computer | [Set up the shared machine](catalogue-maintainers/set-up-the-shared-machine.md) |
+| Create the catalogue checkout, the cluster's public cache and the restricted caches on the cluster computer | [Set up the shared machine](catalogue-maintainers/set-up-the-shared-machine.md) |
 | Create a source catalogue, its public counterpart and the publication root | [Bootstrap a catalogue](catalogue-maintainers/bootstrap-a-catalogue.md) |
 
 Regular tasks:
@@ -71,7 +73,7 @@ Regular tasks:
 | Put public bytes on dCache and verify them | [Upload a public dataset](catalogue-maintainers/upload-a-dataset.md) |
 | Make data that cannot move yet available through the public cache | [Link existing data into the cache](catalogue-maintainers/link-existing-data.md) |
 | Turn a linked dataset into a verified copy the cache owns | [Materialize linked data](catalogue-maintainers/materialize-linked-data.md) |
-| Register or move a licensed dataset in the restricted cache | [Add restricted data](catalogue-maintainers/add-restricted-data.md) |
+| Register or move a restricted dataset in its restricted cache | [Add restricted data](catalogue-maintainers/add-restricted-data.md) |
 | Remove a dataset that should not have been added, from the catalogue and from dCache | [Remove a dataset](catalogue-maintainers/withdraw-a-dataset.md) |
 | Build, check and release the internal and the public catalogue | [Release the catalogue](catalogue-maintainers/release-the-catalogue.md) |
 | Create, rename and delete folders on dCache | [Manage dCache folders](catalogue-maintainers/manage-dcache-folders.md) |

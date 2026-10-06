@@ -1,7 +1,7 @@
 # Check and repair the cache
 
 Compare the files a workflow uses with the sizes and checksums the catalogue
-records, and re-fetch what no longer matches. Examples use the package's command and
+records, and download again what does not match. Examples use the package's command and
 its `test_suite` collection; substitute your package's command and collection.
 
 ## Check a collection
@@ -21,7 +21,7 @@ package defines. Neither form changes anything.
 | `wrong size`, `wrong checksum` | The bytes differ from the catalogue. Repair a downloaded copy, or tell the owner of a linked copy. |
 | `dangling` | A cache link points nowhere: its target moved. Tell the cache maintainer. |
 | `missing`, `unreadable` | The file is absent or you lack permission. Check the expected location and your group membership. |
-| `unavailable here` | A restricted dataset with no authorised copy on this machine. |
+| `unavailable here` | A restricted dataset this account cannot read. The output gives the reason and the state of each restricted cache. |
 | `unverifiable` | A staged development copy without catalogue checksums. Remove the staging entry before an official run. |
 
 ## Repair downloaded data
@@ -32,11 +32,20 @@ package defines. Neither form changes anything.
 <your-tool>-data verify test_suite --deep
 ```
 
-Read the preview first: repair re-fetches the listed files from the published
-store and can replace a dataset's cache link with a fresh copy, which every
-user of a shared cache sees. Restricted, staged and linked-in-place data are
-never repaired; ask the owner of that copy instead. The final check must report
-every file as `ok`.
+Read the preview first: repair downloads the listed files again from the
+published store, into the public cache. It never removes or replaces a link
+and never touches restricted or staged data: a broken link, or a linked or
+restricted copy that does not match, is only reported. Its owner repairs it;
+on the cluster, [report it](report-a-problem.md) to the catalogue
+maintainers. The final check must report every file as `ok`.
+
+!!! warning "Gap: repair replaces a link"
+    The code's `verify --repair` removes a dataset's link in the public
+    cache when a file behind the link is broken or does not match, and
+    downloads a copy in its place; `--dry-run` lists the links it would
+    remove. On the cluster, every user then reads that copy, not the linked
+    data. Report such a link rather than repairing it. See [decision
+    0028](../../explanation/architecture/decisions/0028-one-public-cache-on-the-cluster.md).
 
 ## Check a whole dataset fetched by key {#verify-complete-dataset}
 
@@ -55,8 +64,8 @@ for finding in findings:
         print(finding.status, finding.resource.key)
 ```
 
-Remove staging entries and per-dataset root overrides first; they would
-redirect the check away from the cache.
+Remove staging entries first; they would redirect the check away from the
+cache.
 
 !!! warning "Gap: `ethos-data` has no `verify`"
     Files fetched by key with `ethos-data fetch` can be checked only through
