@@ -15,8 +15,8 @@ setting this lesson makes goes into the lesson and not into your account:
 export ETHOS_DATA_CONFIG="$PWD/lesson-settings.yaml"
 ```
 
-Use a shell without `ETHOS_RESTRICTED_DIR` or `ETHOS_SKIP_UNAVAILABLE`, which
-would win over the lesson's settings.
+Use a shell without `ETHOS_RESTRICTED_DIRS`, which would win over the lesson's
+settings.
 
 ## 1. Look for a hidden dataset
 
@@ -35,9 +35,10 @@ ethos-data --catalog internal-catalogue/datacatalog.json --root cache fetch less
 ```
 
 The listing contains `lesson-licensed/factor.csv`. Fetching still fails because
-the authorised installation has not been located. It does not try a download.
-If you already ran this lesson, run `ethos-data config unset-restricted-cache`
-first.
+the lesson's settings list no restricted cache, which the error says. It does
+not try a download. If you already ran this lesson, remove the restricted cache
+it listed first, with `ethos-data config remove-restricted-cache` and the path
+from step 3.
 
 ## 3. Locate the practice installation
 
@@ -50,13 +51,14 @@ python -c "from pathlib import Path; print(Path('restricted-installation').resol
 Replace `ABSOLUTE_PATH` below with that output:
 
 ```bash
-ethos-data config set-restricted-cache "ABSOLUTE_PATH"
+ethos-data config add-restricted-cache "ABSOLUTE_PATH"
 ethos-data config show
 ethos-data --catalog internal-catalogue/datacatalog.json --root cache fetch lesson-licensed/factor.csv
 ```
 
-The returned path is under `restricted-installation/lesson-licensed`, and the
-file contains a factor of `2`. No copy appears under `cache/lesson-licensed`.
+`config show` lists the directory as `restricted cache 1`. The returned path is
+under `restricted-installation/lesson-licensed`, and the file contains a factor
+of `2`. No copy appears under `cache/lesson-licensed`.
 
 Check the installation in Python:
 
@@ -72,7 +74,7 @@ assert all(finding.status == "ok" for finding in findings)
 ## 4. End the exercise
 
 ```bash
-ethos-data config unset-restricted-cache
+ethos-data config remove-restricted-cache "ABSOLUTE_PATH"
 unset ETHOS_DATA_CONFIG
 ```
 

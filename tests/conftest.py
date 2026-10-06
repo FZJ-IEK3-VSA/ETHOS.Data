@@ -25,11 +25,10 @@ from support import ReaderCatalogue, SourceCatalogue, Store
 #: Every variable that changes what ethos_data reads or where it writes.
 ETHOS_VARIABLES = (
     "ETHOS_DATA_DIR",
-    "ETHOS_RESTRICTED_DIR",
+    "ETHOS_RESTRICTED_DIRS",
     "ETHOS_STAGING_DIR",
     "ETHOS_DATA_CATALOG",
     "ETHOS_PUBLICATION_URL",
-    "ETHOS_SKIP_UNAVAILABLE",
     "ETHOS_CATALOG_NO_CACHE",
     "ETHOS_DATA_CONFIG",
     "ETHOS_DATA_DOWNLOAD",

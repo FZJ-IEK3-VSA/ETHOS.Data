@@ -35,13 +35,6 @@ this. The entry goes into a restricted cache your account lists: the one
 or none listed, `link` refuses. `--catalog-root` records the installation in
 your own clone of the source catalogue.
 
-!!! warning "Gap: one restricted cache"
-    The code reads one restricted cache per account, set with
-    `config set-restricted-cache DIR` or `ETHOS_RESTRICTED_DIR`;
-    `config add-restricted-cache` does not exist. `link` and `materialize`
-    put a restricted dataset's entry into that cache whatever `--root` names,
-    so set it to the cache of the dataset's group first.
-
 ## 3. Or move it into the restricted cache
 
 If the terms allow a local copy, materialize into the restricted cache instead

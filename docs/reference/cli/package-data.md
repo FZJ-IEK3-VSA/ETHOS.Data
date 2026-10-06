@@ -6,7 +6,7 @@ CLI used by consuming packages. Replace `<tool>-data` below with the installed
 command, for example `<your-tool>-data`.
 
 ```text
-<tool>-data [--catalog LOCATION] [--root DIR] [--skip-unavailable] [--test] COMMAND ...
+<tool>-data [--catalog LOCATION] [--root DIR] [--test] COMMAND ...
 ```
 
 The package ships and selects its own collections file. There is no CLI option
@@ -19,16 +19,15 @@ to expose the wrapper.
 | --- | --- |
 | `--catalog LOCATION` | Override the catalogue for this invocation. |
 | `--root DIR` | Override the public cache for this invocation. |
-| `--skip-unavailable` | Omit data this machine cannot access, with a warning; omitted inputs have no returned path. |
 | `--test` | Select the collection's test variant; also accepted after collection subcommands. |
 | `-h`, `--help` | Show help without loading the catalogue. |
 
-!!! warning "Gap: `--skip-unavailable` is to be removed"
-    With [every input is
-    required](../../explanation/architecture/decisions/0013-every-input-is-required.md),
-    unreachable data always stops `fetch`, with an error that names the
-    dataset and says how to obtain and register a copy; `fetch --plan` and
-    `show` list it as not available here. To be implemented separately.
+Every input a collection names is required: restricted data this account
+cannot read stops `fetch`, before anything is downloaded, with an error that
+names the dataset, says how to obtain it as far as the catalogue records that,
+and gives the two commands that register a copy. `fetch --plan`, `show` and
+`verify` only describe, and list it as not available here, with the state of
+every listed restricted cache.
 
 Place global options before the subcommand, except `--test`, which works in
 either position. A package may supply an environment override such as
@@ -138,8 +137,6 @@ resolved in place are used where they lie and never copied. A faulty `paths`
 handle is refused before any transfer (see [above](#show)). Progress messages
 label the variant:
 `onshore_wind [test]: fetching 6 of 6 files (42.3 MB) into /path/to/cache`.
-With `--skip-unavailable`, a collection none of whose files this machine can
-reach reports `nothing to fetch` rather than pretending something was present.
 
 `--plan` and `--paths` choose what to report about the transfer and cannot be
 combined.
@@ -157,7 +154,7 @@ already cached:     4 files      9.9 MB
 to download:        2 files     32.4 MB
     + reskit-test-data/era5/100m_u_component_of_wind.nc
     + reskit-test-data/era5/100m_v_component_of_wind.nc
-not available here:    4 files                  (licensed-example -- left out)
+not available here:    4 files                  (licensed-example -- a fetch stops here)
 ```
 
 Presence is checked by size, which is cheap; a real fetch verifies the hash and
@@ -179,10 +176,8 @@ loaded, so the catalogue is read once — then print its `paths` handles resolve
 to this machine: one `handle<TAB>absolute path` line per handle, tab-separated
 so a shell can read it back (`while IFS=$'\t' read handle path`). A folder
 handle prints the directory holding the collection's selected files under that
-key. With `--skip-unavailable`, a handle whose data this machine cannot reach is
-left out of the output and a warning names it — the same contract a plain fetch
-gives the files themselves; without the flag, unreachable data stops the command
-with an `AccessError` before anything is downloaded. A collection that declares
+key. Data this machine cannot reach stops the command with an `AccessError`
+before anything is downloaded. A collection that declares
 no `paths` exits `2`. The Python equivalent is
 [`Collections.paths`][ethos_data.selection.Collections.paths].
 
@@ -203,27 +198,27 @@ unless `--repair` is given.
 | `--all` | every collection in the file, in every variant (the default when no collection is named); one that cannot be resolved is reported as skipped |
 | `--test` | the named collection's `test` variant |
 | `--deep` | compare checksums, not just sizes — reads every byte |
-| `--repair` | re-fetch whatever no longer matches, from dCache |
+| `--repair` | download again, into the public cache, the copies it owns that no longer match; never a link |
 | `--dry-run` | with `--repair`: say what would be re-fetched, change nothing |
 | `-q`, `--quiet` | only report problems |
 
 Statuses, worst first: `dangling`, `wrong checksum`, `wrong size`, `missing`,
-`unreadable`, `unavailable here`, `unverifiable`, `ok`.
+`unreadable`, `unavailable here`, `unverifiable`, `note`, `ok`.
 `unverifiable` fails the check for a catalogue file whose record holds no
-SHA-256, and only reports a staged file; `--repair` skips both.
+SHA-256, and only reports a staged file; `--repair` skips both. A `note` is
+about a cache rather than a file and never fails the check: an entry the lookup
+passed over in a restricted cache listed before the one it read, or a public
+dataset's entry in a restricted cache. A broken link names its cache.
+
+`--repair` never removes or replaces a link: a broken link, and a file read
+through a link that does not match, are reported for whoever maintains the
+link. It never touches restricted or staged data.
 
 `--all` prints `skipped <name> [<variant>]: <reason>` for every collection or
 variant it cannot resolve — a dataset this catalogue does not describe, an
 incomplete catalogue copy, a faulty definition — and verifies the rest. It
 exits `1` if anything was skipped, even when every checked file matches: the
 check was not complete, and a CI job must not read it as one.
-
-!!! warning "Gap: `--repair` is to leave links alone"
-    With [one public cache on the
-    cluster](../../explanation/architecture/decisions/0028-one-public-cache-on-the-cluster.md),
-    `--repair` downloads a damaged copy again into the public cache and
-    never removes or replaces a link; a broken link is only reported. To be
-    implemented separately.
 
 See [Check and repair the cache](../../how-to/data-users/verify-and-repair.md).
 
@@ -295,7 +290,7 @@ never overwrite fixtures or fall back to downloads.
 | `fetch DIRECTORY COLLECTION` | Check hashes and report local paths; no network or repair. |
 | `fetch --allow-modified` | Explicit development override for changed bytes; warns and retains original metadata. Missing files still fail. |
 
-Global cache, staging, and skip-unavailable settings do not redirect bundle reads.
+Global cache and staging settings do not redirect bundle reads.
 The package's collections file and `--catalog` select inputs for export only. Invalid bundle inputs exit 2.
 See [Keep data in the repository](../../how-to/package-maintainers/keep-data-in-the-repository.md).
 

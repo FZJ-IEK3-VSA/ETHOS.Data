@@ -1,10 +1,11 @@
 """Access classes, and where a dataset's bytes actually come from.
 
-Three classes, declared per dataset in the catalogue:
+Two classes, declared per dataset in the catalogue:
 
-    public      on dCache with o+rx -- anyone downloads it
-    internal    held by ICE-2, not published (yet) -- VO credentials or a local root
-    restricted  licensed; may never be copied -- resolved in place, never downloaded
+    public      published on dCache, world-readable -- anyone downloads it
+    restricted  not published: licensed data, and data the institute holds
+                without publishing it -- read in place from a restricted cache
+                whose file permissions admit the reader, never downloaded
 
 The class picks the root; the filesystem picks the mode. A dataset's entry in
 the public cache is read **in place** when it is a symbolic link, and is an
@@ -19,8 +20,8 @@ order:
 
   1. the staging root -- work in progress, shadowing the catalogue during
      development.  Never applies to restricted data.
-  2. the restricted cache, for restricted datasets: always in place, never
-     downloaded, never written to
+  2. the restricted caches, for restricted datasets: in place from the first
+     listed cache whose entry is readable; never downloaded, never written to
   3. the public cache: in place where the dataset's entry, or its family's, is
      a link; otherwise a copy of the size the catalogue records
   4. a download from the publication root into the public cache, for public
@@ -33,20 +34,21 @@ download. Building the chain touches nothing; locating touches only the file
 system. Whether a file that has to be downloaded is downloaded is the caller's
 choice, see ``fetch=`` in :mod:`ethos_data.retrieval`.
 
-The rule that matters: restricted data is never written into a shared cache and
-never silently downloaded. If there is nowhere to read it from, asking
+The rule that matters: restricted data is never written into the public cache
+and never silently downloaded. If there is nowhere to read it from, asking
 for it fails with an explanation instead of doing something surprising.
 """
 
 from __future__ import annotations
 
+import os
 import warnings
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .catalogs import Catalog, Dataset
-from .config import Roots, resolve_skip_unavailable
+from .config import Roots
 from .errors import AccessError
 from .formats import keys as k
 from .model import names
@@ -60,6 +62,9 @@ __all__ = [
     "entry_for",
     "Location",
     "locate",
+    "restricted_entry",
+    "restricted_refusal",
+    "restricted_states",
     "unavailable",
     "ORIGIN_STAGING",
     "ORIGIN_RESTRICTED",
@@ -70,7 +75,6 @@ __all__ = [
 ]
 
 PUBLIC = k.PUBLIC
-INTERNAL = k.INTERNAL
 RESTRICTED = k.RESTRICTED
 #: Synthesised for a dataset that exists only in the staging root. Never
 #: appears in a real catalogue, so it can never be uploaded or published.
@@ -97,11 +101,13 @@ class Location:
     resource: Resource
     #: None exactly when ``mode`` is "unavailable": there is nowhere to look.
     path: Path | None
-    #: "download" -- fetch into the shared cache; "in-place" -- already on disk,
+    #: "download" -- fetch into the public cache; "in-place" -- already on disk,
     #: never copied; "unavailable" -- not reachable from this machine at all
     mode: str
     #: Which of the resolution rules produced this, for diagnostics.
     origin: str = ""
+    #: Why this machine cannot reach the file, when ``mode`` is "unavailable".
+    reason: str = ""
 
     @property
     def in_place(self) -> bool:
@@ -118,24 +124,66 @@ def access_class(dataset: Dataset) -> str:
     return dataset.access
 
 
-def entry_for(catalog: Catalog, roots: Roots, name: str) -> Path:
+def entry_for(
+    catalog: Catalog,
+    roots: Roots,
+    name: str,
+    cache: str | Path | None = None,
+    *,
+    removing: bool = False,
+) -> Path:
     """Where this dataset's cache entry belongs, whatever is or is not there.
 
-    The access class picks the root, exactly as :func:`locate` does -- so the
-    commands that *make* an entry cannot put one somewhere retrieval would never
-    look for it. Raises UnknownDataset for a name the catalogue does not
-    describe, and AccessError when a restricted dataset has no restricted cache:
-    there is nowhere to put it, and the public cache is the one place it may
-    never go.
+    ``cache`` is the cache a command names with ``--root``. Without it, a public
+    dataset's entry goes into the public cache, and a restricted dataset's into
+    the only listed restricted cache. A restricted dataset's entry goes only
+    into a listed restricted cache, and a public dataset's never into one, so
+    the commands that *make* an entry cannot put one where retrieval would
+    never read it, or where it would reach the wrong readers.
+
+    ``removing`` lets ``unlink`` reach a public dataset's entry in a restricted
+    cache, which ``verify`` reports for its maintainer to remove.
+
+    Raises UnknownDataset for a name the catalogue does not describe, and
+    AccessError when no cache may hold the entry, naming the listed caches or
+    how to list one.
     """
-    root = roots.for_access(access_class(catalog.dataset(name)))
-    if root is None:
+    restricted = access_class(catalog.dataset(name)) == RESTRICTED
+    if cache is not None:
+        named = Path(cache).expanduser()
+        listed = roots.restricted_cache(named)
+        if restricted and listed is None:
+            raise AccessError(
+                f"dataset {name!r} is restricted, and {named} is not one of the "
+                f"restricted caches this account lists ({_listing(roots)}). Its entry "
+                "goes only into a listed restricted cache."
+            )
+        if not restricted and listed is not None and not removing:
+            raise AccessError(
+                f"dataset {name!r} is public, and {named} is a restricted cache. A "
+                "public dataset's entry never goes into one."
+            )
+        return named / name
+    if not restricted:
+        return roots.public / name
+    if not roots.restricted:
         raise AccessError(
-            f"dataset {name!r} is restricted and no restricted cache is configured; "
-            "there is no entry for it. Set one with:\n"
-            "    ethos-data config set-restricted-cache /path/to/ethos_data_restricted"
+            f"dataset {name!r} is restricted, and this account lists no restricted "
+            "cache to hold its entry. List the one for its access combination:\n"
+            "    ethos-data config add-restricted-cache DIR"
         )
-    return root / name
+    if len(roots.restricted) > 1:
+        raise AccessError(
+            f"dataset {name!r} is restricted, and this account lists several "
+            f"restricted caches ({_listing(roots)}). Name the one for its access "
+            "combination with the global --root, for example:\n"
+            f"    ethos-data --root {roots.restricted[0]} link {name} DIR"
+        )
+    return roots.restricted[0] / name
+
+
+def _listing(roots: Roots) -> str:
+    return ", ".join(str(cache) for cache in roots.restricted) or "none"
 
 
 def _staged(staging: Path | None, name: str) -> Path | None:
@@ -207,59 +255,138 @@ class Staging(Locator):
         return Location(resource, staged / resource.path, "in-place", ORIGIN_STAGING)
 
 
+#: The state of one dataset's entry in one restricted cache.
+READABLE = "readable"
+NO_ENTRY = "no entry"
+UNREACHABLE = "cannot be reached"
+UNREADABLE = "entry cannot be read"
+
+
+def _entry_state(cache: Path, name: str) -> str:
+    """The state of ``name``'s entry in ``cache``: one of the states above, or dangling."""
+    try:
+        reachable = cache.is_dir()
+    except OSError:
+        reachable = False
+    if not reachable:
+        return UNREACHABLE
+    link = linked_entry(cache, name)
+    if link is not None and not link.exists():
+        return f"entry dangling: {link} points at {link.readlink()}"
+    entry = cache / name
+    if not entry.exists():
+        return NO_ENTRY
+    if not os.access(entry, os.R_OK | os.X_OK):
+        return UNREADABLE
+    return READABLE
+
+
+def _reason(cache: Path, state: str) -> str:
+    """A state other than a missing copy, as the sentence a refusal prints."""
+    if state == UNREACHABLE:
+        return f"The restricted cache {cache} cannot be reached."
+    if state == UNREADABLE:
+        return f"The entry in {cache} cannot be read."
+    return f"The entry in {cache} is dangling: {state.split(': ', 1)[1]}."
+
+
+def restricted_entry(
+    caches: tuple[Path, ...], name: str
+) -> tuple[Path | None, list[str]]:
+    """The first readable entry of ``name`` in ``caches``, and what was wrong before it.
+
+    A cache that holds no entry for the dataset is no reason: most caches hold
+    most datasets not. A reason names the cache: a listed cache that cannot be
+    reached, or an entry that is dangling or cannot be read. With no cache
+    listed, that is the reason, worded as the normal state it is.
+    """
+    if not caches:
+        return None, ["This account lists no restricted cache."]
+    reasons: list[str] = []
+    for cache in caches:
+        state = _entry_state(cache, name)
+        if state == READABLE:
+            return cache / name, reasons
+        if state != NO_ENTRY:
+            reasons.append(_reason(cache, state))
+    return None, reasons
+
+
+def restricted_states(caches: tuple[Path, ...], name: str) -> str:
+    """The state of ``name`` in every listed restricted cache, for what only describes."""
+    if not caches:
+        return "restricted; this account lists no restricted cache"
+    states = "; ".join(f"{cache}: {_entry_state(cache, name)}" for cache in caches)
+    return f"restricted; no listed restricted cache has a readable entry ({states})"
+
+
 @dataclass
 class RestrictedCache(Locator):
-    """2. Licensed data: found in the restricted cache, or refused. Never passes.
+    """2. Restricted data: read in place from a listed restricted cache, or refused.
 
-    Having no restricted cache is a legitimate, permanent state -- most people,
-    most of the time, are not on the institute cluster and have no right to the
-    licensed bytes. It is reported, not guessed around.
+    The first listed cache whose entry is readable wins. Never passes. Listing
+    no restricted cache is a legitimate, permanent state -- an account that
+    reads public data only lists none, on the cluster too. Without a readable
+    entry the file is refused before anything is downloaded, with the
+    dataset's description and how to register a copy: a workflow cannot run
+    without one of its inputs. With ``describe_only`` it is reported as not
+    available here instead, for commands that only say what a fetch would do.
     """
 
-    root: Path | None
-    skip_unavailable: bool = False
+    caches: tuple[Path, ...]
+    describe_only: bool = False
+    _entries: dict[str, tuple[Path | None, list[str]]] = field(
+        default_factory=dict, repr=False
+    )
 
     def describe(self) -> str:
-        where = self.root if self.root else "(not set)"
-        return f"restricted cache {where}, for restricted data only"
+        if not self.caches:
+            return "restricted caches: none listed"
+        listed = ", ".join(str(cache) for cache in self.caches)
+        return f"restricted caches {listed}, in order, for restricted data only"
+
+    def reset(self) -> None:
+        self._entries.clear()
 
     def locate(self, catalog, dataset, resource):
         if access_class(dataset) != RESTRICTED:
             return None
-        if self.root is not None:
+        # Once per dataset, not per file.
+        if dataset.name not in self._entries:
+            self._entries[dataset.name] = restricted_entry(self.caches, dataset.name)
+        entry, reasons = self._entries[dataset.name]
+        if entry is not None:
             return Location(
-                resource,
-                self.root / dataset.name / resource.path,
-                "in-place",
-                ORIGIN_RESTRICTED,
+                resource, entry / resource.path, "in-place", ORIGIN_RESTRICTED
             )
-        if self.skip_unavailable:
-            return Location(resource, None, UNAVAILABLE, ORIGIN_RESTRICTED)
-        raise AccessError(_no_restricted_cache(dataset))
+        if self.describe_only:
+            why = restricted_states(self.caches, dataset.name)
+            return Location(resource, None, UNAVAILABLE, ORIGIN_RESTRICTED, why)
+        raise AccessError(restricted_refusal(dataset, reasons))
 
 
-def _no_restricted_cache(dataset: Dataset) -> str:
-    note = dataset.descriptor.get(k.RESTRICTION, "")
-    lines = [f"dataset {dataset.name!r} is restricted and is never downloaded."]
-    if note:
-        lines.append(f"  {note}")
-    lines.append("No restricted cache is configured on this machine.")
-    lines.append("")
-    lines.append("If you have a copy, register it:")
-    lines.append(
-        "    ethos-data config set-restricted-cache /path/to/ethos_data_restricted"
-    )
-    lines.append(f"    ethos-data link {dataset.name} /path/to/{dataset.name}")
-    lines.append("")
-    lines.append("If you do not, carry on without it:")
-    lines.append("    ethos-data ... --skip-unavailable")
-    lines.append(
-        "    ethos-data config set-skip-unavailable true    # once, for this machine"
-    )
-    lines.append(
-        "Datasets you cannot reach are then left out of the result and listed, "
-        "rather than silently missing."
-    )
+def restricted_refusal(dataset: Dataset, reasons: list[str]) -> str:
+    """The refusal for a restricted dataset this account cannot read.
+
+    Short, for the person who meets it: that the dataset is restricted; how to
+    obtain it, its homepage and whom to ask, each where the catalogue records
+    it; why it cannot be read, when that is more than a missing copy; and the
+    two commands that register a copy. ``--meta`` prints the full description.
+    """
+    descriptor = dataset.descriptor
+    lines = [f"the dataset {dataset.name!r} is restricted."]
+    for label, key in (
+        ("Obtain it", k.RESTRICTION),
+        ("Homepage", k.HOMEPAGE),
+        ("Contact", k.CONTACT),
+    ):
+        value = " ".join(str(descriptor.get(key) or "").split())
+        if value:
+            lines.append(f"  {label}: {value}")
+    lines.extend(f"  {reason}" for reason in reasons)
+    lines.append("  Once you have a copy you may use, register it:")
+    lines.append("    ethos-data config add-restricted-cache DIR")
+    lines.append(f"    ethos-data link {dataset.name} DIR")
     return "\n".join(lines)
 
 
@@ -325,27 +452,22 @@ class PublicCache(Locator):
 class Download(Locator):
     """4. A download from the publication root into the public cache.
 
-    For public data only. Internal data is not published, so it is not
-    downloaded: it is read where the shared cache holds it. Refuses rather than
-    passes, since nothing comes after it.
+    For public data only: restricted data never gets here, because its locator
+    never passes. Refuses rather than passes, since nothing comes after it;
+    with ``describe_only`` the file is reported as not available here instead.
     """
 
     root: Path
+    describe_only: bool = False
 
     def describe(self) -> str:
         return f"a download into {self.root}, for public data only"
 
     def locate(self, catalog, dataset, resource):
-        if access_class(dataset) == INTERNAL:
-            raise AccessError(
-                f"dataset {dataset.name!r} is internal: it is not published, so it is "
-                "never downloaded, and this machine has no copy of it.\n"
-                "On the cluster computer it is read from the shared public cache; "
-                "check the cache with `ethos-data config show`. Elsewhere, point at a "
-                "copy you hold:\n"
-                f"    ethos-data link {dataset.name} /path/to/{dataset.name}"
-            )
         if not catalog.publication_url:
+            if self.describe_only:
+                why = "the catalogue declares no publication URL to download it from"
+                return Location(resource, None, UNAVAILABLE, ORIGIN_DOWNLOAD, why)
             raise AccessError(
                 f"dataset {dataset.name!r} is not in the public cache as a link, and the "
                 f"catalogue declares no publication URL, so there is nowhere to fetch it "
@@ -391,18 +513,20 @@ class Chain:
         )
 
 
-def chain_for(roots: Roots, *, skip_unavailable: bool = False) -> Chain:
+def chain_for(roots: Roots, *, describe: bool = False) -> Chain:
     """The lookup chain, built from ``roots``; building it touches nothing.
 
-    Bundles are not in the chain: they are read through
-    :func:`ethos_data.load_bundle`.
+    ``describe`` builds the chain for a command that only says what a fetch
+    would do: restricted data this machine cannot read is reported as not
+    available here instead of refused. Bundles are not in the chain: they are
+    read through :func:`ethos_data.load_bundle`.
     """
     return Chain(
         (
             Staging(roots.staging),
-            RestrictedCache(roots.restricted, skip_unavailable),
+            RestrictedCache(roots.restricted, describe),
             PublicCache(roots.public),
-            Download(roots.public),
+            Download(roots.public, describe),
         )
     )
 
@@ -411,35 +535,29 @@ def locate(
     catalog: Catalog,
     resources: list[Resource],
     roots: Roots | None = None,
-    skip_unavailable: bool | None = None,
+    *,
+    describe: bool = False,
 ) -> list[Location]:
     """Work out where every resource should be read from.
 
     ``roots`` are the cache roots to read; without them, those of the
     catalogue's settings snapshot.
 
-    ``skip_unavailable`` decides what happens to licensed data this machine has
-    no access to: ``False`` raises, ``True`` marks it "unavailable" and carries
-    on with everything else. ``None`` takes the configured answer, which
-    defaults to raising.
-
-    Raises AccessError -- naming the dataset and what to configure -- rather than
-    falling back to the cache or to a download when neither is permitted. The
-    chain it runs is :func:`chain_for`.
+    Every input is required: licensed data this machine cannot read raises
+    AccessError, describing the dataset and how to register a copy, before
+    anything is downloaded. ``describe=True`` reports it as "unavailable"
+    instead, for commands that only say what a fetch would do. The chain it
+    runs is :func:`chain_for`.
     """
     roots = roots if roots is not None else catalog.settings.roots
-    if skip_unavailable is None:
-        skip_unavailable = resolve_skip_unavailable()[0]
-    return chain_for(roots, skip_unavailable=skip_unavailable).locate(
-        catalog, resources
-    )
+    return chain_for(roots, describe=describe).locate(catalog, resources)
 
 
 def check_missing(locations: list[Location]) -> list[Location]:
     """In-place files that are not actually there.
 
     A misconfigured root, a dangling link, or a dataset that was never copied
-    into the restricted cache are all common and confusing failures, so they are
+    into a restricted cache are all common and confusing failures, so they are
     reported as a list of concrete missing paths rather than one generic error.
     """
     return [loc for loc in locations if loc.in_place and not loc.path.is_file()]

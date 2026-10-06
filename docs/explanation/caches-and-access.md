@@ -90,17 +90,9 @@ downloaded:
 [One lookup chain](architecture/decisions/0012-one-lookup-chain.md) gives what
 each place considers and when it refuses.
 
-!!! warning "Gap: no bundles in the chain, and three access classes"
-    The code's chain is staging, one restricted cache, the public cache and
-    the download. It has no bundles in the chain, and `skip_unavailable`
-    leaves an unreachable input out. It also knows a third access class,
-    `internal`, which it reads from the public cache and never downloads; in
-    the target, that is restricted data that every member of the institute
-    may read. On the cluster, its repair replaces a dataset's
-    link with a downloaded copy when a file behind it is damaged, which every
-    user then reads; in the target, `verify --repair` never removes or
-    replaces a link
-    ([decision 0028](architecture/decisions/0028-one-public-cache-on-the-cluster.md)).
+!!! warning "Gap: no bundles in the chain"
+    The code's chain is staging, the restricted caches, the public cache and
+    the download. It has no bundles in the chain.
 
 ## The rule that does not bend
 
@@ -118,11 +110,8 @@ copy once you have one; see
 [When a restricted input is missing](../how-to/data-users/use-data-in-a-script.md#licensed-input).
 `--meta` prints the dataset's full description.
 
-!!! warning "Gap: unreachable datasets can still be left out"
-    The code offers `--skip-unavailable`, which leaves an unreachable
-    dataset's key out of the result with a warning, and its refusal prints
-    only the `ethos:restriction` note. `--meta` and `report` do not exist.
-    See [every input is
+!!! warning "Gap: no `--meta`"
+    The code has no `--meta`, and no `report`. See [every input is
     required](architecture/decisions/0013-every-input-is-required.md).
 
 ## Downloads never write through a link
@@ -150,11 +139,6 @@ same bytes either way.
 | restricted data you do not have | a copy obtained under its terms, as the error describes, registered with `config add-restricted-cache` and `ethos-data link <dataset> <directory>` |
 | data that is not catalogued yet | the [staging root](../how-to/package-maintainers/stage-development-data.md#stage-development-data) |
 | a link that is about to break | `ethos-data materialize` |
-
-!!! warning "Gap: one restricted cache"
-    The code's one restricted cache is set with
-    `ethos-data config set-restricted-cache <directory>`;
-    `config add-restricted-cache` does not exist.
 
 ## Copy ownership and frozen inventories
 

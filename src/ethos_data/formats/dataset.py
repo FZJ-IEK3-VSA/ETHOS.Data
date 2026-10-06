@@ -632,7 +632,7 @@ def lint(meta: dict, *, namespace: bool = False) -> list[str]:
 STRIPPED = keys_with(DatasetDescriptor, "published", False)
 #: Copied into the index row by the build.
 PROMOTED = keys_with(DatasetDescriptor, "promoted")
-#: Printed by ``--meta`` and the error for a licensed dataset this machine cannot read.
+#: Printed by ``--meta``, the dataset's full description.
 USER_FACING = keys_with(DatasetDescriptor, "user_facing")
 #: Taken from the enclosing family when a member does not set them.
 INHERITED = keys_with(DatasetDescriptor, "inherited")

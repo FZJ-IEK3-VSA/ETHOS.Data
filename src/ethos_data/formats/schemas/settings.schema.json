@@ -25,21 +25,17 @@
         }
       ],
       "default": null,
-      "description": "Where public and internal data is read and downloaded.",
+      "description": "Where public data is read and downloaded.",
       "title": "Public Cache"
     },
-    "restricted_cache": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Where licensed data lives; read in place, never written.",
-      "title": "Restricted Cache"
+    "restricted_caches": {
+      "default": [],
+      "description": "Where restricted data is read in place, in order; one directory per access combination, none by default.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Restricted Caches",
+      "type": "array"
     },
     "staging_cache": {
       "anyOf": [

@@ -42,7 +42,7 @@ def built(source):
     source.dataset(
         "secret-plan",
         {"b.csv": "2\n"},
-        ethos_access="internal",
+        ethos_access="restricted",
         ethos_visibility="hidden",
         ethos_embargo=EMBARGO,
     )
@@ -193,7 +193,7 @@ class TestLeaks:
         source.dataset(
             "secret-plan",
             {"b.csv": "2\n"},
-            ethos_access="internal",
+            ethos_access="restricted",
             ethos_visibility="hidden",
             ethos_embargo=EMBARGO,
         )
@@ -226,7 +226,7 @@ class TestLeaks:
         source.dataset(
             "era5",
             {"b.csv": "2\n"},
-            ethos_access="internal",
+            ethos_access="restricted",
             ethos_visibility="hidden",
             ethos_embargo=EMBARGO,
         )

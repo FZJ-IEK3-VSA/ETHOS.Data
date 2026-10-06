@@ -135,14 +135,6 @@ dangles or cannot be read, or a listed cache cannot be reached.
 explains the two commands. A workflow cannot run without one of its inputs,
 so no option leaves one out.
 
-!!! warning "Gap: inputs can be left out"
-    The code's refusal names the dataset and prints its `ethos:restriction`
-    note only. Under `skip_unavailable=True`, `--skip-unavailable`,
-    `config set-skip-unavailable true` or `ETHOS_SKIP_UNAVAILABLE`, the code
-    leaves an unreachable named path out of the mapping with a warning, and
-    the refusal suggests these options. See [every input is
-    required](../../explanation/architecture/decisions/0013-every-input-is-required.md).
-
 ## Try catalogue data that is not in a collection yet {#by-key}
 
 Anything the catalogue describes can be asked for by its key,

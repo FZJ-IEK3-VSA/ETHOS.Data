@@ -8,12 +8,9 @@ See [Check and repair the cache](../../how-to/data-users/verify-and-repair.md) a
 
 ## Verification
 
-!!! warning "Gap: `repair` is to leave links alone"
-    With [one public cache on the
-    cluster](../../explanation/architecture/decisions/0028-one-public-cache-on-the-cluster.md),
-    `repair` downloads a damaged copy again into the public cache and never
-    removes or replaces a link; a broken link is only reported. To be
-    implemented separately.
+`repair` downloads a damaged copy again into the public cache and never
+removes or replaces a link; see [one public cache on the
+cluster](../../explanation/architecture/decisions/0028-one-public-cache-on-the-cluster.md).
 
 ::: ethos_data.verify
     options:

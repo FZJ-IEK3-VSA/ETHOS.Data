@@ -26,7 +26,6 @@ def public(monkeypatch, tmp_path) -> Path:
         config.RESTRICTED_ENV_VAR,
         config.STAGING_ENV_VAR,
         config.CATALOG_ENV_VAR,
-        config.SKIP_UNAVAILABLE_ENV_VAR,
         "ETHOS_PUBLICATION_URL",
     ):
         monkeypatch.delenv(variable, raising=False)
@@ -112,6 +111,29 @@ class TestAnUnreachableCacheSaysWhy:
         out = show(capsys)
         assert "restricted cache" in out
         assert "[NOT REACHABLE -- does not exist]" in out
+
+    def test_the_restricted_caches_are_numbered_in_reading_order(
+        self, public, monkeypatch, tmp_path, capsys
+    ):
+        first, second = tmp_path / "group-a", tmp_path / "group-b"
+        first.mkdir()
+        monkeypatch.setenv(
+            config.RESTRICTED_ENV_VAR, os.pathsep.join([str(first), str(second)])
+        )
+
+        lines = show(capsys).splitlines()
+
+        one = next(line for line in lines if line.startswith("restricted cache 1"))
+        two = next(line for line in lines if line.startswith("restricted cache 2"))
+        assert str(first) in one and "NOT REACHABLE" not in one
+        assert str(second) in two and "[NOT REACHABLE -- does not exist]" in two
+
+    def test_an_account_without_a_restricted_cache_is_a_normal_state(
+        self, public, capsys
+    ):
+        out = show(capsys)
+        assert "restricted caches  none listed: public data only" in out
+        assert "config add-restricted-cache" in out
 
     def test_an_error_from_the_operating_system_is_repeated(
         self, public, monkeypatch, capsys

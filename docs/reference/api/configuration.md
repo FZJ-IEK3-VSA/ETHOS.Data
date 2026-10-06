@@ -10,14 +10,9 @@ with **its provenance** — because "why is my data going there?" is the
 question people actually ask. A handle keeps it as its `settings`, and every
 later read of a setting goes through it.
 
-!!! warning "Gap: the restricted cache and the `internal` class are to change"
-    With [one settings file per
-    account](../../explanation/architecture/decisions/0010-one-settings-file-per-account.md),
-    the restricted cache becomes `restricted_caches`, an ordered list with no
-    default. With [decision
-    0011](../../explanation/architecture/decisions/0011-access-class-picks-the-root.md),
-    the access classes are `public` and `restricted`. To be implemented
-    separately.
+The access classes are `public` and `restricted`. Restricted data is read
+from `Roots.restricted`, the restricted caches in order, and `entry_for` decides
+which cache holds an entry that `link` or `materialize` makes.
 
 ## Configuration
 
@@ -27,7 +22,9 @@ later read of a setting goes through it.
         - Settings
         - read_settings
         - Roots
-        - resolve_skip_unavailable
+        - set_cache
+        - add_restricted_cache
+        - remove_restricted_cache
         - set_option
         - unset_option
         - config_path
@@ -43,6 +40,8 @@ later read of a setting goes through it.
     options:
       members:
         - locate
+        - entry_for
+        - restricted_entry
         - chain_for
         - Chain
         - Locator

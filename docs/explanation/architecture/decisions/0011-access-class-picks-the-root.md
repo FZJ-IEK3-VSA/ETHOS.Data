@@ -1,6 +1,6 @@
 # 0011. Let the access class pick the root, and a link mean "read in place"
 
-**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #15 (restricted data is never downloaded, and `repair` skips it), a new PR (caches: two access classes, several restricted caches), a new PR (pipelines: `catalog upload` refuses restricted data)
+**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #15 (restricted data is never downloaded, and `repair` skips it), #39 (two access classes, several restricted caches), a new PR (pipelines: `catalog upload` refuses restricted data)
 
 ## Context
 

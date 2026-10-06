@@ -42,12 +42,9 @@ unresolved licensing. If `--immutable` reports a conflict, assign new
 published paths; do not delete and overwrite a released object.
 
 !!! warning "Gap: `--allow-internal`"
-    The code knows a third access class, `internal`, and
-    `catalog upload --allow-internal` uploads such a dataset below the
-    publication root. It skips the step that makes the dataset
-    world-readable, sets no private permissions, and checks anonymously. Do
-    not use it: data the institute holds without publishing it is restricted
-    data, which stays off dCache.
+    The code offers `catalog upload --allow-internal`, for an access class
+    that no dataset can have. Do not use it: data the institute holds
+    without publishing it is restricted data, which stays off dCache.
 
 ## 3. Recheck without transferring or changing permissions
 

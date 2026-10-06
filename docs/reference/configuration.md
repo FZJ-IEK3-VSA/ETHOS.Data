@@ -11,23 +11,6 @@ which prints the settings file it read, the resolved values and the provenance
 of each. A cache path this machine cannot reach, such as a network drive that is
 not connected, is marked `NOT REACHABLE` with the reason.
 
-!!! warning "Gap: `skip_unavailable` is to be removed"
-    With [every input is
-    required](../explanation/architecture/decisions/0013-every-input-is-required.md),
-    the `skip_unavailable` key, `config set-skip-unavailable`,
-    `unset-skip-unavailable` and `ETHOS_SKIP_UNAVAILABLE` go. To be
-    implemented separately.
-
-!!! warning "Gap: the restricted cache is to become a list"
-    With [one settings file per
-    account](../explanation/architecture/decisions/0010-one-settings-file-per-account.md),
-    `restricted_cache` becomes `restricted_caches`, an ordered list with no
-    default, changed with `config add-restricted-cache DIR` and
-    `config remove-restricted-cache DIR`. `ETHOS_RESTRICTED_DIRS` takes the
-    place of `ETHOS_RESTRICTED_DIR`: it lists directories separated by `:`,
-    on Windows by `;`, and overrides the list in the settings file; nothing
-    is merged. To be implemented separately.
-
 ## Precedence
 
 Each setting is the first of:
@@ -35,13 +18,19 @@ Each setting is the first of:
 | | Source | |
 |---|---|---|
 | 1 | an explicit argument | `--root` / `root=` (public cache), `--catalog` / `catalog=` |
-| 2 | an environment variable | `$ETHOS_DATA_DIR`, `$ETHOS_RESTRICTED_DIR`, … |
+| 2 | an environment variable | `$ETHOS_DATA_DIR`, `$ETHOS_RESTRICTED_DIRS`, … |
 | 3 | the settings file | the file `$ETHOS_DATA_CONFIG` names, else the file in the account |
 | 4 | the built-in default | the per-user cache directory (public cache only) |
 
-Only the public cache has a built-in default. The restricted and staging roots
-have none on purpose: where licensed bytes land is a decision somebody has to
-make out loud, and staging is opt-in.
+The restricted caches are a list with no explicit argument:
+`$ETHOS_RESTRICTED_DIRS` holds directories separated by `:`, on Windows by `;`,
+and replaces the file's list; nothing is merged.
+
+Only the public cache has a built-in default. The restricted caches and the
+staging root have none on purpose: where restricted bytes are read is a
+decision somebody has to make out loud, and staging is opt-in. An account that
+lists no restricted cache reads public data only, which is a valid set-up
+everywhere, the cluster included.
 
 ## The settings file {#settings-file}
 
@@ -69,18 +58,19 @@ when it is read, and every problem is reported at once, naming the key.
 
 | Key | Set with | |
 |---|---|---|
-| `public_cache` | `config set-public-cache` | public and internal data: read from, and downloaded into |
-| `restricted_cache` | `config set-restricted-cache` | licensed data; retrieval only reads it in place |
+| `public_cache` | `config set-public-cache` | public data: read from, and downloaded into |
+| `restricted_caches` | `config add-restricted-cache`, `remove-restricted-cache` | a list of directories, read in order for restricted data, in place; none by default |
 | `staging_cache` | `config set-staging-cache` | work in progress that shadows the catalogue |
-| `skip_unavailable` | `config set-skip-unavailable` | `true` to carry on without data this machine cannot reach |
 | `catalog` | `config set-catalog` | the catalogue to use instead of a collections file's pin or the built-in public catalogue |
 | `publication_url` | `config set-publication-url` | fetch bytes from a different door than the catalogue declares |
 
-A settings file for a shared machine:
+A settings file on the cluster, for a user whose groups admit one restricted
+cache:
 
 ```yaml title="config.yaml"
 public_cache: /shared/ethos/cache
-restricted_cache: /shared/ethos/restricted
+restricted_caches:
+  - /shared/ethos/restricted/<group>
 catalog: /shared/ethos/catalogue/datacatalog.json
 ```
 
@@ -90,10 +80,9 @@ catalog: /shared/ethos/catalogue/datacatalog.json
 |---|---|
 | `ETHOS_DATA_CONFIG` | the settings file: read this one instead of the one in the account |
 | `ETHOS_DATA_DIR` | `public_cache` |
-| `ETHOS_RESTRICTED_DIR` | `restricted_cache` |
+| `ETHOS_RESTRICTED_DIRS` | `restricted_caches`: directories separated by `:`, on Windows by `;` |
 | `ETHOS_STAGING_DIR` | `staging_cache` |
 | `ETHOS_DATA_CATALOG` | `catalog` |
-| `ETHOS_SKIP_UNAVAILABLE` | `skip_unavailable` |
 | `ETHOS_CATALOG_NO_CACHE` | if set, a fetched catalogue descriptor is never cached on disk |
 | `ETHOS_PUBLICATION_URL` | `publication_url` |
 
@@ -113,7 +102,7 @@ settings file      /home/me/.config/ethos-data/config.yaml  (your account)
 catalogue          https://.../datacatalog.json  (the pin in collections.yaml)
 catalogue version  v1.2.0
 public cache       /home/me/.cache/ethos-data  (built-in default, the per-user cache directory)
-restricted cache   not set
+restricted caches  none listed: public data only
 staging cache      not set
 ```
 
@@ -128,7 +117,8 @@ places is built from the settings snapshot of the handle or the command, and
 `config show` prints it for this machine:
 
 1. the staging root, never for restricted data, read in place without checksums;
-2. the restricted cache, for restricted data only, read in place;
+2. the restricted caches, for restricted data only: in place, from the first
+   listed cache whose entry is readable;
 3. the public cache: in place where the dataset's entry, or its family's, is a
    link; otherwise a copy of the size the catalogue records, hash-checked when
    it is fetched;
@@ -136,33 +126,31 @@ places is built from the settings snapshot of the handle or the command, and
    only.
 
 A place that may not serve a file refuses, and the search stops there. A
-restricted dataset without a restricted cache is never read from a copy in the
-public cache, and internal data, which is not published, is never downloaded.
+restricted dataset that no listed cache holds readable is refused before
+anything is downloaded, and the refusal names what is wrong besides a missing
+copy: that the account lists no restricted cache, an entry that is dangling or
+cannot be read, or a cache that cannot be reached. It is never read from a copy
+in the public cache, and never downloaded.
 With `fetch=False` nothing is downloaded: a file that only the last place could
 provide raises `NotFetched`, naming the path it belongs at.
 
-## The three roots
+## The roots
 
 | Root | Holds | Written to |
 |---|---|---|
-| public | public and internal data — symlinks to data already here, plus real directories for downloads | yes, for downloads into real directories |
-| restricted | authorised licensed installations or links | only explicit local administration, such as `link` or `materialize`; never retrieval |
-| staging | uncatalogued work in progress | only by `staging add --copy` |
+| public cache | public data — symbolic links to data already here, plus real directories for downloads and materialized copies | by downloads, into real directories; by `link` and `materialize` |
+| restricted caches | restricted data, one cache per access combination — authorised installations, linked or copied | only by `link` and `materialize`; never by retrieval |
+| staging root | uncatalogued work in progress | only by `staging add --copy` |
 
-Which root a dataset comes from follows from its access class; whether it is
-read in place follows from whether its entry is a symbolic link. See
-[Caches, classes and roots](../explanation/caches-and-access.md).
+Which root a dataset comes from follows from its access class, `public` or
+`restricted`; whether it is read in place follows from whether its entry is a
+symbolic link. On the cluster every user sets the same public cache, the
+cluster's public cache. See
+[Caches, classes and roots](../explanation/caches-and-access.md) and [one public
+cache on the cluster](../explanation/architecture/decisions/0028-one-public-cache-on-the-cluster.md).
 
-!!! warning "Gap: the public cache is to hold public data only"
-    With [decision
-    0011](../explanation/architecture/decisions/0011-access-class-picks-the-root.md),
-    there is no `internal` class. Data the institute holds without
-    publishing it is restricted data, read in place from a restricted cache
-    whose file permissions admit its readers. `config` refuses a root that
-    is, contains or lies inside another. On the cluster every user sets the
-    same public cache; see [one public cache on the
-    cluster](../explanation/architecture/decisions/0028-one-public-cache-on-the-cluster.md).
-    To be implemented separately.
+No root contains another: `config` refuses a public cache, staging root or
+restricted cache that is, contains or lies inside another root.
 
 ## Catalogue resolution
 
@@ -207,15 +195,15 @@ Prefix these with `ethos-data` or a package wrapper such as `<your-tool>-data`.
 | --- | --- |
 | `config show` | Display the settings in effect without network access. |
 | `config set-public-cache DIR` | Public cache. |
-| `config set-restricted-cache DIR` | Authorised restricted installation. |
-| `config set-staging-cache DIR` | Shared development overlay. |
+| `config add-restricted-cache DIR` | Append a restricted cache to the list; refuses one already listed. |
+| `config remove-restricted-cache DIR` | Remove a restricted cache from the list. |
+| `config set-staging-cache DIR` | Development overlay. |
 | `config set-catalog LOCATION` | Catalogue index path or URL. |
-| `config set-skip-unavailable true\|false` | Whether collection results may omit inaccessible inputs. |
 | `config set-publication-url URL` | Override the dataset download base URL. |
 
 Every setter writes to the settings file in effect. Remove a setting with the
-matching `unset-*` command. Unsetting configuration does not move or delete
-data.
+matching `unset-*` command, and a restricted cache with
+`remove-restricted-cache`. Removing a setting does not move or delete data.
 
 `config show` reports the settings, not a package's pin, a package-specific
 environment override, or per-command options. `ethos-data ls` and a wrapper's

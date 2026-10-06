@@ -13,7 +13,7 @@ a file and two lines of code and nothing has to be registered anywhere.
 
 A collections file names slices of the shared catalogue; it never repeats file
 paths, sizes or checksums. That is deliberate -- if two tools each carried their
-own inventory they would drift, and the shared cache would stop deduplicating.
+own inventory they would drift, and the public cache would stop deduplicating.
 
 Two things a collection may carry beyond its selection, both for the same
 reason -- a workflow's code should not have to know resource keys:
@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import fnmatch
 import os
-import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -52,7 +51,7 @@ from .catalogs import (
     select_key,
     split_key,
 )
-from .errors import CollectionError, UnknownCollection
+from .errors import CollectionError, UnknownCollection, UnknownDataset, UnknownKey
 from .retrieval import DataFiles, NamedPaths
 
 if TYPE_CHECKING:
@@ -177,14 +176,7 @@ class Collections:
             )
         wanted = variant_name(test)
         if wanted not in found:
-            raise CollectionError(
-                f"collection {name!r} has no {wanted!r} variant (it defines: {', '.join(found)}). "
-                + (
-                    "Pass test=True (or --test) for its test data."
-                    if wanted == VARIANT_FULL
-                    else "It has no small test selection; ask for the full data."
-                )
-            )
+            raise _VariantError(name, f"has no {wanted} variant")
         selected = definition[wanted]
         if not isinstance(selected, dict):
             raise CollectionError(
@@ -283,35 +275,28 @@ class Collections:
         """
         if len(self.variants(name)) < 2:
             return
-        offered = {}
-        for variant in VARIANTS:
-            try:
-                offered[variant] = set(self.named_keys(name, variant == VARIANT_TEST))
-            except CollectionError as error:
-                # The caller may have asked for the *other* variant, and the
-                # inner message then gives advice ("pass test=True") that
-                # contradicts what they typed. Say what was being compared.
-                raise CollectionError(
-                    f"collection {name!r}: its {variant!r} variant cannot be resolved, so its "
-                    f"test and full variants cannot be compared: {error.args[0]}"
-                ) from error
+        offered = {
+            variant: set(self.named_keys(name, variant == VARIANT_TEST))
+            for variant in VARIANTS
+        }
         if offered[VARIANT_TEST] == offered[VARIANT_FULL]:
             return
-        differences = []
+        clauses = []
         for variant in VARIANTS:
             other = VARIANT_FULL if variant == VARIANT_TEST else VARIANT_TEST
             only = sorted(offered[variant] - offered[other])
-            if only:
-                differences.append(f"only in {variant}: {', '.join(only)}")
-        raise CollectionError(
-            f"collection {name!r}: its test and full variants must name the same paths "
-            f"({'; '.join(differences)}), or code written against one will not run "
-            f"against the other"
-        )
+            if len(only) == 1:
+                clauses.append(
+                    f"named path {only[0]!r} is in its {variant} variant only"
+                )
+            elif only:
+                listed = ", ".join(repr(handle) for handle in only)
+                clauses.append(
+                    f"named paths {listed} are in its {variant} variant only"
+                )
+        raise _VariantError(name, *clauses, named_path=True)
 
-    def resolve(
-        self, name: str, test: bool = False, _seen: frozenset[str] = frozenset()
-    ) -> list[Resource]:
+    def resolve(self, name: str, test: bool = False) -> list[Resource]:
         """Expand a collection (and anything it extends) into resources.
 
         Selection is by glob against the resource path. Shapefile sidecars are
@@ -320,8 +305,23 @@ class Collections:
 
         ``test`` picks the variant of a collection that has them; it passes
         down through ``extends``, so a test selection is built from its
-        parents' test selections. A plain parent is the same either way.
+        parents' test selections. A plain parent is the same either way. A
+        variant missing from a collection reached through ``extends`` is
+        reported as that: the collection asked for extends one whose variant
+        is missing.
         """
+        try:
+            return self._resolve(name, test)
+        except _VariantError as problem:
+            if problem.collection == name:
+                raise
+            raise CollectionError(
+                f"collection {name!r} extends {problem.collection!r}, {problem.clause}"
+            ) from None
+
+    def _resolve(
+        self, name: str, test: bool, _seen: frozenset[str] = frozenset()
+    ) -> list[Resource]:
         name = self._check(name)
         if name in _seen:
             chain = " -> ".join([*sorted(_seen), name])
@@ -338,7 +338,7 @@ class Collections:
         selected: dict[str, Resource] = {}
 
         for parent in definition.get("extends", []) or []:
-            for resource in self.resolve(parent, test, seen):
+            for resource in self._resolve(parent, test, seen):
                 selected[resource.key] = resource
 
         for rule in self._include_rules(name, definition):
@@ -349,7 +349,11 @@ class Collections:
             # `files: ["era5/*.nc"]` selects nothing while
             # `dataset: reskit-test-data/era5` with `files: ["*.nc"]` selects
             # what you meant.
-            for dataset in self.catalog.matching_datasets(rule["dataset"]):
+            try:
+                datasets = self.catalog.matching_datasets(rule["dataset"])
+            except UnknownDataset as error:
+                raise UnknownDataset(f"collection {name!r}: {error.message}") from None
+            for dataset in datasets:
                 patterns = rule.get("files") or ["**"]
                 # resources_matching narrows a sharded dataset to the shards these
                 # patterns can reach; the glob below is still the real filter.
@@ -374,7 +378,6 @@ class Collections:
         test: bool = False,
         root: Roots | str | Path | None = None,
         progressbar: bool = True,
-        skip_unavailable: bool | None = None,
         fetch: bool = True,
     ) -> DataFiles:
         """Make a collection available locally and return ``{key: Path}``.
@@ -389,10 +392,9 @@ class Collections:
         without variants is the same either way. The result's ``.named`` holds
         the collection's ``paths`` as ``{handle: Path}`` -- see :meth:`paths`.
 
-        ``skip_unavailable`` decides what happens to licensed data this machine
-        cannot reach: ``True`` leaves it out of the result (and out of
-        ``.named``) with a warning, ``False`` raises, ``None`` takes the
-        configured answer.
+        Every input is required: licensed data this machine cannot read raises
+        :class:`~ethos_data.errors.AccessError` before anything is downloaded,
+        describing the dataset and how to register a copy.
 
         ``fetch=False`` downloads nothing and contacts no store: every file is
         returned where it is on this machine, and one that is not raises
@@ -409,7 +411,6 @@ class Collections:
             resources,
             root=roots,
             progressbar=progressbar,
-            skip_unavailable=skip_unavailable,
             fetch=fetch,
         )
         files.named = self._named_paths(targets, files, name)
@@ -422,7 +423,6 @@ class Collections:
         test: bool = False,
         root: Roots | str | Path | None = None,
         progressbar: bool = True,
-        skip_unavailable: bool | None = None,
         fetch: bool = True,
     ) -> NamedPaths:
         """The inputs a collection names, as ``{handle: absolute Path}``, fetched.
@@ -441,10 +441,6 @@ class Collections:
         are the same in both variants, so the call above runs unchanged on the
         full data once ``test`` is dropped. A collection that declares no
         ``paths`` is refused here -- :meth:`fetch` returns its files by key.
-        Under ``skip_unavailable`` a handle whose data this machine cannot
-        reach is left out, with a warning naming it, exactly as the file is
-        left out of :meth:`fetch`'s result.
-
         ``fetch=False`` resolves the handles without downloading anything, and
         raises :class:`~ethos_data.errors.NotFetched` for a file that is not on
         this machine, naming the path the same call with ``fetch=True`` puts it.
@@ -454,10 +450,9 @@ class Collections:
             test=test,
             root=root,
             progressbar=progressbar,
-            skip_unavailable=skip_unavailable,
             fetch=fetch,
         )
-        if not files.named and not files.named.omitted:
+        if not files.named:
             raise CollectionError(
                 f"collection {name!r} declares no named paths -- nothing under 'paths:' in "
                 f"its definition. fetch({name!r}) returns its files by resource key; "
@@ -472,7 +467,6 @@ class Collections:
         *,
         test: bool = False,
         root: Roots | str | Path | None = None,
-        skip_unavailable: bool | None = None,
     ) -> dict:
         """What fetching a collection would do, without touching the network.
 
@@ -483,7 +477,6 @@ class Collections:
             self.catalog,
             self.resolve(name, test=test),
             self._roots(root),
-            skip_unavailable,
         )
 
     def main(self, argv: list[str] | None = None, *, prog: str | None = None) -> int:
@@ -532,7 +525,7 @@ class Collections:
             try:
                 dataset, inner = split_key(self.catalog, key)
             except KeyError as error:
-                raise _not_in_catalogue(name, handle, key, error) from error
+                raise _not_in_catalogue(name, error) from error
             # Answered from the selection first, so that checking a dataset-level
             # handle on a sharded dataset does not pull in every shard the include
             # patterns deliberately avoided. The catalogue is only consulted to
@@ -555,7 +548,7 @@ class Collections:
                 try:
                     select_key(self.catalog, dataset, inner, key)
                 except KeyError as error:
-                    raise _not_in_catalogue(name, handle, key, error) from error
+                    raise _not_in_catalogue(name, error) from error
                 raise CollectionError(
                     f"collection {name!r}: paths.{handle} names the folder {key!r}, but the "
                     f"collection includes no file under it; the folder would be empty"
@@ -569,36 +562,18 @@ class Collections:
     ) -> NamedPaths:
         """Where each handle ended up on this machine, read off the fetched files.
 
-        A handle whose data this machine cannot reach is left out and named in
-        a warning -- the same contract ``skip_unavailable`` gives the files
-        themselves: absent from the mapping, never a path to nothing. Without
-        ``skip_unavailable`` the unreachable data has already raised before this.
+        Every file is there: a fetch that could not provide one has raised
+        before this, so every handle the collection defines is in the mapping.
         """
         named = NamedPaths(collection=name)
         for target in targets:
             if target.file is not None:
-                local = files.get(target.file.key)
-                if local is None:
-                    named.omitted.append(target.handle)
-                    continue
-                named[target.handle] = Path(os.path.abspath(local))
-                continue
-            available = [r for r in target.under if r.key in files]
-            if not available:
-                named.omitted.append(target.handle)
+                named[target.handle] = Path(os.path.abspath(files[target.file.key]))
                 continue
             directory = directory_of(
-                files, available, target.dataset, target.inner, target.key
+                files, target.under, target.dataset, target.inner, target.key
             )
             named[target.handle] = Path(os.path.abspath(directory))
-        if named.omitted:
-            warnings.warn(
-                f"collection {name!r}: the named path(s) {', '.join(named.omitted)} are not "
-                f"available on this machine and have been left out -- the mapping has no entry "
-                f"for them.",
-                UserWarning,
-                stacklevel=4,
-            )
         return named
 
 
@@ -617,14 +592,34 @@ class _NamedTarget:
     under: tuple[Resource, ...]
 
 
-def _not_in_catalogue(
-    collection: str, handle: str, key: str, error: KeyError
-) -> CollectionError:
-    message = error.args[0] if error.args else str(error)
-    return CollectionError(
-        f"collection {collection!r}: paths.{handle} names {key!r}, which is not in "
-        f"the catalogue. {message}"
+def _not_in_catalogue(collection: str, error: KeyError) -> KeyError:
+    """The not-found a ``paths`` key met, naming the collection that asked."""
+    message = getattr(error, "message", None) or (error.args[0] if error.args else "")
+    kind = (
+        type(error) if isinstance(error, (UnknownDataset, UnknownKey)) else UnknownKey
     )
+    return kind(f"collection {collection!r}: {message}")
+
+
+class _VariantError(CollectionError):
+    """A collection's variant is missing, or its variants name different paths.
+
+    Keeps the collection and the clause apart, so that a collection that
+    extends this one can say so: "collection 'all' extends 'onshore_wind',
+    which has no test variant".
+    """
+
+    def __init__(self, collection: str, *clauses: str, named_path: bool = False):
+        self.collection = collection
+        if named_path:
+            self.clause = ", and ".join(f"whose {clause}" for clause in clauses)
+            own = f"collection {collection!r}: " + ", and ".join(
+                f"the {clause}" for clause in clauses
+            )
+        else:
+            self.clause = ", and ".join(f"which {clause}" for clause in clauses)
+            own = f"collection {collection!r} " + ", and ".join(clauses)
+        super().__init__(own)
 
 
 def path_matches(path: str, pattern: str) -> bool:

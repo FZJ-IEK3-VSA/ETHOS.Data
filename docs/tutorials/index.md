@@ -34,7 +34,7 @@ You review proposals, maintain the catalogue, and look after its storage.
 
 - [Add a dataset to the catalogue](add-a-dataset.md) — on a practice catalogue
   on your own machine: describe a dataset, build its inventory, publish the
-  public view, link the data into a shared cache, and turn that link into a
+  public view, link the data into the public cache, and turn that link into a
   copy. Nothing is uploaded or published anywhere.
 
 For the design behind these steps, see [Explanation](../explanation/index.md).

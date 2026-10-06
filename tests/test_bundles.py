@@ -264,7 +264,7 @@ def test_invalid_resource_metadata_errors_cleanly(catalogue, tmp_path, bad_recor
         load_bundle(bundle.path)
 
 
-@pytest.mark.parametrize("access", ["staging", "internal", "restricted", "unknown"])
+@pytest.mark.parametrize("access", ["staging", "restricted", "unknown"])
 def test_unsupported_access_snapshot_is_rejected(catalogue, tmp_path, access):
     bundle = export(catalogue, tmp_path / "bundle")
     rewrite(

@@ -1,12 +1,14 @@
 """Where the caches and the catalogue are, for one person on one machine.
 
-There are three roots, and a user is expected to set at most two of them:
+There are three kinds of root:
 
-    public_cache       public and internal data -- a namespace of symbolic
-                       links to data already on this machine, plus real
-                       directories for anything downloaded from dCache
-    restricted_cache   licensed data, held as real files we own and can make
-                       read-only; never downloaded, never written to
+    public_cache       public data -- a namespace of symbolic links to data
+                       already on this machine, plus real directories for
+                       anything downloaded from dCache; one per account, and
+                       on the cluster one shared directory
+    restricted_caches  restricted data, read in place and never downloaded:
+                       an ordered list of directories, each admitting one
+                       access combination; none by default
     staging_cache      optional: work in progress that is not in the catalogue
                        yet, shadowing it during development
 
@@ -20,7 +22,7 @@ one dataset is linked into a cache with ``ethos-data link NAME DIR``.
 Each setting is resolved from the first of:
 
     1. an explicit argument        fetch(..., root=...) / --root, catalog= / --catalog
-    2. an environment variable     $ETHOS_DATA_DIR, $ETHOS_RESTRICTED_DIR, ...
+    2. an environment variable     $ETHOS_DATA_DIR, $ETHOS_RESTRICTED_DIRS, ...
     3. the settings file           the file $ETHOS_DATA_CONFIG names, else the
                                    one in the account
     4. the built-in default        the per-user cache directory (public cache only)
@@ -31,10 +33,17 @@ batch job, in whichever Python environment. ``$ETHOS_DATA_CONFIG`` replaces the
 account's file rather than merging with it, so a CI job or a test run is
 isolated from the account it runs under.
 
+The restricted caches are a list with no explicit argument:
+``$ETHOS_RESTRICTED_DIRS`` holds paths separated by :data:`os.pathsep` and
+replaces the file's list; nothing is merged.
+
 Nothing has to be configured for public data: layer 4 works on Linux, macOS and
-Windows alike. The restricted and staging roots have *no* built-in default on
-purpose -- where licensed bytes land is a decision somebody has to make out
-loud, and staging is opt-in by nature.
+Windows alike. The restricted caches and the staging root have *no* built-in
+default on purpose -- where restricted bytes are read is a decision somebody has
+to make out loud, and staging is opt-in by nature. An account that lists no
+restricted cache reads public data only, which is a valid set-up everywhere.
+No root contains another: :func:`set_cache` and :func:`add_restricted_cache`
+refuse a directory that is, contains or lies inside another root.
 
 :func:`read_settings` reads every setting at once and records *where* each value
 came from, because "why is my data going there?" is the question people actually
@@ -62,17 +71,17 @@ __all__ = [
     "ENV_VAR",
     "PUBLICATION_URL_ENV_VAR",
     "RESTRICTED_ENV_VAR",
-    "SKIP_UNAVAILABLE_ENV_VAR",
-    "SKIP_UNAVAILABLE_KEY",
     "STAGING_ENV_VAR",
     "Roots",
     "Settings",
     "account_config_path",
+    "add_restricted_cache",
     "config_path",
     "current_user",
     "load_config",
     "read_settings",
-    "resolve_skip_unavailable",
+    "remove_restricted_cache",
+    "set_cache",
     "set_option",
     "unset_option",
 ]
@@ -94,15 +103,11 @@ CONFIG_ENV_VAR = "ETHOS_DATA_CONFIG"
 
 #: The public cache.
 ENV_VAR = "ETHOS_DATA_DIR"
-RESTRICTED_ENV_VAR = "ETHOS_RESTRICTED_DIR"
+#: The restricted caches, separated by :data:`os.pathsep`; replaces the file's list.
+RESTRICTED_ENV_VAR = "ETHOS_RESTRICTED_DIRS"
 STAGING_ENV_VAR = "ETHOS_STAGING_DIR"
 PUBLICATION_URL_ENV_VAR = "ETHOS_PUBLICATION_URL"
 
-#: "I do not have the licensed data, carry on without it." Set once by anybody
-#: working away from the institute cluster, where the restricted cache does not
-#: and cannot exist.
-SKIP_UNAVAILABLE_KEY = "skip_unavailable"
-SKIP_UNAVAILABLE_ENV_VAR = "ETHOS_SKIP_UNAVAILABLE"
 
 APP = "ethos-data"
 
@@ -112,14 +117,16 @@ ACCOUNT = "your account"
 
 @dataclass(frozen=True)
 class Roots:
-    """The three cache roots, resolved together with their provenance.
+    """The cache roots, resolved together with their provenance.
 
     Passed around as one object so that adding a root later does not mean
     changing every signature between the command line and ``locate()``.
+    ``restricted`` are the restricted caches in the order they are read; the
+    list has one source.
     """
 
     public: Path
-    restricted: Path | None = None
+    restricted: tuple[Path, ...] = ()
     staging: Path | None = None
     public_source: str = ""
     restricted_source: str = ""
@@ -131,9 +138,17 @@ class Roots:
             self, public=Path(value).expanduser(), public_source="explicit argument"
         )
 
-    def for_access(self, access: str) -> Path | None:
-        """The root a dataset of this access class is read from."""
-        return self.restricted if access == k.RESTRICTED else self.public
+    def restricted_cache(self, directory: str | Path) -> Path | None:
+        """The listed restricted cache ``directory`` names, or None if it is not one."""
+        wanted = _same(directory)
+        return next(
+            (cache for cache in self.restricted if _same(cache) == wanted), None
+        )
+
+
+def _same(directory: str | Path) -> str:
+    """A directory's spelling for comparison: absolute, normalised, case-folded where the system is."""
+    return os.path.normcase(os.path.abspath(Path(directory).expanduser()))
 
 
 # -- the settings file ---------------------------------------------------------
@@ -297,6 +312,95 @@ def unset_option(key: str) -> Path | None:
     return path
 
 
+def _overlapping(directory: Path, others: dict[str, Path]) -> None:
+    """Refuse ``directory`` if it is, contains or lies inside one of ``others``."""
+    mine = Path(_same(directory))
+    for label, other in others.items():
+        theirs = Path(_same(other))
+        if mine == theirs or mine in theirs.parents or theirs in mine.parents:
+            raise ConfigurationError(
+                f"{directory} is, contains or lies inside the {label}, {other}. The "
+                "public cache, the staging root and each restricted cache are separate "
+                "directories; choose another."
+            )
+
+
+def _other_roots(roots: Roots, *, keep: str) -> dict[str, Path]:
+    """Every root of ``roots`` but the one the setting ``keep`` names."""
+    others: dict[str, Path] = {}
+    if keep != k.SETTING_PUBLIC_CACHE:
+        others["public cache"] = roots.public
+    if keep != k.SETTING_STAGING_CACHE and roots.staging is not None:
+        others["staging root"] = roots.staging
+    for number, cache in enumerate(roots.restricted, start=1):
+        others[f"restricted cache {number}"] = cache
+    return others
+
+
+def _current_roots() -> Roots:
+    """The roots in effect, as a setter sees them.
+
+    A setter may create the file ``$ETHOS_DATA_CONFIG`` names, so a missing one
+    holds no roots here rather than stopping the command, and a value the
+    specification would refuse can still be replaced.
+    """
+    path = config_path()
+    document = _read_document(path) if path.is_file() else {}
+    return _roots(None, document, {key: f"settings file {path}" for key in document})
+
+
+def set_cache(key: str, directory: str | Path) -> Path:
+    """Set the public cache or the staging root, refusing a directory that overlaps another root."""
+    if key not in (k.SETTING_PUBLIC_CACHE, k.SETTING_STAGING_CACHE):
+        raise ValueError(f"{key!r} is not the public cache or the staging root")
+    target = Path(directory).expanduser()
+    _overlapping(target, _other_roots(_current_roots(), keep=key))
+    return set_option(key, str(target))
+
+
+def add_restricted_cache(directory: str | Path) -> Path:
+    """Append a restricted cache to the settings file's list.
+
+    Refuses a directory the list already holds, and one that is, contains or
+    lies inside another root.
+    """
+    target = Path(directory).expanduser()
+    path, document = _editable()
+    listed = [str(item) for item in document.get(k.SETTING_RESTRICTED_CACHES) or []]
+    if any(_same(item) == _same(target) for item in listed):
+        raise ConfigurationError(f"{target} is already a restricted cache in {path}.")
+    others = _other_roots(replace(_current_roots(), restricted=()), keep="")
+    for number, item in enumerate(listed, start=1):
+        others[f"restricted cache {number}"] = Path(item)
+    _overlapping(target, others)
+    document[k.SETTING_RESTRICTED_CACHES] = [*listed, str(target)]
+    _write(path, document)
+    return path
+
+
+def remove_restricted_cache(directory: str | Path) -> Path:
+    """Remove a restricted cache from the settings file's list."""
+    found = _existing()
+    listed = [
+        str(item)
+        for item in (found[1] if found else {}).get(k.SETTING_RESTRICTED_CACHES) or []
+    ]
+    kept = [item for item in listed if _same(item) != _same(directory)]
+    if found is None or len(kept) == len(listed):
+        where = found[0] if found else config_path()
+        shown = ", ".join(listed) or "none"
+        raise ConfigurationError(
+            f"{directory} is not a restricted cache in {where}; it lists {shown}."
+        )
+    path, document = found
+    if kept:
+        document[k.SETTING_RESTRICTED_CACHES] = kept
+    else:
+        del document[k.SETTING_RESTRICTED_CACHES]
+    _write(path, document)
+    return path
+
+
 # -- resolving each setting --------------------------------------------------------
 
 
@@ -330,18 +434,33 @@ def _optional_root(
     return _from_file(key, settings, origin)
 
 
+def _restricted(settings: dict, origin: dict[str, str]) -> tuple[tuple[Path, ...], str]:
+    """The restricted caches in order, and where the list came from.
+
+    ``$ETHOS_RESTRICTED_DIRS`` replaces the file's list; nothing is merged.
+    """
+    from_env = os.environ.get(RESTRICTED_ENV_VAR)
+    if from_env:
+        listed = [item for item in from_env.split(os.pathsep) if item.strip()]
+        source = f"${RESTRICTED_ENV_VAR}"
+    else:
+        listed = [str(item) for item in settings.get(k.SETTING_RESTRICTED_CACHES) or []]
+        source = origin.get(k.SETTING_RESTRICTED_CACHES, "")
+    if not listed:
+        return (), ""
+    return tuple(Path(item).expanduser() for item in listed), source
+
+
 def _roots(public, settings: dict, origin: dict[str, str]) -> Roots:
     public_path, public_source = _public(public, settings, origin)
-    restricted = _optional_root(
-        RESTRICTED_ENV_VAR, k.SETTING_RESTRICTED_CACHE, settings, origin
-    )
+    restricted, restricted_source = _restricted(settings, origin)
     staging = _optional_root(STAGING_ENV_VAR, k.SETTING_STAGING_CACHE, settings, origin)
     return Roots(
         public=public_path,
-        restricted=restricted[0] if restricted else None,
+        restricted=restricted,
         staging=staging[0] if staging else None,
         public_source=public_source,
-        restricted_source=restricted[1] if restricted else "",
+        restricted_source=restricted_source,
         staging_source=staging[1] if staging else "",
     )
 
@@ -379,36 +498,6 @@ def _publication_url(settings: dict, origin: dict[str, str]) -> tuple[str, str] 
     return None
 
 
-#: Strings a person plausibly types meaning yes.
-_TRUTHY = {"1", "true", "yes", "on"}
-_FALSY = {"0", "false", "no", "off"}
-
-
-def resolve_skip_unavailable(explicit: bool | None = None) -> tuple[bool, str]:
-    """Whether to carry on when licensed data cannot be reached here.
-
-    Off by default: a dataset quietly missing from a result is worse than a
-    command that stops and says so. Somebody who simply does not have access to
-    the licensed data -- most people, most of the time, away from the institute
-    cluster -- sets this once and stops being asked.
-    """
-    if explicit is not None:
-        return bool(explicit), "explicit argument"
-    from_env = os.environ.get(SKIP_UNAVAILABLE_ENV_VAR)
-    if from_env is not None:
-        lowered = from_env.strip().lower()
-        if lowered in _TRUTHY:
-            return True, f"${SKIP_UNAVAILABLE_ENV_VAR}"
-        if lowered in _FALSY:
-            return False, f"${SKIP_UNAVAILABLE_ENV_VAR}"
-        raise ConfigurationError(
-            f"${SKIP_UNAVAILABLE_ENV_VAR}={from_env!r} is not a yes/no value; "
-            f"use one of {', '.join(sorted(_TRUTHY | _FALSY))}"
-        )
-    settings, origin = load_config()
-    if SKIP_UNAVAILABLE_KEY in settings:
-        return bool(settings[SKIP_UNAVAILABLE_KEY]), origin[SKIP_UNAVAILABLE_KEY]
-    return False, "built-in default (stop rather than omit data)"
 
 
 def current_user() -> str:
@@ -507,7 +596,9 @@ class Settings:
                 "version": self.catalog_version,
             },
             "public_cache": cache(roots.public, roots.public_source),
-            "restricted_cache": cache(roots.restricted, roots.restricted_source),
+            "restricted_caches": [
+                cache(path, roots.restricted_source) for path in roots.restricted
+            ],
             "staging_cache": cache(roots.staging, roots.staging_source),
             "publication_url": None
             if self.publication_url is None
@@ -534,12 +625,27 @@ class Settings:
             rows.append(
                 ("catalogue", "not set: a collections file's pin, else the public one")
             )
-        for label, path, origin in (
-            ("public cache", roots.public, roots.public_source),
-            ("restricted cache", roots.restricted, roots.restricted_source),
-            ("staging cache", roots.staging, roots.staging_source),
-        ):
-            rows.append((label, f"{path}  ({source(origin)})" if path else "not set"))
+        rows.append(
+            ("public cache", f"{roots.public}  ({source(roots.public_source)})")
+        )
+        if not roots.restricted:
+            rows.append(("restricted caches", "none listed: public data only"))
+        for number, path in enumerate(roots.restricted, start=1):
+            rows.append(
+                (
+                    f"restricted cache {number}",
+                    f"{path}  ({source(roots.restricted_source)})",
+                )
+            )
+        staging = roots.staging
+        rows.append(
+            (
+                "staging cache",
+                f"{staging}  ({source(roots.staging_source)})"
+                if staging
+                else "not set",
+            )
+        )
         if self.publication_url is not None:
             rows.append(
                 (

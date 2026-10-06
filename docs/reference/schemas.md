@@ -504,8 +504,10 @@ the evidence. Hashes taken from the original stay an independent witness.
 
 ### Classification
 
-**`ethos:access`** — *string, one of `public`, `internal`, `restricted`; default
-`public`.* Who may read the bytes; picks the cache root.
+**`ethos:access`** — *string, one of `public`, `restricted`; default `public`.*
+Who may read the bytes; picks the cache root. Restricted data is licensed data,
+or data the institute holds without publishing it; its `ethos:restriction`
+says who may obtain it, and how.
 
 **`ethos:visibility`** — *string, one of `public`, `hidden`; default `public`.*
 Whether it appears in the published catalogue.
@@ -516,13 +518,6 @@ it can be hidden while colleagues use it daily. The one combination the build
 rejects is `access: public` with `visibility: hidden` — if the bytes are
 downloadable by anyone, list the dataset.
 
-!!! warning "Gap: `internal` is to be removed"
-    With [decision
-    0011](../explanation/architecture/decisions/0011-access-class-picks-the-root.md),
-    `ethos:access` is `public` or `restricted`. Data the institute holds
-    without publishing it is `restricted`, and its `ethos:restriction` says
-    who may obtain it, and how. To be implemented separately.
-
 **`ethos:embargo`** — *mapping `{until, reason, becomes}`; required when
 `visibility: hidden`.* `until` may be `"unspecified"`, but only with an explicit
 reason. Without this block a dataset stays hidden by accident forever. Stripped
@@ -532,31 +527,27 @@ else's business.
 **`ethos:restriction`** — *string; for `access: restricted`.* Why it is
 restricted, and how a user entitled to the data gets it.
 
-This is the one field here that a user actually sees. When a restricted dataset
-cannot be resolved because no restricted cache is configured, the error prints
-this note between the refusal and the instructions:
+This is the one field here that a user actually sees, with `homepage` and
+`ethos:contact`. When no listed restricted cache holds a readable entry for a
+restricted dataset, the error prints each of them that the descriptor records,
+then a reason when something other than a missing copy is wrong, then how to
+register a copy:
 
 ```
-dataset 'thewindpower-turbines' is restricted and is never downloaded.
-  <ethos:restriction goes here>
-No restricted cache is configured on this machine.
-
-If you have access to the licensed copy, say where it is:
-    ethos-data config set-restricted-cache ...
+error: the dataset 'thewindpower-turbines' is restricted.
+  Obtain it: <ethos:restriction goes here>
+  Homepage: <homepage>
+  Contact: <ethos:contact>
+  This account lists no restricted cache.
+  Once you have a copy you may use, register it:
+    ethos-data config add-restricted-cache DIR
+    ethos-data link thewindpower-turbines DIR
 ```
 
 So write it for the person who just hit the wall, not for the auditor: which
 licence forbids the mirror, and what they should do — buy a seat, ask a named
 colleague, point at an existing copy. A note that only says "restricted" tells
 them nothing they did not just learn from the line above it.
-
-!!! warning "Gap: the error is to say how to obtain and register a copy"
-    With [every input is
-    required](../explanation/architecture/decisions/0013-every-input-is-required.md),
-    the error names the dataset, says how to obtain it and how to register a
-    copy, wherever a restricted dataset cannot be read on this machine. It
-    prints no other part of the description and offers no
-    `--skip-unavailable`; `--meta` prints the full description. To be implemented separately.
 
 ### Inventory control
 

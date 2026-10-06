@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-from .access import cache_entries, chain_for
+from .access import cache_entries, chain_for, locate
 from .bundles import export_bundle, load_bundle
 from .catalogs import Catalog, catalog_for
 from .config import (
@@ -25,11 +25,12 @@ from .config import (
     DEFAULT_CATALOG,
     ENV_VAR,
     RESTRICTED_ENV_VAR,
-    SKIP_UNAVAILABLE_KEY,
     STAGING_ENV_VAR,
+    add_restricted_cache,
     config_path,
     read_settings,
-    resolve_skip_unavailable,
+    remove_restricted_cache,
+    set_cache,
     set_option,
     unset_option,
 )
@@ -104,7 +105,7 @@ def run_tool(
     run, and all a tool needs to offer its users a data command -- geokit's is
     a tool's, with its file and its name. The parser offers ``show``,
     ``fetch`` and ``verify`` for the file's collections and the ``bundle``,
-    ``staging`` and ``config`` groups. Access by catalogue key and shared cache
+    ``staging`` and ``config`` groups. Access by catalogue key and cache
     and catalogue maintenance belong to ``ethos-data``.
 
     The handle -- and with it the catalogue -- is built only when a command
@@ -199,7 +200,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "  ethos-data ls\n"
         "  ethos-data ls global-wind-atlas-v4\n"
         "  ethos-data fetch global-wind-atlas-v4\n"
-        "  ethos-data link --all --root /shared/ethos/public\n"
+        "  ethos-data link --all --root /shared/ethos/cache\n"
         "  ethos-data catalog --catalog-root /path/to/source build --check\n"
         "Use 'ethos-data COMMAND --help' for command options.",
     )
@@ -266,18 +267,17 @@ def _add_common_options(
         + (" and the collections file's pin" if tool_commands else ""),
     )
     parser.add_argument(
-        "--root", default=None, help="override the public cache directory"
+        "--root",
+        default=None,
+        help="override the public cache directory"
+        + (
+            ""
+            if tool_commands
+            else "; for link, unlink and materialize, the cache that holds the entry"
+        ),
     )
     if not tool_commands:
         return
-    parser.add_argument(
-        "--skip-unavailable",
-        action="store_true",
-        default=None,
-        help="carry on without data this machine has no access to "
-        "(licensed data you have no copy of), "
-        "listing what was left out instead of stopping",
-    )
     # Accepted here as well as after the subcommand: `--test fetch onshore_wind`
     # is what people type after reading "put global options first", and a bare
     # "unrecognized arguments: --test" would send them looking for a typo.
@@ -459,12 +459,7 @@ def _add_config_commands(sub) -> None:
         (
             "public-cache",
             k.SETTING_PUBLIC_CACHE,
-            "where public and internal data is read and downloaded",
-        ),
-        (
-            "restricted-cache",
-            k.SETTING_RESTRICTED_CACHE,
-            "where licensed data lives; never downloaded",
+            "where public data is read and downloaded",
         ),
         (
             "staging-cache",
@@ -480,13 +475,15 @@ def _add_config_commands(sub) -> None:
         )
         unsetter.set_defaults(option_key=key)
 
-    skipper = config_sub.add_parser(
-        "set-skip-unavailable",
-        help="carry on without licensed data this machine cannot reach (for people "
-        "not working on the institute cluster)",
+    adder = config_sub.add_parser(
+        "add-restricted-cache",
+        help="list a restricted cache, read in order after those already listed",
     )
-    skipper.add_argument("value", choices=("true", "false"))
-    config_sub.add_parser("unset-skip-unavailable", help="remove the setting again")
+    adder.add_argument("directory")
+    remover = config_sub.add_parser(
+        "remove-restricted-cache", help="remove a restricted cache from the list"
+    )
+    remover.add_argument("directory")
 
     puburl = config_sub.add_parser(
         "set-publication-url",
@@ -506,12 +503,13 @@ def _add_config_commands(sub) -> None:
 
 
 def _add_cache_commands(sub) -> None:
-    """Commands on the shared cache itself; ``ethos-data`` only."""
+    """Commands on the caches themselves; ``ethos-data`` only."""
     material = sub.add_parser(
         "materialize",
         help="copy catalogued files into the cache from a link or local source",
         description="Copy a complete dataset and verify it before replacing a cache link. "
-        "The original is kept. Explicit restricted datasets use the restricted root.",
+        "The original is kept. A named restricted dataset's copy goes into a listed "
+        "restricted cache.",
     )
     material.add_argument("datasets", nargs="*", help="dataset names (default: --all)")
     material.add_argument(
@@ -552,14 +550,13 @@ def _add_cache_commands(sub) -> None:
         "link",
         help="point cache entries at data already on this machine",
         description="Two modes, one command. Naming a dataset registers one "
-        "directory as that dataset's entry, in whichever cache its access class "
-        "belongs to -- so a restricted dataset deliberately named here lands in "
-        "the restricted cache, which is how an authorised installation is meant "
-        "to be recorded. --all instead builds the whole public namespace from a "
-        "source checkout, and never links a restricted or unlicensed dataset "
-        "into it, because a cache several people read must not hold licensed "
-        "bytes nobody reviewed. Neither mode ever replaces a real directory "
-        "with a link.",
+        "directory as that dataset's entry: in the cache the global --root names, "
+        "else a public dataset's in the public cache and a restricted dataset's in "
+        "the only listed restricted cache -- which is how an authorised "
+        "installation is registered. --all instead builds the whole public "
+        "namespace from a source checkout, in the public cache its --root names, "
+        "and never links a restricted or unlicensed dataset into it. Neither mode "
+        "ever replaces a real directory with a link.",
     )
     linker.add_argument("dataset", nargs="?", help="dataset name (omit with --all)")
     linker.add_argument(
@@ -582,8 +579,7 @@ def _add_cache_commands(sub) -> None:
         dest="cache_root",
         metavar="DIR",
         default=None,
-        help="with --all: the public cache directory to build "
-        "(default: the cache this machine is configured to read)",
+        help="with --all, and required by it: the public cache to build",
     )
     linker.add_argument(
         "--prune",
@@ -738,12 +734,14 @@ def _main(argv: list[str] | None = None) -> int:
     if args.command == "catalog":
         return _catalog_dispatch(args)
 
-    settings = read_settings(root=args.root, catalog=args.catalog)
-    if args.command == "materialize":
-        return _materialize_command(args, settings)
-    if args.command in ("link", "unlink"):
+    if args.command in ("materialize", "link", "unlink"):
+        # Here --root names the cache that holds the entry, not the public cache.
+        settings = read_settings(catalog=args.catalog)
+        if args.command == "materialize":
+            return _materialize_command(args, settings)
         return _link_command(args, settings)
 
+    settings = read_settings(root=args.root, catalog=args.catalog)
     roots = settings.roots
     catalog = _cache_catalog(settings).overlaid(roots)
     if args.command == "ls":
@@ -884,7 +882,7 @@ def _collection_fetch_command(args, loaded, roots) -> int:
     if args.paths:
         return _paths_command(args, loaded, roots)
 
-    report = plan(loaded.catalog, resources, roots, args.skip_unavailable)
+    report = plan(loaded.catalog, resources, roots)
     if args.plan:
         print(f"public cache:    {report['root']}")
         for origin, items in sorted(report["in_place_by_origin"].items()):
@@ -906,8 +904,10 @@ def _collection_fetch_command(args, loaded, roots) -> int:
             names = sorted({r.dataset for r in report["unavailable"]})
             print(
                 f"not available here: {len(report['unavailable']):>4} files            "
-                f"      ({', '.join(names)} -- left out)"
+                f"      ({', '.join(names)} -- a fetch stops here)"
             )
+            for name in names:
+                print(f"    {name}: {report['unavailable_reasons'][name]}")
         if report["unreadable"]:
             print(
                 f"\nMISSING from where they were expected ({len(report['unreadable'])}):"
@@ -916,47 +916,22 @@ def _collection_fetch_command(args, loaded, roots) -> int:
                 print(f"    ! {location.path}   [{location.origin}]")
         return 0
 
-    omitted = len(report["unavailable"])
-    if omitted:
-        names = sorted({r.dataset for r in report["unavailable"]})
-        print(
-            f"{label}: leaving out {omitted} file(s) from "
-            f"{', '.join(names)} -- not available on this machine.",
-            file=sys.stderr,
-        )
+    if report["unavailable"]:
+        # Every input is required: stop before anything is printed or fetched,
+        # with the refusal that says what the dataset is and how to get it.
+        locate(loaded.catalog, resources, roots)
     if not report["missing"]:
-        if omitted and omitted == len(resources):
-            print(
-                f"{label}: nothing to fetch -- none of its {omitted} file(s) is available "
-                f"on this machine."
-            )
-            return 0
         note = (
             f" ({len(report['in_place'])} used in place)" if report["in_place"] else ""
         )
-        print(
-            f"{label}: all {len(resources) - omitted} available files "
-            f"already present{note}"
-        )
-        loaded.fetch(
-            args.collection,
-            test=args.test,
-            root=roots,
-            progressbar=False,
-            skip_unavailable=args.skip_unavailable,
-        )
+        print(f"{label}: all {len(resources)} files already present{note}")
+        loaded.fetch(args.collection, test=args.test, root=roots, progressbar=False)
         return 0
     print(
         f"{label}: fetching {len(report['missing'])} of {len(resources)} files "
         f"({_human(report['bytes_to_download'])}) into {report['root']}"
     )
-    loaded.fetch(
-        args.collection,
-        test=args.test,
-        root=roots,
-        progressbar=True,
-        skip_unavailable=args.skip_unavailable,
-    )
+    loaded.fetch(args.collection, test=args.test, root=roots, progressbar=True)
     print("done.")
     return 0
 
@@ -975,17 +950,10 @@ def _paths_command(args, loaded, roots) -> int:
 
     Tab-separated so a shell can read it back -- `while IFS=$'\\t' read handle
     path` -- which is the whole point of naming inputs rather than files. Runs
-    on the collections file already loaded, so the catalogue is read once and
-    --skip-unavailable means what it means for `fetch`.
+    on the collections file already loaded, so the catalogue is read once.
     """
-    files = loaded.fetch(
-        args.collection,
-        test=args.test,
-        root=roots,
-        progressbar=True,
-        skip_unavailable=args.skip_unavailable,
-    )
-    if not files.named and not files.named.omitted:
+    files = loaded.fetch(args.collection, test=args.test, root=roots, progressbar=True)
+    if not files.named:
         raise CollectionError(
             f"collection {args.collection!r} declares no named paths -- nothing under 'paths:' "
             f"in its definition. `fetch {args.collection}` gets its files; ask the "
@@ -1019,7 +987,15 @@ def _ls_command(args, catalog: Catalog) -> int:
 
 
 def _verify_command(args, loaded, roots) -> int:
-    from .verify import OK, UNAVAILABLE, UNVERIFIABLE, repair, summarise, verify
+    from .verify import (
+        NOTE,
+        OK,
+        UNAVAILABLE,
+        UNVERIFIABLE,
+        repair,
+        summarise,
+        verify,
+    )
 
     if not args.collection and not args.all:
         args.all = True
@@ -1064,7 +1040,6 @@ def _verify_command(args, loaded, roots) -> int:
         ordered,
         roots,
         deep=args.deep,
-        skip_unavailable=args.skip_unavailable,
     )
     grouped = summarise(findings)
 
@@ -1082,8 +1057,9 @@ def _verify_command(args, loaded, roots) -> int:
     broken = [f for f in findings if not f.ok]
     unverifiable = [f for f in findings if f.status == UNVERIFIABLE]
     absent = [f for f in findings if f.status == UNAVAILABLE]
+    notes = [f for f in findings if f.status == NOTE]
     if not broken:
-        checked = len(findings) - len(unverifiable) - len(absent)
+        checked = len(findings) - len(unverifiable) - len(absent) - len(notes)
         print(f"\n{checked:,} file(s) match the catalogue.")
         if absent:
             names = sorted({f.resource.dataset for f in absent})
@@ -1129,11 +1105,6 @@ def _verify_command(args, loaded, roots) -> int:
         return 1
 
     outcome = repair(loaded.catalog, findings, roots, dry_run=args.dry_run)
-    if outcome["links_to_remove"]:
-        print("\nthese links will be removed so a download has somewhere to land")
-        print("(other people share this cache -- they will be re-fetching too):")
-        for link in outcome["links_to_remove"]:
-            print(f"    {link} -> {link.readlink()}")
     for key, why in sorted(outcome["skipped"].items()):
         print(f"  not repairable: {key}  ({why})")
     if args.dry_run:
@@ -1151,38 +1122,35 @@ def _cache_catalog(settings):
 
 
 def _link_all_command(args, roots) -> int:
-    """Every dataset in the checkout with a source_dir, into one named cache.
+    """Every public dataset in the checkout with a source_dir, into one named cache.
 
-    Which cache that is gets decided here and nowhere else. A top-level
-    ``--root``, ``$ETHOS_DATA_DIR`` and the configuration files are read once,
-    into ``roots``, and the planner is handed the answer rather than asked to
-    work it out again: two lookups in one process can disagree -- the
-    environment read at a different moment, or an override the second lookup
-    never sees -- and the failure that produces is a complete link tree built in
-    a directory nobody asked for, reported as a success. ``--root`` after
-    ``link`` overrules that, and is the only thing that does.
+    That cache is the one ``--root`` names, after ``link`` or before it, and
+    nothing else: a forgotten ``--root`` would otherwise build the whole link
+    tree in whatever public cache the account happens to read. A listed
+    restricted cache is refused, since the tree holds public data only.
     """
     from .maintain import namespace as namespace_module
     from .maintain import resolve_catalog_root
 
-    catalog_root = resolve_catalog_root(args.catalog_root)
-
-    # Decided only once there is a checkout to link from. A run that ends in
-    # "no catalogue here" has chosen nothing, and a line above that error
-    # naming a cache reads as a step that did succeed -- so the next thing
-    # anyone does is go looking in that directory for links this run never made.
-    if args.cache_root is None:
-        root = roots.public
-        # Names where this answer came from, not whether a flag was typed: a
-        # top-level ``ethos-data --root DIR link --all`` reaches here too, with
-        # that directory already resolved into ``roots``, and "no --root given"
-        # read as a denial of the flag the person had just used.
+    named = args.cache_root if args.cache_root is not None else args.root
+    if named is None:
         print(
-            f"no --root after `link`; using the public cache from {roots.public_source}"
+            "link --all needs --root: the public cache to build, for example\n"
+            "    ethos-data link --all --root /shared/ethos/cache --dry-run",
+            file=sys.stderr,
         )
-    else:
-        root = Path(args.cache_root).expanduser()
+        return 2
+    root = Path(named).expanduser()
+    if roots.restricted_cache(root) is not None:
+        print(
+            f"{root} is a restricted cache. link --all links public data only, into "
+            "a public cache; link a restricted dataset by name into the restricted "
+            "cache of its access combination.",
+            file=sys.stderr,
+        )
+        return 2
 
+    catalog_root = resolve_catalog_root(args.catalog_root)
     return namespace_module.run(
         catalog_root,
         root,
@@ -1217,9 +1185,8 @@ def _link_command(args, settings) -> int:
         if not args.dataset:
             print(
                 "name a dataset, or use --all:\n"
-                "    ethos-data link <dataset> [directory]\n"
-                "    ethos-data link --all\n"
-                "    ethos-data link --all --root DIR [--prune]",
+                "    ethos-data [--root CACHE] link <dataset> [directory]\n"
+                "    ethos-data link --all --root DIR [--prune] [--dry-run]",
                 file=sys.stderr,
             )
             return 2
@@ -1242,9 +1209,10 @@ def _link_command(args, settings) -> int:
             roots,
             force=args.force,
             catalog_root=args.catalog_root,
+            cache=args.root,
         )
     else:
-        report = unlink(catalog, args.dataset, roots)
+        report = unlink(catalog, args.dataset, roots, cache=args.root)
 
     # Flushed, because the warning below goes to stderr: unflushed, the two
     # streams arrive in the opposite order and the warning reads as being about
@@ -1281,16 +1249,24 @@ def _materialize_command(args, settings) -> int:
             )
             return 2
     elif args.all or not names:
-        if not roots.public.is_dir():
-            print(f"no public cache at {roots.public}")
+        # A public cache only: copying restricted bytes is something somebody
+        # names dataset by dataset.
+        walked = Path(args.root).expanduser() if args.root else roots.public
+        if roots.restricted_cache(walked) is not None:
+            print(
+                f"{walked} is a restricted cache; --all walks a public cache only. "
+                "Name each restricted dataset to copy.",
+                file=sys.stderr,
+            )
+            return 2
+        if not walked.is_dir():
+            print(f"no public cache at {walked}")
             return 1
         names = sorted(
-            name for name, path in cache_entries(roots.public) if path.is_symlink()
+            name for name, path in cache_entries(walked) if path.is_symlink()
         )
         if not names:
-            print(
-                f"no symbolic-link entries in {roots.public}; nothing to materialise."
-            )
+            print(f"no symbolic-link entries in {walked}; nothing to materialise.")
             return 0
 
     reports = materialize(
@@ -1302,6 +1278,7 @@ def _materialize_command(args, settings) -> int:
         dry_run=args.dry_run,
         source=args.source,
         catalog_root=args.catalog_root,
+        cache=args.root,
     )
     for report in reports:
         print(f"  {report}")
@@ -1373,9 +1350,11 @@ def _staging_command(args) -> int:
 
     print(f"staging root:     {root}")
     print(f"official caches:  {roots.public}")
-    print(
-        f"                  {roots.restricted or '(no restricted cache on this machine)'}\n"
-    )
+    for cache in roots.restricted:
+        print(f"                  {cache}")
+    if not roots.restricted:
+        print("                  (no restricted cache listed)")
+    print()
     if not entries:
         print(
             "  (nothing staged)"
@@ -1445,10 +1424,9 @@ def _resolve_catalog_location(location: str) -> str:
     return str(candidate)
 
 
-#: Each cache setting: how it is described, and its root in the snapshot.
+#: Each single-valued cache setting: how it is described, and its root in the snapshot.
 CACHE_KEYS = {
     k.SETTING_PUBLIC_CACHE: ("public cache", "public"),
-    k.SETTING_RESTRICTED_CACHE: ("restricted cache", "restricted"),
     k.SETTING_STAGING_CACHE: ("staging cache", "staging"),
 }
 
@@ -1472,9 +1450,26 @@ def _config_command(args) -> int:
 
     if command.startswith("set-") and getattr(args, "option_key", None) in CACHE_KEYS:
         key = args.option_key
-        path = set_option(key, str(Path(args.directory).expanduser()))
+        path = set_cache(key, args.directory)
         print(f"{key} written to {path}")
         print(f"resolved now: {_resolved_now(key)}")
+        return 0
+
+    if command == "add-restricted-cache":
+        path = add_restricted_cache(args.directory)
+        print(
+            f"{Path(args.directory).expanduser()} added to the restricted caches in {path}"
+        )
+        _print_restricted_caches(read_settings().roots)
+        return 0
+
+    if command == "remove-restricted-cache":
+        path = remove_restricted_cache(args.directory)
+        print(
+            f"{Path(args.directory).expanduser()} removed from the restricted caches "
+            f"in {path}"
+        )
+        _print_restricted_caches(read_settings().roots)
         return 0
 
     if command.startswith("unset-") and getattr(args, "option_key", None) in CACHE_KEYS:
@@ -1482,24 +1477,6 @@ def _config_command(args) -> int:
         path = unset_option(key)
         print(f"removed from {path}" if path else _nothing_set())
         print(f"resolved now: {_resolved_now(key)}")
-        return 0
-
-    if command == "set-skip-unavailable":
-        path = set_option(SKIP_UNAVAILABLE_KEY, args.value == "true")
-        wanted, _ = resolve_skip_unavailable()
-        print(f"{SKIP_UNAVAILABLE_KEY} written to {path}")
-        if wanted:
-            print(
-                "Licensed datasets this machine cannot reach will now be left out of "
-                "results and listed,\nrather than stopping the command."
-            )
-        else:
-            print("Commands will now stop when licensed data cannot be reached.")
-        return 0
-
-    if command == "unset-skip-unavailable":
-        path = unset_option(SKIP_UNAVAILABLE_KEY)
-        print(f"removed from {path}" if path else _nothing_set())
         return 0
 
     if command == "set-publication-url":
@@ -1601,6 +1578,16 @@ def _print_cache_top_level(root: Path) -> None:
         )
 
 
+def _print_restricted_caches(roots) -> None:
+    """The restricted caches the settings resolve to now, numbered in reading order."""
+    if not roots.restricted:
+        print("restricted caches now: none listed; this account reads public data only")
+        return
+    print(f"restricted caches now ({roots.restricted_source}):")
+    for number, cache in enumerate(roots.restricted, start=1):
+        print(f"  {number}. {cache}{_reachability(cache)}")
+
+
 def _config_show() -> int:
     """The settings in effect, where each came from, and whether each cache is there.
 
@@ -1616,15 +1603,9 @@ def _config_show() -> int:
         marker = ""
         if label == "public cache":
             marker = _reachability(roots.public, created_on_demand=True)
-        elif label == "restricted cache" and roots.restricted:
-            marker = _reachability(roots.restricted)
-        elif label == "restricted cache":
-            skipping = resolve_skip_unavailable()[0]
-            marker = (
-                " -- licensed datasets are left out of results and listed"
-                if skipping
-                else " -- licensed datasets will refuse to resolve"
-            )
+        elif label.startswith("restricted cache "):
+            number = int(label.rsplit(" ", 1)[1])
+            marker = _reachability(roots.restricted[number - 1])
         elif label == "staging cache" and roots.staging:
             marker = "   [ACTIVE -- shadows the catalogue]" + _reachability(
                 roots.staging
@@ -1632,12 +1613,6 @@ def _config_show() -> int:
         print(f"{label:<{width}}  {value}{marker}")
         if label == "catalogue" and settings.catalog is None:
             print(f"{'':<{width}}  public catalogue: {DEFAULT_CATALOG}")
-
-    skip, skip_source = resolve_skip_unavailable()
-    if skip:
-        print(f"\nunreachable data  left out and listed, not an error  ({skip_source})")
-    elif not roots.restricted:
-        print("\nunreachable data  stops the command (the default)")
 
     print("\nprecedence for each setting, first match wins:")
     print("  1. an explicit argument   --root / root=, --catalog / catalog=")
@@ -1671,7 +1646,10 @@ def _config_show() -> int:
 
     print("\nSet them with:")
     print("  ethos-data config set-public-cache     /path")
-    print("  ethos-data config set-restricted-cache /path")
+    print(
+        "  ethos-data config add-restricted-cache /path            # for each restricted"
+        " cache your groups admit"
+    )
     print(
         "  ethos-data config set-staging-cache    /path            # only while developing"
     )

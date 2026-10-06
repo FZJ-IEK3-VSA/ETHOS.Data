@@ -87,9 +87,8 @@ CATALOG_ROLE = "ethos:catalog_role"
 # -- closed vocabularies -----------------------------------------------------------
 
 PUBLIC = "public"
-INTERNAL = "internal"
 RESTRICTED = "restricted"
-ACCESS_CLASSES = (PUBLIC, INTERNAL, RESTRICTED)
+ACCESS_CLASSES = (PUBLIC, RESTRICTED)
 
 HIDDEN = "hidden"
 VISIBILITIES = (PUBLIC, HIDDEN)
@@ -142,7 +141,7 @@ HASH_CACHE_FILE = ".ethos-data-hash-cache.json"
 #: The settings file in the account's configuration directory.
 SETTINGS_FILE = "config.yaml"
 SETTING_PUBLIC_CACHE = "public_cache"
-SETTING_RESTRICTED_CACHE = "restricted_cache"
+SETTING_RESTRICTED_CACHES = "restricted_caches"
 SETTING_STAGING_CACHE = "staging_cache"
 SETTING_CATALOG = "catalog"
 SETTING_PUBLICATION_URL = "publication_url"

@@ -7,6 +7,8 @@ what it never touches. Run through a package's command, as the guide does.
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 import ethos_data
@@ -152,13 +154,84 @@ class TestRepair:
         restricted = tmp_path / "restricted"
         (restricted / "wind").mkdir(parents=True)
         (restricted / "wind" / "u.nc").write_bytes(b"uu")
-        monkeypatch.setenv("ETHOS_RESTRICTED_DIR", str(restricted))
+        monkeypatch.setenv("ETHOS_RESTRICTED_DIRS", str(restricted))
 
         assert verify(collections, "--deep", "--repair") == 1
 
         assert "restricted: never downloaded" in capsys.readouterr().out
         assert (restricted / "wind" / "u.nc").read_bytes() == b"uu"
         assert store.downloads() == []
+
+    def test_a_link_is_never_removed_or_replaced(self, reader, store, tmp_path, capsys):
+        """On the cluster every user reads the public cache; a link is the maintainers'."""
+        reader.dataset("wind", {"u.nc": "uuuu"}, where="store")
+        collections = reader.collections(WIND)
+        linked = tmp_path / "project" / "wind"
+        linked.mkdir(parents=True)
+        (linked / "u.nc").write_bytes(b"uu")
+        reader.cache.mkdir(parents=True, exist_ok=True)
+        (reader.cache / "wind").symlink_to(linked, target_is_directory=True)
+
+        assert verify(collections, "--deep", "--repair") == 1
+
+        assert "repair never changes a link" in capsys.readouterr().out
+        assert (reader.cache / "wind").is_symlink()
+        assert (linked / "u.nc").read_bytes() == b"uu"
+        assert store.downloads() == []
+
+    def test_a_broken_link_is_reported_naming_the_cache_and_left_alone(
+        self, reader, store, tmp_path, capsys
+    ):
+        reader.dataset("wind", {"u.nc": "uuuu"}, where="store")
+        collections = reader.collections(WIND)
+        reader.cache.mkdir(parents=True, exist_ok=True)
+        (reader.cache / "wind").symlink_to(tmp_path / "gone", target_is_directory=True)
+
+        assert verify(collections, "--repair") == 1
+
+        out = capsys.readouterr().out
+        assert f"in the public cache {reader.cache}" in out
+        assert "a broken link: repair never changes a link" in out
+        assert (reader.cache / "wind").is_symlink()
+        assert store.downloads() == []
+
+
+class TestNotesOnTheRestrictedCaches:
+    """What verify says about a cache rather than about the file it read."""
+
+    def test_an_entry_passed_over_in_an_earlier_cache_is_noted(
+        self, reader, tmp_path, monkeypatch, capsys
+    ):
+        reader.dataset("wind", {"u.nc": "uuuu"}, access="restricted", where="nowhere")
+        collections = reader.collections(WIND)
+        first, second = tmp_path / "group-a", tmp_path / "group-b"
+        first.mkdir()
+        (first / "wind").symlink_to(tmp_path / "moved", target_is_directory=True)
+        (second / "wind").mkdir(parents=True)
+        (second / "wind" / "u.nc").write_bytes(b"uuuu")
+        monkeypatch.setenv(
+            "ETHOS_RESTRICTED_DIRS", os.pathsep.join([str(first), str(second)])
+        )
+
+        assert verify(collections, "--deep") == 0, "a note is not a failure"
+
+        out = capsys.readouterr().out
+        assert "note: 1" in out
+        assert f"The entry in {first} is dangling" in out
+        assert "1 file(s) match the catalogue." in out
+
+    def test_a_public_datasets_entry_in_a_restricted_cache_is_noted(
+        self, wind, reader, tmp_path, monkeypatch, capsys
+    ):
+        restricted = tmp_path / "restricted"
+        (restricted / "wind").mkdir(parents=True)
+        monkeypatch.setenv("ETHOS_RESTRICTED_DIRS", str(restricted))
+
+        assert verify(wind) == 0
+
+        out = capsys.readouterr().out
+        assert "but the dataset is public" in out
+        assert f"ethos-data --root {restricted} unlink wind" in out
 
     def test_staged_data_is_left_alone(
         self, wind, reader, store, tmp_path, monkeypatch

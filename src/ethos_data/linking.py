@@ -1,28 +1,31 @@
 """Pointing one cache entry at data that is already on this machine.
 
-    ethos-data link global-wind-atlas /data/GWA_4.0   # this directory
-    ethos-data link global-wind-atlas                 # its source_dir
-    ethos-data link --all                             # every source_dir there is
+    ethos-data link global-wind-atlas /data/GWA_4.0      # this directory
+    ethos-data link global-wind-atlas                    # its source_dir
+    ethos-data --root /shared/ethos/restricted/g link gadm-3.6 /data/gadm
+    ethos-data link --all --root /shared/ethos/cache     # every source_dir there is
     ethos-data unlink global-wind-atlas
 
 This is the single-dataset mode of ``ethos-data link``; the other is ``--all``,
 which is a different job wearing the same name. ``--all`` builds a *shared*
 namespace from a source checkout: it takes the root to build explicitly, reviews
 the whole catalogue with ``--dry-run``, and prunes stale entries. Naming a
-dataset instead fills the cache this machine is configured to read, and reaches
-three things ``--all`` does not:
+dataset instead fills one cache entry, and reaches three things ``--all`` does
+not:
 
   * one dataset by name, rather than every one in the catalogue
   * a dataset that has been uploaded, so its descriptor has no ``source_dir``
     left, but whose bytes are sitting right here and need no downloading
   * a restricted dataset, which ``--all`` skips on purpose -- a shared
-    public namespace must never touch licensed data, but registering one
-    authorised installation by name is exactly how it is meant to be done
+    public namespace must never touch restricted data, but registering one
+    authorised installation by name, in the restricted cache of its access
+    combination, is exactly how it is meant to be done
 
-Until now the answer was "type ``ln -s`` yourself", which is advice that quietly
-does the wrong thing on Windows -- ``ln -s`` in Git Bash copies the whole tree
-instead of linking -- and which puts the entry at whatever path the person
-guessed rather than the one retrieval will look in.
+The entry goes where retrieval reads it: a public dataset's into the public
+cache, a restricted dataset's into a listed restricted cache, and into the
+cache the global ``--root`` names when one is named; see
+:func:`ethos_data.access.entry_for`. ``ln -s`` by hand puts it wherever the
+person guessed, and in Git Bash on Windows copies the whole tree instead.
 
 **The entry is a link, and that is the point.** A symbolic link is how the cache
 records "these bytes are borrowed": retrieval reads them in place, refuses to
@@ -208,6 +211,7 @@ def link(
     roots: Roots | None = None,
     force: bool = False,
     catalog_root: str | Path | None = None,
+    cache: str | Path | None = None,
 ) -> LinkReport:
     """Make this dataset's cache entry a symbolic link to ``directory``.
 
@@ -215,9 +219,11 @@ def link(
     dataset is used -- see :func:`source_dir_for`, which is also what decides
     where ``catalog_root`` is looked for.
 
-    The entry goes in whichever root the dataset's access class belongs to, so a
-    restricted dataset lands in the restricted cache or nowhere at all. That is
-    one thing naming a dataset does and ``ethos-data link --all`` does not:
+    ``cache`` is the cache that holds the entry, as the global ``--root`` names
+    it. Without it, a public dataset's entry goes into the public cache and a
+    restricted dataset's into the only listed restricted cache; a restricted
+    dataset lands in a listed restricted cache or nowhere at all. That is one
+    thing naming a dataset does and ``ethos-data link --all`` does not:
     ``--all`` skips restricted datasets, because building a shared public
     namespace must never touch them, while linking one deliberately by name is
     how an authorised installation gets registered.
@@ -228,7 +234,7 @@ def link(
     """
     roots = roots if roots is not None else catalog.settings.roots
     try:
-        entry = entry_for(catalog, roots, name)
+        entry = entry_for(catalog, roots, name, cache)
     except AccessError as error:
         raise LinkError(error.message) from None
 
@@ -270,16 +276,18 @@ def unlink(
     catalog: Catalog,
     name: str,
     roots: Roots | None = None,
+    cache: str | Path | None = None,
 ) -> LinkReport:
     """Remove this dataset's cache entry, if it is a link.
 
     The data it points at is never touched. A real directory is refused: it is
     the cache's own copy, and deleting somebody's downloaded or materialised
-    dataset is not something a command called ``unlink`` should do.
+    dataset is not something a command called ``unlink`` should do. ``cache``
+    names the cache as :func:`link` takes it.
     """
     roots = roots if roots is not None else catalog.settings.roots
     try:
-        entry = entry_for(catalog, roots, name)
+        entry = entry_for(catalog, roots, name, cache, removing=True)
     except AccessError as error:
         raise LinkError(error.message) from None
 

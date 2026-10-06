@@ -15,7 +15,7 @@ Put global options before the subcommand.
 | Option | Behaviour |
 | --- | --- |
 | `--catalog LOCATION` | Select a local `datacatalog.json` or an HTTP(S) URL for this invocation. |
-| `--root DIR` | Override the local public cache directory for this invocation. |
+| `--root DIR` | Override the public cache for this invocation; for `link`, `unlink` and `materialize`, name the cache that holds the entry. |
 | `-h`, `--help` | Show help without loading catalogue metadata. |
 
 The catalogue is chosen from `--catalog`, `ETHOS_DATA_CATALOG`, configuration,
@@ -23,12 +23,12 @@ then the built-in public catalogue. `ethos-data` does not read a collections
 file. A package command instead uses its own file's pin when no override is
 set; see [catalogue resolution](../configuration.md#catalogue-resolution).
 
-`--root` here names a local cache, and so does `--root` after `link --all`. They
-differ in reach: the global one changes the cache every command in this
-invocation uses, the one after `link` changes only the namespace that single run
-builds, and it wins where both are given. `catalog upload --root` is a third
-thing entirely — a publication folder on the remote. Use
-`ethos-data COMMAND --help` for command options.
+The global `--root` names the public cache for access by key, and for `link`,
+`unlink` and `materialize` the cache that holds the entry: a public cache, or a
+listed restricted cache. `link --all` builds the cache that `--root` after
+`link` names, or else the global one; the one after `link` wins where both are
+given. `catalog upload --root` is a third thing entirely — a publication folder
+on the remote. Use `ethos-data COMMAND --help` for command options.
 
 ## `ls [key]` {#ls-key}
 
@@ -56,8 +56,8 @@ ethos-data fetch reskit-test-data/era5
 
 Fetch a file, folder, dataset or dataset family and print its absolute local
 path. A shapefile brings its sidecars. Downloaded files are checked against
-catalogue hashes and reused when they match. Files resolved through local roots,
-cache links, staging or an authorised restricted installation are read in place.
+catalogue hashes and reused when they match. Files resolved through cache links,
+staging or an authorised restricted installation are read in place.
 Restricted data is never downloaded.
 
 The Python equivalent is [`Catalog.path`][ethos_data.catalogs.Catalog.path] on
@@ -69,7 +69,9 @@ pins, point `--catalog` at that pin, or use its collections handle's `.catalog`.
 `ethos-data config show` prints the settings file it read, the catalogue and
 cache settings, their origins, one level of public-cache entries and the
 [places a file is read from](../configuration.md#lookup-order) in order. It
-works offline and marks unreachable cache paths with the reason. It
+numbers the restricted caches in reading order and says when the account lists
+none, as a normal state. It works offline and marks unreachable cache paths with
+the reason. It
 reports the settings, not per-command overrides or a package's resolved
 catalogue pin.
 
@@ -78,7 +80,9 @@ Use `ethos-data ls` to see the catalogue selected for direct access, or
 
 The setters and unsetters write to the settings file in effect, the file
 `ETHOS_DATA_CONFIG` names or else the one in your account, and a setter creates
-it if need be. `unset-publication-url` returns downloads to the door the
+it if need be. `add-restricted-cache DIR` appends a restricted cache and refuses
+one already listed; `remove-restricted-cache DIR` removes one. A cache setter
+refuses a directory that is, contains or lies inside another root. `unset-publication-url` returns downloads to the door the
 catalogue names. Settings affect package wrappers too. The
 [configuration reference](../configuration.md) lists keys, commands, environment
 variables and precedence. For setup steps, see
@@ -90,15 +94,6 @@ variables and precedence. For setup steps, see
     [Check that a download works](../../how-to/data-users/set-up-your-machine.md#check-a-download).
     It is to be implemented separately.
 
-!!! warning "Gap: the restricted cache is to become a list"
-    With [one settings file per
-    account](../../explanation/architecture/decisions/0010-one-settings-file-per-account.md),
-    `config add-restricted-cache DIR` and `remove-restricted-cache DIR` take
-    the place of
-    `set-restricted-cache` and `unset-restricted-cache`. `config show`
-    numbers the restricted caches, marks one it cannot reach, and says when
-    the account lists none. To be implemented separately.
-
 ## `link [dataset] [directory]` {#link-dataset-directory}
 
 Point cache entries at data already on this machine — one dataset by name, or
@@ -108,16 +103,16 @@ every dataset the source catalogue describes.
 ethos-data link global-wind-atlas /data/GWA_4.0     # this directory
 ethos-data link global-wind-atlas                   # its source_dir
 ethos-data link global-wind-atlas --force           # repoint an existing link
-ethos-data link --all                               # every source_dir there is
-ethos-data link --all --root /shared/ethos/cache    # into a cache named here
-ethos-data link --all --prune --dry-run             # review a full rebuild first
+ethos-data --root /shared/ethos/restricted/<group> link gadm-3.6 /data/gadm
+ethos-data link --all --root /shared/ethos/cache    # every source_dir there is
+ethos-data link --all --root /shared/ethos/cache --prune --dry-run
 ```
 
 | Flag | | Mode |
 |---|---|---|
 | `--all` | link every dataset in the source catalogue that has a `source_dir` | selects catalogue mode |
 | `--force` | repoint an entry that is already a link | dataset only |
-| `--root DIR` | build the namespace in this directory instead of the public cache this machine reads | `--all` only |
+| `--root DIR` | the public cache to build; required | `--all` only |
 | `--prune` | the only flag that removes anything: links for names the catalogue no longer describes | `--all` only |
 | `--dry-run` | show what would change, write nothing | honoured only with `--all`; a single-dataset link is applied immediately |
 | `--catalog-root DIR` | catalogue checkout to read `source_dir` from (default: searched upward from the current directory) | both |
@@ -137,8 +132,12 @@ is not one is how a link gets created by somebody who meant to look first.
 Previewing belongs to `--all`, where the plan covers a whole catalogue and a
 mistaken `--root` is worth catching before it is built.
 
-Entries go in the root for each dataset's access class, so a restricted dataset
-lands in the restricted cache or is refused. The directory is recorded as given,
+The entry goes into the cache the global `--root` names. Without it, a public
+dataset's entry goes into the public cache and a restricted dataset's into the
+only listed restricted cache; with several listed, or none, the command refuses,
+naming the caches or `config add-restricted-cache DIR`. A restricted dataset's
+entry goes only into a listed restricted cache, and a public dataset's never into
+one. The directory is recorded as given,
 not resolved. A real directory in the cache is never replaced: that is data the
 cache owns. If the catalogue's first listed file is not under the directory, the
 link is still made and a warning names the file — the usual cause is naming a
@@ -158,34 +157,17 @@ cache entry hands it to everyone reading that cache. Record the terms, or use
 naming a dataset is deliberate: it leaves **restricted datasets out of the
 namespace it builds**. A namespace everybody sharing the machine reads must never
 hand out licensed bytes to a reader who was never granted them. Naming a
-restricted dataset explicitly does link it, into the restricted root — that is
-how one authorised installation gets registered, by somebody who knows it is
+restricted dataset explicitly does link it, into the restricted cache of its
+access combination — that is how one authorised installation gets registered, by somebody who knows it is
 authorised. The asymmetry is the design, not an oversight.
 
-Without `--root`, `--all` builds the namespace in the public cache the rest of
-this invocation is already using — the configured public cache, or the global
-`--root` when one was given — so the cache you inspect afterwards is the cache
-you just wrote to. The run names it before it writes: its opening lines report
-the root and the catalogue checkout, and `--dry-run` prints the same preamble
-while writing nothing. Read the destination there rather than from
-`ethos-data config show`, which reports the shared settings this machine is
-configured with and never sees a global `--root`. A namespace built in a
-directory nobody meant still reads as success from the terminal, so the line
-naming the root is the one worth checking. `--root` after `link` overrides all
-of this for this run alone, which is how a maintainer fills the cluster's
-public cache from a machine configured to read its own.
-
-!!! warning "Gap: where `link` puts an entry is to change"
-    With [decision
-    0016](../../explanation/architecture/decisions/0016-one-link-command-two-modes.md),
-    the global `--root` names the cache that `link`, `unlink` and
-    `materialize` write. A restricted dataset's entry goes only into a
-    restricted cache the settings list, and a public dataset's never into
-    one. Without `--root`, a public dataset's entry goes into the public
-    cache and a restricted dataset's into the only listed restricted cache;
-    with several listed, or none, the command refuses. `link --all` requires
-    its `--root`, links public data only, and refuses a listed restricted
-    cache. To be implemented separately.
+`--all` requires `--root`: the namespace goes only into a public cache somebody
+names, in practice the cluster's public cache, and a forgotten `--root` cannot
+build it in whatever cache the account happens to read. A listed restricted
+cache is refused as its root, and a restricted dataset is skipped with "link it
+by name into the restricted cache of its access combination". The run names
+the root before it writes: its opening lines report the root and the catalogue
+checkout, and `--dry-run` prints the same preamble while writing nothing.
 
 ### What `--prune` removes {#namespace-prune}
 
@@ -210,8 +192,11 @@ owns and could write downloads into it.
 
 ## `unlink <dataset>`
 
-Remove a cache entry that is a symbolic link. The data it points at is not
-touched. A real directory is refused — it holds the cache's own copy.
+Remove a cache entry that is a symbolic link, from the cache the global
+`--root` names, or else from where `link` puts it. The data it points at is not
+touched. A real directory is refused — it holds the cache's own copy. A public
+dataset's entry in a restricted cache, which `verify` reports, is removed with
+`ethos-data --root CACHE unlink NAME`.
 
 ## `materialize [datasets...]`
 
@@ -219,7 +204,7 @@ Replace symbolic-link cache entries with real, verified copies.
 
 | Flag | |
 |---|---|
-| `--all` | every entry in the public cache that is currently a link |
+| `--all` | every entry that is currently a link in the public cache, or in the public cache the global `--root` names |
 | `--dry-run` | show the cost, copy nothing |
 | `--force` | compatibility option; existing real directories are still skipped |
 | `--no-verify` | skip checksum verification of each copied file (not advised) |
@@ -227,8 +212,9 @@ Replace symbolic-link cache entries with real, verified copies.
 | `--catalog-root DIR` | catalogue checkout to read `source_dir` from, when there is no entry and no `--from` |
 
 Only files the catalogue describes are copied. Refuses if the copy would leave
-less than 2% of the filesystem free. Explicit dataset names use the root for
-their access class, including the restricted root. A local copy of licensed
+less than 2% of the filesystem free. A named dataset's copy goes where `link`
+puts its entry, a restricted dataset's into a listed restricted cache. A local
+copy of licensed
 files requires permission under that installation's terms and an appropriately
 protected destination; see [Materialize linked data](../../how-to/catalogue-maintainers/materialize-linked-data.md#materialize-copies).
 `--from` names one dataset (not `--all`) and also fills an entry that does not
@@ -236,7 +222,7 @@ exist yet, which is how a cache is seeded from bytes already on the machine
 instead of an upload and a download back. With no entry and no `--from`, the
 catalogue's `source_dir` is used. This also supports seeding an authorised
 restricted installation. It will not write over a real directory the cache owns,
-and `--all` still walks the public cache only. Provenance is written to
+and `--all` walks a public cache only. Provenance is written to
 `.ethos-data-materialized.json` in the new directory; `was_a_link_at` is null
 when no link was replaced.
 
@@ -283,7 +269,7 @@ other mode — `--root` or `--prune` beside a dataset name, `--force` beside
 
 `-c` / `--collections`, default collections-file discovery, and
 `config set-collections` / `unset-collections` have been removed from the CLI.
-`--test` and `--skip-unavailable` are package-wrapper options.
+`--test` is a package-wrapper option.
 Applications without a wrapper can still pass an explicit file to
 [`ethos_data.collections`][ethos_data.collections] in Python.
 

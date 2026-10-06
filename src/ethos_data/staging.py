@@ -318,16 +318,15 @@ def list_staged(root: str | Path | None = None) -> list[StagedDataset]:
 def _official_entry(roots: Roots, name: str) -> Path | None:
     """Where the official version of a dataset sits, if there is one.
 
-    Membership of the catalogue is decided from the two official roots rather
-    than from datacatalog.json, deliberately: this has to answer for a machine
+    Membership of the catalogue is decided from the official caches -- the
+    public cache and every listed restricted cache -- rather than from
+    datacatalog.json, deliberately: this has to answer for a machine
     that may have no catalogue loaded, and the caches are the thing that
     actually determines what a job can resolve. A dataset described in the
     catalogue but not yet linked into the public cache is, on this machine,
     exactly as unavailable as one nobody has described at all.
     """
-    for root in (roots.public, roots.restricted):
-        if root is None:
-            continue
+    for root in (roots.public, *roots.restricted):
         entry = root / name
         if entry.exists() or entry.is_symlink():
             return entry
@@ -486,8 +485,8 @@ def apply_staging(
             # ``warn`` exists to quieten.
             warnings.warn(
                 f"{name!r} is staged at {directory} but is a restricted dataset; "
-                f"the staging entry is IGNORED. Licensed data is only ever read from "
-                f"the restricted cache.",
+                f"the staging entry is IGNORED. Restricted data is only ever read "
+                f"from a restricted cache.",
                 UserWarning,
                 stacklevel=2,
             )

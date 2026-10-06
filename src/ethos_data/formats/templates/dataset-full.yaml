@@ -66,7 +66,7 @@ ethos:uploaded: false                          # dCache holds it; drop source_di
 ethos:frozen: false                            # inventory final; drop source_dir
 
 # ---- classification ----------------------------------------------------
-ethos:access: public                           # default: public | internal | restricted
+ethos:access: public                           # default: public | restricted
 ethos:visibility: public                       # default: public | hidden
 ethos:embargo:                                 # if visibility: hidden
   until: "2027-01-01"

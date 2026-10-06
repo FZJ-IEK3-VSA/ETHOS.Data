@@ -224,7 +224,7 @@ class TestMembersDifferInAccess:
                 {
                     "alpha": PUBLIC_MEMBER,
                     "beta": {
-                        "access": "internal",
+                        "access": "restricted",
                         "visibility": "hidden",
                         "extra": (
                             "ethos:license_status: unresolved\n"
@@ -240,7 +240,7 @@ class TestMembersDifferInAccess:
             index = json.loads((catalog / "datacatalog.json").read_text())
             rows = {entry["name"]: entry for entry in index["datasets"]}
             assert rows["family/alpha"]["ethos:access"] == "public"
-            assert rows["family/beta"]["ethos:access"] == "internal"
+            assert rows["family/beta"]["ethos:access"] == "restricted"
             # The namespace row classifies nothing -- it has no bytes.
             assert "ethos:access" not in rows["family"]
             assert rows["family"]["ethos:namespace"] is True
@@ -253,7 +253,7 @@ class TestMembersDifferInAccess:
                 {
                     "alpha": PUBLIC_MEMBER,
                     "beta": {
-                        "access": "internal",
+                        "access": "restricted",
                         "visibility": "hidden",
                         "extra": (
                             "ethos:license_status: unresolved\n"
