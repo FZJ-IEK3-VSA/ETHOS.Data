@@ -127,8 +127,8 @@ def preflight(
     if access == k.RESTRICTED:
         raise UploadError(
             f"{name} is restricted and must never be uploaded.\n"
-            "Restricted data stays where it is; users point at it with\n"
-            f"    ethos-data config set-root {name} /path/to/{name}"
+            "Restricted data stays where it is; register it in the restricted cache:\n"
+            f"    ethos-data link {name} /path/to/{name}"
         )
     if access == k.INTERNAL and not allow_internal:
         raise UploadError(

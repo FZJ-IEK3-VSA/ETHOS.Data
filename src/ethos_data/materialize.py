@@ -119,7 +119,7 @@ def plan_materialize(
     Note that this pulls the full inventory of every dataset named, including
     every shard of a sharded one -- that is what "how many bytes is this" costs.
     """
-    roots = Roots.coerce(roots)
+    roots = catalog._roots(roots)
     given = Path(source).expanduser() if source is not None else None
     reports = []
     for name in sorted(set(names)):
@@ -278,7 +278,7 @@ def materialize(
     target, and applies to every name given -- which is why the command line
     takes it with exactly one.
     """
-    roots = Roots.coerce(roots)
+    roots = catalog._roots(roots)
     planned = plan_materialize(
         catalog, names, roots, force=force, source=source, catalog_root=catalog_root
     )

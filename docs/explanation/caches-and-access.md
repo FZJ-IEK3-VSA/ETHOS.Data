@@ -90,10 +90,9 @@ downloaded:
 [One lookup chain](architecture/decisions/0012-one-lookup-chain.md) gives what
 each place considers and when it refuses.
 
-!!! warning "Gap: the code reads four places and knows three access classes"
-    The code reads a per-dataset root (`dataset_roots`) before everything
-    else, then staging, one restricted cache and the public cache. It has no
-    bundles in the chain, and `skip_unavailable` leaves an unreachable input
+!!! warning "Gap: the code reads three places and knows three access classes"
+    The code reads staging, one restricted cache and the public cache. It
+    has no bundles in the chain, and `skip_unavailable` leaves an unreachable input
     out. It also knows a third access class, `internal`, which it downloads
     like public data; in the target, that is restricted data that every member
     of the institute may read. On the cluster, its repair replaces a dataset's
@@ -151,10 +150,8 @@ same bytes either way.
 | data that is not catalogued yet | the [staging root](../how-to/package-maintainers/stage-development-data.md#stage-development-data) |
 | a link that is about to break | `ethos-data materialize` |
 
-!!! warning "Gap: a per-dataset root, and one restricted cache"
-    The code also reads a per-dataset root, set with
-    `ethos-data config set-root <dataset> <directory>`, before every cache.
-    Its one restricted cache is set with
+!!! warning "Gap: one restricted cache"
+    The code's one restricted cache is set with
     `ethos-data config set-restricted-cache <directory>`;
     `config add-restricted-cache` does not exist.
 

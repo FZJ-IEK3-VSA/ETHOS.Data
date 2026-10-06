@@ -194,11 +194,12 @@ def test_the_catalogue_variable_beats_a_config_file(monkeypatch):
         lambda: ({"catalog": "/from/config.json"}, {"catalog": "user config"}),
     )
     monkeypatch.setenv("ETHOS_DATA_CATALOG", "https://example.invalid/datacatalog.json")
-    assert config.resolve_catalog() == (
+    settings = config.read_settings()
+    assert (settings.catalog, settings.catalog_source) == (
         "https://example.invalid/datacatalog.json",
         "$ETHOS_DATA_CATALOG",
     )
-    assert config.resolve_catalog("explicit.json")[0] == "explicit.json"
+    assert config.read_settings(catalog="explicit.json").catalog == "explicit.json"
 
 
 # -- the collections handle: a tool's file -------------------------------------------------

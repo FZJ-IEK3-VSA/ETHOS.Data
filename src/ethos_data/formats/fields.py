@@ -11,14 +11,15 @@ Four properties, read by the code that would otherwise keep its own list:
                  ``dataset.yaml`` when it does not set the key itself
 
 They travel in the JSON Schema too, under ``x-ethos``, so a reader of a schema
-sees them where it sees the type.
+sees them where it sees the type. :func:`describe` words a validation error the
+same way for every format.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 PROPERTIES = ("published", "promoted", "user_facing", "inherited")
 
@@ -80,3 +81,23 @@ def keys_with(model: type[BaseModel], prop: str, value: bool = True) -> tuple[st
 def keys(model: type[BaseModel]) -> tuple[str, ...]:
     """Every key ``model`` declares, as written in a file."""
     return tuple(info.alias or name for name, info in model.model_fields.items())
+
+
+def describe(error: ValidationError) -> list[str]:
+    """One line per problem pydantic found, naming the key as written in the file."""
+    lines = []
+    for problem in error.errors():
+        where = _where(problem["loc"])
+        message = problem["msg"].removeprefix("Value error, ")
+        lines.append(f"{where}: {message}" if where else message)
+    return lines
+
+
+def _where(location: tuple) -> str:
+    parts: list[str] = []
+    for item in location:
+        if isinstance(item, int):
+            parts[-1:] = [f"{parts[-1]}[{item}]"] if parts else [f"[{item}]"]
+        else:
+            parts.append(str(item))
+    return ".".join(parts)

@@ -21,30 +21,16 @@ from .bundles import export_bundle, load_bundle
 from .catalogs import Catalog, load_catalog
 from .config import (
     CATALOG_ENV_VAR,
-    CATALOG_KEY,
     CONFIG_ENV_VAR,
     DEFAULT_CATALOG,
     ENV_VAR,
-    LEGACY_CACHE_KEY,
-    PUBLIC_CACHE_KEY,
-    PUBLICATION_URL_KEY,
-    RESTRICTED_CACHE_KEY,
     RESTRICTED_ENV_VAR,
     SKIP_UNAVAILABLE_KEY,
-    STAGING_CACHE_KEY,
     STAGING_ENV_VAR,
-    Resolved,
     config_path,
     read_settings,
-    resolve_catalog,
-    resolve_public_cache,
-    resolve_restricted_cache,
-    resolve_roots,
     resolve_skip_unavailable,
-    resolve_staging_cache,
-    set_dataset_root,
     set_option,
-    unset_dataset_root,
     unset_option,
 )
 from .errors import (
@@ -55,6 +41,7 @@ from .errors import (
     IncompleteCatalog,
     UnknownDataset,
 )
+from .formats import keys as k
 from .maintain.cli import add_catalog_parser
 from .maintain.cli import dispatch as _catalog_dispatch
 from .retrieval import plan
@@ -469,20 +456,19 @@ def _add_config_commands(sub) -> None:
     )
 
     for verb, key, blurb in (
-        ("cache", PUBLIC_CACHE_KEY, "the public cache (alias of set-public-cache)"),
         (
             "public-cache",
-            PUBLIC_CACHE_KEY,
+            k.SETTING_PUBLIC_CACHE,
             "where public and internal data is read and downloaded",
         ),
         (
             "restricted-cache",
-            RESTRICTED_CACHE_KEY,
+            k.SETTING_RESTRICTED_CACHE,
             "where licensed data lives; never downloaded",
         ),
         (
             "staging-cache",
-            STAGING_CACHE_KEY,
+            k.SETTING_STAGING_CACHE,
             "where work in progress lives; shadows the catalogue",
         ),
     ):
@@ -502,15 +488,6 @@ def _add_config_commands(sub) -> None:
     skipper.add_argument("value", choices=("true", "false"))
     config_sub.add_parser("unset-skip-unavailable", help="remove the setting again")
 
-    rooter = config_sub.add_parser(
-        "set-root", help="escape hatch: use one dataset from a local directory"
-    )
-    rooter.add_argument("dataset")
-    rooter.add_argument("directory")
-    unrooter = config_sub.add_parser(
-        "unset-root", help="stop using a local directory for a dataset"
-    )
-    unrooter.add_argument("dataset")
     puburl = config_sub.add_parser(
         "set-publication-url",
         help="fetch bytes from a different door (e.g. the high-throughput one for CI)",
@@ -703,21 +680,29 @@ class _ToolSource:
     def file(self, args) -> str:
         return str(self.file_path)
 
-    def load(self, args, roots) -> Collections:
-        if args.catalog:
-            return load_collections(
-                self.file_path, catalog=args.catalog, roots=roots, tool=self.tool
-            )
-        if self._loaded is None:
-            from . import collections
+    def load(self, args) -> Collections:
+        """The handle this command uses, its settings read once.
 
-            self._loaded = collections(
-                self.file_path, tool=self.tool, catalog=self.catalog
-            )
-        return self._loaded
+        ``--catalog`` and ``--root`` go into the one snapshot together. A handle
+        that already exists is reused when neither is given.
+        """
+        overridden = args.catalog is not None or args.root is not None
+        if self._loaded is not None and not overridden:
+            return self._loaded
+        settings = read_settings(root=args.root, catalog=args.catalog or self.catalog)
+        loaded = load_collections(
+            self.file_path,
+            catalog=settings.catalog,
+            roots=settings.roots,
+            tool=self.tool,
+            settings=settings,
+        )
+        if not overridden:
+            self._loaded = loaded
+        return loaded
 
     def catalog_override(self, args) -> str:
-        return args.catalog or self.catalog or self.load(args, None).catalog.location
+        return args.catalog or self.catalog or self.load(args).catalog.location
 
 
 def _bundle_command(args, source) -> int:
@@ -757,13 +742,14 @@ def _main(argv: list[str] | None = None) -> int:
     if args.command == "catalog":
         return _catalog_dispatch(args)
 
-    roots = resolve_roots(args.root)
+    settings = read_settings(root=args.root, catalog=args.catalog)
     if args.command == "materialize":
-        return _materialize_command(args, roots)
+        return _materialize_command(args, settings)
     if args.command in ("link", "unlink"):
-        return _link_command(args, roots)
+        return _link_command(args, settings)
 
-    catalog = _cache_catalog(args).overlaid(roots)
+    roots = settings.roots
+    catalog = _cache_catalog(settings).overlaid(roots)
     if args.command == "ls":
         return _ls_command(args, catalog)
     return _path_command(args, catalog, roots)
@@ -778,12 +764,12 @@ def _dispatch(args, source) -> int:
     if args.command == "staging":
         return _staging_command(args)
 
-    roots = resolve_roots(args.root)
     # --test may sit before or after the subcommand; commands without the flag
     # (config, staging, ...) simply ignore it.
     args.test = bool(getattr(args, "test", False) or args.test_global)
 
-    loaded = source.load(args, roots)
+    loaded = source.load(args)
+    roots = loaded.settings.roots
     if args.command == "show":
         return _show_command(args, loaded, roots)
     if args.command == "verify":
@@ -1163,12 +1149,16 @@ def _verify_command(args, loaded, roots) -> int:
     return 0 if not outcome["skipped"] else 1
 
 
-def _cache_catalog(args):
-    """The explicit or configured catalogue, with the public default as fallback."""
-    resolved_catalog = resolve_catalog(args.catalog)
-    if resolved_catalog:
-        return load_catalog(resolved_catalog[0])
-    return load_catalog(DEFAULT_CATALOG)
+def _cache_catalog(settings):
+    """The snapshot's catalogue, with the public default as fallback."""
+    location = settings.catalog or DEFAULT_CATALOG
+    loaded = load_catalog(location)
+    loaded._settings = settings.with_catalog(
+        location,
+        settings.catalog_source or "built-in public catalogue",
+        loaded.version,
+    )
+    return loaded
 
 
 def _link_all_command(args, roots) -> int:
@@ -1212,8 +1202,10 @@ def _link_all_command(args, roots) -> int:
     )
 
 
-def _link_command(args, roots) -> int:
+def _link_command(args, settings) -> int:
     from .linking import link, unlink
+
+    roots = settings.roots
 
     if args.command == "link":
         if args.all:
@@ -1252,7 +1244,7 @@ def _link_command(args, roots) -> int:
             )
             return 2
 
-    catalog = _cache_catalog(args)
+    catalog = _cache_catalog(settings)
     if args.command == "link":
         report = link(
             catalog,
@@ -1281,10 +1273,11 @@ def _link_command(args, roots) -> int:
     return 0
 
 
-def _materialize_command(args, roots) -> int:
+def _materialize_command(args, settings) -> int:
     from .materialize import materialize
 
-    catalog = _cache_catalog(args)
+    roots = settings.roots
+    catalog = _cache_catalog(settings)
 
     names = list(args.datasets)
     if args.source is not None:
@@ -1352,8 +1345,15 @@ def _materialize_command(args, roots) -> int:
 def _staging_command(args) -> int:
     from . import staging
 
+    roots = read_settings().roots
     if args.staging_command == "add":
-        staged = staging.add(args.name, args.directory, note=args.note, copy=args.copy)
+        staged = staging.add(
+            args.name,
+            args.directory,
+            note=args.note,
+            root=roots.staging,
+            copy=args.copy,
+        )
         # For a copy the entry *is* the data, so staged.target resolves to the
         # entry itself; the source is only interesting as provenance.
         source = Path(args.directory).expanduser().resolve()
@@ -1368,17 +1368,16 @@ def _staging_command(args) -> int:
         return 0
 
     if args.staging_command == "remove":
-        entry = staging.remove(args.name, force=args.force)
+        entry = staging.remove(args.name, root=roots.staging, force=args.force)
         print(f"unstaged {args.name!r} ({entry}).")
         return 0
 
-    root = staging.staging_root()
+    root = roots.staging
     if root is None:
         print("no staging root configured.")
         print(f"    {args.prog} config set-staging-cache /path/to/ethos_data_staging")
         return 0
 
-    roots = resolve_roots()
     entries = staging.classify_staged(roots)
     if args.new_only:
         entries = [e for e in entries if e.is_new]
@@ -1457,11 +1456,11 @@ def _resolve_catalog_location(location: str) -> str:
     return str(candidate)
 
 
-#: How each cache setting is described when it is written or shown.
+#: Each cache setting: how it is described, and its root in the snapshot.
 CACHE_KEYS = {
-    PUBLIC_CACHE_KEY: ("public cache", resolve_public_cache),
-    RESTRICTED_CACHE_KEY: ("restricted cache", resolve_restricted_cache),
-    STAGING_CACHE_KEY: ("staging cache", resolve_staging_cache),
+    k.SETTING_PUBLIC_CACHE: ("public cache", "public"),
+    k.SETTING_RESTRICTED_CACHE: ("restricted cache", "restricted"),
+    k.SETTING_STAGING_CACHE: ("staging cache", "staging"),
 }
 
 
@@ -1469,28 +1468,31 @@ def _nothing_set() -> str:
     return f"nothing set in {config_path()}"
 
 
+def _resolved_now(key: str) -> str:
+    """The root a cache setting decides, as the settings resolve it now."""
+    roots = read_settings().roots
+    attribute = CACHE_KEYS[key][1]
+    path = getattr(roots, attribute)
+    if path is None:
+        return "(not set)"
+    return f"{path}  (from {getattr(roots, f'{attribute}_source')})"
+
+
 def _config_command(args) -> int:
     command = args.config_command
 
     if command.startswith("set-") and getattr(args, "option_key", None) in CACHE_KEYS:
         key = args.option_key
-        label, resolver = CACHE_KEYS[key]
         path = set_option(key, str(Path(args.directory).expanduser()))
         print(f"{key} written to {path}")
-        print(f"resolved now: {resolver()}")
+        print(f"resolved now: {_resolved_now(key)}")
         return 0
 
     if command.startswith("unset-") and getattr(args, "option_key", None) in CACHE_KEYS:
         key = args.option_key
-        label, resolver = CACHE_KEYS[key]
         path = unset_option(key)
         print(f"removed from {path}" if path else _nothing_set())
-        if key == PUBLIC_CACHE_KEY:
-            # The older name lives in the same file and would still win.
-            legacy = unset_option(LEGACY_CACHE_KEY)
-            if legacy:
-                print(f"also removed the older {LEGACY_CACHE_KEY} key from {legacy}")
-        print(f"resolved now: {resolver() or '(not set)'}")
+        print(f"resolved now: {_resolved_now(key)}")
         return 0
 
     if command == "set-skip-unavailable":
@@ -1512,21 +1514,21 @@ def _config_command(args) -> int:
         return 0
 
     if command == "set-publication-url":
-        path = set_option(PUBLICATION_URL_KEY, args.url)
-        print(f"{PUBLICATION_URL_KEY} written to {path}")
+        path = set_option(k.SETTING_PUBLICATION_URL, args.url)
+        print(f"{k.SETTING_PUBLICATION_URL} written to {path}")
         print(f"bytes will now be fetched from {args.url}")
         return 0
 
     if command == "unset-publication-url":
-        path = unset_option(PUBLICATION_URL_KEY)
+        path = unset_option(k.SETTING_PUBLICATION_URL)
         print(f"removed from {path}" if path else _nothing_set())
         return 0
 
     if command == "set-catalog":
         location = _resolve_catalog_location(args.location)
-        path = set_option(CATALOG_KEY, location)
+        path = set_option(k.SETTING_CATALOG, location)
         print(f"catalog written to {path}")
-        print(f"resolved now: {resolve_catalog()[0]}")
+        print(f"resolved now: {read_settings().catalog}")
         print(
             "Package data commands keep their own collections and use this catalogue "
             "instead of their pin, unless a package-specific override is set."
@@ -1534,26 +1536,8 @@ def _config_command(args) -> int:
         return 0
 
     if command == "unset-catalog":
-        path = unset_option(CATALOG_KEY)
+        path = unset_option(k.SETTING_CATALOG)
         print(f"removed from {path}" if path else _nothing_set())
-        return 0
-
-    if command == "set-root":
-        path = set_dataset_root(args.dataset, args.directory)
-        print(f"dataset_roots[{args.dataset}] written to {path}")
-        print(
-            f"{args.dataset!r} will now be read from "
-            f"{Path(args.directory).expanduser()} and never downloaded"
-        )
-        return 0
-
-    if command == "unset-root":
-        path = unset_dataset_root(args.dataset)
-        print(
-            f"removed from {path}"
-            if path
-            else f"no root set for {args.dataset!r} in {config_path()}"
-        )
         return 0
 
     return _config_show()
@@ -1579,9 +1563,9 @@ def _unreachable(path: Path) -> str | None:
     return None if stat.S_ISDIR(info.st_mode) else "is not a directory"
 
 
-def _reachability(resolved, *, created_on_demand: bool = False) -> str:
+def _reachability(path: Path, *, created_on_demand: bool = False) -> str:
     """The ``[...]`` marker printed after a cache path; empty when all is well."""
-    reason = _unreachable(resolved.value)
+    reason = _unreachable(path)
     if reason is None:
         return ""
     if created_on_demand and reason == "does not exist":
@@ -1633,19 +1617,18 @@ def _config_show() -> int:
 
     The snapshot every handle takes, printed as a handle would print it, with
     what only a person looking needs on top: whether each cache can be reached,
-    the dataset roots that are gone, the precedence, and one listing of the
-    public cache.
+    the precedence, and one listing of the public cache.
     """
     settings = read_settings()
     roots = settings.roots
-    rows = [row for row in settings.rows() if row[0] != "dataset root"]
+    rows = settings.rows()
     width = max(len(label) for label, _ in rows)
     for label, value in rows:
         marker = ""
         if label == "public cache":
-            marker = _reachability(Resolved(roots.public, ""), created_on_demand=True)
+            marker = _reachability(roots.public, created_on_demand=True)
         elif label == "restricted cache" and roots.restricted:
-            marker = _reachability(Resolved(roots.restricted, ""))
+            marker = _reachability(roots.restricted)
         elif label == "restricted cache":
             skipping = resolve_skip_unavailable()[0]
             marker = (
@@ -1655,7 +1638,7 @@ def _config_show() -> int:
             )
         elif label == "staging cache" and roots.staging:
             marker = "   [ACTIVE -- shadows the catalogue]" + _reachability(
-                Resolved(roots.staging, "")
+                roots.staging
             )
         print(f"{label:<{width}}  {value}{marker}")
         if label == "catalogue" and settings.catalog is None:
@@ -1666,15 +1649,6 @@ def _config_show() -> int:
         print(f"\nunreachable data  left out and listed, not an error  ({skip_source})")
     elif not roots.restricted:
         print("\nunreachable data  stops the command (the default)")
-
-    if roots.datasets:
-        print(
-            "\nescape hatch -- datasets read from a per-dataset root (never downloaded):"
-        )
-        for name, where in sorted(roots.datasets.items()):
-            reason = _unreachable(Path(where))
-            marker = f"   [MISSING -- {reason}]" if reason else ""
-            print(f"  {name:<28} {where}{marker}")
 
     print("\nprecedence for each setting, first match wins:")
     print("  1. an explicit argument   --root / root=, --catalog / catalog=")

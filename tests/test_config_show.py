@@ -139,24 +139,6 @@ class TestAnUnreachableCacheSaysWhy:
         out = show(capsys)
         assert "[NOT REACHABLE -- is not a directory]" in out
 
-    def test_a_per_dataset_root_that_is_gone(
-        self, public, monkeypatch, tmp_path, capsys
-    ):
-        gone = tmp_path / "gone"
-        monkeypatch.setattr(
-            config,
-            "load_config",
-            lambda: (
-                {"dataset_roots": {"era5": str(gone)}},
-                {
-                    "dataset_roots": "user config x",
-                    "dataset_roots.era5": "user config x",
-                },
-            ),
-        )
-        out = show(capsys)
-        assert f"  {'era5':<28} {gone}   [MISSING -- does not exist]" in out
-
     @pytest.mark.skipif(os.name != "nt", reason="drive letters are a Windows concept")
     def test_a_disconnected_drive_is_named(self):
         """The case that started this: a Samba drive that had dropped its connection."""

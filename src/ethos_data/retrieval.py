@@ -37,7 +37,7 @@ from .access import (
     unavailable,
 )
 from .catalogs import Catalog
-from .config import ENV_VAR, Roots, resolve_public_cache
+from .config import ENV_VAR, Roots, read_settings
 from .errors import AccessError
 from .formats import keys as k
 from .model.resource import Resource
@@ -137,7 +137,7 @@ def cache_dir(explicit: str | Path | None = None) -> Path:
     file, then the per-user cache directory.
     See :mod:`ethos_data.config` for the full precedence and the reasoning.
     """
-    return resolve_public_cache(explicit).value
+    return read_settings(root=explicit).roots.public
 
 
 def local_path(resource: Resource, root: Path | None = None) -> Path:
@@ -151,7 +151,7 @@ def plan(
     skip_unavailable: bool | None = None,
 ) -> dict:
     """Report what a fetch would do, without touching the network."""
-    roots = Roots.coerce(roots)
+    roots = catalog._roots(roots)
     locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)
 
     present, missing, in_place = [], [], []
@@ -196,11 +196,11 @@ def download(
     """Make every resource available locally and return where each one is.
 
     Resources resolved in place -- a link in the public cache, the restricted
-    cache, a staging entry, or a configured root -- are used where they lie and
-    never copied; the rest are downloaded into the public cache, skipping
-    anything already present and hash-verified.
+    cache or a staging entry -- are used where they lie and never copied; the
+    rest are downloaded into the public cache, skipping anything already
+    present and hash-verified.
     """
-    roots = Roots.coerce(root)
+    roots = catalog._roots(root)
     _warn_about_licensing(catalog, resources)
 
     locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)

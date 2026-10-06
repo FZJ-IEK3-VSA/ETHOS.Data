@@ -36,6 +36,7 @@ import pytest
 import yaml
 
 from ethos_data import cli, config
+from ethos_data.formats import keys as k
 from ethos_data.maintain.manifest import render_dataset, write_dataset
 from ethos_data.maintain.manifest import run as build_run
 from ethos_data.maintain.publish import render
@@ -216,12 +217,12 @@ class TestConfiguration:
         monkeypatch.setenv(config.CONFIG_ENV_VAR, str(written))
 
         value = str(tmp_path / f"caches-{UMLAUT}")
-        config.set_option(config.PUBLIC_CACHE_KEY, value)
+        config.set_option(k.SETTING_PUBLIC_CACHE, value)
 
         raw = written.read_bytes()
         assert b"\r" not in raw
-        assert yaml.safe_load(raw.decode("utf-8"))[config.PUBLIC_CACHE_KEY] == value
-        assert config.resolve_public_cache().value == Path(value)
+        assert yaml.safe_load(raw.decode("utf-8"))[k.SETTING_PUBLIC_CACHE] == value
+        assert config.read_settings().roots.public == Path(value)
 
 
 if __name__ == "__main__":

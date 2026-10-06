@@ -136,3 +136,13 @@ MATERIALIZED_RECORD_FILE = ".ethos-data-materialized.json"
 #: Beside a dataset's datapackage.json in a source checkout: the build's
 #: hashes by size and mtime. Private, never published.
 HASH_CACHE_FILE = ".ethos-data-hash-cache.json"
+
+# -- the settings file -------------------------------------------------------------
+
+#: The settings file in the account's configuration directory.
+SETTINGS_FILE = "config.yaml"
+SETTING_PUBLIC_CACHE = "public_cache"
+SETTING_RESTRICTED_CACHE = "restricted_cache"
+SETTING_STAGING_CACHE = "staging_cache"
+SETTING_CATALOG = "catalog"
+SETTING_PUBLICATION_URL = "publication_url"

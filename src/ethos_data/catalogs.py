@@ -87,10 +87,11 @@ def _pinned(url: str) -> bool:
 def _cache_path(url: str) -> Path:
     # Imported here: config pulls in platformdirs, and catalog.py is imported by
     # tooling that only wants the dataclasses.
-    from .config import resolve_cache_dir
+    from .config import read_settings
 
     folder = digest.of_bytes(url.encode())[:16]
-    return resolve_cache_dir().value / ".catalog" / folder / url.rsplit("/", 1)[-1]
+    public = read_settings().roots.public
+    return public / ".catalog" / folder / url.rsplit("/", 1)[-1]
 
 
 def _read(location: str) -> tuple[str, str]:

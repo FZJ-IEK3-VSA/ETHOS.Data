@@ -8,23 +8,14 @@ ethos-data config show
 ```
 
 which prints the settings file it read, the resolved values and the provenance
-of each, and any settings file of an earlier release that it now ignores. A
-cache path this machine cannot reach, such as a network drive that is not
-connected, is marked `NOT REACHABLE` with the reason.
+of each. A cache path this machine cannot reach, such as a network drive that is
+not connected, is marked `NOT REACHABLE` with the reason.
 
 !!! warning "Gap: `skip_unavailable` is to be removed"
     With [every input is
     required](../explanation/architecture/decisions/0013-every-input-is-required.md),
     the `skip_unavailable` key, `config set-skip-unavailable`,
     `unset-skip-unavailable` and `ETHOS_SKIP_UNAVAILABLE` go. To be
-    implemented separately.
-
-!!! warning "Gap: `dataset_roots` is to be removed"
-    With [one settings file per
-    account](../explanation/architecture/decisions/0010-one-settings-file-per-account.md),
-    the `dataset_roots` key, `config set-root` and `unset-root` go. A local
-    copy of a dataset is linked into a cache with `ethos-data link NAME DIR`,
-    or copied into one with `ethos-data materialize NAME --from DIR`. To be
     implemented separately.
 
 !!! warning "Gap: the restricted cache is to become a list"
@@ -71,28 +62,17 @@ file.
 The `config` setters and unsetters write to the settings file in effect and
 create it if need be. Unsetting the last value leaves the file in place, empty.
 
-Earlier releases also read an `ethos-data.yaml` found by searching upward from
-the working directory, `<sys.prefix>/etc/ethos-data/config.yaml` and a
-machine-wide file. They are ignored now, and `config show` names each one it
-finds.
-
-On Windows the file and the default cache moved out of
-`%LOCALAPPDATA%\ethos-data\ethos-data\`. For one release, the file at the old
-location is still read while there is none at the new one, with a warning that
-names the new location, and the first setter writes it there. The old default
-cache is used while the new one does not exist, and `config show` says where to
-move it.
+The file is checked against its specification, `ethos_data.formats.SettingsFile`,
+when it is read, and every problem is reported at once, naming the key.
 
 ## Keys
 
 | Key | Set with | |
 |---|---|---|
 | `public_cache` | `config set-public-cache` | public and internal data: read from, and downloaded into |
-| `cache_dir` | Legacy read fallback | Older spelling of `public_cache`; `config set-cache` now writes `public_cache`. |
 | `restricted_cache` | `config set-restricted-cache` | licensed data; retrieval only reads it in place |
 | `staging_cache` | `config set-staging-cache` | work in progress that shadows the catalogue |
 | `skip_unavailable` | `config set-skip-unavailable` | `true` to carry on without data this machine cannot reach |
-| `dataset_roots` | `config set-root <dataset> <dir>` | a mapping of dataset name to directory |
 | `catalog` | `config set-catalog` | the catalogue to use instead of a collections file's pin or the built-in public catalogue |
 | `publication_url` | `config set-publication-url` | fetch bytes from a different door than the catalogue declares |
 
@@ -102,8 +82,6 @@ A settings file for a shared machine:
 public_cache: /shared/ethos/cache
 restricted_cache: /shared/ethos/restricted
 catalog: /shared/ethos/catalogue/datacatalog.json
-dataset_roots:
-  submarine-cables: /benchtop/shared_data/SubmarineCables
 ```
 
 ## Environment variables
@@ -119,9 +97,6 @@ dataset_roots:
 | `ETHOS_CATALOG_NO_CACHE` | if set, a fetched catalogue descriptor is never cached on disk |
 | `ETHOS_PUBLICATION_URL` | `publication_url` |
 
-`ETHOS_DATA_DIR` is named for the era when there was only one root. It is kept
-under that name because it is in scripts, job files and people's shell profiles.
-
 ## Settings of a handle {#handle-settings}
 
 A handle reads every setting once, when it is built, and uses that snapshot for
@@ -136,7 +111,7 @@ print(data.settings)
 ```text
 settings file      /home/me/.config/ethos-data/config.yaml  (your account)
 catalogue          https://.../datacatalog.json  (the pin in collections.yaml)
-catalogue version  v2026.09.2
+catalogue version  v1.2.0
 public cache       /home/me/.cache/ethos-data  (built-in default, the per-user cache directory)
 restricted cache   not set
 staging cache      not set
@@ -211,17 +186,16 @@ Prefix these with `ethos-data` or a package wrapper such as `<your-tool>-data`.
 | Command | Value |
 | --- | --- |
 | `config show` | Display the settings in effect without network access. |
-| `config set-public-cache DIR`, `set-cache DIR` | Public cache; the second spelling is an alias. |
+| `config set-public-cache DIR` | Public cache. |
 | `config set-restricted-cache DIR` | Authorised restricted installation. |
 | `config set-staging-cache DIR` | Shared development overlay. |
 | `config set-catalog LOCATION` | Catalogue index path or URL. |
-| `config set-root DATASET DIR` | One dataset's existing directory. |
 | `config set-skip-unavailable true\|false` | Whether collection results may omit inaccessible inputs. |
 | `config set-publication-url URL` | Override the dataset download base URL. |
 
 Every setter writes to the settings file in effect. Remove a setting with the
-matching `unset-*` command; `unset-root` takes the dataset name. Unsetting
-configuration does not move or delete data.
+matching `unset-*` command. Unsetting configuration does not move or delete
+data.
 
 `config show` reports the settings, not a package's pin, a package-specific
 environment override, or per-command options. `ethos-data ls` and a wrapper's

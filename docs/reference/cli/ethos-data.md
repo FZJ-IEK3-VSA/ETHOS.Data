@@ -67,9 +67,8 @@ pins, point `--catalog` at that pin, or use its collections handle's `.catalog`.
 ## `config`
 
 `ethos-data config show` prints the settings file it read, the catalogue and
-cache settings, their origins, local dataset overrides and one level of
-public-cache entries, and names any settings file of an earlier release that it
-ignores. It works offline and marks unreachable cache paths with the reason. It
+cache settings, their origins and one level of public-cache entries. It works
+offline and marks unreachable cache paths with the reason. It
 reports the settings, not per-command overrides or a package's resolved
 catalogue pin.
 
@@ -90,11 +89,11 @@ variables and precedence. For setup steps, see
     [Check that a download works](../../how-to/data-users/set-up-your-machine.md#check-a-download).
     It is to be implemented separately.
 
-!!! warning "Gap: `set-root` is to be removed, and the restricted cache to become a list"
+!!! warning "Gap: the restricted cache is to become a list"
     With [one settings file per
     account](../../explanation/architecture/decisions/0010-one-settings-file-per-account.md),
-    `config set-root` and `unset-root` go, and `config add-restricted-cache DIR`
-    and `remove-restricted-cache DIR` take the place of
+    `config add-restricted-cache DIR` and `remove-restricted-cache DIR` take
+    the place of
     `set-restricted-cache` and `unset-restricted-cache`. `config show`
     numbers the restricted caches, marks one it cannot reach, and says when
     the account lists none. To be implemented separately.
@@ -203,16 +202,10 @@ otherwise have linked a dataset, its real directory is listed as `keep`; where
 the catalogue has dropped the dataset, its directory is not listed at all.
 
 On Windows a symbolic link needs Developer Mode or an elevated shell. Without
-either, use `config set-root` instead. A junction (`mklink /J`) is **not** a
-substitute: it is reported as an ordinary directory, so the cache would treat
-borrowed data as a copy it owns and could write downloads into it.
-
-!!! warning "Gap: without symbolic links, `link` is to offer a copy"
-    With [decision
-    0016](../../explanation/architecture/decisions/0016-one-link-command-two-modes.md),
-    `config set-root` goes. Where no symbolic link can be made, `link`
-    refuses and offers `ethos-data materialize NAME --from DIR`, a verified
-    copy. To be implemented separately.
+either, `link` refuses and offers `ethos-data materialize NAME --from DIR`, a
+verified copy. A junction (`mklink /J`) is **not** a substitute: it is reported
+as an ordinary directory, so the cache would treat borrowed data as a copy it
+owns and could write downloads into it.
 
 ## `unlink <dataset>`
 

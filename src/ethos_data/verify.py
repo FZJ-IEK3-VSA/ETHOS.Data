@@ -109,7 +109,7 @@ def verify(
     the cost of one ``stat`` per file. With ``deep`` it compares checksums,
     which catches everything and reads every byte.
     """
-    roots = Roots.coerce(roots)
+    roots = catalog._roots(roots)
     locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)
 
     findings: list[Finding] = []
@@ -213,7 +213,7 @@ def repair(
         download,
     )  # local: retrieval imports access, which imports config
 
-    roots = Roots.coerce(roots)
+    roots = catalog._roots(roots)
     broken = [f for f in findings if not f.ok]
 
     skipped: dict[str, str] = {
