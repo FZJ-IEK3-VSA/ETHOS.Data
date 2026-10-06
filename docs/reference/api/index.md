@@ -78,8 +78,6 @@ was left out here rather than never defined.
         - NamedPaths
         - download
         - plan
-        - cache_dir
-        - local_path
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

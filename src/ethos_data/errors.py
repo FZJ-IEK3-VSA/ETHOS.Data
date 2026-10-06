@@ -33,6 +33,7 @@ __all__ = [
     "IncompleteCatalog",
     "LinkError",
     "MaintenanceError",
+    "NotFetched",
     "PublishError",
     "StagingError",
     "UnknownCollection",
@@ -113,6 +114,14 @@ class BundleError(EthosDataError, ValueError):
 
 class AccessError(EthosDataError, RuntimeError):
     """A dataset cannot be reached under the current configuration."""
+
+
+class NotFetched(AccessError):
+    """A file ``fetch=False`` would have had to download: it is not on this machine.
+
+    The message names each file and the path it belongs at, which is where the
+    same call with ``fetch=True`` puts it.
+    """
 
 
 class LinkError(EthosDataError, RuntimeError):

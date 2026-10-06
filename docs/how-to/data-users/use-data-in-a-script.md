@@ -93,14 +93,6 @@ python data_cli.py fetch offshore_siting --paths   # fetch, then print handle<TA
 python data_cli.py fetch offshore_siting --plan    # what a fetch would download; downloads nothing
 ```
 
-!!! warning "Gap: `fetch=False` is not implemented"
-    `Collections.paths`, `Collections.fetch` and `Catalog.path` always
-    download what is missing. The building blocks exist (`ethos_data.locate`
-    resolves every location without touching the network, and `fetch --plan`
-    reports them), but no parameter returns paths without fetching, and no
-    error yet says where a missing file belongs and that `fetch=True` would
-    put it there.
-
 ## Run on test data or the full data {#test-variant}
 
 Collections that serve tests and examples come in two sizes with the same

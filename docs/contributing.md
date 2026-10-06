@@ -77,8 +77,9 @@ pytest -m legacy --collect-only -q   # what is still waiting to be rewritten
 
 **Deduplication depends on path agreement.** Every tool must derive the same
 cache path from the same catalogue entry, or the sharing stops silently and
-nobody finds out for months. Anything touching `local_path`, `Resource.key`, or
-the cache layout is a compatibility change, not a refactor.
+nobody finds out for months. Anything touching `Resource.key` or the cache
+layout `<root>/<dataset>/<resource path>` is a compatibility change, not a
+refactor.
 
 **Retrieval never writes restricted data into the public cache or downloads
 it.** If it cannot be reached, asking for it fails with an explanation.

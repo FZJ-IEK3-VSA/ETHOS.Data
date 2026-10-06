@@ -43,8 +43,11 @@ later read of a setting goes through it.
     options:
       members:
         - locate
+        - chain_for
+        - Chain
+        - Locator
+        - linked_entry
         - Location
-        - requires_local_root
         - check_missing
         - unavailable
       show_root_heading: false

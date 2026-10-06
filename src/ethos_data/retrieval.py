@@ -1,13 +1,10 @@
 """Downloading catalogue resources into the shared, hash-verified cache.
 
-(Module named ``retrieval`` rather than ``fetch`` so it can never shadow the
-public ``ethos_data.fetch`` function -- the same reason ``selection`` is not
-called ``collections``. At runtime the function won anyway, because ``def
-fetch`` in ``__init__`` runs after the ``from .fetch import ...`` line, but
-static tooling saw only the module: griffe could not document the package's
-main entry point, and editors and type checkers offered the module's members
-for ``ethos_data.fetch``. ``download`` and ``plan`` are exported from here under
-their own names for the same reason -- do not rename this module to either.)
+(Named ``retrieval`` rather than ``fetch``, ``download`` or ``plan``, so that
+it never shadows the public functions of those names in the view static tooling
+takes of the package: griffe documents them, and editors and type checkers
+offer them, only while no module has their name. ``selection`` is not called
+``collections`` for the same reason.)
 
 The cache layout is the whole trick behind cross-tool deduplication:
 
@@ -31,24 +28,23 @@ from pathlib import Path
 import pooch
 
 from .access import (
+    ORIGIN_CACHED,
     Location,
     check_missing,
+    linked_entry,
     locate,
     unavailable,
 )
 from .catalogs import Catalog
-from .config import ENV_VAR, Roots, read_settings
-from .errors import AccessError
+from .config import Roots
+from .errors import AccessError, NotFetched
 from .formats import keys as k
 from .model.resource import Resource
 
 __all__ = [
     "DataFiles",
-    "ENV_VAR",
     "NamedPaths",
-    "cache_dir",
     "download",
-    "local_path",
     "plan",
 ]
 
@@ -130,28 +126,14 @@ class DataFiles(dict):
         return self[matches[0]]
 
 
-def cache_dir(explicit: str | Path | None = None) -> Path:
-    """Root of the shared public cache.
-
-    Resolved from an explicit argument, then $ETHOS_DATA_DIR, then the settings
-    file, then the per-user cache directory.
-    See :mod:`ethos_data.config` for the full precedence and the reasoning.
-    """
-    return read_settings(root=explicit).roots.public
-
-
-def local_path(resource: Resource, root: Path | None = None) -> Path:
-    return (root or cache_dir()) / resource.dataset / resource.path
-
-
 def plan(
     catalog: Catalog,
     resources: list[Resource],
-    roots: "Roots | str | Path | None" = None,
+    roots: Roots | None = None,
     skip_unavailable: bool | None = None,
 ) -> dict:
     """Report what a fetch would do, without touching the network."""
-    roots = catalog._roots(roots)
+    roots = roots if roots is not None else catalog.settings.roots
     locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)
 
     present, missing, in_place = [], [], []
@@ -189,9 +171,11 @@ def plan(
 def download(
     catalog: Catalog,
     resources: list[Resource],
-    root: "Roots | str | Path | None" = None,
+    root: Roots | None = None,
     progressbar: bool = True,
     skip_unavailable: bool | None = None,
+    *,
+    fetch: bool = True,
 ) -> DataFiles:
     """Make every resource available locally and return where each one is.
 
@@ -199,8 +183,13 @@ def download(
     cache or a staging entry -- are used where they lie and never copied; the
     rest are downloaded into the public cache, skipping anything already
     present and hash-verified.
+
+    With ``fetch=False`` nothing is downloaded and no store is contacted: a
+    copy already in the public cache is returned as it is, and a file that
+    would have to be downloaded raises :class:`~ethos_data.errors.NotFetched`,
+    naming the path it belongs at.
     """
-    roots = catalog._roots(root)
+    roots = root if root is not None else catalog.settings.roots
     _warn_about_licensing(catalog, resources)
 
     locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)
@@ -238,15 +227,20 @@ def download(
     for location in locations:
         if not location.available:
             continue
-        if location.in_place:
+        if location.in_place or (not fetch and location.origin == ORIGIN_CACHED):
             files[location.resource.key] = location.path
         else:
             to_download.setdefault(location.resource.dataset, []).append(location)
 
+    if not fetch and to_download:
+        raise NotFetched(
+            _not_fetched([loc for items in to_download.values() for loc in items])
+        )
+
     for dataset_name, items in sorted(to_download.items()):
         dataset = catalog.dataset(dataset_name)
         destination = roots.public / dataset_name
-        _refuse_to_write_through_a_link(destination)
+        _refuse_to_write_through_a_link(roots.public, dataset_name)
         base_url = catalog.base_url_for(dataset)
         puller = pooch.create(
             path=destination,
@@ -270,15 +264,32 @@ def download(
     )
 
 
-def _refuse_to_write_through_a_link(destination: Path) -> None:
+def _not_fetched(locations: list[Location]) -> str:
+    """Which files ``fetch=False`` found missing, and where each belongs."""
+    shown = locations[:8]
+    width = max(len(loc.resource.key) for loc in shown)
+    listing = "\n".join(
+        f"    {loc.resource.key:<{width}}  belongs at {loc.path}" for loc in shown
+    )
+    more = "" if len(locations) <= 8 else f"\n    ... and {len(locations) - 8} more"
+    return (
+        f"{len(locations)} file(s) are not on this machine, and fetch=False "
+        f"downloads nothing:\n{listing}{more}\n"
+        "The same call with fetch=True downloads them to those paths."
+    )
+
+
+def _refuse_to_write_through_a_link(root: Path, name: str) -> None:
     """Never let a download land in somebody else's directory.
 
-    ``locate`` already routes a symbolic-link entry to "in-place", so reaching
-    here with one means a bug or a race -- a link created between planning and
-    fetching. Either way the consequence would be writing into shared project
-    storage that this cache only borrows, so it is worth a second check.
+    ``locate`` already routes a linked entry, the dataset's own or its
+    family's, to "in-place", so reaching here with one means a bug or a race --
+    a link created between planning and fetching. Either way the consequence
+    would be writing into shared project storage that this cache only borrows,
+    so it is worth a second check.
     """
-    if destination.is_symlink():
+    destination = linked_entry(root, name)
+    if destination is not None:
         raise AccessError(
             f"{destination} is a symbolic link to {destination.resolve()}, so it is data "
             f"this machine already has and does not own. Refusing to download into it.\n"
