@@ -25,7 +25,7 @@ from pathlib import Path
 import yaml
 
 from ..adapters.metadata import FileSource
-from ..errors import CatalogueRootError, DescriptorError
+from ..errors import CatalogueRootError, DescriptorError, LinkError
 from ..formats import keys as k
 from ..formats.keys import CATALOG_ROLE as ROLE_KEY
 from ..formats.keys import ROLE_PUBLISHED, ROLE_SOURCE
@@ -267,6 +267,43 @@ def parent_chain(root: Path, dataset_dir: Path) -> list[Path]:
             chain.append(current)
         current = current.parent
     return list(reversed(chain))
+
+
+def source_dir_for(name: str, catalog_root: str | Path | None = None) -> Path:
+    """The ``source_dir`` a source catalogue records for this dataset.
+
+    ``source_dir`` is popped out of the descriptor when it is built, so it lives
+    in the hand-written ``datasets/<name>/dataset.yaml`` and nowhere else -- not
+    in ``datapackage.json``, not in any ``datacatalog.json``. Reading it means
+    reading the checkout, exactly as ``catalog build`` and ``catalog upload`` do;
+    ``catalog_root`` names it, or it is searched for upward from the current
+    directory.
+
+    ``ethos-data link`` and ``materialize`` ask it when they are given no
+    directory; reading a checkout is catalogue maintenance, so the data-access
+    services take the answer, not the question.
+    """
+    try:
+        root = resolve_catalog_root(
+            str(catalog_root) if catalog_root is not None else None
+        )
+    except CatalogueRootError as error:
+        # `resolve_catalog_root` is written for the maintainer commands, which
+        # exit on a missing checkout. Here it is one way of answering a question,
+        # so it becomes the same error every other failure in this module raises.
+        raise LinkError(error.message) from None
+    dataset_dir = datasets_dir(root) / name
+    descriptor = dataset_dir / "dataset.yaml"
+    if not descriptor.is_file():
+        raise LinkError(f"no dataset called {name!r} in {datasets_dir(root)}")
+    source = source_dir_of(dataset_dir, read_descriptor(dataset_dir))
+    if source is None:
+        raise LinkError(
+            f"{descriptor} has no source_dir, so there is nothing to link from.\n"
+            "An uploaded dataset has none by design -- dCache holds it. Name the "
+            f"directory instead:\n    ethos-data link {name} /path/to/{name}"
+        )
+    return source
 
 
 def inventory_of(name: str, dataset_dir: Path) -> Inventory:

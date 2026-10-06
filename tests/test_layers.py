@@ -4,7 +4,9 @@ Tests for the decision "Four layers". From the bottom: the model
 (``formats``, ``model``), the adapters (``adapters``), the services, and the
 presentation (``cli``, ``maintain.cli`` and the package facade). The typed
 errors and the reporter are what every layer speaks, so any layer imports
-them. An import inside a function counts as much as one at the top.
+them. An import inside a function counts as much as one at the top. Of the
+services, catalogue maintenance may use data access, never the reverse:
+reading data never loads the writer.
 """
 
 from __future__ import annotations
@@ -100,7 +102,25 @@ def test_a_module_imports_nothing_above_its_layer(path):
     )
 
 
-def test_every_exception_is_still_needed():
+DATA_ACCESS = [
+    path
+    for path in MODULES
+    if layer(module_of(path)) == SERVICES
+    and not module_of(path).startswith("ethos_data.maintain")
+]
+
+
+@pytest.mark.parametrize("path", DATA_ACCESS, ids=lambda p: module_of(p))
+def test_data_access_imports_nothing_from_catalogue_maintenance(path):
+    found = sorted(
+        target
+        for target in imported(path)
+        if target == "ethos_data.maintain" or target.startswith("ethos_data.maintain.")
+    )
+    assert not found, f"{module_of(path)} imports " + ", ".join(found)
+
+
+def test_every_exception_is_needed():
     for module, target in EXCEPTIONS:
         path = PACKAGE / Path(*module.split(".")[1:]).with_suffix(".py")
         assert target in imported(path), f"{module} does not import {target}; drop it"

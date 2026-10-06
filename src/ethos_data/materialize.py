@@ -56,6 +56,7 @@ import json
 import os
 import shutil
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -64,7 +65,6 @@ from .catalogs import Catalog
 from .config import Roots, current_user
 from .errors import AccessError, LinkError, UnknownDataset
 from .formats import keys as k
-from .linking import source_dir_for
 from .model import digest
 from .model.resource import Resource
 
@@ -123,7 +123,7 @@ def plan_materialize(
     roots: Roots | None = None,
     force: bool = False,
     source: "str | Path | None" = None,
-    catalog_root: "str | Path | None" = None,
+    source_dir: Callable[[str], Path] | None = None,
     cache: str | Path | None = None,
 ) -> list[MaterializeReport]:
     """Classify each dataset without copying anything.
@@ -131,6 +131,9 @@ def plan_materialize(
     ``source`` is a directory to copy from in place of whatever the entry points
     at. It also makes an *absent* entry copyable, which is the only way to fill
     one for a dataset that has no ``source_dir`` left to be linked from.
+    ``source_dir(name)`` answers where an absent entry's build input is; the
+    command line reads it from a source checkout, and without it an absent
+    entry needs ``source``.
     ``cache`` is the cache that holds the entries, as the global ``--root``
     names it; see :func:`ethos_data.access.entry_for`.
 
@@ -206,9 +209,11 @@ def plan_materialize(
             target = given
         elif not was_link:
             # Nothing in the cache and no --from: the source catalogue knows
-            # where the bytes are.
+            # where the bytes are, when the caller can ask it.
             try:
-                target = source_dir_for(name, catalog_root)
+                if source_dir is None:
+                    raise LinkError(f"no source_dir for {name!r}")
+                target = source_dir(name)
             except LinkError:
                 reports.append(
                     MaterializeReport(
@@ -281,7 +286,7 @@ def materialize(
     dry_run: bool = False,
     on_file=None,
     source: "str | Path | None" = None,
-    catalog_root: "str | Path | None" = None,
+    source_dir: Callable[[str], Path] | None = None,
     cache: str | Path | None = None,
 ) -> list[MaterializeReport]:
     """Replace symbolic-link cache entries with real, verified copies.
@@ -301,7 +306,7 @@ def materialize(
         roots,
         force=force,
         source=source,
-        catalog_root=catalog_root,
+        source_dir=source_dir,
         cache=cache,
     )
     if dry_run:

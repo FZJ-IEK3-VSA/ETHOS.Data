@@ -25,7 +25,7 @@ dash means that the decision is implemented and needs no pull request.
 | 0006 | [Specify every file format once](0006-every-file-format-specified-once.md) | proposed | #11, #12, #13, #27 |
 | 0007 | [Read every generated catalogue through one inventory reader](0007-one-inventory-reader.md) | implemented | #40 |
 | | **Code structure** | | |
-| 0008 | [Build the package in four layers: model, adapters, services, presentation](0008-four-layers.md) | proposed | #10, #13, #17, #20, a new PR (service groups) |
+| 0008 | [Build the package in four layers: model, adapters, services, presentation](0008-four-layers.md) | implemented | #10, #13, #17, #20, a new PR (service groups) |
 | 0009 | [Reach dCache, downloads, metadata sources and git through ports with fakes](0009-ports-and-fakes-for-external-systems.md) | proposed | #20, #40, #23 |
 | | **Reading data** | | |
 | 0010 | [Read settings from one file per account, once per handle](0010-one-settings-file-per-account.md) | proposed | #14, #15, #39, #19, #40, #25 |

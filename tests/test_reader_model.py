@@ -17,7 +17,7 @@ import pytest
 import ethos_data
 from ethos_data import staging
 from ethos_data.errors import StagingError
-from ethos_data.maintain.manifest import build_resource
+from ethos_data.files import build_resource
 from ethos_data.model import digest, names
 from ethos_data.model.resource import (
     Resource,

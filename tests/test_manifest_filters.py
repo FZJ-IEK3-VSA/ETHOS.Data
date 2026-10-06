@@ -17,7 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from ethos_data.maintain.manifest import expand_pattern, render_dataset
+from ethos_data.files import expand_pattern
+from ethos_data.maintain.manifest import render_dataset
 from ethos_data.errors import DescriptorError
 
 CATALOG = "name: t\nethos:catalog_role: source\nethos:publication_url: https://example.invalid/x\n"

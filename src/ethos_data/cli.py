@@ -1256,13 +1256,17 @@ def _link_command(args, settings) -> int:
 
     catalog = _cache_catalog(settings)
     if args.command == "link":
+        directory = args.directory
+        if directory is None:
+            from .maintain import source_dir_for
+
+            directory = source_dir_for(args.dataset, args.catalog_root)
         report = link(
             catalog,
             args.dataset,
-            args.directory,
+            directory,
             roots,
             force=args.force,
-            catalog_root=args.catalog_root,
             cache=args.root,
         )
     else:
@@ -1285,6 +1289,7 @@ def _link_command(args, settings) -> int:
 
 
 def _materialize_command(args, settings) -> int:
+    from .maintain import source_dir_for
     from .materialize import linked_entries, materialize
 
     roots = settings.roots
@@ -1317,7 +1322,7 @@ def _materialize_command(args, settings) -> int:
         verify_hashes=not args.no_verify,
         dry_run=args.dry_run,
         source=args.source,
-        catalog_root=args.catalog_root,
+        source_dir=lambda name: source_dir_for(name, args.catalog_root),
         cache=args.root,
     )
     for report in reports:

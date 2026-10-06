@@ -61,6 +61,7 @@ from it. Refusals are raised, never reported.
         - read_descriptor
         - read_catalog_meta
         - source_dir_of
+        - source_dir_for
         - inventory_of
       show_root_heading: false
       show_root_toc_entry: false

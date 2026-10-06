@@ -27,6 +27,7 @@ from ethos_data.cli import main
 from ethos_data.config import Roots
 from ethos_data.errors import LinkError, UnknownDataset
 from ethos_data.linking import link, unlink
+from ethos_data.maintain import source_dir_for
 from ethos_data.model.inventory import Inventory
 from ethos_data.model.resource import Resource
 
@@ -297,7 +298,9 @@ def test_links_the_source_dir_when_no_directory_is_given(workspace, tmp_path):
         {"example": f"name: example\ntitle: Example\nsource_dir: {data.as_posix()}\n"},
     )
 
-    report = link(_catalog(), "example", roots=roots, catalog_root=checkout)
+    report = link(
+        _catalog(), "example", source_dir_for("example", checkout), roots=roots
+    )
 
     assert report.target == data
     assert (cache / "example").is_symlink()
@@ -306,22 +309,21 @@ def test_links_the_source_dir_when_no_directory_is_given(workspace, tmp_path):
 
 def test_a_dataset_with_no_source_dir_says_what_to_do_instead(workspace, tmp_path):
     """An uploaded dataset has none by design: dCache holds it."""
-    cache, _, roots = workspace
+    cache, _, _ = workspace
     checkout = _checkout(
         tmp_path, {"example": "name: example\ntitle: Example\nethos:uploaded: true\n"}
     )
 
     with pytest.raises(LinkError, match="no source_dir"):
-        link(_catalog(), "example", roots=roots, catalog_root=checkout)
+        source_dir_for("example", checkout)
     assert not (cache / "example").exists()
 
 
 def test_a_dataset_the_checkout_does_not_have(workspace, tmp_path):
-    _, _, roots = workspace
     checkout = _checkout(tmp_path, {})
 
     with pytest.raises(LinkError, match="no dataset called"):
-        link(_catalog(), "example", roots=roots, catalog_root=checkout)
+        source_dir_for("example", checkout)
 
 
 def test_cli_all_links_every_source_dir_into_the_named_cache(
@@ -531,8 +533,8 @@ def test_cli_all_skips_restricted_data_that_link_by_name_still_takes(
     link(
         _catalog("restricted"),
         "example",
+        source_dir_for("example", checkout),
         roots=Roots(public=cache, restricted=(restricted,)),
-        catalog_root=checkout,
     )
 
     assert (restricted / "example").is_symlink()
