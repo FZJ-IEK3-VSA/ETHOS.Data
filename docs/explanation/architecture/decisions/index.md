@@ -29,7 +29,7 @@ dash means that the decision is implemented and needs no pull request.
 | 0009 | [Reach dCache, downloads, metadata sources and git through ports with fakes](0009-ports-and-fakes-for-external-systems.md) | proposed | #20, #40, #23 |
 | | **Reading data** | | |
 | 0010 | [Read settings from one file per account, once per handle](0010-one-settings-file-per-account.md) | proposed | #14, #15, #39, #19, #40, #25 |
-| 0011 | [Let the access class pick the root, and a link mean "read in place"](0011-access-class-picks-the-root.md) | proposed | #15, #39, a new PR (pipelines) |
+| 0011 | [Let the access class pick the root, and a link mean "read in place"](0011-access-class-picks-the-root.md) | implemented | #15, #39, #42 |
 | 0012 | [Find every file through one lookup chain](0012-one-lookup-chain.md) | proposed | #15, #39, #16, #24, #25 |
 | 0013 | [Treat every input as required, and say what is missing](0013-every-input-is-required.md) | implemented | #16, #18 |
 | 0014 | [Name workflow inputs in the collection and pair test and full variants](0014-named-inputs-and-test-full-variants.md) | implemented | — |
@@ -43,7 +43,7 @@ dash means that the decision is implemented and needs no pull request.
 | 0021 | [Let a bundle be ahead of the catalogue, and warn until it is realigned](0021-bundles-ahead-of-the-catalogue.md) | proposed | #25 |
 | | **Maintaining the catalogue** | | |
 | 0022 | [Record each dataset's state in a status file](0022-dataset-status-files.md) | proposed | #21, #22, #23 |
-| 0023 | [Run every catalogue workflow that writes as a pipeline that plans before it acts](0023-maintenance-pipelines.md) | proposed | #20, #22, a new PR (pipelines), #23, #26 |
+| 0023 | [Run every catalogue workflow that writes as a pipeline that plans before it acts](0023-maintenance-pipelines.md) | proposed | #20, #22, #42, #23, #26 |
 | 0024 | [Let unresolved licensing block distribution, not development](0024-licensing-gates-distribution.md) | proposed | #21, #25 |
 | 0025 | [Draft the handoffs between roles from templates](0025-handoff-templates.md) | proposed | #26 |
 | | **Deployment** | | |
