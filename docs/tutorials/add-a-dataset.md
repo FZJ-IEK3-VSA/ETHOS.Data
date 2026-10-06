@@ -161,10 +161,20 @@ cd ..
 
 ## 6. Read the dataset as a data user
 
-Create `collections.yaml` in `catalogue-lesson`:
+A data user names the catalogue they read in their settings. Name a settings
+file for the lesson in this shell, and the public catalogue in it, so that a
+catalogue you may have configured for your everyday work cannot take its
+place:
+
+```bash
+export ETHOS_DATA_CONFIG="$PWD/lesson-settings.yaml"
+ethos-data config set-catalog "$PWD/public-catalogue/datacatalog.json"
+```
+
+While `ETHOS_DATA_CONFIG` names it, ETHOS.Data reads this file instead of the
+settings in your account. Create `collections.yaml` in `catalogue-lesson`:
 
 ```yaml
-catalog: public-catalogue/datacatalog.json
 collections:
   temperatures:
     include:
@@ -191,8 +201,7 @@ Plan the collection the way a data user on the cluster would, whose public
 cache is the one the data was linked into:
 
 ```bash
-python data_cli.py --catalog public-catalogue/datacatalog.json \
-  --root public-cache fetch temperatures --plan
+python data_cli.py --root public-cache fetch temperatures --plan
 ```
 
 ```title="Output"
@@ -202,15 +211,11 @@ already cached:     0 files         0 B
 to download:        0 files         0 B
 ```
 
-`--catalog` repeats the pin from the collections file, so that a catalogue you
-may have configured for your everyday work cannot take its place. Now fetch the
-collection and check it against the catalogue:
+Now fetch the collection and check it against the catalogue:
 
 ```bash
-python data_cli.py --catalog public-catalogue/datacatalog.json \
-  --root public-cache fetch temperatures
-python data_cli.py --catalog public-catalogue/datacatalog.json \
-  --root public-cache verify temperatures --deep
+python data_cli.py --root public-cache fetch temperatures
+python data_cli.py --root public-cache verify temperatures --deep
 ```
 
 The fetch reports `1 used in place`, and verification ends with
@@ -223,10 +228,8 @@ reorganised or retired, replace the link with a verified copy that the cache
 owns:
 
 ```bash
-ethos-data --catalog public-catalogue/datacatalog.json \
-  --root public-cache materialize station-temperatures --dry-run
-ethos-data --catalog public-catalogue/datacatalog.json \
-  --root public-cache materialize station-temperatures
+ethos-data --root public-cache materialize station-temperatures --dry-run
+ethos-data --root public-cache materialize station-temperatures
 ```
 
 ```title="Output (abridged)"
@@ -253,7 +256,8 @@ A real catalogue has one more step between building and publishing:
 `ethos-data catalog upload` puts public bytes on dCache and proves that anyone
 can download them. It needs storage credentials, so this lesson left it out.
 
-When you are done, delete the `catalogue-lesson` directory.
+When you are done, remove `ETHOS_DATA_CONFIG` from the shell
+(`unset ETHOS_DATA_CONFIG`) and delete the `catalogue-lesson` directory.
 
 ## Next
 

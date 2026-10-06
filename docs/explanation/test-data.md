@@ -8,7 +8,7 @@ service. One package can use several approaches.
 |---|---|---|
 | Tiny synthetic fixture created in a test or committed directly | Parser edge cases and self-contained unit tests | The package owns its meaning and updates; no catalogue is required. |
 | Verified bundle of attributed public data | Required tests and examples that must run without network access | Larger checkout; a bundle ahead of the catalogue warns until it is realigned. |
-| Pinned catalogue plus download cache | Large fixtures and tests of live data access | A fresh runner needs metadata and data access; retained caches reduce transfers. |
+| Catalogue release within the release bounds, plus download cache | Large fixtures and tests of live data access | A fresh runner needs metadata and data access; retained caches reduce transfers. |
 | Staged development dataset | New inputs or inventory changes before catalogue acceptance | Mutable, warned about, and not evidence of an official version. |
 | `test:` variant of a collection, beside its `full:` data | Examples and live-data tests that run the production code path on small inputs | Needs the catalogue and a small download; offers the same named paths as the full data, so the same code runs on both. |
 
@@ -97,7 +97,7 @@ with an unexplained change.
     change or warns about one, and a changed file is read only with
     `allow_modified=True`.
 
-## A metadata pin is only part of reproducibility
+## Release bounds are only part of reproducibility
 
 An exact catalogue release, such as `exact_version: v1.2.0`, fixes the
 inventory. A patch release changes metadata only, so `exact_version: v1.3`
@@ -109,11 +109,10 @@ compete for one cache entry. Withdrawn data may be purged only after a major
 release. Data that is only linked, and restricted installations, change with
 their source.
 
-!!! warning "Gap: a catalogue URL instead of release bounds, and no revisions"
-    The code takes a catalogue path or URL in `catalog:` and has no
-    revisions. Changing only `ethos:remote_prefix` leaves the cache path
-    `<dataset>/<resource path>` unchanged, so two versions with changed bytes
-    need a new dataset name or new resource paths.
+!!! warning "Gap: no revisions"
+    The code has no revisions. Changing only `ethos:remote_prefix` leaves the
+    cache path `<dataset>/<resource path>` unchanged, so two versions with
+    changed bytes need a new dataset name or new resource paths.
 
 Record the package revision, catalogue release, collections, and any local
 overrides used by an experiment. A configured catalogue is read instead of the

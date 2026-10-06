@@ -12,7 +12,7 @@
         }
       ],
       "default": null,
-      "description": "The catalogue to read; replaces the public one and any pin.",
+      "description": "The catalogue to read in place of the public one; checked against a package's release bounds.",
       "title": "Catalog"
     },
     "public_cache": {

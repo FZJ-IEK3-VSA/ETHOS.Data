@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 import ethos_data
-from ethos_data import Roots, locate
+from ethos_data import Roots, config, locate
 from ethos_data.access import (
     ORIGIN_CACHED,
     ORIGIN_DOWNLOAD,
@@ -26,6 +26,7 @@ from ethos_data.access import (
 )
 from ethos_data.catalogs import load_catalog
 from ethos_data.errors import AccessError, NotFetched
+from ethos_data.model.versions import Bounds
 
 
 def link(entry: Path, target: Path) -> None:
@@ -258,27 +259,33 @@ class TestFetchFalse:
 
 
 class TestOneCatalogueResolver:
-    def test_an_explicit_location_then_the_environment_then_the_file_then_the_pin(
+    def test_an_explicit_location_then_the_environment_then_the_file_then_the_public_one(
         self, tmp_path, monkeypatch
     ):
         settings = ethos_data.read_settings()
-        pin = str(tmp_path / "pinned.json")
+        bounds = Bounds.from_document({"exact_version": "v1.2.0"})
 
-        assert settings.choose_catalog(pin=pin) == (pin, "a collections file's pin")
-        assert settings.choose_catalog()[1] == "built-in public catalogue"
+        assert settings.choose_catalog() == (
+            config.DEFAULT_CATALOG,
+            "built-in public catalogue",
+        )
+        assert settings.choose_catalog(bounds=bounds) == (
+            config.PUBLIC_RELEASE_URL.format(version="v1.2.0"),
+            "the public release v1.2.0",
+        )
 
         ethos_data.set_option("catalog", str(tmp_path / "file.json"))
-        from_file = ethos_data.read_settings().choose_catalog(pin=pin)
+        from_file = ethos_data.read_settings().choose_catalog(bounds=bounds)
         assert from_file[0] == str(tmp_path / "file.json")
         assert from_file[1].startswith("settings file")
 
         monkeypatch.setenv("ETHOS_DATA_CATALOG", str(tmp_path / "env.json"))
-        assert ethos_data.read_settings().choose_catalog(pin=pin) == (
+        assert ethos_data.read_settings().choose_catalog(bounds=bounds) == (
             str(tmp_path / "env.json"),
             "$ETHOS_DATA_CATALOG",
         )
         assert ethos_data.read_settings().choose_catalog(
-            explicit="x.json", pin=pin
+            explicit="x.json", bounds=bounds
         ) == (
             "x.json",
             "explicit argument",
@@ -287,7 +294,7 @@ class TestOneCatalogueResolver:
     def test_loading_a_collections_file_follows_the_same_order(
         self, reader, tmp_path, monkeypatch
     ):
-        """$ETHOS_DATA_CATALOG wins over the pin, as for every handle."""
+        """$ETHOS_DATA_CATALOG names the catalogue a handle reads, as for every command."""
         collections = reader.collections(WIND)
         other = replace_index(reader, tmp_path)
         monkeypatch.setenv("ETHOS_DATA_CATALOG", str(other))

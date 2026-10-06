@@ -295,16 +295,10 @@ class PublishResult:
     def ok(self) -> bool:
         return not (self.stale or self.orphans or self.leaks)
 def _releases(names: list[str]) -> list[str]:
-    """Distinct releases, oldest first; anything not of the form vYYYY.MM.N dropped."""
-    from ..model.versions import Version
+    """Distinct releases, oldest first; anything not of the form vMAJOR.MINOR.PATCH dropped."""
+    from ..model.versions import releases
 
-    found = set()
-    for name in names:
-        try:
-            found.add(Version.parse(name))
-        except ValueError:
-            continue
-    return [str(release) for release in sorted(found)]
+    return [str(release) for release in releases(names)]
 
 
 def _published_releases(destination_root: Path) -> list[str]:

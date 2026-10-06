@@ -2,7 +2,7 @@
   "$defs": {
     "CatalogBounds": {
       "additionalProperties": true,
-      "description": "The catalogue releases a package works with: one exactly, or a range.",
+      "description": "The catalogue releases a package works with: one exactly, or a range.\n\nEach version is a release, ``v1.2.0``, or a prefix of one, ``v1.3`` or\n``v1``: as ``min_version`` its first release, as ``max_version`` its last,\nas ``exact_version`` every one of them.",
       "properties": {
         "min_version": {
           "anyOf": [
@@ -15,7 +15,7 @@
           ],
           "default": null,
           "description": "The oldest release the package was tested with.",
-          "pattern": "^v\\d{4}\\.\\d{2}\\.\\d+$",
+          "pattern": "^v(0|[1-9][0-9]*)(\\.(0|[1-9][0-9]*)){0,2}$",
           "title": "Min Version"
         },
         "max_version": {
@@ -29,7 +29,7 @@
           ],
           "default": null,
           "description": "Refuse anything newer.",
-          "pattern": "^v\\d{4}\\.\\d{2}\\.\\d+$",
+          "pattern": "^v(0|[1-9][0-9]*)(\\.(0|[1-9][0-9]*)){0,2}$",
           "title": "Max Version"
         },
         "exact_version": {
@@ -42,8 +42,8 @@
             }
           ],
           "default": null,
-          "description": "The one release the package resolves to.",
-          "pattern": "^v\\d{4}\\.\\d{2}\\.\\d+$",
+          "description": "The release, or the releases, to resolve to.",
+          "pattern": "^v(0|[1-9][0-9]*)(\\.(0|[1-9][0-9]*)){0,2}$",
           "title": "Exact Version"
         }
       },
@@ -199,15 +199,11 @@
           "$ref": "#/$defs/CatalogBounds"
         },
         {
-          "type": "string"
-        },
-        {
           "type": "null"
         }
       ],
       "default": null,
-      "description": "The catalogue releases the package works with; a path or URL, relative to this file, still pins one catalogue.",
-      "title": "Catalog"
+      "description": "The catalogue releases the package works with."
     },
     "collections": {
       "additionalProperties": {

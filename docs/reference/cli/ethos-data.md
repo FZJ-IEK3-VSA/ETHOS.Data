@@ -20,8 +20,9 @@ Put global options before the subcommand.
 
 The catalogue is chosen from `--catalog`, `ETHOS_DATA_CATALOG`, configuration,
 then the built-in public catalogue. `ethos-data` does not read a collections
-file. A package command instead uses its own file's pin when no override is
-set; see [catalogue resolution](../configuration.md#catalogue-resolution).
+file. A package command checks the catalogue against its file's release
+bounds, and without a configured catalogue reads the public release they
+select; see [catalogue resolution](../configuration.md#catalogue-resolution).
 
 The global `--root` names the public cache for access by key, and for `link`,
 `unlink` and `materialize` the cache that holds the entry: a public cache, or a
@@ -67,7 +68,8 @@ Restricted data is never downloaded.
 
 The Python equivalent is [`Catalog.path`][ethos_data.catalogs.Catalog.path] on
 [`ethos_data.catalog()`][ethos_data.catalog]. To use the catalogue a package
-pins, point `--catalog` at that pin, or use its collections handle's `.catalog`.
+reads, point `--catalog` at the release its `show` names, or use its
+collections handle's `.catalog`.
 
 ## `config`
 
@@ -77,8 +79,8 @@ cache settings, their origins, one level of public-cache entries and the
 numbers the restricted caches in reading order and says when the account lists
 none, as a normal state. It works offline and marks unreachable cache paths with
 the reason. It
-reports the settings, not per-command overrides or a package's resolved
-catalogue pin.
+reports the settings, not per-command overrides or the catalogue a package
+reads within its release bounds.
 
 Use `ethos-data ls` to see the catalogue selected for direct access, or
 `<your-tool>-data show` for a package's selected catalogue and collections.

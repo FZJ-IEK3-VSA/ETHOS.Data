@@ -62,8 +62,9 @@ from pathlib import Path
 import platformdirs
 import yaml
 
-from .errors import ConfigurationError
+from .errors import CatalogVersionError, ConfigurationError
 from .formats import keys as k
+from .model.versions import Bounds
 
 __all__ = [
     "CATALOG_ENV_VAR",
@@ -91,16 +92,15 @@ __all__ = [
 ]
 
 #: The public catalogue, used whenever nothing else names one -- so that public
-#: data needs no configuration at all. It follows a moving branch; a package
-#: that must resolve to the same bytes release after release pins a version in
-#: its own collections file instead.
+#: data needs no configuration at all. It follows a moving branch, and lists
+#: every release; a collections file's release bounds choose one of them.
 DEFAULT_CATALOG = "https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json"
 #: Where the public catalogue keeps one release: the tag of that release.
 PUBLIC_RELEASE_URL = "https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/{version}/datacatalog.json"
 #: Point every tool in one shell or job at another catalogue -- the internal one,
 #: say -- without editing a file. Wins over the settings file and over the
-#: version a collections file pins; an explicit ``catalog=`` / ``--catalog``
-#: wins over it. One variable for every package.
+#: public release a collections file's bounds select; an explicit ``catalog=`` /
+#: ``--catalog`` wins over it. One variable for every package.
 CATALOG_ENV_VAR = "ETHOS_DATA_CATALOG"
 #: A settings file to read instead of the one in the account -- for a CI job, a
 #: container, a lesson, or a team's file on a shared machine. Replaces the
@@ -584,8 +584,8 @@ class Settings:
     :meth:`as_dict` gives the same as plain values.
 
     ``catalog`` is the catalogue override from the settings alone until a
-    handle fills in the catalogue it actually uses, from a collections file's
-    pin or the built-in default.
+    handle fills in the catalogue it actually uses: the public release a
+    collections file's bounds select, or the built-in default.
     """
 
     file: Path
@@ -599,25 +599,44 @@ class Settings:
     publication_url_source: str = ""
 
     def choose_catalog(
-        self,
-        *,
-        explicit: str | None = None,
-        pin: str | None = None,
-        pin_source: str = "a collections file's pin",
+        self, *, explicit: str | None = None, bounds: Bounds | None = None
     ) -> tuple[str, str]:
         """The catalogue to read, and why: one order for every handle and command.
 
         An explicit location; then ``$ETHOS_DATA_CATALOG`` or the settings
-        file, as these settings read them; then a collections file's pin; then
-        the public catalogue, so that public data needs nothing configured.
+        file, as these settings read them; then the public catalogue, so that
+        public data needs nothing configured. A collections file's ``bounds``
+        choose the public release: a full ``exact_version`` reads that
+        release's tag, any other bounds the newest release they admit among
+        those the public ``main`` index lists. A catalogue chosen any other way
+        is checked against the bounds once it is loaded.
         """
         if explicit:
             return explicit, "explicit argument"
         if self.catalog is not None:
             return self.catalog, self.catalog_source
-        if pin is not None:
-            return pin, pin_source
-        return DEFAULT_CATALOG, "built-in public catalogue"
+        if bounds is None:
+            return DEFAULT_CATALOG, "built-in public catalogue"
+        release = bounds.release()
+        if release is not None:
+            return (
+                PUBLIC_RELEASE_URL.format(version=release),
+                f"the public release {release}",
+            )
+        from .catalogs import public_releases
+
+        published = public_releases()
+        newest = bounds.newest(published)
+        if newest is None:
+            listed = ", ".join(map(str, published)) or "none"
+            raise CatalogVersionError(
+                f"no public catalogue release is within {bounds}; the public "
+                f"releases are: {listed}."
+            )
+        return (
+            PUBLIC_RELEASE_URL.format(version=newest),
+            f"the public release {newest}, the newest within {bounds}",
+        )
 
     def with_catalog(
         self, location: str, source: str, version: str | None = None
@@ -679,7 +698,7 @@ class Settings:
             rows.append(("catalogue version", self.catalog_version or "not recorded"))
         else:
             rows.append(
-                ("catalogue", "not set: a collections file's pin, else the public one")
+                ("catalogue", "not set: the public one, at a package's release bounds")
             )
         rows.append(
             ("public cache", f"{roots.public}  ({source(roots.public_source)})")

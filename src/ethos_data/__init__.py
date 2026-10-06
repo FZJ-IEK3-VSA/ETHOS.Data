@@ -19,8 +19,8 @@ needs, named once by its maintainer in the tool's ``collections.yaml``;
 ``test=True`` selects the small fixtures the maintainer paired with the full
 data, so an example runs in seconds and the same code runs on the real inputs.
 A **key** (``"<dataset>/<path>"``) names one dataset, folder or file in the
-catalogue; :func:`catalog` -- or a handle's ``.catalog``, for the version a tool
-pins -- answers those with ``path`` and ``resources``.
+catalogue; :func:`catalog` -- or a handle's ``.catalog``, for the release a
+tool's bounds admit -- answers those with ``path`` and ``resources``.
 
 A tool builds its handle once, from the file beside its own code, and exposes
 the same commands as its own console script with :meth:`Collections.main`;
@@ -59,8 +59,9 @@ from .config import (
 from .errors import (
     AccessError,
     BundleError,
-    CatalogUnavailable,
     CatalogueRootError,
+    CatalogUnavailable,
+    CatalogVersionError,
     CollectionError,
     ConfigurationError,
     DescriptorError,
@@ -104,6 +105,7 @@ __all__ = [
     "CONFIG_ENV_VAR",
     "Catalog",
     "CatalogUnavailable",
+    "CatalogVersionError",
     "CollectionError",
     "Collections",
     "DEFAULT_CATALOG",
@@ -174,9 +176,11 @@ def collections(
     ``tool`` is the tool's short name, used in messages and as the default
     name of its command (``<tool>-data``; see :meth:`Collections.main`). The
     catalogue is ``catalog`` if given, else ``$ETHOS_DATA_CATALOG`` or a
-    configured one, else the version the file pins, else the built-in public
-    catalogue -- so a user can repoint every tool at once without any tool
-    knowing. ``root`` overrides the public cache directory. The file and the
+    configured one, else the public catalogue at the newest release the file's
+    bounds admit -- so a user can repoint every tool at once without any tool
+    knowing. A catalogue outside the bounds raises
+    :class:`~ethos_data.errors.CatalogVersionError`. ``root`` overrides the
+    public cache directory. The file and the
     settings are read once, here: ``.settings`` reports what every later call
     uses, and ``.catalog`` is the catalogue it resolved to, for access by key.
     """
@@ -202,8 +206,8 @@ def catalog(
     ``location`` is a ``datacatalog.json`` path or URL; without one, the
     catalogue is ``$ETHOS_DATA_CATALOG`` or a configured one, else the
     built-in public catalogue. The settings are read and the staging overlay
-    is applied once, here; ``.settings`` reports them. A tool's pinned
-    catalogue is ``ethos_data.collections(...).catalog``::
+    is applied once, here; ``.settings`` reports them. The catalogue a tool
+    reads within its release bounds is ``ethos_data.collections(...).catalog``::
 
         era5 = ethos_data.catalog().path("era5/2015")
         files = ethos_data.catalog().resources("global-wind-atlas-v3")
@@ -236,7 +240,8 @@ def tool_main(
         mytool-data = "mytool.data:main"
 
     ``show``, ``fetch`` and ``verify`` for the file's collections, against the
-    catalogue it pins, plus ``bundle``, ``staging`` and ``config``. A single
+    catalogue the settings choose within its bounds, plus ``bundle``,
+    ``staging`` and ``config``. A single
     catalogue key belongs to ``ethos-data``, not here -- which is what keeps
     this to six commands whatever the tool.
     ``prog`` names the command in help and messages

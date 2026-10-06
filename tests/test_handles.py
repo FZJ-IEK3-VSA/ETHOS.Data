@@ -171,7 +171,7 @@ def test_without_a_catalogue_the_public_one_is_used(monkeypatch):
     assert asked == [config.DEFAULT_CATALOG]
 
 
-def test_a_collections_file_without_a_pin_uses_the_public_catalogue(
+def test_a_collections_file_without_bounds_uses_the_public_catalogue(
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr(config, "load_config", lambda: ({}, {}))
@@ -207,15 +207,16 @@ def test_the_catalogue_variable_beats_a_config_file(monkeypatch):
 
 
 @pytest.fixture
-def shipped(world):
+def shipped(world, monkeypatch):
     """A tool, faketool, with a collections file beside its data module -- and
-    nothing registered anywhere. Returns the file."""
+    nothing registered anywhere. Returns the file; the environment names the
+    catalogue."""
     tmp_path, _, index = world
+    monkeypatch.setenv("ETHOS_DATA_CATALOG", str(index))
     package = tmp_path / "site" / "faketool" / "data"
     package.mkdir(parents=True)
     file = package / "collections.yaml"
     file.write_text(
-        f"catalog: {index.as_posix()}\n"
         "collections:\n  wind:\n    include:\n      - dataset: family/alpha\n        files: ['era5/*.nc']\n"
     )
     return file
@@ -228,7 +229,7 @@ def test_a_tool_builds_its_handle_from_the_file_beside_its_code(shipped, world):
     assert data.names() == ["wind"]
     files = data.fetch("wind", progressbar=False)
     assert sorted(files) == ["family/alpha/era5/x.nc", "family/alpha/era5/y.nc"]
-    # .catalog is the catalogue the file pins, for keys.
+    # .catalog is the catalogue the handle reads, for keys.
     assert data.catalog.path("family/alpha/era5") == cache / "family/alpha/era5"
     assert data.catalog.staged, "the overlay is applied once, when the handle is built"
 
@@ -362,19 +363,10 @@ def test_catalogue_listing_only_reads_the_index(world, monkeypatch, capsys):
     assert "family/alpha" in out and "flat" in out
 
 
-def test_ethos_data_ignores_collection_pins_and_uses_catalogue_precedence(
-    world, shipped, monkeypatch, capsys
-):
-
+def test_ethos_data_follows_the_catalogue_precedence(world, monkeypatch, capsys):
     root, cache, index = world
     other = root / "other.json"
     other.write_text(json.dumps({"datasets": []}))
-    # Both a configured file and a file in the working directory pin an empty catalogue.
-    shipped.write_text(f"catalog: {other.as_posix()}\ncollections: {{}}\n")
-    monkeypatch.chdir(shipped.parent)
-    monkeypatch.setattr(
-        config, "load_config", lambda: ({"collections": str(shipped)}, {})
-    )
     monkeypatch.setattr(config, "DEFAULT_CATALOG", str(index))
     assert main(["fetch", "flat/one.csv"]) == 0
     assert capsys.readouterr().out.strip() == str(cache / "flat/one.csv")
@@ -489,14 +481,16 @@ def test_tool_main_runs_the_commands_and_reuses_one_handle(
     assert "faketool defines: wind" in capsys.readouterr().err
 
 
-def test_an_unreachable_pin_can_still_be_overridden_with_catalog(
-    shipped, world, tmp_path, capsys
+def test_an_unreachable_catalogue_can_be_overridden_with_catalog(
+    shipped, world, monkeypatch, capsys
 ):
-    """The point of --catalog: a tag nobody has cut yet must not block the command."""
+    """The point of --catalog: a catalogue nobody can reach must not block the command."""
     _, _, index = world
+    monkeypatch.setenv(
+        "ETHOS_DATA_CATALOG", "https://example.invalid/nowhere/datacatalog.json"
+    )
     broken = shipped.with_name("broken.yaml")
     broken.write_text(
-        "catalog: https://example.invalid/nowhere/datacatalog.json\n"
         "collections:\n  wind:\n    include:\n      - dataset: family/alpha\n"
     )
     assert ethos_data.tool_main(broken, tool="faketool", argv=["show"]) == 2

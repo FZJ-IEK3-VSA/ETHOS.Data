@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 from ..errors import DescriptorError
+from ..model.versions import RELEASE_PATTERN, Version
 from . import keys as k
 from .fields import field
 
@@ -30,8 +31,8 @@ class CatalogMeta(BaseModel):
     contact: str | None = field(k.CONTACT, description="Team or username.")
     version: str | None = field(
         k.VERSION,
-        description="The release this is, vYYYY.MM.N; the build writes it into the index.",
-        schema={"pattern": r"^v\d{4}\.\d{2}\.\d+$"},
+        description="The release this is, vMAJOR.MINOR.PATCH; the build writes it into the index.",
+        schema={"pattern": RELEASE_PATTERN},
     )
     catalog_role: str = field(
         k.CATALOG_ROLE,
@@ -50,8 +51,6 @@ def check(meta: dict) -> None:
     would make every tool refuse to touch it.
     """
     if meta.get(k.VERSION) is not None:
-        from ..model.versions import Version
-
         try:
             Version.parse(meta[k.VERSION])
         except ValueError as error:

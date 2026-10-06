@@ -107,10 +107,6 @@ admits a later release reads a catalogue without the dataset, and the error
 says plainly that the dataset cannot be found, as for a mistyped name. Release
 notices announce withdrawals.
 
-!!! warning "Gap: `catalog:` takes a URL"
-    The code takes only a catalogue path or URL in `catalog:`, such as a
-    release tag's `datacatalog.json` on GitHub, and has no release bounds.
-
 ## What a tool gives up
 
 Being told, rather than deciding, what a dataset contains. A tool cannot patch

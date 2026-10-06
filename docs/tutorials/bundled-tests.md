@@ -3,8 +3,8 @@
 In this lesson you make a small teaching catalogue, export one verified fixture,
 and observe how strict checking differs from a deliberate development edit.
 The synthetic local catalogue stands in for released metadata: no shared catalogue
-or dCache files are changed. In a real package, export from its pinned official
-catalogue instead.
+or dCache files are changed. In a real package, export from an official
+catalogue release within its release bounds instead.
 
 You need an installed `ethos-data` and pytest. Work in a new directory so the lesson
 has no existing test data to replace. Allow about 20 minutes. Create the directory
@@ -12,7 +12,12 @@ tree before adding the files below:
 
 ```bash
 python -c "from pathlib import Path; Path('catalogue/datasets/lesson/input').mkdir(parents=True)"
+export ETHOS_DATA_CONFIG="$PWD/lesson-settings.yaml"
 ```
+
+`ETHOS_DATA_CONFIG` names the lesson's settings file: while it is named,
+ETHOS.Data reads it instead of the settings in your account, and writes any
+setting into it.
 
 ## Build the teaching catalogue
 
@@ -43,12 +48,14 @@ Create `catalogue/datasets/lesson/input/value.txt` containing `3`, then build:
 cd catalogue
 ethos-data catalog build
 cd ..
+ethos-data config set-catalog "$PWD/catalogue/datacatalog.json"
 ```
 
-Create `collections.yaml`:
+The last command names the teaching catalogue in the lesson's settings file,
+so the catalogue configured for your normal work is not read. Create
+`collections.yaml`:
 
 ```yaml
-catalog: catalogue/datacatalog.json
 collections:
   tiny_test:
     include:
@@ -75,11 +82,10 @@ exposes through `tool_main`, without needing RESKit installed for this lesson.
 ## Export the fixture
 
 ```bash
-python data_cli.py --catalog catalogue/datacatalog.json bundle export tests/data-bundle tiny_test \
+python data_cli.py bundle export tests/data-bundle tiny_test \
   --source-root lesson=catalogue/datasets/lesson/input --source-revision lesson-1
 ```
 
-The explicit catalogue overrides any catalogue configured for your normal work.
 The local source is verified against the built manifest. The deliberately
 unreachable publication URL is not used because you supplied the existing bytes.
 Inspect `tests/data-bundle/bundle.json`: it records the selected resource and its
@@ -133,6 +139,8 @@ python data_cli.py bundle verify tests/data-bundle tiny_test
 pytest -q tests/test_value.py
 ```
 
-Both checks pass again. For real changes, follow
+Both checks pass again. Remove `ETHOS_DATA_CONFIG` from the shell
+(`unset ETHOS_DATA_CONFIG`) to return to your own settings. For real changes,
+follow
 [Keep data in the repository](../how-to/package-maintainers/keep-data-in-the-repository.md#update-data)
 to publish a revision and refresh the copy after the fix has been verified.

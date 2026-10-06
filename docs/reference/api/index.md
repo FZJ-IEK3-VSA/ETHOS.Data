@@ -7,7 +7,7 @@ key. The rest is here for completeness.
 
 | Topic | Contents |
 |-------|----------|
-| [Catalogue and collections](catalog.md) | `Catalog`, `Dataset`, `Resource`, `Collections`, `load_catalog`, `load_collections`, `catalog_pin`; the errors `CatalogUnavailable`, `UnknownDataset`, `IncompleteCatalog`, `CollectionError`, `UnknownCollection` |
+| [Catalogue and collections](catalog.md) | `Catalog`, `Dataset`, `Resource`, `Collections`, `load_catalog`, `load_collections`; the errors `CatalogUnavailable`, `CatalogVersionError`, `UnknownDataset`, `IncompleteCatalog`, `CollectionError`, `UnknownCollection` |
 | [Configuration and access](configuration.md) | the settings snapshot, cache roots, provenance, `Location`, `locate`, `AccessError` |
 | [Integrity and staging](integrity.md) | `verify`, `repair`, `Finding`, `run_selftest`, `materialize`, the staging root |
 | [Shared model](model.md) | `ethos_data.model` — digests, dataset names and families, resource records |
@@ -29,7 +29,8 @@ script: it builds the handle only for the commands that need one. A **key**
 (`<dataset>/<path>`) names one dataset, folder or file; `catalog()` loads the
 configured or public catalogue into a [`Catalog`](catalog.md#catalogue) whose
 `path()` and `resources()` answer by key, and a handle's `.catalog` does the
-same for the catalogue the file pins — so `fetch()` and `.catalog.path()` on
+same for the catalogue it reads within the file's release bounds — so
+`fetch()` and `.catalog.path()` on
 one handle read the same catalogue. The one-call forms `fetch()`, `paths()`
 and `resolve()` take the file's path and build a handle each time. A catalogue
 index that cannot be read raises

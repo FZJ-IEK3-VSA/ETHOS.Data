@@ -19,7 +19,10 @@ class BundleSource(BaseModel):
     catalog: str = Field(
         description="The catalogue location the bundle was exported from."
     )
-    revision: str | None = Field(None, description="The pinned revision, as given.")
+    revision: str | None = Field(
+        None,
+        description="The catalogue release or commit the exporter named, as given.",
+    )
     catalog_version: str | None = None
     catalog_descriptor_sha256: str | None = None
 

@@ -75,7 +75,7 @@ Key concepts used across `ethos-data`.
 |---|---|
 | **Settings file** | The one file the settings are read from and written to: the file `ETHOS_DATA_CONFIG` names, else the one in the account. It holds `public_cache`, `restricted_caches`, `staging_cache`, `catalog` and `publication_url`. See [Where the settings are stored](../how-to/data-users/set-up-your-machine.md#settings-file). |
 | **Provenance** | The record of *where* a resolved setting came from. Every lookup carries one, because "why is my data going there`" is the question people actually ask. |
-| **Pinned catalogue** | A catalogue URL naming an immutable version. Cached on disk forever. A URL naming `main`, `master`, `HEAD`, `latest`, `dev` or `develop` is recognised as moving and never cached. |
+| **Immutable catalogue URL** | A catalogue URL naming a release tag or a commit. Its metadata is cached on disk forever. A URL naming `main`, `master`, `HEAD`, `latest`, `dev` or `develop` is recognised as moving and never cached. |
 
 ## Installations
 

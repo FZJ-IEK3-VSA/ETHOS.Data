@@ -49,7 +49,9 @@ dataset or bundle may hold.
     options:
       members:
         - Version
+        - Prefix
         - Bounds
+        - releases
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

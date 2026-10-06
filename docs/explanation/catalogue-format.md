@@ -127,7 +127,7 @@ Two cases the general rule cannot express, handled explicitly:
 
 ## Catalogue caching
 
-A descriptor fetched from a version-pinned URL is written to disk and reused
+A descriptor fetched from a URL naming a release tag is written to disk and reused
 forever — its contents cannot change, so there is nothing to invalidate. Writes
 go through a temporary file and a rename, because two processes racing must
 never see a half-written file.

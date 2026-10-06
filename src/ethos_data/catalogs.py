@@ -50,7 +50,7 @@ from .formats.derived import (
 )
 from .model import digest, names
 from .model.resource import Resource, extras_of, from_record, to_record, with_sidecars
-from .model.versions import Bounds, Version
+from .model.versions import Bounds, Version, releases
 
 if TYPE_CHECKING:
     from .config import Roots, Settings
@@ -576,7 +576,7 @@ class Catalog:
     # key; a collections file (:class:`ethos_data.Collections`) is the place to
     # ask for what a tool's workflow needs by name. ``ethos_data.catalog()``
     # builds a handle for the configured catalogue; ``Collections.catalog`` is
-    # the one a tool's collections file pins.
+    # the one a tool reads within its collections file's release bounds.
 
     def _roots(self, root: Roots | str | Path | None) -> Roots:
         """The roots of :attr:`settings`, or of one call that names its own."""
@@ -665,42 +665,14 @@ def releases_of(catalog: Catalog) -> list[Version]:
     names = list(catalog.descriptor.get(keys.RELEASES) or [])
     if catalog.version:
         names.append(catalog.version)
-    found = set()
-    for name in names:
-        try:
-            found.add(Version.parse(name))
-        except ValueError:
-            continue
-    return sorted(found)
+    return releases(names)
 
 
-def public_release(bounds: Bounds) -> tuple[str, str]:
-    """The public release ``bounds`` select, and why, when no catalogue is set.
+def public_releases() -> list[Version]:
+    """The releases the public catalogue's ``main`` index lists, oldest first."""
+    from .config import DEFAULT_CATALOG
 
-    ``exact_version`` names its release outright. Otherwise the public
-    catalogue lists its releases, and the newest within the bounds is taken.
-    Either way the location is that release's own, which never changes.
-    """
-    from .config import DEFAULT_CATALOG, PUBLIC_RELEASE_URL
-
-    if bounds.exact is not None:
-        return (
-            PUBLIC_RELEASE_URL.format(version=bounds.exact),
-            f"the public release {bounds.exact}",
-        )
-    published = releases_of(load_catalog(DEFAULT_CATALOG))
-    admitted = [release for release in published if bounds.admits(release)]
-    if not admitted:
-        listed = ", ".join(map(str, published)) or "none"
-        raise CatalogVersionError(
-            f"no public catalogue release is within {bounds}; the public releases "
-            f"are: {listed}."
-        )
-    newest = admitted[-1]
-    return (
-        PUBLIC_RELEASE_URL.format(version=newest),
-        f"the public release {newest}, the newest within {bounds}",
-    )
+    return releases_of(load_catalog(DEFAULT_CATALOG))
 
 
 def check_release(catalog: Catalog, bounds: Bounds, file_name: str) -> None:
@@ -720,7 +692,7 @@ def check_release(catalog: Catalog, bounds: Bounds, file_name: str) -> None:
     except ValueError:
         raise CatalogVersionError(
             f"the {where} records release {catalog.version!r}, which is not of the form "
-            f"vYYYY.MM.N; {file_name} accepts only {bounds}.\n{advice}"
+            f"vMAJOR.MINOR.PATCH; {file_name} accepts only {bounds}.\n{advice}"
         ) from None
     if not bounds.admits(release):
         raise CatalogVersionError(
@@ -738,17 +710,16 @@ def load_catalog(location: str) -> Catalog:
     try:
         text, base = _read(location)
     except (FileNotFoundError, urllib.error.URLError) as error:
-        # HTTPError is a URLError: a 404 for a tag nobody has cut yet arrives
-        # here too, and reads as "HTTP Error 404: Not Found" -- which says
-        # nothing about *which* URL, or that a pin chose it.
+        # HTTPError is a URLError: a 404 for a release tag nobody has cut
+        # arrives here too, and reads as "HTTP Error 404: Not Found" -- which
+        # says nothing about *which* URL.
         reason = getattr(error, "reason", None) or error
         if isinstance(error, urllib.error.HTTPError):
             reason = f"HTTP {error.code} {error.reason}"
         raise CatalogUnavailable(
             f"cannot read the catalogue index at {location}: {reason}\n"
-            f"If a collections file pinned this location, its pin may name a revision or "
-            f"repository that does not exist (yet). Use another catalogue for this run with "
-            f"--catalog / catalog=, for this shell with $ETHOS_DATA_CATALOG, or for good with "
+            f"Use another catalogue for this run with --catalog / catalog=, for this "
+            f"shell with $ETHOS_DATA_CATALOG, or for good with "
             f"`ethos-data config set-catalog <datacatalog.json>`."
         ) from error
     descriptor = json.loads(text)

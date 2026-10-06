@@ -82,7 +82,7 @@ def store(tmp_path):
 @pytest.fixture
 def reader(tmp_path, monkeypatch, store):
     """A reader-side catalogue whose public cache is ``$ETHOS_DATA_DIR``."""
-    built = ReaderCatalogue(tmp_path, store)
+    built = ReaderCatalogue(tmp_path, store, monkeypatch)
     monkeypatch.setenv("ETHOS_DATA_DIR", str(built.cache))
     return built
 

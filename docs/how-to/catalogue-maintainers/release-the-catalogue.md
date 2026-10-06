@@ -9,10 +9,6 @@ run the release on the cluster computer, where its build input is readable.
 
 ## 1. Release {#release}
 
-Set the release in `catalog.yaml` first, `version: v2026.09.2`: the build
-writes it into the index, where packages compare it with the versions their
-collections files accept.
-
 ```bash
 ethos-data catalog release v1.2.0 --public ../ETHOS.Data-Catalogue --dry-run
 ethos-data catalog release v1.2.0 --public ../ETHOS.Data-Catalogue
@@ -31,8 +27,10 @@ before the push makes the push fail, and the release is rerun from the
 updated branch.
 
 !!! warning "Gap: releases are manual"
-    The code has no `catalog release`. Build, check and tag by hand, in the
-    source checkout:
+    The code has no `catalog release`. Set the release in `catalog.yaml`,
+    `version: v1.2.0`, which the build writes into the index, where packages
+    compare it with their release bounds. Then build, check and tag by hand,
+    in the source checkout:
 
     ```bash
     ethos-data catalog build

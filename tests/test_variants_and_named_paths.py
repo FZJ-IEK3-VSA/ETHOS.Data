@@ -42,11 +42,11 @@ def _write(path: Path, text: str) -> dict:
 def _no_network(*args, **kwargs):
     """Stands in for ``urllib.request.urlopen`` where a test must stay offline.
 
-    Nothing here configures a catalogue, so the only way a command could reach
-    the network is by falling back to the public one instead of the pin.
+    The catalogue is named in the environment here, so the only way a command
+    could reach the network is by falling back to the public one instead.
     """
     pytest.fail(
-        "the public catalogue was contacted; the pinned one should have been read"
+        "the public catalogue was contacted; the configured one should have been read"
     )
 
 
@@ -79,7 +79,7 @@ def world(tmp_path, monkeypatch):
     """A catalogue whose every file is already in the cache, so nothing downloads.
 
     The developer's own configuration must never leak in: a user-level
-    ``catalog`` override would replace every pin these tests write.
+    ``catalog`` setting would replace the catalogue these tests name.
     """
     monkeypatch.setattr(config, "load_config", lambda: ({}, {}))
     for variable in (
@@ -156,8 +156,12 @@ def world(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def define(world):
-    """Write a collections file pinned to the synthetic catalogue; returns its path."""
+def define(world, monkeypatch):
+    """Write a collections file; returns its path.
+
+    The catalogue it reads, the synthetic one unless ``catalog`` names
+    another, is named by ``$ETHOS_DATA_CATALOG``, as a user's settings would.
+    """
     tmp_path, _, index = world
 
     def write(
@@ -168,10 +172,10 @@ def define(world):
         collections = "".join(
             textwrap.dedent(body).strip("\n") + "\n" for body in bodies
         )
+        monkeypatch.setenv("ETHOS_DATA_CATALOG", str(catalog))
         path = tmp_path / name
         path.write_text(
-            f"catalog: {catalog.as_posix()}\ncollections:\n"
-            + textwrap.indent(collections, "  "),
+            "collections:\n" + textwrap.indent(collections, "  "),
             encoding="utf-8",
         )
         return path
@@ -314,10 +318,10 @@ class TestVariants:
         assert loaded.variants("onshore_wind") == ("test", "full")
         assert loaded.variants("landcover") == ()
         assert (
-            loaded.definition("onshore_wind", test=True)["paths"]["era5"]
+            loaded.definition("onshore_wind", test=True).paths["era5"]
             == "reskit-test-data/era5"
         )
-        assert loaded.definition("onshore_wind")["paths"]["era5"] == "era5"
+        assert loaded.definition("onshore_wind").paths["era5"] == "era5"
         # A plain collection's definition is the whole thing, title included.
         assert loaded.definition("landcover", test=True) is loaded.describe("landcover")
 
@@ -331,7 +335,6 @@ class TestVariants:
         assert selection.variant_name(True) == "test"
         assert selection.variant_name(False) == "full"
         assert selection.PATHS_KEY == "paths"
-        assert selection.SELECTION_KEYS == ("extends", "include", "paths")
 
     def test_the_test_flag_propagates_through_extends(self, define):
         """A test selection is built from its parents' test selections; a plain
@@ -954,8 +957,8 @@ def shipped(world, monkeypatch):
     (package / "data").mkdir(parents=True)
     (package / "__init__.py").write_text("")
     (package / "data" / "__init__.py").write_text("")
+    monkeypatch.setenv("ETHOS_DATA_CATALOG", str(index))
     (package / "data" / "collections.yaml").write_text(
-        f"catalog: {index.as_posix()}\n"
         "collections:\n"
         "  wind:\n"
         "    title: Wind inputs\n"
@@ -1342,12 +1345,12 @@ class TestCommandLine:
             re.MULTILINE,
         )
         assert re.search(
-            r"^  broken\s+\[unresolvable\]\s+collection 'broken' must be a mapping .*got NoneType$",
+            r"^  broken\s+\[unresolvable\]\s+collection 'broken': must be a mapping, got NoneType$",
             out,
             re.MULTILINE,
         )
         assert re.search(
-            r"^  alsobroken\s+\[unresolvable\]\s+collection 'alsobroken' must be a mapping .*got list$",
+            r"^  alsobroken\s+\[unresolvable\]\s+collection 'alsobroken': must be a mapping, got list$",
             out,
             re.MULTILINE,
         )
@@ -1437,23 +1440,19 @@ class TestCommandLine:
         # A command without the flag ignores it rather than rejecting it.
         assert tool_main(str(file), prog="example-data", argv=["--test", "show"]) == 0
 
-    @pytest.mark.legacy(
-        "collections files bound the catalogue version; the location comes from the settings"
-    )
-    def test_the_collection_commands_read_the_catalogue_the_file_pins(
+    def test_the_collection_commands_read_the_configured_catalogue(
         self, world, define, other_catalog, monkeypatch, capsys
     ):
-        """Nothing is configured here, so the alternative to the pin would be
-        the public catalogue on the network, which must not be contacted."""
+        """The alternative to the configured catalogue would be the public one
+        on the network, which must not be contacted."""
         file = define(ONSHORE)
         monkeypatch.setattr(urllib.request, "urlopen", _no_network)
         assert tool_main(str(file), prog="example-data", argv=["show"]) == 0
         assert "onshore_wind" in capsys.readouterr().out
-        # A different working directory cannot change the wrapper's pin.
         monkeypatch.chdir(file.parent)
         assert tool_main(file, prog="example-data", argv=["show", "onshore_wind"]) == 0
         assert capsys.readouterr().out.startswith("onshore_wind [full]: 7 files, ")
-        # --catalog and $ETHOS_DATA_CATALOG still win over the pin.
+        # --catalog wins over the environment, for one run.
         assert (
             tool_main(
                 str(file),
@@ -1482,7 +1481,7 @@ def other_catalog(world):
 
 
 class TestCollectionsFileRoute:
-    """A handle's ``.catalog``: the file's pin, for the key-taking calls."""
+    """A handle's ``.catalog``: the catalogue it reads, for the key-taking calls."""
 
     def test_path_and_list_resources_take_a_collections_file(
         self, world, define, monkeypatch
@@ -1492,20 +1491,19 @@ class TestCollectionsFileRoute:
         _, cache, _ = world
         file = define(ONSHORE)
         monkeypatch.setattr(urllib.request, "urlopen", _no_network)
-        pinned = ethos_data.collections(file).catalog
-        assert pinned.path("landcover/clc.tif") == cache / "landcover/clc.tif"
+        catalog = ethos_data.collections(file).catalog
+        assert catalog.path("landcover/clc.tif") == cache / "landcover/clc.tif"
         assert (
             ethos_data.collections(str(file)).catalog.path("era5/2015")
             == cache / "era5/2015"
         )
-        listed = pinned.resources("era5/2015")
+        listed = catalog.resources("era5/2015")
         assert [r.key for r in listed] == ["era5/2015/u.nc", "era5/2015/v.nc"]
 
-    def test_an_explicit_or_configured_catalogue_wins_over_the_pin(
+    def test_an_explicit_or_configured_catalogue_is_the_one_read(
         self, define, other_catalog, monkeypatch
     ):
-        """Below, not instead of: ``--catalog`` and the environment exist to
-        repoint every tool at once, pins included."""
+        """``catalog=`` for one handle, the environment for every tool at once."""
         file = define(ONSHORE)
         with pytest.raises(ethos_data.UnknownDataset, match="'era5' cannot be found"):
             ethos_data.collections(file, catalog=str(other_catalog)).catalog.resources(
@@ -1522,9 +1520,8 @@ class TestCatalogUnavailable:
     def test_a_missing_local_index_names_the_path_and_says_how_to_point_elsewhere(
         self, world
     ):
-        """The common cause is a pin, not a network fault, and the person hitting
-        it usually did not write that pin -- so the message says how to use
-        another catalogue for this run, this shell, or for good."""
+        """The message says how to use another catalogue for this run, this
+        shell, or for good."""
         tmp_path, _, _ = world
         nowhere = tmp_path / "nowhere" / "datacatalog.json"
         with pytest.raises(ethos_data.CatalogUnavailable) as caught:
@@ -1547,8 +1544,8 @@ class TestCatalogUnavailable:
         self, world, monkeypatch
     ):
         """HTTPError is a URLError; left alone it reads "HTTP Error 404: Not
-        Found" -- nothing about which URL, or that a pin chose it."""
-        url = "https://example.invalid/catalogue/v9.9/datacatalog.json"
+        Found" -- nothing about which URL."""
+        url = "https://example.invalid/catalogue/v9.9.0/datacatalog.json"
 
         def not_found(*args, **kwargs):
             raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
@@ -1560,7 +1557,7 @@ class TestCatalogUnavailable:
         assert message.startswith(
             f"cannot read the catalogue index at {url}: HTTP 404 Not Found"
         )
-        assert "pin may name a revision or repository that does not exist" in message
+        assert "--catalog" in message
         assert isinstance(caught.value.__cause__, urllib.error.HTTPError)
 
         def unreachable(*args, **kwargs):
@@ -1584,105 +1581,34 @@ class TestCatalogUnavailable:
             assert "Traceback" not in captured.err
 
 
-@pytest.mark.legacy(
-    "collections files bound the catalogue version; the location comes from the settings"
-)
-class TestCatalogPin:
-    """``catalog_pin``: the one reading of a file's ``catalog:`` key, shared by fetch, path and ls."""
-
-    def test_a_relative_pin_belongs_to_the_file_not_the_working_directory(
-        self, tmp_path, monkeypatch
-    ):
-        """A collections file is committed beside the catalogue it pins; where
-        the user happens to stand when running the tool must not change what
-        the file means."""
-        folder = tmp_path / "project" / "config"
-        folder.mkdir(parents=True)
-        file = folder / "collections.yaml"
-        file.write_text(
-            "catalog: ../catalogue/datacatalog.json\ncollections: {}\n",
-            encoding="utf-8",
-        )
-        monkeypatch.chdir(tmp_path)
-        expected = str(
-            (tmp_path / "project" / "catalogue" / "datacatalog.json").resolve()
-        )
-        assert selection.catalog_pin(file) == expected
-        assert selection.catalog_pin(str(file)) == expected
-        # An absolute path is taken as it is.
-        absolute = str((tmp_path / "elsewhere" / "datacatalog.json").resolve())
-        assert selection.catalog_pin(file, {"catalog": absolute}) == absolute
-
-    def test_no_pin_is_none_and_a_parsed_document_may_be_handed_in(self, tmp_path):
-        file = tmp_path / "collections.yaml"
-        file.write_text("collections: {}\n", encoding="utf-8")
-        assert selection.catalog_pin(file) is None
-        assert selection.catalog_pin(file, {"catalog": ""}) is None
-        url = "https://example.invalid/catalogue/v1/datacatalog.json"
-        assert selection.catalog_pin(file, {"catalog": url}) == url
-        # With a document the file is not read: load_collections has already parsed it.
-        assert selection.catalog_pin(
-            tmp_path / "never-written.yaml", {"catalog": "index.json"}
-        ) == str((tmp_path / "index.json").resolve())
-
-    def test_a_legacy_ref_suffix_is_stripped(self, tmp_path):
-        """Collections files used to pin ``<location>@<ref>``. A revision now
-        lives in the URL itself, so the suffix is dropped rather than looked for
-        on disk -- while a Git host's branch or tag segment is left alone."""
-        file = tmp_path / "collections.yaml"
-        assert selection.catalog_pin(
-            file, {"catalog": "catalogue/datacatalog.json@v1.2"}
-        ) == str((tmp_path / "catalogue" / "datacatalog.json").resolve())
-        assert (
-            selection.catalog_pin(
-                file, {"catalog": "https://example.invalid/cat/datacatalog.json@v2"}
-            )
-            == "https://example.invalid/cat/datacatalog.json"
-        )
-        tagged = "https://raw.githubusercontent.com/org/repo/v1.2/datacatalog.json"
-        assert selection.catalog_pin(file, {"catalog": tagged}) == tagged
-
-    def test_load_collections_follows_the_pin_from_any_working_directory(
-        self, world, define, monkeypatch
-    ):
-        """The relative form is what a committed file carries; it must hold
-        wherever the tool is run from, and never fall back to the network."""
-        _, cache, index = world
-        file = define(ONSHORE, catalog=Path("catalogue/datacatalog.json"))
-        monkeypatch.chdir(cache)
-        monkeypatch.setattr(urllib.request, "urlopen", _no_network)
-        assert selection.catalog_pin(file) == str(index)
-        assert ethos_data.load_collections(file).catalog.location == str(index)
-        assert [r.key for r in ethos_data.resolve("landcover", file)] == [
-            "landcover/clc.tif"
-        ]
-
-
 class TestSecondReviewRound:
     """Loose ends a second adversarial pass found; each was demonstrated first."""
 
     @pytest.mark.parametrize(
         "body, complaint",
         [
-            ("strinclude:\n  include: landcover\n", "include must be a list"),
+            (
+                "strinclude:\n  include: landcover\n",
+                "include: Input should be a valid list",
+            ),
             (
                 'nodataset:\n  include:\n    - files: ["clc.tif"]\n',
-                "needs a 'dataset' name",
+                "include[0].dataset: Field required",
             ),
             (
                 'badfiles:\n  include:\n    - dataset: landcover\n      files: "clc.tif"\n',
-                "must be a list of glob strings",
+                "include[0].files: Input should be a valid list",
             ),
         ],
     )
     def test_a_malformed_include_is_a_collection_error_not_a_traceback(
         self, define, capsys, body, complaint
     ):
-        """These used to escape as TypeError/KeyError from inside the glob loop
-        and take every other row of `ethos-data list` down with them."""
+        """Checked through the model, with the place of the mistake, and
+        without taking every other row of `show` down with them."""
         file = define(ONSHORE, body)
         name = body.split(":", 1)[0]
-        with pytest.raises(ethos_data.CollectionError, match=complaint):
+        with pytest.raises(ethos_data.CollectionError, match=re.escape(complaint)):
             ethos_data.resolve(name, file)
         assert tool_main(str(file), prog="example-data", argv=["show"]) == 1
         out = capsys.readouterr().out

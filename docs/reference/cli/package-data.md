@@ -226,7 +226,7 @@ See [Check and repair the cache](../../how-to/data-users/verify-and-repair.md).
 ## Reaching past the collections {#keys}
 
 A dataset, folder or file the package's collections do not name is
-`ethos-data`'s to hand out — it reads the catalogue the package pins, so the
+`ethos-data`'s to hand out — given the catalogue the package reads, the
 answer is the same and lands in the same cache.
 
 ```bash

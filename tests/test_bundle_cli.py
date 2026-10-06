@@ -52,9 +52,10 @@ def test_cli_export_verify_development_override(tmp_path, monkeypatch, capsys):
             }
         )
     )
+    monkeypatch.setenv("ETHOS_DATA_CATALOG", str(tmp_path / "datacatalog.json"))
     collections = tmp_path / "collections.yaml"
     collections.write_text(
-        "catalog: datacatalog.json\ncollections:\n  small:\n    include:\n      - dataset: lesson\n"
+        "collections:\n  small:\n    include:\n      - dataset: lesson\n"
     )
     target = tmp_path / "bundle"
     assert (
