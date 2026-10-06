@@ -75,6 +75,7 @@ raised, never reported.
       members:
         - run
         - BuildResult
+        - Build
         - render_dataset
         - write_dataset
         - stale_files
@@ -129,9 +130,10 @@ here, and every step a command takes checked against the
 
 ## Pipelines
 
-Adding, freezing, removing and checking a dataset are pipelines: every stage
-plans before any acts, so a refusal comes before the first write and a dry
-run is the plan.
+Every catalogue workflow that writes is a pipeline: every stage plans before
+any acts, so a refusal comes before the first write and a dry run is the plan.
+Building, uploading, publishing and the cache namespace are below; adding,
+freezing, removing and checking a dataset here.
 
 ::: ethos_data.maintain.pipeline
     options:
@@ -139,6 +141,7 @@ run is the plan.
         - Pipeline
         - Stage
         - Action
+        - Run
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3
@@ -174,6 +177,31 @@ run is the plan.
       show_root_toc_entry: false
       heading_level: 3
 
+::: ethos_data.maintain.release
+    options:
+      members:
+        - run
+        - ReleaseResult
+        - Release
+        - changes_since
+        - next_release
+        - Changes
+        - stamped
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.checkout
+    options:
+      members:
+        - run
+        - UpdateResult
+        - Update
+        - latest
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
 ::: ethos_data.maintain.provenance
     options:
       members:
@@ -190,6 +218,7 @@ run is the plan.
       members:
         - run
         - PublishResult
+        - Publication
         - render
         - public_datasets
         - strip
@@ -200,8 +229,11 @@ run is the plan.
 
 ## The cache namespace
 
-Built by [`ethos-data link --all`](../cli/ethos-data.md#link-dataset-directory).
-`run` takes the catalogue checkout and the namespace root as plain arguments,
+Built by [`ethos-data link --all`](../cli/ethos-data.md#link-dataset-directory),
+which also records the links in a clone given `--catalog-root`; the links and
+copies [`link`](../cli/ethos-data.md#link-dataset-directory) and
+[`materialize`](../cli/ethos-data.md#materialize-datasets) make by name are
+recorded here too. `run` takes the catalogue checkout and the namespace root as plain arguments,
 neither of them optional, because the command decides which cache it means once
 and hands the answer down: a planner that looked the cache up for itself could
 answer differently from the caller that had already looked, and the result would
@@ -212,12 +244,12 @@ be a whole link tree built somewhere nobody named.
       members:
         - run
         - NamespaceResult
-        - plan
-        - apply
-        - Action
-        - allow
-        - record_link
-        - record_materialized
+        - Namespace
+        - link
+        - Linking
+        - materialize_and_record
+        - Copying
+        - CopyResult
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3
@@ -230,6 +262,7 @@ be a whole link tree built somewhere nobody named.
         - run
         - UploadResult
         - UploadOptions
+        - Upload
         - preflight
         - read_back
         - load

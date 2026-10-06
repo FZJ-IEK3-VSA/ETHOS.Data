@@ -69,7 +69,7 @@
           "type": "string"
         },
         "step": {
-          "description": "add, migrate, build, change, upload, verify, link, materialize, record, check-source or remove.",
+          "description": "add, migrate, build, change, upload, verify, link, materialize, record, check-source, remove, purge or release.",
           "title": "Step",
           "type": "string"
         },
@@ -153,6 +153,19 @@
           "default": null,
           "description": "The build input that freezing the dataset retired.",
           "title": "Source Dir"
+        },
+        "release": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The catalogue release a release step made, vMAJOR.MINOR.PATCH.",
+          "title": "Release"
         }
       },
       "required": [

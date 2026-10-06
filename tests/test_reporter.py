@@ -55,14 +55,14 @@ def test_an_upload_takes_its_flags_as_options_not_a_command_line(source):
     result = upload.run(
         source.root,
         ["flat"],
-        upload.UploadOptions(dry_run=True, transfers=2),
+        upload.UploadOptions(transfers=2),
         store=store,
         reporter=recorded,
     )
 
     assert result.ok and result.datasets == ["flat"]
     assert store.copies[0]["transfers"] == 2
-    assert "Dry run only; nothing was uploaded." in "\n".join(recorded.infos)
+    assert "flat becomes available" in "\n".join(recorded.infos)
 
 
 def test_reporting_restores_the_reporter_it_replaced():

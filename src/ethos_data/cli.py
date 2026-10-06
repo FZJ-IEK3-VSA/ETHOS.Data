@@ -40,7 +40,6 @@ from .errors import (
     CollectionError,
     EthosDataError,
     IncompleteCatalog,
-    MaintenanceError,
     UnknownDataset,
 )
 from .formats import keys as k
@@ -592,12 +591,13 @@ def _add_cache_commands(sub) -> None:
     linker.add_argument(
         "--dry-run",
         action="store_true",
-        help="only honoured with --all, where it also previews what --prune "
-        "would remove; single-dataset link applies immediately",
+        help="print the plan, write nothing: with --all, where it also previews "
+        "what --prune would remove, and with --catalog-root; a link by name "
+        "without --catalog-root is made at once",
     )
     # Named as the maintainer commands name it, because it is the same thing: the
-    # checkout holding dataset.yaml. source_dir is popped out of a descriptor when
-    # it is built, so the hand-written file is the only place it exists.
+    # checkout holding each dataset's status.yaml, the one record of its
+    # source_dir.
     linker.add_argument(
         "--catalog-root",
         default=None,
@@ -1254,11 +1254,24 @@ def _link_command(args, settings) -> int:
             return 2
 
     checkout, catalog = _checkout_and_catalog(args, settings)
-    if args.command == "link":
+    if args.command == "link" and checkout is not None:
         from .maintain import namespace
 
-        if checkout is not None:
-            namespace.allow(checkout, args.dataset, "link")
+        report = namespace.link(
+            namespace.Linking(
+                checkout,
+                catalog,
+                args.dataset,
+                Path(args.directory) if args.directory is not None else None,
+                roots,
+                force=args.force,
+                cache=args.root,
+            ),
+            dry_run=args.dry_run,
+        )
+        if report is None:
+            return 0
+    elif args.command == "link":
         directory = args.directory
         if directory is None:
             from .maintain import source_dir_for
@@ -1279,8 +1292,6 @@ def _link_command(args, settings) -> int:
     # streams arrive in the opposite order and the warning reads as being about
     # whatever came before it.
     print(f"  {report}", flush=True)
-    if args.command == "link" and checkout is not None:
-        _print_recorded(args.dataset, namespace.record_link(checkout, report))
     if report.missing:
         # Not a failure: the link is made, and the person who typed the path is
         # the only one who can say whether it is the right level.
@@ -1308,14 +1319,9 @@ def _checkout_and_catalog(args, settings):
     return checkout, load_catalog(str(checkout / "datacatalog.json"), settings=settings)
 
 
-def _print_recorded(dataset: str, state: str) -> None:
-    """Say what a link or a copy recorded in the checkout's status file."""
-    print(f"  recorded    {dataset} is {state}, in its status.yaml")
-
-
 def _materialize_command(args, settings) -> int:
-    from .maintain import namespace, source_dir_for
-    from .materialize import MaterializeReport, linked_entries, materialize
+    from .maintain import source_dir_for
+    from .materialize import linked_entries, materialize
 
     roots = settings.roots
     checkout, catalog = _checkout_and_catalog(args, settings)
@@ -1339,20 +1345,29 @@ def _materialize_command(args, settings) -> int:
             print(f"no symbolic-link entries in {walked}; nothing to materialise.")
             return 0
 
-    refused = []
     if checkout is not None:
-        # The step is checked for each dataset before anything is copied; one
-        # whose state does not allow it is reported and left alone.
-        for name in list(names):
-            try:
-                namespace.allow(checkout, name, "materialize")
-            except MaintenanceError as error:
-                refused.append(
-                    MaterializeReport(name, "cannot", error.message.splitlines()[0])
-                )
-                names.remove(name)
+        # Each copy is a step of the dataset in the checkout, checked for every
+        # dataset before anything is copied; one whose state does not allow it
+        # is reported and left alone.
+        from .maintain import namespace
 
-    reports = refused + materialize(
+        result = namespace.materialize_and_record(
+            namespace.Copying(
+                checkout,
+                catalog,
+                names,
+                roots,
+                verify_hashes=not args.no_verify,
+                source=args.source,
+                cache=args.root,
+            ),
+            dry_run=args.dry_run,
+        )
+        for report in result.reports:
+            print(f"  {report}")
+        return 0 if result.ok else 1
+
+    reports = materialize(
         catalog,
         names,
         roots,
@@ -1366,11 +1381,6 @@ def _materialize_command(args, settings) -> int:
         print(f"  {report}")
         for failure in report.failures[:10]:
             print(f"      ! {failure}")
-        if checkout is not None and report.action == "materialized":
-            state = namespace.record_materialized(
-                checkout, report, verified=not args.no_verify
-            )
-            _print_recorded(report.dataset, state)
 
     total = sum(r.bytes for r in reports if r.action in ("would copy", "materialized"))
     destinations = sorted(

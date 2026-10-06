@@ -6,9 +6,7 @@ Key concepts used across `ethos-data`.
     These terms describe the [target architecture](../explanation/architecture/glossary.md),
     which the code does not have yet: one **bundle** format and a bundle
     **ahead of the catalogue**, **release** with `catalog release`, and
-    **handoffs**. The code has only bundles exported from the catalogue, and
-    of the **pipelines** only `catalog add`, `record`, `remove` and
-    `check-source`.
+    **handoffs**. The code has only bundles exported from the catalogue.
 
 ## Data
 

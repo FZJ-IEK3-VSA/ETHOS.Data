@@ -54,6 +54,9 @@ dataset or bundle may hold.
         - Prefix
         - Bounds
         - releases
+        - admissible
+        - LEVELS
+        - FIRST
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

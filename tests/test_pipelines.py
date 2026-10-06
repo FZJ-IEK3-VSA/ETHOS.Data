@@ -70,7 +70,7 @@ class TestPipeline:
             def plan(self, context):
                 return [Action("write the file", lambda: done.append("written"))]
 
-        assert Pipeline("p", [Writes()]).run(None, dry_run=True) == 1
+        assert Pipeline("p", [Writes()]).run(None, dry_run=True).planned == 1
 
         assert done == []
         out = capsys.readouterr().out
@@ -95,6 +95,36 @@ class TestPipeline:
             Pipeline("p", [Checked()]).run(None)
 
         assert done == [1]
+
+    def test_a_failed_dataset_of_a_batch_stops_only_its_own_actions(self):
+        done = []
+
+        def fails():
+            raise MaintenanceError("rclone exited 7")
+
+        class Transfer:
+            name = "transfer"
+
+            def plan(self, context):
+                return [
+                    Action("copy a", fails, subject="a"),
+                    Action("copy b", lambda: done.append("copy b"), subject="b"),
+                ]
+
+        class Record:
+            name = "record"
+
+            def plan(self, context):
+                return [
+                    Action("record a", lambda: done.append("record a"), subject="a"),
+                    Action("record b", lambda: done.append("record b"), subject="b"),
+                ]
+
+        run = Pipeline("p", [Transfer(), Record()]).run(None)
+
+        assert done == ["copy b", "record b"]
+        assert not run.ok
+        assert run.failed == {"a": "rclone exited 7"}
 
 
 class TestAdd:
@@ -437,3 +467,72 @@ class TestCheckSource:
 
         index = json.loads((source.root / "datacatalog.json").read_text("utf-8"))
         assert [row["name"] for row in index["datasets"]] == ["mirror"]
+
+
+class TestBuild:
+    def test_a_dry_run_lists_what_would_change_and_writes_nothing(self, source):
+        directory = source.dataset("flat", {"a.csv": "1"})
+
+        code, out, err = source.catalog("build", "--dry-run")
+
+        assert code == 0, err
+        assert "write        write datasets/flat/: datapackage.json" in out
+        assert "write        write datacatalog.json: 1 datasets" in out
+        assert "record       flat becomes built" in out
+        assert not (directory / "datapackage.json").exists()
+        assert not (directory / ".ethos-data-hash-cache.json").exists()
+        assert source.status("flat")["state"] == "draft"
+
+    def test_a_build_that_changes_nothing_writes_nothing(self, source):
+        directory = source.dataset("flat", {"a.csv": "1"})
+        assert source.build()[0] == 0
+        written = (directory / "datapackage.json").stat().st_mtime_ns
+
+        code, out, _ = source.build()
+
+        assert code == 0
+        assert "nothing to do." in out
+        assert (directory / "datapackage.json").stat().st_mtime_ns == written
+
+    def test_a_dataset_the_build_refuses_stops_it_before_anything_is_written(
+        self, source
+    ):
+        source.dataset("ok", {"a.csv": "1"})
+        source.dataset("zz", {"b.csv": "2"})
+        assert source.build()[0] == 0
+        source.edit("ok", title="Renamed")
+        source.edit("zz", source_dir="/somewhere")
+
+        code, _, err = source.build()
+
+        assert code == 1
+        assert "ethos-data catalog migrate zz" in err
+        assert source.package("ok")["title"] != "Renamed"
+
+
+class TestPublish:
+    def test_a_dry_run_is_the_plan(self, source, tmp_path):
+        source.dataset("flat", {"a.csv": "1"})
+        assert source.build()[0] == 0
+        target = tmp_path / "public"
+        target.mkdir()
+        (target / "stray.txt").write_text("left over", encoding="utf-8")
+
+        code, out, err = source.catalog("publish", str(target), "--dry-run")
+
+        assert code == 0, err
+        assert "write        remove stray.txt" in out
+        assert "write        write datacatalog.json" in out
+        assert [p.name for p in target.iterdir()] == ["stray.txt"]
+
+    def test_publishing_again_changes_nothing(self, source, tmp_path):
+        source.dataset("flat", {"a.csv": "1"})
+        assert source.build()[0] == 0
+        target = tmp_path / "public"
+        target.mkdir()
+        assert source.publish(target)[0] == 0
+
+        code, out, _ = source.publish(target)
+
+        assert code == 0
+        assert "nothing to do." in out

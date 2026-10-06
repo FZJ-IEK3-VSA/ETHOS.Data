@@ -34,6 +34,9 @@ class FakeStore:
     """
 
     put: Callable[[str, str, bytes], None] | None = None
+    #: Receives every purged or replaced destination, when given, to delete what
+    #: ``put`` sent there.
+    remove: Callable[[str], None] | None = None
     #: The rclone status to rehearse a failed transfer with; 0 copies.
     copy_status: int = 0
     #: Whether anonymous reads succeed: False rehearses a missing chmod.
@@ -42,6 +45,8 @@ class FakeStore:
     where: str = "ONLINE"
     objects: dict[str, bytes] = field(default_factory=dict)
     copies: list[dict] = field(default_factory=list)
+    syncs: list[dict] = field(default_factory=list)
+    purges: list[str] = field(default_factory=list)
     chmods: list[tuple[str, int]] = field(default_factory=list)
     reads: list[str] = field(default_factory=list)
     tokens: list[str] = field(default_factory=list)
@@ -57,7 +62,6 @@ class FakeStore:
         paths: list[str],
         *,
         transfers: int,
-        dry_run: bool,
     ) -> None:
         self.copies.append(
             {
@@ -65,20 +69,53 @@ class FakeStore:
                 "destination": destination,
                 "paths": list(paths),
                 "transfers": transfers,
-                "dry_run": dry_run,
             }
         )
         if self.copy_status:
             raise UploadError(
                 f"rclone exited {self.copy_status} copying to {destination}."
             )
-        if dry_run:
-            return
         for path in paths:
             data = (Path(source) / path).read_bytes()
             self.objects[f"{destination}/{path}"] = data
             if self.put is not None:
                 self.put(destination, path, data)
+
+    def sync(self, source: Path, destination: str) -> None:
+        source = Path(source)
+        paths = sorted(
+            p.relative_to(source).as_posix()
+            for p in source.rglob("*")
+            if p.is_file() and ".git" not in p.relative_to(source).parts
+        )
+        self.syncs.append(
+            {"source": source, "destination": destination, "paths": paths}
+        )
+        if self.copy_status:
+            raise UploadError(
+                f"rclone exited {self.copy_status} syncing {source} to {destination}"
+            )
+        self._forget(destination)
+        for path in paths:
+            data = (source / path).read_bytes()
+            self.objects[f"{destination}/{path}"] = data
+            if self.put is not None:
+                self.put(destination, path, data)
+
+    def purge(self, destination: str) -> None:
+        if self.copy_status:
+            raise UploadError(f"rclone exited {self.copy_status} purging {destination}")
+        self.purges.append(destination)
+        self._forget(destination)
+
+    def exists(self, destination: str) -> bool:
+        return any(path.startswith(f"{destination}/") for path in self.objects)
+
+    def _forget(self, destination: str) -> None:
+        for path in [p for p in self.objects if p.startswith(f"{destination}/")]:
+            del self.objects[path]
+        if self.remove is not None:
+            self.remove(destination)
 
     def chmod(self, path: str, mode: int, bearer: str) -> None:
         self.chmods.append((path, mode))
@@ -134,15 +171,41 @@ class FakeDownloader:
 
 @dataclass
 class FakeGit:
-    """A checkout that records its commits, tags and pushes."""
+    """A checkout that records its commits, tags, pushes, fetches and fast-forwards."""
 
     clean: bool = True
     commits: list[str] = field(default_factory=list)
     tags: list[tuple[str, str]] = field(default_factory=list)
     pushes: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
+    fetches: list[str] = field(default_factory=list)
+    forwards: list[str] = field(default_factory=list)
+    #: Tags the remote has, which ``fetch`` brings in.
+    remote_tags: list[str] = field(default_factory=list)
+    #: The text of each file at a tag, by ``(tag, path)``, for ``show``.
+    files: dict[tuple[str, str], str] = field(default_factory=dict)
+    #: The paths ``changed`` reports, whatever the tag.
+    changes: list[str] = field(default_factory=list)
 
     def is_clean(self) -> bool:
         return self.clean
+
+    def tag_names(self) -> list[str]:
+        return [name for name, _ in self.tags]
+
+    def fetch(self, remote: str) -> None:
+        self.fetches.append(remote)
+        for name in self.remote_tags:
+            if name not in self.tag_names():
+                self.tags.append((name, ""))
+
+    def fast_forward(self, ref: str) -> None:
+        self.forwards.append(ref)
+
+    def show(self, ref: str, path: str) -> str | None:
+        return self.files.get((ref, path))
+
+    def changed(self, ref: str) -> list[str]:
+        return list(self.changes)
 
     def head(self) -> str:
         return f"commit-{len(self.commits)}"

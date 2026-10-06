@@ -65,8 +65,8 @@ def make_catalog(root: Path, datasets: dict[str, dict]) -> Path:
 def make_args(
     datasets: list[str], **overrides
 ) -> tuple[list[str], upload.UploadOptions]:
-    """The datasets and the options ``upload.run`` takes; a dry run by default."""
-    return datasets, upload.UploadOptions(**{"dry_run": True, **overrides})
+    """The datasets and the options ``upload.run`` takes."""
+    return datasets, upload.UploadOptions(**overrides)
 
 
 @pytest.fixture
@@ -82,7 +82,7 @@ def workspace():
 def store(monkeypatch):
     """The publication store every upload in the test gets: a fake that records."""
     fake = FakeStore()
-    monkeypatch.setattr(upload, "DcacheStore", lambda remote: fake)
+    monkeypatch.setattr(upload, "DcacheStore", lambda remote, frontend: fake)
     return fake
 
 
@@ -190,6 +190,28 @@ class TestUploadingTheSubset:
         result = upload.run(workspace, *make_args(["a", "b"]))
         assert not result.ok
         assert sorted(result.failed) == ["a", "b"]
+
+    def test_one_failed_dataset_does_not_stop_the_others(self, workspace, store):
+        make_catalog(workspace, {"a": {}, "b": {}})
+        copy = store.copy
+
+        def refuse_a(source, destination, paths, **options):
+            if destination.endswith("/a"):
+                raise UploadError(f"rclone exited 7 copying to {destination}.")
+            copy(source, destination, paths, **options)
+
+        store.copy = refuse_a
+
+        result = upload.run(workspace, *make_args(["a", "b"]))
+
+        assert list(result.failed) == ["a"]
+        states = {
+            name: yaml.safe_load(
+                (workspace / "datasets" / name / "status.yaml").read_text("utf-8")
+            )["state"]
+            for name in ("a", "b")
+        }
+        assert states == {"a": "built", "b": "available"}
 
 
 if __name__ == "__main__":

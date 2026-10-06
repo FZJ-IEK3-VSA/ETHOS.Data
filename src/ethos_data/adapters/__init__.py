@@ -49,9 +49,24 @@ class Store(Protocol):
         paths: list[str],
         *,
         transfers: int,
-        dry_run: bool,
     ) -> None:
         """Copy ``paths`` under ``source`` to ``destination``; never overwrite."""
+        ...
+
+    def sync(self, source: Path, destination: str) -> None:
+        """Make ``destination`` hold exactly the files under ``source``, ``.git`` aside.
+
+        Unlike :meth:`copy` it replaces what is there, for a folder of which
+        the store keeps the latest version only.
+        """
+        ...
+
+    def purge(self, destination: str) -> None:
+        """Delete ``destination`` and everything under it; the store has no trash."""
+        ...
+
+    def exists(self, destination: str) -> bool:
+        """Whether ``destination`` holds anything."""
         ...
 
     def chmod(self, path: str, mode: int, bearer: str) -> None:
@@ -94,10 +109,30 @@ class Downloader(Protocol):
 
 @runtime_checkable
 class Git(Protocol):
-    """A git checkout, as a release commits, tags and pushes it."""
+    """A git checkout, as a release commits, tags and pushes it and a server updates it."""
 
     def is_clean(self) -> bool:
         """Whether the working tree has no uncommitted changes."""
+        ...
+
+    def tag_names(self) -> list[str]:
+        """Every tag of the repository."""
+        ...
+
+    def fetch(self, remote: str) -> None:
+        """Fetch ``remote``'s branches and tags."""
+        ...
+
+    def fast_forward(self, ref: str) -> None:
+        """Move the checkout to ``ref``, refusing anything but a fast-forward."""
+        ...
+
+    def show(self, ref: str, path: str) -> str | None:
+        """The text of ``path`` at ``ref``; None when ``ref`` has no such file."""
+        ...
+
+    def changed(self, ref: str) -> list[str]:
+        """The paths that differ between ``ref`` and the working tree, committed or not."""
         ...
 
     def head(self) -> str:

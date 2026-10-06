@@ -64,8 +64,15 @@ from each `dataset.yaml`, plus the catalogue-wide `datacatalog.json`.
 ```bash
 ethos-data catalog build my-dataset      # one
 ethos-data catalog build                 # all
+ethos-data catalog build --dry-run       # what a build would write and record
 ethos-data catalog build --check         # CI: fail if any manifest is out of date
 ```
+
+Four stages, each planned before any acts: `check` reads `catalog.yaml` and
+the state of every dataset named before anything is hashed; `render` renders
+every generated file in memory; `write` writes the files that differ from the
+ones on disk, and the index; `record` records what the build changed. A build
+that changes nothing writes nothing.
 
 Walks `source_dir`, computes a SHA-256 per file, applies
 `ethos:include`/`ethos:exclude`, pulls in shapefile companions, and excludes VCS
@@ -87,6 +94,7 @@ only.
 
 | Flag | |
 |---|---|
+| `--dry-run` | print the plan; write nothing |
 | `--check` | report staleness and exit non-zero; write nothing |
 
 ## `publish <target>`
@@ -95,9 +103,14 @@ Generate the public catalogue from this source one, into a checkout of the
 public repository.
 
 ```bash
+ethos-data catalog publish ../ETHOS.Data-Catalogue --dry-run
 ethos-data catalog publish ../ETHOS.Data-Catalogue
 ethos-data catalog publish ../ETHOS.Data-Catalogue --check
 ```
+
+Three stages: `render` renders the public tree in memory, `check` runs the
+leak check below, and `write` writes the files that differ and removes the
+files the target holds that are not generated.
 
 Emits `datacatalog.json`, each public `datasets/<name>/datapackage.json` with
 the keys the dataset.yaml format marks unpublished stripped (`source_dir`,
@@ -116,6 +129,7 @@ written, in both modes. Licence documents are copied verbatim and not searched.
 
 | Flag | |
 |---|---|
+| `--dry-run` | print the plan: the files it would write and remove; write nothing |
 | `--check` | fail if the target is out of date or the tree would leak; write nothing |
 
 ## `upload <dataset> [<dataset> ...]`
@@ -130,8 +144,10 @@ ethos-data catalog upload my-dataset --verify-only
 ```
 
 Name one dataset, or any subset of the catalogue. A family name stands for every
-member beneath it, since the family itself has no files. Each dataset is uploaded
-and verified in turn, in the order given, and a run ends with a per-dataset summary:
+member beneath it, since the family itself has no files. Five stages, each
+planned before any acts, handle the datasets in the order given: `check`,
+`transfer`, `permissions`, `verify` and `record`. A run of several ends with a
+per-dataset summary:
 
 ```bash
 ethos-data catalog upload global-wind-atlas-v4 global-solar-atlas
@@ -143,18 +159,20 @@ Every dataset named is loaded and checked **before any of them is uploaded**, so
 a restricted dataset, an unbuilt manifest or a mistyped name stops the run while
 nothing has been published yet. That is the difference from a shell loop, which
 would upload the first dataset and only then discover the problem with the
-second.
+second. A dataset that fails later, in its transfer or its read-back, does not
+stop the others, and what was uploaded stays. A dataset whose upload of its
+current inventory is verified and recorded is not uploaded again, so running
+the command again finishes the batch.
 
 | Flag | Default | |
 |---|---|---|
-| `--dry-run` | | preview rclone transfers; may contact storage; do not combine with `--verify-only` |
-| `--verify-only` | | skip transfer; public chmod still runs unless `--no-chmod` is supplied |
-| `--allow-internal` | | permit internal data without public chmod; verification remains anonymous |
+| `--dry-run` | | print the plan; contact no store |
+| `--verify-only` | | skip the transfer; the chmod runs unless `--no-chmod` is given too |
 | `--no-chmod` | | do not set `0755` on the dataset prefix |
 | `--transfers N` | `8` | parallel transfers |
-| `--remote NAME` | `HIFIS` | rclone remote name |
-| `--oidc-profile NAME` | `HIFIS` | oidc-agent profile |
-| `--vo-path PATH` | `Helmholtz/FZJ-ICE2` | namespace path of the VO |
+| `--remote NAME` | `catalog.yaml`'s `ethos:store`, else `HIFIS` | rclone remote name |
+| `--oidc-profile NAME` | `catalog.yaml`'s `ethos:store`, else `HIFIS` | oidc-agent profile |
+| `--vo-path PATH` | `catalog.yaml`'s `ethos:store`, else `Helmholtz/FZJ-ICE2` | namespace path of the VO |
 | `--root NAME` | last segment of `catalog.yaml`'s `ethos:publication_url` | publication root under the VO |
 
 A dataset may be named by directory name or by path — a path must point into
@@ -174,9 +192,6 @@ reports anything unreadable or the wrong size, plus the storage locality
 (`ONLINE` / `ONLINE_AND_NEARLINE` / `NEARLINE`).
 
 HEAD checks establish readability and size, not remote SHA-256 identity.
-An internal upload can succeed in transfer yet fail anonymous verification.
-`--allow-internal` does not establish private storage permissions or configure
-authenticated consumer downloads.
 
 The dataset's state must allow the step: a built dataset is uploaded, a frozen
 one is refused and only rechecked with `--verify-only`. A verified upload, and
@@ -186,19 +201,10 @@ freezes it afterwards. A dataset without a status file is refused, naming
 [`migrate`](#migrate-datasets). The guards of the step refuse restricted data
 and unresolved licensing with `TransitionError`.
 
-!!! warning "Gap: `--allow-internal` is to be removed"
-    With [decision
-    0011](../../explanation/architecture/decisions/0011-access-class-picks-the-root.md),
-    there is no `internal` class, so the option has nothing left to permit.
-    Data the institute holds without publishing it is restricted data, which
-    `upload` refuses: it never has a copy on dCache. To be implemented
-    separately.
-
 Use `--verify-only --no-chmod` to recheck without changing permissions.
 
-With a single dataset the exit code is rclone's own on a transfer failure, or
-`1` on a verification miss. With several it is `1` if any dataset failed, and
-the summary says which.
+The exit code is `1` if any dataset failed; with several, the summary says
+which.
 
 Full runbook: [Upload a dataset](../../how-to/catalogue-maintainers/upload-a-dataset.md).
 
@@ -280,9 +286,23 @@ checkout, and its cache entries and bytes where they are, until a major
 release is recorded after the removal. Removing a withdrawn dataset again does
 nothing.
 
+`--purge` is the second half, once a major [release](#release-version) is
+recorded after the removal in the dataset's status file:
+
+| Stage | |
+|---|---|
+| `check` | every dataset named is withdrawn; a major release is recorded after its removal; no other dataset's copy on the store lies in its folder or around it; this account can write every cache that holds a recorded entry, else the cache is named and nothing is deleted. Entries in the account's public cache and restricted caches that no copy records are reported, not deleted |
+| `cache` | unlink every link the status file records; delete every copy a cache owns |
+| `store` | purge the dataset's folder on the store, which has no trash area, unless it holds nothing any more, and check that it is not served afterwards |
+| `tombstone` | delete the dataset's directory but its `status.yaml`, which records it `purged`, and a family left with no members; rebuild the index |
+
+The tombstone keeps the name: `catalog add` refuses to give it to other bytes.
+A purge interrupted half-way finishes when it is run again.
+
 | Flag | |
 |---|---|
 | `--reason TEXT` | why, for the record in `status.yaml` |
+| `--purge` | delete the cache entries, bytes and directory of withdrawn datasets, after a major release |
 | `--dry-run` | check and plan; write nothing |
 
 ## `check-source <dataset> <directory>` {#check-source}
@@ -310,6 +330,78 @@ datasets have no source and are refused.
 | `--dry-run` | compare; record nothing |
 
 Exit `1` if a file differs.
+
+## `release <version>` {#release-version}
+
+Make a release of the checked source catalogue, the internal and the public
+catalogue alike.
+
+```bash
+ethos-data catalog release v1.3.0 --public ../ETHOS.Data-Catalogue --dry-run
+ethos-data catalog release v1.3.0 --public ../ETHOS.Data-Catalogue
+ethos-data catalog release v1.3.0 --public ../ETHOS.Data-Catalogue --push --upload
+```
+
+| Stage | |
+|---|---|
+| `check` | the version is admissible and has no tag; both checkouts are clean, and the public one is not a source catalogue; every manifest is current; every public dataset the public catalogue lists has an upload verified after its last inventory change; the public tree does not leak |
+| `stamp` | write `version:` into `catalog.yaml` and the index; add a `release` step to the history of every dataset with steps since its last release, and, in a major release, of every withdrawn dataset |
+| `commit` | commit the source checkout, `Release <version>`, and tag it |
+| `public` | generate the public catalogue in its checkout, commit and tag it |
+| `push` | with `--push`: push both checkouts and the tag to `--remote` |
+| `store` | with `--upload`: put the public catalogue on the store under `<publication root>/catalogue/`, replacing the previous one, make it world-readable, and check that it is served |
+
+The version is `vMAJOR.MINOR.PATCH`. The first release is `v1.0.0`; every
+later one is the next patch, minor or major of the last release, at or above
+the smallest level the changes since need. The `check` stage works that level
+out and names the smallest admissible version, `catalog status` too:
+
+| Changes since the last release | Level |
+|---|---|
+| A step recorded in a status file that adds, builds, changes or withdraws a dataset | minor |
+| A dataset that enters or leaves the internal or the public catalogue, or whose row changes its access class, visibility, size, file count or remote prefix | minor |
+| Any other change of an index row, and any file of the clone that differs from the last release's tag, status files aside | patch |
+
+A patch or minor release that changes nothing is refused. A major release is
+a retention epoch: it needs no change, and the purge of a withdrawn dataset
+waits for one.
+
+Run again with the same version, it does only what is left: a stamp, a
+release step or a tag that is there is not made again. A release made without `--push` and
+`--upload` is finished by running it again with them, and so is one that was
+interrupted.
+
+| Flag | |
+|---|---|
+| `--public DIR` | the checkout of the public catalogue repository; required |
+| `--push` | push both checkouts and the tag |
+| `--upload` | put the public catalogue on the store |
+| `--remote NAME` | the git remote to push to (default: `origin`) |
+| `--dry-run` | check and plan; write nothing |
+
+## `update-checkout` {#update-checkout}
+
+Move the checkout readers are served, on the machine that serves it, to a
+release.
+
+```bash
+ethos-data catalog --catalog-root /shared/ethos/catalogue update-checkout --dry-run
+ethos-data catalog --catalog-root /shared/ethos/catalogue update-checkout
+```
+
+Three stages: `fetch` the remote's branches and tags, refusing a checkout
+with changes nobody committed; `advance` to the latest release tag, or to
+`--to`, by fast-forward only, checking that `catalog.yaml` then says that
+release; `check` every manifest against its files, writing nothing. Nothing is
+rebuilt in a served checkout. The check hashes the files of every dataset that
+is not frozen, so freezing datasets with [`record`](#record-dataset) keeps it
+short.
+
+| Flag | |
+|---|---|
+| `--to VERSION` | the release to move to, `v1.2.0` (default: the latest release tag) |
+| `--remote NAME` | the git remote to fetch (default: `origin`) |
+| `--dry-run` | plan; fetch and move nothing |
 
 ## `migrate [datasets...]` {#migrate-datasets}
 
@@ -345,8 +437,10 @@ Exit `1` if a dataset was left alone.
 
 ## `check-store [vo]`
 
-Probe what this account can do on dCache InfiniteSpace. Default VO:
-`FZJ-ICE2`.
+Probe what this account can do on dCache InfiniteSpace. Inside a catalogue
+checkout it probes the store `catalog.yaml` names under
+[`ethos:store`](../schemas.md#catalogyaml); elsewhere, or for another VO
+named, the VO `FZJ-ICE2` by default.
 
 ```bash
 ethos-data catalog check-store FZJ-ICE2

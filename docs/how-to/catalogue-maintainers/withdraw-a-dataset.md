@@ -75,13 +75,3 @@ still describe the dataset, but its bytes are gone, and copies on users' own
 machines remain; removal notifies nobody by itself and corrects no earlier
 result.
 
-!!! warning "Gap: the purge is manual"
-    The code has no `catalog remove --purge`. After the next major release,
-    remove the dataset's cache entries with
-    `ethos-data --root <cache> unlink <name>`, or `rm -r` for a copy the
-    cache owns, and its folder on dCache with
-    `rclone purge HIFIS:ethos-data/<remote prefix>`, once you have checked
-    that no other dataset shares it; see
-    [Manage dCache folders](manage-dcache-folders.md). Then delete the
-    dataset's directory except its `status.yaml`, and record the purge in it
-    by hand. Nothing checks the order.

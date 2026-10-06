@@ -80,6 +80,8 @@ STAGING = "staging"
 
 DATASETS = "datasets"
 PUBLICATION_URL = "ethos:publication_url"
+#: Of catalog.yaml: how the maintainer commands reach the publication store.
+STORE = "ethos:store"
 CATALOG_ROLE = "ethos:catalog_role"
 #: Of the published index: every public release, the current one included.
 RELEASES = "ethos:releases"
@@ -164,6 +166,13 @@ UNSPECIFIED = "unspecified"
 
 DATAPACKAGE_PROFILE = "https://datapackage.org/profiles/2.0/datapackage.json"
 DATACATALOG_PROFILE = "https://datapackage.org/profiles/2.0/datacatalog.json"
+
+# -- the generated catalogue files ----------------------------------------------
+
+#: A dataset's generated descriptor, beside its dataset.yaml.
+PACKAGE_FILE = "datapackage.json"
+#: The catalogue's generated index, at the catalogue's root.
+INDEX_FILE = "datacatalog.json"
 
 # -- records the tools write beside data -----------------------------------------
 

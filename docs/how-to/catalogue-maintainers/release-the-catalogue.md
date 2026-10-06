@@ -26,25 +26,6 @@ with the same version does only what is left; a merge that lands on JuGit
 before the push makes the push fail, and the release is rerun from the
 updated branch.
 
-!!! warning "Gap: releases are manual"
-    The code has no `catalog release`. Set the release in `catalog.yaml`,
-    `version: v1.2.0`, which the build writes into the index, where packages
-    compare it with their release bounds. Then build, check and tag by hand,
-    in the source checkout:
-
-    ```bash
-    ethos-data catalog build
-    ethos-data catalog build --check
-    git diff
-    git commit -am "Add <datasets>"
-    git tag v1.2.0
-    git push origin main v1.2.0
-    ```
-
-    then generate, check and tag the public catalogue as in
-    [step 3](#public), and update the cluster's checkout as in
-    [step 2](#internal).
-
 ### Choose the version {#version}
 
 A release is named `vMAJOR.MINOR.PATCH`: three numbers without leading zeros
@@ -72,10 +53,6 @@ any release of the current major describes. An urgent deletion, for example
 under a licence that forbids further distribution, needs an unplanned major
 release; see [Remove a dataset](withdraw-a-dataset.md).
 
-!!! warning "Gap: nothing checks the version"
-    The code has no `catalog status` and no `catalog release`. Work the level
-    out from the table above, and check that the tag follows the last one.
-
 ## 2. Update the internal catalogue {#internal}
 
 Cluster users read one checkout of the source catalogue on the cluster
@@ -92,10 +69,6 @@ ethos-data --catalog /shared/ethos/catalogue/datacatalog.json ls
 tag and runs `build --check`, which writes nothing. Never rebuild inside the
 served checkout while jobs read it: an index from one revision paired with
 inventories from another is exactly what an `IncompleteCatalog` error reports.
-
-!!! warning "Gap: no `update-checkout`"
-    The code has no `catalog update-checkout`. In the served checkout, run
-    `git pull --ff-only`, then `ethos-data catalog build --check`.
 
 ## 3. Generate the public catalogue {#public}
 
@@ -138,17 +111,6 @@ A hidden dataset must not be mentioned at all.
 and `--push` pushes it. Its check refuses a public dataset whose upload was
 not [verified](upload-a-dataset.md) after its last inventory change. Never
 move a released tag or change metadata behind an existing release.
-
-!!! warning "Gap: the public catalogue is tagged by hand"
-    Without `catalog release`, commit, tag and push the public checkout
-    yourself, once every downloadable entry it adds has been uploaded and
-    verified:
-
-    ```bash
-    git commit -am "Release v1.2.0: <what changed>"
-    git tag v1.2.0
-    git push origin main v1.2.0
-    ```
 
 !!! danger "Never create the public repository by cloning the internal one"
     A public checkout that began as a copy of the source repository carries

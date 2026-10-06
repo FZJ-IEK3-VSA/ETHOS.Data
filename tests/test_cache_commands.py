@@ -38,6 +38,7 @@ class TestLinkAll:
 
     def test_a_dry_run_writes_nothing(self, source, tmp_path):
         source.dataset("here", {"a.csv": "1"})
+        assert source.build()[0] == 0
         cache = tmp_path / "public"
 
         code, out, _ = run_cli(
@@ -53,6 +54,8 @@ class TestLinkAll:
         )
 
         assert code == 0
+        assert "apply        link " in out
+        assert "record       here becomes available" in out
         assert "Nothing was written." in out
         assert not cache.exists()
 

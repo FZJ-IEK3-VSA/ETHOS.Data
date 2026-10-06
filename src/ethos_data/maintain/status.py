@@ -27,7 +27,7 @@ import yaml
 from pydantic import ValidationError
 
 from .. import report
-from ..adapters import Store
+from ..adapters import Git, Store
 from ..config import current_user
 from ..errors import DescriptorError, MaintenanceError
 from ..formats import keys as k
@@ -36,6 +36,7 @@ from ..formats.dataset import describe
 from ..formats.derived import license_settled
 from ..formats.status_file import Copy, Event, StatusFile
 from ..model import lifecycle
+from ..model.versions import Version
 from . import (
     _read_mapping,
     dataset_name_for,
@@ -265,6 +266,47 @@ def record_copy(
     return take(directory, status, step, dataset=dataset, copy=copy, **details).state
 
 
+def releases(status: StatusFile) -> tuple[str | None, int]:
+    """The last release that holds the dataset's steps, and how many came after it."""
+    last, after = None, 0
+    for entry in status.history:
+        if entry.step == "release":
+            last, after = entry.release, 0
+        else:
+            after += 1
+    return last, after
+
+
+def since_release(status: StatusFile) -> list[Event]:
+    """The steps the dataset took after its last release step: every one, without one."""
+    last = max(
+        (
+            index
+            for index, entry in enumerate(status.history)
+            if entry.step == "release"
+        ),
+        default=-1,
+    )
+    return status.history[last + 1 :]
+
+
+def major_release_after(status: StatusFile, step: str) -> str | None:
+    """The first major release recorded after the last ``step``, or None."""
+    seen, found = False, None
+    for entry in status.history:
+        if entry.step == step:
+            seen, found = True, None
+        elif (
+            seen
+            and found is None
+            and entry.step == "release"
+            and entry.release
+            and Version.parse(entry.release).is_major
+        ):
+            found = entry.release
+    return found
+
+
 # -- whether the record still holds ----------------------------------------------
 
 
@@ -415,8 +457,14 @@ def evidence(
 # -- the command ---------------------------------------------------------------
 
 
-def datasets(catalog_root: Path, names: list[str]) -> list[tuple[str, Path]]:
-    """The named datasets, or every one with files, as (name, directory)."""
+def datasets(
+    catalog_root: Path, names: list[str], *, tombstones: bool = False
+) -> list[tuple[str, Path]]:
+    """The named datasets, or every one with files, as (name, directory).
+
+    ``tombstones`` adds, to every dataset, those purged: a directory holding
+    only its ``status.yaml``.
+    """
     root = datasets_dir(catalog_root)
     if names:
         found = []
@@ -433,11 +481,18 @@ def datasets(catalog_root: Path, names: list[str]) -> list[tuple[str, Path]]:
             else:
                 found.append((name, directory))
         return found
-    return [
+    found = [
         (dataset_name_for(root, directory), directory)
         for directory in iter_dataset_dirs(root)
         if not is_namespace(directory)
     ]
+    if tombstones and root.is_dir():
+        found += [
+            (dataset_name_for(root, path.parent), path.parent)
+            for path in sorted(root.rglob(STATUS))
+            if not (path.parent / "dataset.yaml").is_file()
+        ]
+    return sorted(found)
 
 
 @dataclass
@@ -463,36 +518,45 @@ def run(
     *,
     check: bool = False,
     store: Store | None = None,
+    git: Git | None = None,
 ) -> StatusResult:
     """List each dataset's state and next step; with ``check``, test the record.
 
-    ``store`` reads uploads back, dCache's public door by default. The result
-    is not ``ok`` when a status file is missing or cannot be read, or a record
-    does not hold.
+    ``store`` reads uploads back, dCache's public door by default. ``git``
+    reaches the clone, for the smallest admissible next release; without a git
+    checkout, that line is left out. The result is not ``ok`` when a status
+    file is missing or cannot be read, or a record does not hold.
     """
     if store is None:
         from ..adapters.dcache import DcacheStore
 
         store = DcacheStore()
     result = StatusResult()
-    rows = datasets(catalog_root, names)
+    rows = datasets(catalog_root, names, tombstones=not names)
     width = max([len(name) for name, _ in rows] + [7])
-    report.info(f"  {'dataset':<{width}}  {'state':<10} {'access':<11} next")
+    report.info(
+        f"  {'dataset':<{width}}  {'state':<10} {'access':<11} {'release':<16} next"
+    )
     for name, dataset_dir in rows:
-        meta = read_descriptor(dataset_dir)
-        access = meta.get(k.ACCESS, k.PUBLIC)
+        described = (dataset_dir / "dataset.yaml").is_file()
+        meta = read_descriptor(dataset_dir) if described else {}
+        access = meta.get(k.ACCESS, k.PUBLIC) if described else "-"
         try:
             status = read(dataset_dir)
         except DescriptorError as error:
             result.unreadable.append(name)
-            report.info(f"  {name:<{width}}  {'?':<10} {access:<11} {error.message}")
+            report.info(
+                f"  {name:<{width}}  {'?':<10} {access:<11} {'':<16} {error.message}"
+            )
             continue
         if status is None:
             result.unreadable.append(name)
             hint = f"ethos-data catalog migrate {name}"
-            report.info(f"  {name:<{width}}  {'-':<10} {access:<11} {hint}")
+            report.info(f"  {name:<{width}}  {'-':<10} {access:<11} {'-':<16} {hint}")
             continue
         result.states[name] = status.state
+        last, after = releases(status)
+        release = (last or "-") + (f" +{after}" if after and last else "")
         hint = lifecycle.next_step(
             name,
             status.state,
@@ -502,12 +566,17 @@ def run(
             licensed=license_settled(meta),
             checkout=str(catalog_root),
         )
-        report.info(f"  {name:<{width}}  {status.state:<10} {access:<11} {hint or '-'}")
-        if check:
+        report.info(
+            f"  {name:<{width}}  {status.state:<10} {access:<11} {release:<16} "
+            f"{hint or '-'}"
+        )
+        if check and described:
             found = evidence(catalog_root, dataset_dir, name, status, store)
             result.findings[name] = found
             for finding in found:
                 report.info(f"  {'':<{width}}    {finding}")
+    if not names:
+        _next_release(catalog_root, git)
     if check:
         failed = sum(
             not finding.ok for found in result.findings.values() for finding in found
@@ -516,3 +585,23 @@ def run(
             f"\n{failed} finding(s) do not hold." if failed else "\nEvery record holds."
         )
     return result
+
+
+def _next_release(catalog_root: Path, git: Git | None) -> None:
+    """Report the smallest admissible next release, and why; nothing outside git."""
+    from .release import next_release
+
+    if git is None:
+        from ..adapters.git import GitRepository
+
+        git = GitRepository(catalog_root)
+    try:
+        version, changes = next_release(catalog_root, git)
+    except MaintenanceError:
+        return
+    if version is None:
+        report.info("\nnext release: none, nothing changed since the last one")
+        return
+    report.info(f"\nnext release: {version} at least, a {changes.level} release")
+    for reason in changes.reasons[:10]:
+        report.info(f"  {reason}")

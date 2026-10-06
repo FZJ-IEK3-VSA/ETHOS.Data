@@ -7,6 +7,12 @@ A bound may name a prefix, ``v1`` or ``v1.3``. As ``min_version`` it stands for
 the first release that starts with it, as ``max_version`` for the last, and as
 ``exact_version`` for every one of them: ``exact_version: v1.3`` admits every
 ``v1.3.x``, the same bytes with the newest metadata.
+
+The level of a release says what changed since the one before: a patch
+changes metadata only, a minor release changes data, and a major release is
+a retention epoch, after which withdrawn data may be purged. The first
+release is ``v1.0.0``; every later one is the next patch, minor or major of
+the last, at or above the level its changes need.
 """
 
 from __future__ import annotations
@@ -19,12 +25,22 @@ from ..formats import keys as k
 
 __all__ = [
     "BOUND_PATTERN",
+    "FIRST",
+    "LEVELS",
+    "MAJOR",
+    "MINOR",
+    "PATCH",
     "RELEASE_PATTERN",
     "Bounds",
     "Prefix",
     "Version",
+    "admissible",
     "releases",
 ]
+
+PATCH, MINOR, MAJOR = "patch", "minor", "major"
+#: The levels of a release, smallest first.
+LEVELS = (PATCH, MINOR, MAJOR)
 
 _NUMBER = "(0|[1-9][0-9]*)"
 #: A release, as the formats and the reader match it: ``v1.2.0``.
@@ -60,6 +76,35 @@ class Version:
 
     def __str__(self) -> str:
         return f"v{self.major}.{self.minor}.{self.patch}"
+
+    @property
+    def is_major(self) -> bool:
+        """Whether this is a major release, ``vN.0.0``."""
+        return self.minor == 0 and self.patch == 0
+
+    def next(self, level: str) -> Version:
+        """The release after this one at ``level``: patch, minor or major."""
+        if level == PATCH:
+            return Version(self.major, self.minor, self.patch + 1)
+        if level == MINOR:
+            return Version(self.major, self.minor + 1, 0)
+        if level == MAJOR:
+            return Version(self.major + 1, 0, 0)
+        raise ValueError(f"{level!r} is not a release level; one of {LEVELS}")
+
+
+#: The first release of a catalogue.
+FIRST = Version(1, 0, 0)
+
+
+def admissible(last: Version | None, level: str) -> list[Version]:
+    """The releases that may follow ``last`` when the changes need ``level``.
+
+    Smallest first. The first release, after none, is :data:`FIRST` alone.
+    """
+    if last is None:
+        return [FIRST]
+    return [last.next(each) for each in LEVELS[LEVELS.index(level) :]]
 
 
 @dataclass(frozen=True)

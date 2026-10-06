@@ -1,6 +1,6 @@
 # 0022. Record each dataset's state in a status file
 
-**Status:** proposed · **Date:** 2026-10-06 · **Implemented by:** #21, #22, #23
+**Status:** implemented · **Date:** 2026-10-06 · **Implemented by:** #21, #22, #23
 
 ## Context
 
