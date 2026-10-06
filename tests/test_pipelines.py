@@ -162,7 +162,6 @@ class TestAdd:
             ({"name": "../outside"}, "unsafe dataset name"),
             ({"source_dir": None}, "names no source_dir"),
             ({"source_dir": "missing"}, "is not a directory"),
-            ({"ethos:frozen": True}, "a dataset entering the catalogue is not frozen"),
             ({"ethos:origin": "created"}, "claims this data was made here"),
         ],
     )
@@ -211,6 +210,20 @@ class TestAdd:
         assert "place" not in out
         assert source.status("new-data")["state"] == "built"
 
+    def test_a_run_interrupted_inside_place_is_finished(self, source, candidate):
+        """The status file is written last: without one, the draft is placed again."""
+        draft = accept.Draft(source.root, candidate)
+        accept.Intake().plan(draft)
+        describe, *_ = accept.Place().plan(draft)
+        describe.perform()
+        assert not (source.directory("new-data") / "status.yaml").exists()
+
+        code, out, err = source.catalog("add", str(candidate))
+
+        assert code == 0, err
+        assert "place        write datasets/new-data/status.yaml" in out
+        assert source.status("new-data")["state"] == "built"
+
 
 class TestRemove:
     def test_a_withdrawn_dataset_leaves_the_index_and_the_public_catalogue(
@@ -235,7 +248,8 @@ class TestRemove:
         assert source.publish(target)[0] == 0
         assert not (target / "datasets" / "gone").exists()
         assert "gone" not in (target / "datacatalog.json").read_text("utf-8")
-        assert "Publish and release the catalogue without them" in out
+        assert "a withdrawal needs a minor release" in out
+        assert "until a major release is recorded after the removal" in out
         assert source.build()[0] == 0
         assert [row["name"] for row in source.index()["datasets"]] == ["kept"]
 
@@ -276,7 +290,7 @@ class TestRemove:
         code, out, _ = source.catalog("remove", "gone")
 
         assert code == 0
-        assert "withdraw" not in out
+        assert "withdraw     " not in out
         assert source.status("gone")["history"] == history
 
     def test_a_dry_run_writes_nothing(self, source):
@@ -308,22 +322,24 @@ class TestRemove:
         assert not (cache / "gone").exists()
 
     def test_a_dataset_without_a_status_file_is_migrated_first(self, source):
-        source.dataset("old", {"a.csv": "1"}, legacy=True)
+        source.dataset("old", {"a.csv": "1"})
         assert source.build()[0] == 0
+        (source.directory("old") / "status.yaml").unlink()
 
         code, _, err = source.catalog("remove", "old")
 
         assert code == 1
         assert "ethos-data catalog migrate old" in err
 
-    def test_the_next_step_of_a_withdrawn_dataset_is_the_release(self, source):
+    def test_the_purge_of_a_withdrawn_dataset_waits_for_a_major_release(self, source):
         source.dataset("gone", {"a.csv": "1"})
         assert source.build()[0] == 0
         assert source.catalog("remove", "gone")[0] == 0
 
         _, out, _ = source.catalog("status", "gone")
 
-        assert "withdrawn" in out and "release the catalogue without it" in out
+        assert "withdrawn" in out
+        assert "once a major release is recorded after its removal" in out
 
 
 class TestCheckSource:

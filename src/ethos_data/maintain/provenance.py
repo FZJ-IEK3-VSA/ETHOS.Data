@@ -21,7 +21,6 @@ derivation instead.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -29,7 +28,7 @@ from .. import report
 from ..errors import MaintenanceError
 from ..formats import keys as k
 from ..model import digest, lifecycle
-from . import read_descriptor, resources_of
+from . import inventory_of, read_descriptor
 from . import status as dataset_status
 from .pipeline import Action, Pipeline
 
@@ -50,6 +49,11 @@ class Check:
     inventory: int = 0
 
     @property
+    def ok(self) -> bool:
+        """Whether every file compared matches the inventory."""
+        return not self.differ
+
+    @property
     def summary(self) -> str:
         compared = len(self.matched) + len(self.differ)
         text = (
@@ -64,14 +68,10 @@ class Compare:
 
     def plan(self, check: Check) -> list[Action]:
         directory = dataset_status.dataset_dir_in(check.catalog_root, check.dataset)
-        status = dataset_status.read(directory)
-        if status is None:
-            raise MaintenanceError(
-                f"{check.dataset} has no {dataset_status.STATUS} yet to record the "
-                f"check in. Write one with\n    ethos-data catalog migrate {check.dataset}"
-            )
+        meta = read_descriptor(directory)
+        status = dataset_status.build_input(directory, meta, check.dataset).status
         lifecycle.step("check-source", status.state, check.dataset)
-        origin = read_descriptor(directory).get(k.ORIGIN, k.DOWNLOADED)
+        origin = meta.get(k.ORIGIN, k.DOWNLOADED)
         if origin != k.DOWNLOADED:
             raise MaintenanceError(
                 f"{check.dataset} is {origin}, so it has no source to download it "
@@ -80,9 +80,9 @@ class Compare:
             )
         if not check.folder.is_dir():
             raise MaintenanceError(f"{check.folder} is not a directory")
-        package = json.loads((directory / "datapackage.json").read_text("utf-8"))
         recorded = {
-            resource[k.PATH]: resource for resource in resources_of(package, directory)
+            record[k.PATH]: record
+            for record in inventory_of(check.dataset, directory).records()
         }
         check.inventory = len(recorded)
         for path in sorted(p for p in check.folder.rglob("*") if p.is_file()):
@@ -137,11 +137,11 @@ def run(
     *,
     note: str = "",
     dry_run: bool = False,
-) -> int:
+) -> Check:
     """Compare ``folder`` with the inventory of ``dataset`` and record the result.
 
-    Returns 1 when a file differs, else 0.
+    Returns the check, which is ``ok`` when every file compared matches.
     """
     check = Check(catalog_root, dataset, Path(folder).expanduser(), note)
     PIPELINE.run(check, dry_run=dry_run)
-    return 1 if check.differ else 0
+    return check

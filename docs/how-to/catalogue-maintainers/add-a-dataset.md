@@ -2,8 +2,8 @@
 
 Put a dataset into the catalogue: review its `dataset.yaml`, which a proposer
 supplied or you write yourself, copy it into the catalogue, build, make the
-bytes available, release. Work in your checkout of the source catalogue, with
-read access to the candidate bytes, which must not change while you work.
+bytes available, release. Work in your own clone of the source catalogue,
+with read access to the candidate bytes, which must not change while you work.
 
 ## 1. Get the description {#write-the-description}
 
@@ -139,7 +139,8 @@ a build input the catalogue maintainers own; see
 [Keep data in the repository](../package-maintainers/keep-data-in-the-repository.md#sync). The build walks `source_dir`, hashes every
 selected file and writes `datapackage.json` beside the description; never
 hand-edit the generated JSON. Check the generated paths, counts, sizes and
-hashes against the proposal and resolve every difference before going on.
+hashes against the proposal and resolve every difference before going on,
+then commit the dataset's directory and `datacatalog.json` on a branch.
 
 ## 4. Make the bytes available
 
@@ -169,7 +170,7 @@ ethos-data catalog --catalog-root <your clone> record my-dataset
 retires `source_dir`: the recorded inventory is frozen. For linked data, the
 original directory stays the build input until the dataset is
 [materialized](materialize-linked-data.md#retire-the-original), and the copy
-is recorded then. Commit the status file on a branch and merge it by merge
+is recorded then. Commit the status file on the branch and merge it by merge
 request on JuGit.
 
 ## 6. Release and hand off

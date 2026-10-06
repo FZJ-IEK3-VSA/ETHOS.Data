@@ -147,6 +147,7 @@ run is the plan.
     options:
       members:
         - run
+        - AddResult
         - Draft
       show_root_heading: false
       show_root_toc_entry: false
@@ -156,6 +157,7 @@ run is the plan.
     options:
       members:
         - run
+        - RecordResult
         - choose
         - Freeze
       show_root_heading: false
@@ -166,6 +168,7 @@ run is the plan.
     options:
       members:
         - run
+        - RemoveResult
         - Removal
       show_root_heading: false
       show_root_toc_entry: false

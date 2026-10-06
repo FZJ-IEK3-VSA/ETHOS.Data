@@ -17,7 +17,8 @@ that names the bytes with ``source_dir``. Accepting it is three stages:
 A relative ``source_dir`` is relative to the draft, and is recorded as the
 absolute path it names, symbolic links left as they are. The draft is copied
 line by line, comments and all; only ``source_dir`` is left out. Run again
-after an interruption, ``add`` finds the draft placed and only builds it.
+after an interruption, ``add`` places what is missing and builds the dataset:
+the status file is written last, so a dataset without one is placed again.
 """
 
 from __future__ import annotations
@@ -28,18 +29,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .. import report
-from ..errors import DescriptorError, MaintenanceError
+from ..errors import MaintenanceError
 from ..formats import dataset as dataset_format
 from ..formats import keys as k
+from ..formats.edit import without_keys
 from ..formats.status_file import StatusFile
 from ..model import lifecycle
 from ..model.names import relative
 from . import DESCRIPTOR, _read_mapping, datasets_dir
 from . import status as dataset_status
-from .migrate import edited_text
 from .pipeline import Action, Pipeline
 
-__all__ = ["PIPELINE", "Draft", "run"]
+__all__ = ["PIPELINE", "AddResult", "Draft", "run"]
 
 
 @dataclass
@@ -81,14 +82,9 @@ class Intake:
         self._name(draft)
         self._source_dir(draft)
         name = draft.name
-        meta = {key: value for key, value in draft.meta.items() if key != k.SOURCE_DIR}
-        meta[k.NAME] = name
-        try:
-            dataset_format.check(meta)
-        except DescriptorError as error:
-            raise DescriptorError(f"{name}: {error.message}") from None
-        for warning in dataset_format.lint(meta):
-            report.warning(f"warning: {name}: {warning}")
+        meta = {**draft.meta, k.NAME: name}
+        for warning in dataset_format.check_draft(meta):
+            report.warning(f"warning: {warning}")
         for entry in meta.get(k.LICENSES) or []:
             document = entry.get(k.DOCUMENT) if isinstance(entry, dict) else None
             if document and not (path.parent / document).is_file():
@@ -98,13 +94,13 @@ class Intake:
                 )
             if document:
                 draft.documents.append(str(document))
-        description = edited_text(draft.text, [k.SOURCE_DIR])
-        if description is None:
+        try:
+            draft.description = without_keys(draft.text, [k.SOURCE_DIR])
+        except ValueError:
             raise MaintenanceError(
                 f"{name}: source_dir could not be left out of the draft line by "
                 "line; write the draft as one key per line"
-            )
-        draft.description = description
+            ) from None
         self._target(draft)
         return []
 
@@ -127,12 +123,6 @@ class Intake:
         draft.name = str(name)
 
     def _source_dir(self, draft: Draft) -> None:
-        for key in (k.UPLOADED, k.FROZEN):
-            if draft.meta.get(key):
-                raise MaintenanceError(
-                    f"{draft.name}: the draft says {key}: true, but a dataset entering "
-                    "the catalogue is not frozen; remove the key"
-                )
         raw = draft.meta.get(k.SOURCE_DIR)
         if not raw:
             raise MaintenanceError(
@@ -153,11 +143,18 @@ class Intake:
         if not (target / DESCRIPTOR).is_file():
             return
         status = dataset_status.read(target)
+        described = (target / DESCRIPTOR).read_bytes().decode(
+            "utf-8"
+        ) == draft.description
+        if described and status is None:
+            # An earlier run stopped inside ``place``, before the status file,
+            # which it writes last: place the draft again.
+            return
         same = (
-            status is not None
+            described
+            and status is not None
             and status.state == lifecycle.DRAFT
             and status.source_dir == str(draft.source_dir)
-            and (target / DESCRIPTOR).read_bytes().decode("utf-8") == draft.description
         )
         if not same:
             state = status.state if status is not None else "described"
@@ -237,8 +234,7 @@ class Build:
         def build() -> None:
             from . import manifest
 
-            if manifest.run(draft.catalog_root, [str(draft.name)]):
-                raise MaintenanceError(f"{draft.name}: the build failed")
+            manifest.run(draft.catalog_root, [str(draft.name)])
 
         def built() -> str:
             status = dataset_status.read(draft.directory)
@@ -251,6 +247,19 @@ class Build:
 PIPELINE: Pipeline[Draft] = Pipeline("add", [Intake(), Place(), Build()])
 
 
+@dataclass(frozen=True)
+class AddResult:
+    """The dataset ``catalog add`` took in, or would take in."""
+
+    dataset: str
+    #: Whether it was placed and built: not for a dry run.
+    built: bool
+
+    @property
+    def ok(self) -> bool:
+        return True
+
+
 @report.reported
 def run(
     catalog_root: Path,
@@ -258,8 +267,8 @@ def run(
     *,
     name: str | None = None,
     dry_run: bool = False,
-) -> int:
-    """Take the draft at ``source`` into the catalogue; returns 0, or raises."""
+) -> AddResult:
+    """Take the draft at ``source`` into the catalogue and build it, or raise why not."""
     draft = Draft(catalog_root, Path(source), name)
     PIPELINE.run(draft, dry_run=dry_run)
     if not dry_run:
@@ -267,4 +276,4 @@ def run(
             f"\n{draft.name} is built. Check its inventory against the proposal, then "
             "make its bytes available; `ethos-data catalog status` says how."
         )
-    return 0
+    return AddResult(str(draft.name), not dry_run)

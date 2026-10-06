@@ -36,7 +36,7 @@ check is done; the folder is a scratch area, not a third cache.
 ## 3. Compare against the catalogue's inventory
 
 Lay the re-downloaded files out by the paths the inventory records. Then, in
-the source checkout:
+your own clone of the source catalogue:
 
 ```bash
 ethos-data catalog check-source global-wind-atlas-v4 /shared/ethos/validation/global-wind-atlas-v4 \
@@ -69,7 +69,8 @@ re-downloaded for a byte comparison.
 the `--note`, in the dataset's `status.yaml`; `ethos-data catalog status
 <dataset>` lists the dataset, and its history the checks. Write the same into
 the dataset's issue. If the check was part of a proposal, it belongs in that
-proposal's thread.
+proposal's thread. Commit the status file on a branch and merge it by merge
+request on JuGit.
 
 ## 5. If it does not match
 

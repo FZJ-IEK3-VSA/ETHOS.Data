@@ -72,7 +72,7 @@ def choose(dataset: str, status: StatusFile, access: str, named: str | None) -> 
     if not candidates:
         raise MaintenanceError(
             f"{dataset} has no copy that can be its authoritative one. A link "
-            "borrows its source_dir, which a rebuild still reads: upload it or "
+            "borrows its source_dir, which every rebuild reads: upload it or "
             "materialize it first, or name a copy with --copy. Its copies:\n"
             f"{_listing(status.copies)}"
         )

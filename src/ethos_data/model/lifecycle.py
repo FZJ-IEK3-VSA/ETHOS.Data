@@ -194,7 +194,7 @@ def freezable(access: str, kinds: Collection[str]) -> bool:
 
     An upload, a copy a cache owns, or for restricted data the registered
     installation, a link in a restricted cache. A link to public data borrows
-    the build input, which a rebuild still reads; ``catalog record --copy``
+    the build input, which every rebuild reads; ``catalog record --copy``
     makes one the authority only when it is named.
     """
     return (

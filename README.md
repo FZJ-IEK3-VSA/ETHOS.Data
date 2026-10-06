@@ -91,9 +91,12 @@ that generates and publishes it lives here, so that the descriptors written and
 the descriptors read can never drift apart.
 
 ```bash
+ethos-data catalog add <draft>                      # take a reviewed draft in and build it
 ethos-data catalog build                            # regenerate manifests from dataset.yaml
 ethos-data catalog publish ../ETHOS.Data-Catalogue  # emit the public subset
 ethos-data catalog upload <dataset>                 # put the bytes on dCache, then verify
+ethos-data catalog remove <dataset> --reason "..."  # withdraw a dataset from the catalogue
+ethos-data catalog check-source <dataset> <dir>     # compare a re-download with the inventory
 ethos-data catalog check-store                      # probe dCache permissions
 ```
 

@@ -40,14 +40,16 @@ a refusal comes before anything is written:
 
 | Stage | |
 |---|---|
-| `intake` | read the draft and check it as the build would: a name, a `source_dir` that is a directory, licence documents that exist; a draft that says `ethos:uploaded` or `ethos:frozen` is refused |
+| `intake` | read the draft and check it as the build would: a name, a `source_dir` that is a directory, licence documents that exist |
 | `place` | write `datasets/<name>/dataset.yaml`, the draft line by line without `source_dir`; copy its licence documents beside it; write its `status.yaml`: a draft built from `source_dir` |
 | `build` | build it, which makes it `built` |
 
 A relative `source_dir` is relative to the draft, and is recorded as the
 absolute path it names, symbolic links left as they are. A dataset already in
-the catalogue is refused, unless an earlier run placed this same draft and did
-not build it: then only the build is left.
+the catalogue is refused, unless an earlier run with this same draft was
+interrupted: the status file is written last, so a run that stopped inside
+`place` places the draft again, and one that stopped before the build only
+builds.
 
 | Flag | |
 |---|---|
@@ -250,10 +252,10 @@ ethos-data catalog record gadm-3.6 --copy /shared/ethos/restricted/gadm-3.6
 
 Which copy, unless `--copy` names one: the upload, else the copy a cache owns,
 else, for restricted data, the registered installation, a link in a
-restricted cache. A link to public data borrows the build input, which a
-rebuild still reads, and is the authoritative copy only when named. A dataset that is not `available` is
-refused, and one already frozen may have its authoritative copy changed to
-another recorded copy.
+restricted cache. A link to public data borrows the build input, which every
+rebuild reads, and is the authoritative copy only when named with `--copy`. A
+dataset that is not `available` is refused, and one already frozen may have
+its authoritative copy changed to another recorded copy.
 
 | Flag | |
 |---|---|
@@ -274,8 +276,9 @@ reason, and a family name stands for its members; `index` rebuilds the index,
 and the families above them, without them. From then on the build, `publish`
 and `link --all` leave a withdrawn dataset out, and a family whose members are
 all withdrawn. Its description, inventory and status file stay in the
-checkout, and its cache entries and bytes where they are, until a release
-without it is out. Removing a withdrawn dataset again does nothing.
+checkout, and its cache entries and bytes where they are, until a major
+release is recorded after the removal. Removing a withdrawn dataset again does
+nothing.
 
 | Flag | |
 |---|---|

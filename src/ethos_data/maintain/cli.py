@@ -238,7 +238,8 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         help="withdraw datasets: out of the index and the public catalogue",
         description="Record each dataset as withdrawn -- a family stands for its "
         "members -- and rebuild the index without them. Their description, status "
-        "file, cache entries and bytes stay until a release without them is out.",
+        "file, cache entries and bytes stay until a major release is recorded after "
+        "the removal.",
     )
     remover.add_argument("datasets", nargs="+", help="dataset or family names")
     remover.add_argument(
@@ -356,18 +357,24 @@ def dispatch(args) -> int:
     if args.catalog_command == "add":
         from . import accept
 
-        return accept.run(root, args.source, name=args.name, dry_run=args.dry_run)
+        return _status(
+            accept.run(root, args.source, name=args.name, dry_run=args.dry_run)
+        )
 
     if args.catalog_command == "remove":
         from . import remove
 
-        return remove.run(root, args.datasets, reason=args.reason, dry_run=args.dry_run)
+        return _status(
+            remove.run(root, args.datasets, reason=args.reason, dry_run=args.dry_run)
+        )
 
     if args.catalog_command == "check-source":
         from . import provenance
 
-        return provenance.run(
-            root, args.dataset, args.directory, note=args.note, dry_run=args.dry_run
+        return _status(
+            provenance.run(
+                root, args.dataset, args.directory, note=args.note, dry_run=args.dry_run
+            )
         )
 
     raise MaintenanceError(f"unknown catalog command: {args.catalog_command}")

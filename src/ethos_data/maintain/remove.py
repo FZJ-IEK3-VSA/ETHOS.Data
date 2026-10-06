@@ -13,8 +13,9 @@ the first half, in two stages:
 
 A withdrawn dataset is left out of every later build and of the public
 catalogue. Its description, inventory and status file stay where they are,
-and so do its cache entries and its bytes on dCache: they go once a release
-without it is out.
+and so do its cache entries and its bytes on dCache, until a major release is
+recorded after the removal: the releases of the current major made before it
+still describe the dataset.
 """
 
 from __future__ import annotations
@@ -26,11 +27,11 @@ from pathlib import Path
 from .. import report
 from ..errors import MaintenanceError
 from ..model import lifecycle
-from . import dataset_name_for, datasets_dir, is_namespace
+from . import dataset_name_for, datasets_dir, is_namespace, read_descriptor
 from . import status as dataset_status
 from .pipeline import Action, Pipeline
 
-__all__ = ["PIPELINE", "Removal", "run"]
+__all__ = ["PIPELINE", "Removal", "RemoveResult", "run"]
 
 
 @dataclass
@@ -55,13 +56,8 @@ class Withdraw:
             )
         actions = []
         for name, directory in removal.datasets:
-            status = dataset_status.read(directory)
-            if status is None:
-                raise MaintenanceError(
-                    f"{name} has no {dataset_status.STATUS} yet to record the removal "
-                    f"in. Write one from its dataset.yaml with\n"
-                    f"    ethos-data catalog migrate {name}"
-                )
+            meta = read_descriptor(directory)
+            status = dataset_status.build_input(directory, meta, name).status
             if status.state == lifecycle.WITHDRAWN:
                 continue
             lifecycle.step("remove", status.state, name)
@@ -107,8 +103,8 @@ class Index:
         def rebuild() -> None:
             from . import manifest
 
-            if families and manifest.run(removal.catalog_root, families):
-                raise MaintenanceError(f"rebuilding {', '.join(families)} failed")
+            if families:
+                manifest.run(removal.catalog_root, families)
             manifest.write_index(removal.catalog_root)
 
         def gone() -> str:
@@ -125,6 +121,19 @@ class Index:
 PIPELINE: Pipeline[Removal] = Pipeline("remove", [Withdraw(), Index()])
 
 
+@dataclass(frozen=True)
+class RemoveResult:
+    """The datasets ``catalog remove`` withdrew, or would withdraw."""
+
+    datasets: list[str]
+    #: Whether the status files and the index were written: not for a dry run.
+    written: bool
+
+    @property
+    def ok(self) -> bool:
+        return True
+
+
 @report.reported
 def run(
     catalog_root: Path,
@@ -132,13 +141,14 @@ def run(
     *,
     reason: str = "",
     dry_run: bool = False,
-) -> int:
+) -> RemoveResult:
     """Withdraw ``names`` -- datasets or families -- and rebuild the index without them."""
     removal = Removal(catalog_root, list(names), reason)
     PIPELINE.run(removal, dry_run=dry_run)
     if not dry_run:
         report.info(
-            "\nPublish and release the catalogue without them. Their cache entries "
-            "and their bytes on dCache stay until that release is out."
+            "\nCommit the withdrawal, merge it and release the catalogue: a "
+            "withdrawal needs a minor release. Their cache entries and their bytes "
+            "on dCache stay until a major release is recorded after the removal."
         )
-    return 0
+    return RemoveResult([name for name, _ in removal.datasets], not dry_run)
