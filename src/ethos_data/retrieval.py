@@ -158,6 +158,9 @@ def plan(
         "in_place_by_origin": by_origin,
         "unreadable": check_missing(locations),
         "unavailable": [l.resource for l in unavailable(locations)],
+        "unavailable_reasons": {
+            l.resource.dataset: l.reason for l in unavailable(locations)
+        },
         "bytes_total": sum(r.bytes for r in resources),
         "bytes_to_download": sum(l.resource.bytes for l in missing),
     }

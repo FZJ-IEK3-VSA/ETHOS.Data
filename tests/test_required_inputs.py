@@ -1,25 +1,24 @@
 """Every input a collection names is required.
 
 Characterisation tests for the decision of that name and for [Use data in a
-script]: licensed data this machine cannot read stops a fetch before anything
-is downloaded, with an error that describes the dataset and how to register a
-copy; the commands that only describe list it as not available here; and no
-setting, variable or argument leaves an input out any more.
+script]: restricted data this account cannot read stops a fetch before anything
+is downloaded, with a short error that says how to obtain the dataset and how
+to register a copy; the commands that only describe list it as not available
+here, with the state of every listed restricted cache; and no setting,
+variable or argument leaves an input out.
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
-import yaml
 from support import run_cli
 
 import ethos_data
-from ethos_data import access, config
+from ethos_data import access
 from ethos_data.errors import AccessError
-from ethos_data.formats import dataset as dataset_format
-from ethos_data.formats.derived import reader_description
 
 DESCRIBED = {
     "title": "GADM administrative areas",
@@ -44,7 +43,7 @@ BOTH = """
 
 @pytest.fixture
 def both(reader):
-    """A collection of one public and one licensed dataset; returns the handle."""
+    """A collection of one public and one restricted dataset; returns the handle."""
     reader.dataset("open", {"a.csv": "1\n"}, where="store")
     reader.dataset(
         "gadm",
@@ -57,56 +56,68 @@ def both(reader):
 
 
 class TestTheRefusal:
-    def test_it_describes_the_dataset_and_how_to_register_a_copy(self, both, store):
+    def test_it_is_short_and_says_how_to_obtain_and_register_a_copy(self, both, store):
         with pytest.raises(AccessError) as refused:
             both.fetch("both", progressbar=False)
 
-        message = refused.value.message
-        assert message.startswith(
-            "dataset 'gadm' is restricted, and this machine cannot read it: "
-            "no restricted cache is configured on this machine."
-        )
-        for line in (
-            "GADM administrative areas  (version 3.6)",
-            "Boundaries of every country and its subdivisions.",
-            "homepage     https://gadm.org",
-            "source       GADM download (https://gadm.org/download)",
-            "licence      GADM-licence (https://gadm.org/license)",
-            "attribution  GADM, version 3.6.",
-            "restricted   Licensed for academic use; ask the custodian for a copy.",
-            "upstream     available: Version 4.1 is current.",
-            "contact      data-custodian@example.org",
-            "ethos-data config set-restricted-cache /path/to/ethos_data_restricted",
-            "ethos-data link gadm /path/to/gadm",
-        ):
-            assert line in message, line
+        assert refused.value.message.splitlines() == [
+            "the dataset 'gadm' is restricted.",
+            "  Obtain it: Licensed for academic use; ask the custodian for a copy.",
+            "  Homepage: https://gadm.org",
+            "  Contact: data-custodian@example.org",
+            "  This account lists no restricted cache.",
+            "  Once you have a copy you may use, register it:",
+            "    ethos-data config add-restricted-cache DIR",
+            "    ethos-data link gadm DIR",
+        ]
         assert store.downloads() == [], (
             "nothing is downloaded, not even the public file"
         )
 
-    def test_a_restricted_cache_without_an_entry_for_it_refuses_too(
+    def test_it_prints_only_what_the_catalogue_records(self, reader, store):
+        reader.dataset("gadm", {"gadm.gpkg": "g"}, access="restricted", where="nowhere")
+        handle = ethos_data.collections(
+            reader.collections(BOTH.replace("open", "gadm"))
+        )
+
+        with pytest.raises(AccessError) as refused:
+            handle.fetch("both", progressbar=False)
+
+        message = refused.value.message
+        for absent in ("Obtain it", "Homepage", "Contact", "GADM administrative"):
+            assert absent not in message, absent
+
+    def test_a_cache_without_an_entry_for_it_gives_no_reason(
         self, both, tmp_path, monkeypatch
     ):
-        monkeypatch.setenv("ETHOS_RESTRICTED_DIR", str(tmp_path / "restricted"))
         (tmp_path / "restricted").mkdir()
+        monkeypatch.setenv("ETHOS_RESTRICTED_DIRS", str(tmp_path / "restricted"))
 
-        with pytest.raises(AccessError, match="has no entry for it") as refused:
+        with pytest.raises(AccessError) as refused:
             ethos_data.collections(both.path).fetch("both", progressbar=False)
 
-        assert "GADM administrative areas" in refused.value.message
+        message = refused.value.message
+        assert "the dataset 'gadm' is restricted." in message
+        assert str(tmp_path / "restricted") not in message
+        assert "This account lists no restricted cache" not in message
 
-    def test_an_entry_this_account_may_not_read_refuses_too(
+    def test_an_entry_this_account_may_not_read_is_named(
         self, both, tmp_path, monkeypatch
     ):
         entry = tmp_path / "restricted" / "gadm"
         entry.mkdir(parents=True)
-        monkeypatch.setenv("ETHOS_RESTRICTED_DIR", str(tmp_path / "restricted"))
+        monkeypatch.setenv("ETHOS_RESTRICTED_DIRS", str(tmp_path / "restricted"))
         monkeypatch.setattr(access.os, "access", lambda path, mode: Path(path) != entry)
 
-        with pytest.raises(AccessError, match="you may not read its entry"):
+        with pytest.raises(AccessError) as refused:
             ethos_data.collections(both.path).fetch("both", progressbar=False)
 
-    def test_a_link_to_an_installation_that_is_gone_refuses_too(
+        assert (
+            f"The entry in {tmp_path / 'restricted'} cannot be read."
+            in refused.value.message
+        )
+
+    def test_a_link_to_an_installation_that_is_gone_is_named(
         self, both, tmp_path, monkeypatch
     ):
         entry = tmp_path / "restricted" / "gadm"
@@ -115,17 +126,21 @@ class TestTheRefusal:
             entry.symlink_to(tmp_path / "moved", target_is_directory=True)
         except OSError:
             pytest.skip("symbolic links need a privilege this account lacks")
-        monkeypatch.setenv("ETHOS_RESTRICTED_DIR", str(tmp_path / "restricted"))
+        monkeypatch.setenv("ETHOS_RESTRICTED_DIRS", str(tmp_path / "restricted"))
 
-        with pytest.raises(AccessError, match="which is not there"):
+        with pytest.raises(AccessError) as refused:
             ethos_data.collections(both.path).fetch("both", progressbar=False)
+
+        assert f"The entry in {tmp_path / 'restricted'} is dangling" in (
+            refused.value.message
+        )
 
     def test_the_command_stops_with_it_too(self, both, store):
         code, out, err = run_cli_tool(both)
 
         assert code == 2
-        assert "dataset 'gadm' is restricted" in err
-        assert "GADM administrative areas" in err
+        assert "error: the dataset 'gadm' is restricted." in err
+        assert "GADM administrative areas" not in err
         assert out == ""
         assert store.downloads() == []
 
@@ -146,12 +161,23 @@ def run_cli_tool(handle, *args: str) -> tuple[int, str, str]:
 
 
 class TestWhatOnlyDescribes:
-    def test_a_plan_lists_it_as_not_available_here(self, both, store):
-        code, out, _ = run_cli_tool(both, "--plan")
+    def test_a_plan_lists_it_with_the_state_of_every_restricted_cache(
+        self, both, store, tmp_path, monkeypatch
+    ):
+        first, second = tmp_path / "group-a", tmp_path / "group-b"
+        first.mkdir()
+        monkeypatch.setenv(
+            "ETHOS_RESTRICTED_DIRS", os.pathsep.join([str(first), str(second)])
+        )
+        handle = ethos_data.collections(both.path)
+
+        code, out, _ = run_cli_tool(handle, "--plan")
 
         assert code == 0
         assert "not available here:    1 files" in out
         assert "(gadm -- a fetch stops here)" in out
+        assert f"{first}: no entry" in out
+        assert f"{second}: cannot be reached" in out
         assert store.downloads() == []
 
     def test_verify_reports_it_and_why(self, both, reader):
@@ -163,29 +189,26 @@ class TestWhatOnlyDescribes:
         unavailable = [f for f in findings if f.status == "unavailable here"]
         assert [f.resource.key for f in unavailable] == ["gadm/gadm.gpkg"]
         assert unavailable[0].detail.startswith(
-            "no restricted cache is configured on this machine"
+            "restricted; this account lists no restricted cache"
         )
+
+    def test_a_missing_publication_url_is_described_not_raised(self, reader):
+        reader.publication_url = ""
+        reader.dataset("open", {"a.csv": "1\n"}, where="nowhere")
+        catalog = ethos_data.catalog(str(reader.write()))
+        resources = catalog.resources("open")
+
+        report = ethos_data.plan(catalog, resources)
+        findings = ethos_data.verify(catalog, resources)
+
+        assert [r.key for r in report["unavailable"]] == ["open/a.csv"]
+        assert "no publication URL" in report["unavailable_reasons"]["open"]
+        assert [f.status for f in findings] == ["unavailable here"]
+        with pytest.raises(AccessError, match="no publication URL"):
+            ethos_data.download(catalog, resources)
 
 
 class TestNothingLeavesAnInputOut:
-    def test_the_old_setting_and_variable_are_ignored_and_named(
-        self, both, monkeypatch
-    ):
-        settings_file = config.config_path()
-        settings_file.parent.mkdir(parents=True, exist_ok=True)
-        settings_file.write_bytes(yaml.safe_dump({"skip_unavailable": True}).encode())
-        monkeypatch.setenv("ETHOS_SKIP_UNAVAILABLE", "1")
-
-        with pytest.raises(AccessError):
-            ethos_data.collections(both.path).fetch("both", progressbar=False)
-        code, out, _ = run_cli(["config", "show"])
-
-        assert code == 0
-        assert "skip_unavailable  (no longer read: every input is required)" in out
-        assert (
-            "$ETHOS_SKIP_UNAVAILABLE  (no longer read: every input is required)" in out
-        )
-
     def test_the_arguments_are_gone(self, both):
         with pytest.raises(TypeError):
             both.fetch("both", skip_unavailable=True)
@@ -207,18 +230,3 @@ class TestNothingLeavesAnInputOut:
 
         assert code == 2
         assert "unrecognized arguments: --skip-unavailable" in err
-
-
-def test_the_description_covers_every_user_facing_key():
-    """The format marks the keys a reader without a copy sees; each is printed."""
-    printed = "\n".join(reader_description(DESCRIBED))
-
-    for key in dataset_format.USER_FACING:
-        if key == "ethos:access":
-            continue  # the refusal says it is restricted
-        value = DESCRIBED[key]
-        if isinstance(value, list):
-            value = value[0].get("title") or value[0]["name"]
-        elif isinstance(value, dict):
-            value = value["status"]
-        assert str(value) in printed, key

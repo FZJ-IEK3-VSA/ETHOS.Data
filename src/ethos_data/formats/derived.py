@@ -12,7 +12,6 @@ reader's hot path can use them without importing the models:
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 from . import keys as k
@@ -46,66 +45,6 @@ def license_settled(meta: dict) -> bool:
 def remote_prefix_of(package: dict) -> str:
     """The dataset's folder on the published store: its own prefix, else its name."""
     return package.get(k.REMOTE_PREFIX) or package[k.NAME]
-
-
-def _entry(entry: object, *names: str) -> str:
-    """One source or licence as a line: its name, and where it lives."""
-    if not isinstance(entry, Mapping):
-        return str(entry)
-    name = next((str(entry[key]) for key in names if entry.get(key)), "")
-    where = str(entry.get(k.PATH) or "")
-    if name and where:
-        return f"{name} ({where})"
-    return name or where
-
-
-def reader_description(package: Mapping) -> list[str]:
-    """What somebody without a copy needs to know about a dataset, as lines.
-
-    The keys the dataset.yaml specification marks user-facing, each as far as
-    the descriptor records it: what the data is, where it came from, under
-    which terms, why it is restricted and how to obtain it, and whom to ask.
-    The refusal for licensed data this machine cannot read prints these.
-    """
-    lines: list[str] = []
-    heading = str(package.get(k.TITLE) or package.get(k.NAME) or "")
-    version = package.get(k.VERSION)
-    if version:
-        heading = f"{heading}  (version {version})" if heading else f"version {version}"
-    if heading:
-        lines.append(heading)
-    if package.get(k.DESCRIPTION):
-        lines.append(str(package[k.DESCRIPTION]).strip())
-
-    rows: list[tuple[str, str]] = []
-    if package.get(k.HOMEPAGE):
-        rows.append(("homepage", str(package[k.HOMEPAGE])))
-    for source in package.get(k.SOURCES) or []:
-        rows.append(("source", _entry(source, k.TITLE)))
-    for licence in package.get(k.LICENSES) or []:
-        rows.append(("licence", _entry(licence, k.TITLE, k.NAME)))
-    if package.get(k.ATTRIBUTION):
-        rows.append(("attribution", str(package[k.ATTRIBUTION]).strip()))
-    if package.get(k.RESTRICTION):
-        rows.append(("restricted", str(package[k.RESTRICTION]).strip()))
-    upstream = package.get(k.UPSTREAM)
-    if isinstance(upstream, Mapping) and upstream.get("status"):
-        note = str(upstream.get("note") or "").strip()
-        rows.append(
-            (
-                "upstream",
-                f"{upstream['status']}: {note}" if note else str(upstream["status"]),
-            )
-        )
-    if package.get(k.CONTACT):
-        rows.append(("contact", str(package[k.CONTACT]).strip()))
-
-    width = max((len(label) for label, _ in rows), default=0)
-    for label, value in rows:
-        first, *rest = value.splitlines() or [""]
-        lines.append(f"{label:<{width}}  {first}")
-        lines.extend(f"{'':<{width}}  {line}" for line in rest)
-    return lines
 
 
 def resource_url(publication_url: str, remote_prefix: str, path: str = "") -> str:

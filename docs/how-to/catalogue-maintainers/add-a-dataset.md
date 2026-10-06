@@ -97,11 +97,8 @@ that names the dataset and prints its `ethos:restriction`, `homepage` and
 who may obtain a copy, where, and under which terms.
 `ethos-data ls <name> --meta` prints the full description.
 
-!!! warning "Gap: the error prints only `ethos:restriction`"
-    The code's error prints the `ethos:restriction` note without the
-    homepage and the contact, and it offers `--skip-unavailable` to carry on
-    without the dataset. `ls` has no
-    `--meta`. See [every input is
+!!! warning "Gap: no `--meta`"
+    `ls` has no `--meta`. See [every input is
     required](../../explanation/architecture/decisions/0013-every-input-is-required.md).
 
 ## 2. Review it

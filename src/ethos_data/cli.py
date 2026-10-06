@@ -906,6 +906,8 @@ def _collection_fetch_command(args, loaded, roots) -> int:
                 f"not available here: {len(report['unavailable']):>4} files            "
                 f"      ({', '.join(names)} -- a fetch stops here)"
             )
+            for name in names:
+                print(f"    {name}: {report['unavailable_reasons'][name]}")
         if report["unreadable"]:
             print(
                 f"\nMISSING from where they were expected ({len(report['unreadable'])}):"
@@ -1611,7 +1613,6 @@ def _config_show() -> int:
         print(f"{label:<{width}}  {value}{marker}")
         if label == "catalogue" and settings.catalog is None:
             print(f"{'':<{width}}  public catalogue: {DEFAULT_CATALOG}")
-
 
     print("\nprecedence for each setting, first match wins:")
     print("  1. an explicit argument   --root / root=, --catalog / catalog=")

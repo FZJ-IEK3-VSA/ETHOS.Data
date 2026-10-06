@@ -27,7 +27,6 @@ def world(tmp_path, monkeypatch):
         "ETHOS_DATA_CATALOG",
         "ETHOS_STAGING_DIR",
         "ETHOS_RESTRICTED_DIRS",
-        "ETHOS_SKIP_UNAVAILABLE",
     ):
         monkeypatch.delenv(variable, raising=False)
     cache = tmp_path / "cache"
@@ -122,7 +121,9 @@ def test_a_folder_a_dataset_or_a_family(world, key, expected):
 def test_an_unknown_key_says_so(world):
     _, _, index = world
     catalog = ethos_data.catalog(str(index))
-    with pytest.raises(KeyError, match="no file or folder 'nope'"):
+    with pytest.raises(
+        KeyError, match="'flat/nope' cannot be found in the dataset 'flat'"
+    ):
         catalog.path("flat/nope")
     with pytest.raises(ethos_data.UnknownDataset, match="missing"):
         catalog.path("missing/file.csv")

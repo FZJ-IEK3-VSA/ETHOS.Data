@@ -92,8 +92,7 @@ each place considers and when it refuses.
 
 !!! warning "Gap: no bundles in the chain"
     The code's chain is staging, the restricted caches, the public cache and
-    the download. It has no bundles in the chain, and `skip_unavailable`
-    leaves an unreachable input out.
+    the download. It has no bundles in the chain.
 
 ## The rule that does not bend
 
@@ -111,11 +110,8 @@ copy once you have one; see
 [When a restricted input is missing](../how-to/data-users/use-data-in-a-script.md#licensed-input).
 `--meta` prints the dataset's full description.
 
-!!! warning "Gap: unreachable datasets can still be left out"
-    The code offers `--skip-unavailable`, which leaves an unreachable
-    dataset's key out of the result with a warning, and its refusal prints
-    only the `ethos:restriction` note. `--meta` and `report` do not exist.
-    See [every input is
+!!! warning "Gap: no `--meta`"
+    The code has no `--meta`, and no `report`. See [every input is
     required](architecture/decisions/0013-every-input-is-required.md).
 
 ## Downloads never write through a link

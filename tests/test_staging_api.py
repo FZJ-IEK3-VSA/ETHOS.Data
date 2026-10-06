@@ -18,7 +18,6 @@ def workspace(tmp_path, monkeypatch):
     monkeypatch.setenv("ETHOS_DATA_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("ETHOS_STAGING_DIR", str(tmp_path / "staging"))
     monkeypatch.delenv("ETHOS_RESTRICTED_DIRS", raising=False)
-    monkeypatch.delenv("ETHOS_SKIP_UNAVAILABLE", raising=False)
 
     def no_network(*args, **kwargs):
         pytest.fail("Staged resource attempted network access")
@@ -114,7 +113,7 @@ def test_explicit_roots_control_the_overlay(workspace, tmp_path):
     _, collections, _ = workspace
     roots = config.Roots(public=tmp_path / "elsewhere")
     loaded = ethos_data.load_collections(collections, roots=roots)
-    with pytest.raises(KeyError, match="unknown dataset"):
+    with pytest.raises(KeyError, match="the dataset 'example' cannot be found"):
         loaded.resolve("test")
 
 

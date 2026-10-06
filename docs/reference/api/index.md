@@ -60,10 +60,13 @@ can never shadow the function above — the same reason `selection` is not calle
 `collections`.
 
 Every input a collection names is required: `fetch()`, `paths()` and
-`download()` raise [`AccessError`][ethos_data.errors.AccessError] for licensed
-data this machine cannot read, before anything is downloaded, with the
-dataset's description and the commands that register a copy. `plan()` and
-`verify()` only describe, and report such data as not available here.
+`download()` raise [`AccessError`][ethos_data.errors.AccessError] for restricted
+data this account cannot read, before anything is downloaded, naming the
+dataset, how to obtain it as far as the catalogue records that, and the
+commands that register a copy. `plan()` and `verify()` only describe, and
+report such data as not available here, with the state of every listed
+restricted cache; they report a file with no publication URL to download it
+from the same way.
 
 ::: ethos_data.retrieval
     options:

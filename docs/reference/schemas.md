@@ -527,16 +527,19 @@ else's business.
 **`ethos:restriction`** — *string; for `access: restricted`.* Why it is
 restricted, and how a user entitled to the data gets it.
 
-This is the one field here that a user actually sees. When no listed
-restricted cache holds a readable entry for a restricted dataset, the error
-prints this note between the refusal and the instructions:
+This is the one field here that a user actually sees, with `homepage` and
+`ethos:contact`. When no listed restricted cache holds a readable entry for a
+restricted dataset, the error prints each of them that the descriptor records,
+then a reason when something other than a missing copy is wrong, then how to
+register a copy:
 
 ```
-dataset 'thewindpower-turbines' is restricted and is never downloaded.
-  <ethos:restriction goes here>
+error: the dataset 'thewindpower-turbines' is restricted.
+  Obtain it: <ethos:restriction goes here>
+  Homepage: <homepage>
+  Contact: <ethos:contact>
   This account lists no restricted cache.
-
-Once you have a copy you may use, register it:
+  Once you have a copy you may use, register it:
     ethos-data config add-restricted-cache DIR
     ethos-data link thewindpower-turbines DIR
 ```

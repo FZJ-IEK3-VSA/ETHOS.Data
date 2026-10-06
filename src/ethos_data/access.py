@@ -51,7 +51,6 @@ from .catalogs import Catalog, Dataset
 from .config import Roots
 from .errors import AccessError
 from .formats import keys as k
-from .formats.derived import reader_description
 from .model import names
 from .model.resource import Resource
 
@@ -64,6 +63,8 @@ __all__ = [
     "Location",
     "locate",
     "restricted_entry",
+    "restricted_refusal",
+    "restricted_states",
     "unavailable",
     "ORIGIN_STAGING",
     "ORIGIN_RESTRICTED",
@@ -254,6 +255,41 @@ class Staging(Locator):
         return Location(resource, staged / resource.path, "in-place", ORIGIN_STAGING)
 
 
+#: The state of one dataset's entry in one restricted cache.
+READABLE = "readable"
+NO_ENTRY = "no entry"
+UNREACHABLE = "cannot be reached"
+UNREADABLE = "entry cannot be read"
+
+
+def _entry_state(cache: Path, name: str) -> str:
+    """The state of ``name``'s entry in ``cache``: one of the states above, or dangling."""
+    try:
+        reachable = cache.is_dir()
+    except OSError:
+        reachable = False
+    if not reachable:
+        return UNREACHABLE
+    link = linked_entry(cache, name)
+    if link is not None and not link.exists():
+        return f"entry dangling: {link} points at {link.readlink()}"
+    entry = cache / name
+    if not entry.exists():
+        return NO_ENTRY
+    if not os.access(entry, os.R_OK | os.X_OK):
+        return UNREADABLE
+    return READABLE
+
+
+def _reason(cache: Path, state: str) -> str:
+    """A state other than a missing copy, as the sentence a refusal prints."""
+    if state == UNREACHABLE:
+        return f"The restricted cache {cache} cannot be reached."
+    if state == UNREADABLE:
+        return f"The entry in {cache} cannot be read."
+    return f"The entry in {cache} is dangling: {state.split(': ', 1)[1]}."
+
+
 def restricted_entry(
     caches: tuple[Path, ...], name: str
 ) -> tuple[Path | None, list[str]]:
@@ -268,27 +304,20 @@ def restricted_entry(
         return None, ["This account lists no restricted cache."]
     reasons: list[str] = []
     for cache in caches:
-        try:
-            reachable = cache.is_dir()
-        except OSError:
-            reachable = False
-        if not reachable:
-            reasons.append(f"The restricted cache {cache} cannot be reached.")
-            continue
-        link = linked_entry(cache, name)
-        if link is not None and not link.exists():
-            reasons.append(
-                f"The entry in {cache} is dangling: {link} points at {link.readlink()}."
-            )
-            continue
-        entry = cache / name
-        if not entry.exists():
-            continue
-        if not os.access(entry, os.R_OK | os.X_OK):
-            reasons.append(f"The entry in {cache} cannot be read.")
-            continue
-        return entry, reasons
+        state = _entry_state(cache, name)
+        if state == READABLE:
+            return cache / name, reasons
+        if state != NO_ENTRY:
+            reasons.append(_reason(cache, state))
     return None, reasons
+
+
+def restricted_states(caches: tuple[Path, ...], name: str) -> str:
+    """The state of ``name`` in every listed restricted cache, for what only describes."""
+    if not caches:
+        return "restricted; this account lists no restricted cache"
+    states = "; ".join(f"{cache}: {_entry_state(cache, name)}" for cache in caches)
+    return f"restricted; no listed restricted cache has a readable entry ({states})"
 
 
 @dataclass
@@ -330,38 +359,34 @@ class RestrictedCache(Locator):
             return Location(
                 resource, entry / resource.path, "in-place", ORIGIN_RESTRICTED
             )
-        why = "; ".join(reasons) or "no listed restricted cache has an entry for it"
         if self.describe_only:
+            why = restricted_states(self.caches, dataset.name)
             return Location(resource, None, UNAVAILABLE, ORIGIN_RESTRICTED, why)
-        raise AccessError(restricted_refusal(dataset, why))
+        raise AccessError(restricted_refusal(dataset, reasons))
 
 
-def restricted_refusal(dataset: Dataset, why: str) -> str:
-    """The refusal for a restricted dataset this machine cannot read.
+def restricted_refusal(dataset: Dataset, reasons: list[str]) -> str:
+    """The refusal for a restricted dataset this account cannot read.
 
-    What the person who meets it needs: what the dataset is and how to obtain
-    it, from its catalogue entry, and the two commands that register a copy
-    once they have one.
+    Short, for the person who meets it: that the dataset is restricted; how to
+    obtain it, its homepage and whom to ask, each where the catalogue records
+    it; why it cannot be read, when that is more than a missing copy; and the
+    two commands that register a copy. ``--meta`` prints the full description.
     """
-    lines = [
-        (
-            f"dataset {dataset.name!r} is restricted, and this machine cannot read "
-            f"it: {why}."
-        ),
-        "",
-    ]
-    lines.extend(f"  {line}" for line in reader_description(dataset.descriptor))
-    lines.extend(
-        [
-            "",
-            (
-                "Every input a workflow names is required. If you have a copy you "
-                "may use, register it:"
-            ),
-            "    ethos-data config add-restricted-cache DIR",
-            f"    ethos-data link {dataset.name} DIR",
-        ]
-    )
+    descriptor = dataset.descriptor
+    lines = [f"the dataset {dataset.name!r} is restricted."]
+    for label, key in (
+        ("Obtain it", k.RESTRICTION),
+        ("Homepage", k.HOMEPAGE),
+        ("Contact", k.CONTACT),
+    ):
+        value = " ".join(str(descriptor.get(key) or "").split())
+        if value:
+            lines.append(f"  {label}: {value}")
+    lines.extend(f"  {reason}" for reason in reasons)
+    lines.append("  Once you have a copy you may use, register it:")
+    lines.append("    ethos-data config add-restricted-cache DIR")
+    lines.append(f"    ethos-data link {dataset.name} DIR")
     return "\n".join(lines)
 
 
@@ -428,16 +453,21 @@ class Download(Locator):
     """4. A download from the publication root into the public cache.
 
     For public data only: restricted data never gets here, because its locator
-    never passes. Refuses rather than passes, since nothing comes after it.
+    never passes. Refuses rather than passes, since nothing comes after it;
+    with ``describe_only`` the file is reported as not available here instead.
     """
 
     root: Path
+    describe_only: bool = False
 
     def describe(self) -> str:
         return f"a download into {self.root}, for public data only"
 
     def locate(self, catalog, dataset, resource):
         if not catalog.publication_url:
+            if self.describe_only:
+                why = "the catalogue declares no publication URL to download it from"
+                return Location(resource, None, UNAVAILABLE, ORIGIN_DOWNLOAD, why)
             raise AccessError(
                 f"dataset {dataset.name!r} is not in the public cache as a link, and the "
                 f"catalogue declares no publication URL, so there is nowhere to fetch it "
@@ -496,7 +526,7 @@ def chain_for(roots: Roots, *, describe: bool = False) -> Chain:
             Staging(roots.staging),
             RestrictedCache(roots.restricted, describe),
             PublicCache(roots.public),
-            Download(roots.public),
+            Download(roots.public, describe),
         )
     )
 

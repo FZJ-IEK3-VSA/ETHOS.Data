@@ -110,9 +110,6 @@ notices announce withdrawals.
 !!! warning "Gap: `catalog:` takes a URL"
     The code takes only a catalogue path or URL in `catalog:`, such as a
     release tag's `datacatalog.json` on GitHub, and has no release bounds.
-    Its error for an unknown dataset lists the datasets the catalogue has
-    and, for the public catalogue, suggests that the dataset was withdrawn
-    and that an older catalogue would still describe it.
 
 ## What a tool gives up
 

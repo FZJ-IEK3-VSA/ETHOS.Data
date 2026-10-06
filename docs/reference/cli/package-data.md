@@ -22,10 +22,12 @@ to expose the wrapper.
 | `--test` | Select the collection's test variant; also accepted after collection subcommands. |
 | `-h`, `--help` | Show help without loading the catalogue. |
 
-Every input a collection names is required: licensed data this machine
+Every input a collection names is required: restricted data this account
 cannot read stops `fetch`, before anything is downloaded, with an error that
-describes the dataset and how to register a copy. `fetch --plan`, `show` and
-`verify` only describe, and list it as not available here.
+names the dataset, says how to obtain it as far as the catalogue records that,
+and gives the two commands that register a copy. `fetch --plan`, `show` and
+`verify` only describe, and list it as not available here, with the state of
+every listed restricted cache.
 
 Place global options before the subcommand, except `--test`, which works in
 either position. A package may supply an environment override such as

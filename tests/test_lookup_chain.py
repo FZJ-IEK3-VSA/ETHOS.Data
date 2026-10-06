@@ -81,7 +81,7 @@ class TestTheOrder:
         reader.dataset("licensed", {"a.csv": "1\n"}, access="restricted", where="cache")
         roots = Roots(public=reader.cache)
 
-        with pytest.raises(AccessError, match="is restricted, and this machine cannot"):
+        with pytest.raises(AccessError, match="the dataset 'licensed' is restricted"):
             place(reader, "licensed", "a.csv", roots)
 
     def test_a_link_wins_over_a_download(self, reader, tmp_path):

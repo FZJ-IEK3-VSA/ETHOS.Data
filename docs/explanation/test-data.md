@@ -62,12 +62,6 @@ all of them, or stops before anything is downloaded and says what is missing.
 - **The name is not found.** A mistyped name and a dataset the catalogue does
   not publish get the same answer: the dataset cannot be found.
 
-!!! warning "Gap: inputs can still be left out"
-    Under `skip_unavailable` the code leaves an unreachable named path out
-    of the mapping with a warning, and its refusal prints only the
-    `ethos:restriction` note. See [every input is
-    required](architecture/decisions/0013-every-input-is-required.md).
-
 Test and full variants are not bundles. Both are selections from the
 catalogue, fetched through the caches; a bundle is data a package keeps in
 its own repository.

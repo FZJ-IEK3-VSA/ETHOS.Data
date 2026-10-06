@@ -163,19 +163,6 @@ ROLE_PUBLISHED = keys.ROLE_PUBLISHED
 CATALOG_ROLES = keys.CATALOG_ROLES
 
 
-def describe_catalog(descriptor: dict, location: str = "") -> str:
-    """A short human name for a catalogue, for use in error messages.
-
-    Both catalogues share a ``name`` -- the public one is a subset view of the
-    same catalogue, not a different one -- so the role is what distinguishes
-    them, and it is the thing a reader needs to know when a dataset is absent.
-    """
-    name = descriptor.get(keys.NAME) or "catalogue"
-    role = descriptor.get(ROLE_KEY)
-    label = f"{role} catalogue {name!r}" if role else f"catalogue {name!r}"
-    return f"{label} ({location})" if location else label
-
-
 def _missing_part(
     dataset: str, what: str, location: str, index_base: str
 ) -> IncompleteCatalog:
@@ -563,21 +550,7 @@ class Catalog:
         try:
             return self.datasets[name]
         except KeyError:
-            known = ", ".join(sorted(self.datasets)) or "<none>"
-            where = describe_catalog(self.descriptor, self.location)
-            hint = ""
-            if self.role == ROLE_PUBLISHED:
-                # By far the likeliest cause: it was published once and later
-                # withdrawn, so the collections file is not wrong, just newer
-                # than the catalogue it is pointed at -- or older than it.
-                hint = (
-                    "\nIf it used to exist, it has been withdrawn from publication. "
-                    "Pin an older catalogue, or ask the maintainers to republish it."
-                )
-            raise UnknownDataset(
-                f"unknown dataset {name!r}: the {where} does not describe it.\n"
-                f"It has: {known}.{hint}"
-            ) from None
+            raise UnknownDataset(not_found(name)) from None
 
     def base_url_for(self, dataset: Dataset) -> str:
         """Root under which this dataset's resource paths resolve.
@@ -721,6 +694,19 @@ def load_catalog(location: str) -> Catalog:
     return Catalog(location=location, descriptor=descriptor, datasets=datasets)
 
 
+def not_found(name: str) -> str:
+    """The one answer for a dataset the catalogue in use does not describe.
+
+    A mistyped name and a dataset the catalogue does not publish look the same
+    from here, so they get the same answer, which lists nothing: release
+    notices announce what was withdrawn.
+    """
+    return (
+        f"the dataset {name!r} cannot be found. "
+        "Maybe it was mistyped, or it is not published."
+    )
+
+
 def split_key(catalog: Catalog, key: str) -> tuple[str, str]:
     """Split a key into the dataset it names and the path inside that dataset.
 
@@ -736,12 +722,10 @@ def split_key(catalog: Catalog, key: str) -> tuple[str, str]:
         if dataset is not None and not dataset.namespace:
             return name, key[len(name) + 1 :]
     first = key.split("/", 1)[0]
-    catalog.dataset(first)  # an unknown name raises, listing what there is
-    members = ", ".join(d.name for d in catalog.members_of(first)) or "none"
-    raise UnknownDataset(
-        f"{key!r} names no dataset in the {describe_catalog(catalog.descriptor, catalog.location)}: "
-        f"{first!r} is a family, and none of its members ({members}) starts the key."
-    )
+    catalog.dataset(first)  # an unknown name raises
+    # A family, and none of its members starts the key: the member it names
+    # is the dataset that cannot be found.
+    raise UnknownDataset(not_found("/".join(key.split("/")[:2])))
 
 
 def select_key(
@@ -771,9 +755,7 @@ def select_key(
         if p.startswith(prefix)
     ]
     if not under:
-        raise UnknownKey(
-            f"{key!r} is not in the catalogue: {name!r} has no file or folder {inner!r}"
-        )
+        raise UnknownKey(f"{key!r} cannot be found in the dataset {name!r}.")
     return sorted(under, key=lambda r: r.key), None
 
 
