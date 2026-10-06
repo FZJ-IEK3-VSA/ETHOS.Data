@@ -435,7 +435,7 @@ def export_bundle(
     source_revision records the caller's pinned catalogue commit or release.
     The exporter does not infer immutability or verify Git references.
     """
-    from .maintain.publish import STRIP_FROM_PACKAGE
+    from .formats.dataset import STRIPPED as STRIP_FROM_PACKAGE
 
     target = Path(target).expanduser().absolute()
     if target.exists() or target.is_symlink():

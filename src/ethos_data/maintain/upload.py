@@ -44,8 +44,10 @@ from typing import NamedTuple
 
 import yaml
 
-from ..catalogs import ROLE_PUBLISHED, license_settled
 from ..errors import UploadError
+from ..formats import keys as k
+from ..formats.derived import license_settled, remote_prefix_of
+from ..formats.keys import ROLE_PUBLISHED
 from . import (
     catalogue_role,
     dataset_name_for,
@@ -95,7 +97,7 @@ def load(catalog_root: Path, dataset_name: str) -> tuple[dict, dict, Path | None
         raise UploadError(
             f"no dataset called {dataset_name!r} in {datasets_dir(catalog_root)}.\n"
             f"Datasets in this catalogue:\n{listing}\n"
-            "To add a new one, describe it first -- see docs/how-to/catalogue-maintainers/describe-a-dataset.md."
+            "To add one, see docs/how-to/catalogue-maintainers/add-a-dataset.md."
         )
     if not package_file.is_file():
         raise UploadError(
@@ -126,16 +128,18 @@ def preflight(
     allow_internal: bool,
     verify_only: bool,
 ) -> str:
-    access = package.get("ethos:access", "public")
-    prefix = package.get("ethos:remote_prefix")
+    access = package.get(k.ACCESS, k.PUBLIC)
+    # The documented default, and the folder the reader downloads from: the
+    # dataset's own name unless it declares a prefix.
+    prefix = remote_prefix_of(package)
 
-    if access == "restricted":
+    if access == k.RESTRICTED:
         raise UploadError(
             f"{name} is restricted and must never be uploaded.\n"
             "Restricted data stays where it is; users point at it with\n"
             f"    ethos-data config set-root {name} /path/to/{name}"
         )
-    if access == "internal" and not allow_internal:
+    if access == k.INTERNAL and not allow_internal:
         raise UploadError(
             f"{name} is internal (not published). Upload it only if the VO-only "
             "prefix is really where you want it, and pass --allow-internal.\n"
@@ -150,7 +154,7 @@ def preflight(
     # sends somebody off to fix the wrong thing. --verify-only is still allowed:
     # rechecking what is already published copies nothing.
     if not verify_only and not license_settled(package):
-        note = package.get("ethos:license_note", "")
+        note = package.get(k.LICENSE_NOTE, "")
         raise UploadError(
             f"{name} has unresolved licensing and is not uploaded. {note}\n".rstrip()
             + "\n"
@@ -158,11 +162,6 @@ def preflight(
             "`ethos:license_status: resolved` once somebody has read them -- and rebuild.\n"
             "Development against it does not need an upload; stage it instead:\n"
             f"    staging add {name} <directory>  (with your package's data command)"
-        )
-
-    if not prefix:
-        raise UploadError(
-            f"{name} declares no ethos:remote_prefix, so there is nowhere to put it."
         )
 
     if source_dir is None:
@@ -234,7 +233,7 @@ def resolve_name(catalog_root: Path, argument: str) -> str:
     datasets = datasets_dir(catalog_root)
 
     # A nested dataset's name contains a slash -- `reskit-test-data/era5` -- so a
-    # slash no longer means "this is a path". Try it as a name first: if it names
+    # slash does not mean "this is a path". Try it as a name first: if it names
     # a described dataset, that is what it is.
     if (
         not Path(argument).is_absolute()
@@ -242,19 +241,18 @@ def resolve_name(catalog_root: Path, argument: str) -> str:
     ):
         return argument
     # Anything still holding a separator is a path. Both of them, not just "/":
-    # on Windows shell completion produces `datasets\global-wind-atlas-v4`, and
-    # testing for "/" alone took that for a dataset name and reported it missing
-    # -- the one form of the argument a Windows user is most likely to type.
+    # on Windows shell completion produces `datasets\global-wind-atlas-v4`, the
+    # one form of the argument a Windows user is most likely to type.
     if not any(sep and sep in argument for sep in (os.sep, os.altsep, "/")):
         return argument
 
     path = Path(argument).expanduser().resolve()
-    # Resolve BOTH sides before asking whether one contains the other. Only the
-    # argument used to be resolved, so the two were not always written the same
-    # way: `resolve()` expands a Windows 8.3 short name, and %TEMP% is one for
-    # any account whose name holds a dot, so `C:\Users\JA60A~1.BEL\...` and
-    # `C:\Users\j.belina\...` named the same directory and compared unequal. A
-    # symlinked home or /tmp does the same thing on Linux.
+    # Resolve BOTH sides before asking whether one contains the other, so the
+    # two are written the same way: `resolve()` expands a Windows 8.3 short
+    # name, and %TEMP% is one for any account whose name holds a dot, so
+    # `C:\Users\JA60A~1.BEL\...` and `C:\Users\j.belina\...` name the same
+    # directory and compare unequal unless both are resolved. A symlinked home
+    # or /tmp does the same thing on Linux.
     resolved_datasets = datasets.expanduser().resolve()
     if path.is_relative_to(resolved_datasets) and (path / "dataset.yaml").is_file():
         return dataset_name_for(resolved_datasets, path)
@@ -406,7 +404,7 @@ def upload_one(args, plan: Plan, base_url: str, root: str, bearer) -> int:
             print("\nDry run only; nothing was uploaded.")
             return 0
 
-    if not args.no_chmod and plan.package.get("ethos:access") == "public":
+    if not args.no_chmod and plan.package.get(k.ACCESS, k.PUBLIC) == k.PUBLIC:
         status = chmod(namespace_path, MODE_0755, bearer())
         print(f"\nchmod 0755 {namespace_path} -> HTTP {status}")
         if status not in (200, 204):
@@ -457,11 +455,9 @@ def run(catalog_root: Path, args) -> int:
 
     # The upload destination and the URL we verify afterwards have to name the
     # same folder, so derive the default from the catalogue rather than repeating
-    # it. They drifted apart once already, when the publication root moved from
-    # reskit-data to ice2-data-files (and since then on to ethos-data): bytes
-    # would have gone to the old folder and
-    # every verification HEAD would have 404d against the new one, which reads
-    # like a permissions problem and is not one.
+    # it. Were they to differ, the bytes would go to one folder and every
+    # verification HEAD would 404 against the other, which reads like a
+    # permissions problem and is not one.
     published_root = base_url.rstrip("/").rsplit("/", 1)[-1]
     root = args.root or published_root
     if args.root and args.root != published_root:

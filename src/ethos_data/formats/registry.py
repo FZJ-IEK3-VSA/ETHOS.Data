@@ -15,6 +15,7 @@ from .bundle import BundleManifest
 from .catalogue import CatalogMeta
 from .collections_file import CollectionsFile
 from .dataset import DatasetDescriptor, NamespaceDescriptor
+from .fields import keys_with
 from .package import CatalogIndex, PackageDescriptor, ShardFile
 from .records import MaterializedRecord, StagingRegistry
 from .settings_file import SettingsFile
@@ -71,6 +72,15 @@ FORMATS: dict[str, Format] = {
                "Where a materialised cache entry was copied from."),
     )
 }  # fmt: skip
+
+
+def unpublished_keys() -> tuple[str, ...]:
+    """Every key any format marks unpublished, each once, in registry order."""
+    found: dict[str, None] = {}
+    for fmt in FORMATS.values():
+        for key in keys_with(fmt.model, "published", False):
+            found.setdefault(key, None)
+    return tuple(found)
 
 
 def schema(name: str) -> dict:

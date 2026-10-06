@@ -2,8 +2,7 @@
 
 Characterisation tests for [Release the catalogue]: what ``publish`` strips,
 what it carries along, what it must never mention, and what ``--check``
-compares. Two known defects are recorded as strict expected failures, so the
-pull request that fixes them has to say so by removing the marker.
+compares, and the leak check that stops a tree naming what it must not.
 """
 
 from __future__ import annotations
@@ -90,6 +89,16 @@ class TestWhatIsPublished:
         assert not (target / "stale.txt").exists()
         assert (target / ".git" / "HEAD").read_bytes() == b"ref: refs/heads/main\n"
 
+    def test_a_source_checkout_is_never_the_target(self, built, target):
+        (target / "catalog.yaml").write_bytes(b"name: a source catalogue\n")
+        before = everything_in(target)
+
+        code, _, err = built.publish(target)
+
+        assert code == 1
+        assert "holds a catalog.yaml" in err
+        assert everything_in(target) == before, "nothing is deleted or written"
+
     def test_licence_documents_travel_verbatim(self, source, target):
         source.dataset(
             "with-terms",
@@ -127,11 +136,6 @@ class TestCheck:
             not in (target / "datasets" / "open" / "datapackage.json").read_bytes()
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="publish --check compares the bytes of a licence document with "
-        "read_text and reports it stale; fixed with the format specifications",
-    )
     def test_check_passes_for_licence_documents(self, source, target):
         source.dataset(
             "with-terms",
@@ -150,12 +154,6 @@ class TestCheck:
         assert source.publish(target, check=True)[0] == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="the published index row is built separately from the source row and "
-    "lacks visibility, remote prefix, licence status, version and ethos:namespace; "
-    "fixed with the format specifications",
-)
 def test_a_published_index_row_says_what_the_source_row_says(source, target):
     source.namespace("family")
     source.dataset("family/member", {"a.csv": "1\n"}, version="2.0")
@@ -170,3 +168,73 @@ def test_a_published_index_row_says_what_the_source_row_says(source, target):
     }
     for row in source.index()["datasets"]:
         assert published[row["name"]] == row
+
+
+class TestLeaks:
+    """The release's leak check, run by publish itself rather than by hand."""
+
+    def test_every_key_a_format_marks_unpublished_is_looked_for(self):
+        from ethos_data.formats.registry import unpublished_keys
+        from ethos_data.maintain.publish import STRIP_FROM_PACKAGE, UNPUBLISHED_KEYS
+
+        assert UNPUBLISHED_KEYS == unpublished_keys()
+        assert set(STRIP_FROM_PACKAGE) <= set(UNPUBLISHED_KEYS)
+
+    @pytest.fixture(
+        params=[
+            'Built on "secret-plan" for now.',
+            "Built on secret-plan.",
+            "Built on `secret-plan`, like the rest.",
+            "Inputs listed in datasets/secret-plan/datapackage.json",
+        ],
+        ids=["quoted", "sentence", "backticks", "path"],
+    )
+    def leaking(self, request, source):
+        source.dataset(
+            "secret-plan",
+            {"b.csv": "2\n"},
+            ethos_access="internal",
+            ethos_visibility="hidden",
+            ethos_embargo=EMBARGO,
+        )
+        source.dataset("open", {"a.csv": "1\n"}, description=request.param)
+        assert source.build()[0] == 0
+        return source
+
+    def test_a_tree_that_names_a_withheld_dataset_is_not_written(self, leaking, target):
+        before = everything_in(target)
+
+        code, _, err = leaking.publish(target)
+
+        assert code == 1
+        assert "names the withheld dataset secret-plan" in err
+        assert everything_in(target) == before, "nothing is written"
+
+    def test_check_reports_the_leak(self, leaking, target):
+        code, _, err = leaking.publish(target, check=True)
+
+        assert code == 1
+        assert (
+            "LEAK: datasets/open/datapackage.json names the withheld dataset secret-plan"
+            in err
+        )
+
+    @pytest.mark.parametrize("public", ["family/era5", "era5-land", "era5.1"])
+    def test_a_name_that_merely_contains_a_withheld_one_is_no_leak(
+        self, source, target, public
+    ):
+        source.dataset(
+            "era5",
+            {"b.csv": "2\n"},
+            ethos_access="internal",
+            ethos_visibility="hidden",
+            ethos_embargo=EMBARGO,
+        )
+        if "/" in public:
+            source.namespace(public.split("/")[0])
+        source.dataset(public, {"a.csv": "1\n"})
+        assert source.build()[0] == 0
+
+        code, _, err = source.publish(target)
+
+        assert code == 0, err

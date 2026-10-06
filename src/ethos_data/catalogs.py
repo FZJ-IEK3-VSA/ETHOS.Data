@@ -42,6 +42,8 @@ from .errors import (
     UnknownDataset,
     UnknownKey,
 )
+from .formats import keys
+from .formats.derived import license_settled, license_status_of
 
 if TYPE_CHECKING:
     from .config import Roots
@@ -60,25 +62,9 @@ __all__ = [
 
 #: The one value of ``ethos:license_status`` that means somebody has read the
 #: upstream terms. Anything else -- "unresolved", "unknown", absent -- is a
-#: question nobody has answered yet.
-LICENSE_RESOLVED = "resolved"
-
-
-def license_settled(meta: dict) -> bool:
-    """Whether a descriptor states terms somebody has actually checked.
-
-    The same rule :attr:`Dataset.license_status` applies, asked of a plain
-    mapping -- a hand-written ``dataset.yaml`` or a generated
-    ``datapackage.json`` -- so that the half of the tooling that *writes* can
-    refuse to distribute a dataset before the question has been answered.
-
-    A ``licenses`` entry settles it: the builder already rejects one that names
-    no licence. Otherwise only an explicit ``resolved`` does, because the
-    default has to be "nobody has looked" rather than "nothing applies".
-    """
-    if meta.get("licenses"):
-        return True
-    return meta.get("ethos:license_status") == LICENSE_RESOLVED
+#: question nobody has answered yet. The rule itself, :func:`license_settled`,
+#: is the format's, shared with the half of the tooling that writes.
+LICENSE_RESOLVED = keys.RESOLVED
 
 
 #: Refs that move.  A catalogue fetched from one of these must not be cached
@@ -358,14 +344,12 @@ class Dataset:
     def license_status(self) -> str:
         """ "resolved" once somebody has read the upstream terms.
 
-        Promoted into the index by build_manifest.py so that listing a catalogue
-        does not have to load every descriptor to warn about licensing.
+        Promoted into the index by the build so that listing a catalogue does
+        not have to load every descriptor to warn about licensing.
         """
-        if "ethos:license_status" in self.entry:
-            return self.entry["ethos:license_status"]
-        if self.descriptor.get("licenses"):
-            return "resolved"
-        return self.descriptor.get("ethos:license_status", "unknown")
+        if keys.LICENSE_STATUS in self.entry:
+            return self.entry[keys.LICENSE_STATUS]
+        return license_status_of(self.descriptor)
 
     # -- these pull the datapackage in --------------------------------------
 

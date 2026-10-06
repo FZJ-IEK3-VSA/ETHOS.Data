@@ -121,3 +121,6 @@ DATACATALOG_PROFILE = "https://datapackage.org/profiles/2.0/datacatalog.json"
 STAGING_REGISTRY_FILE = ".ethos-data-staging.json"
 #: In a materialised cache entry: where its bytes were copied from.
 MATERIALIZED_RECORD_FILE = ".ethos-data-materialized.json"
+#: Beside a dataset's datapackage.json in a source checkout: the build's
+#: hashes by size and mtime. Private, never published.
+HASH_CACHE_FILE = ".ethos-data-hash-cache.json"

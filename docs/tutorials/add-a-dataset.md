@@ -127,7 +127,8 @@ Review and commit in the public repo, then push.
 
 `publish` regenerates the public catalogue from every dataset marked
 `ethos:visibility: public`, and strips the fields that only make sense to a
-maintainer. Check that none of them leaked:
+maintainer. It refuses to write a tree that still carries one, or that names
+a hidden dataset. To see for yourself that none of them leaked:
 
 ```bash
 grep -rn -E 'source_dir|ethos:uploaded|ethos:license_note|ethos:embargo' ../public-catalogue

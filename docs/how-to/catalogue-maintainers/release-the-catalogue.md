@@ -112,18 +112,23 @@ ethos-data catalog publish ../ETHOS.Data-Catalogue
 
 `publish` emits, for every dataset with `ethos:visibility: public`, the index,
 the descriptor and shards with `source_dir`, `ethos:embargo`,
-`ethos:license_note` and `ethos:uploaded` stripped, the licence documents, and
-the README table. It stamps `ethos:catalog_role: published` into the index.
+`ethos:license_note`, `ethos:uploaded` and `ethos:frozen` stripped, the
+licence documents, and the README table. It stamps
+`ethos:catalog_role: published` into the index.
 
 ### Check for a leak before committing {#leak-check}
 
+`publish` checks the tree it generates before writing any of it. A stripped
+key that is still there, or a hidden dataset named anywhere, in a descriptor,
+the index or the README, stops it with nothing written, and it names each
+finding. Fix the source descriptor or its visibility, rebuild, and publish
+again. The check knows names, not meaning, so read the diff:
+
 ```bash
-rg -n 'source_dir|ethos:embargo|ethos:license_note|ethos:uploaded' ../ETHOS.Data-Catalogue   # expect no output
-rg -n '<name of a hidden dataset>' ../ETHOS.Data-Catalogue                                    # expect no output
 cd ../ETHOS.Data-Catalogue && git diff
 ```
 
-A hidden dataset must not be mentioned at all. Read the diff.
+A hidden dataset must not be mentioned at all.
 
 ### Commit, tag, push
 
@@ -206,13 +211,16 @@ ethos-data catalog build --check
 ethos-data catalog publish ../ETHOS.Data-Catalogue --check
 ```
 
+`publish --check` runs the [leak check](#leak-check) too, so a merge request
+that would leak fails before anybody publishes.
+
 | Dataset state | The runner needs |
 | --- | --- |
 | Candidate with `source_dir` | Read access to that directory, so a runner on the cluster computer |
 | Uploaded or frozen, no `source_dir` | Only the checkout; the recorded inventory is preserved |
 
 The build keeps a size-and-mtime hash cache; for a review that must hash every
-byte, start from a checkout without `.ice2-hash-cache.json`. To check that
+byte, start from a checkout without `.ethos-data-hash-cache.json`. To check that
 uploaded bytes are still served without transferring anything:
 
 ```bash
@@ -223,6 +231,3 @@ A maintainer runs the release itself. Running it in CI is a feature request
 (GitHub issue #34): such a runner needs a token that does not depend on a
 person's oidc-agent session, and every build input that is not frozen.
 
-!!! warning "Gap: the leak check is separate"
-    The leak check is not part of `publish --check`; run it as under
-    [Check for a leak before committing](#leak-check).
