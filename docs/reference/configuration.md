@@ -123,15 +123,17 @@ results file. `ethos_data.read_settings()` takes the snapshot without a handle.
 
 ## Where a file is read {#lookup-order}
 
-Each file is read from the first of these places that has it, and
-`config show` prints the list for this machine:
+Each file is read from the first of these places that has it. The chain of
+places is built from the settings snapshot of the handle or the command, and
+`config show` prints it for this machine:
 
-1. a per-dataset root (`config set-root`), read in place;
-2. the staging root, never for restricted data, read in place without checksums;
-3. the restricted cache, for restricted data only, read in place;
-4. a link in the public cache, the dataset's own or its family's, read in place;
-5. a copy already in the public cache, of the size the catalogue records;
-6. a download from the publication root into the public cache, for public data only.
+1. the staging root, never for restricted data, read in place without checksums;
+2. the restricted cache, for restricted data only, read in place;
+3. the public cache: in place where the dataset's entry, or its family's, is a
+   link; otherwise a copy of the size the catalogue records, hash-checked when
+   it is fetched;
+4. a download from the publication root into the public cache, for public data
+   only.
 
 A place that may not serve a file refuses, and the search stops there. A
 restricted dataset without a restricted cache is never read from a copy in the

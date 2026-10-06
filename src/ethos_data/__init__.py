@@ -76,7 +76,7 @@ from .errors import (
 from .linking import link, unlink
 from .materialize import materialize
 from .model.resource import Resource
-from .retrieval import DataFiles, NamedPaths, cache_dir, download, local_path, plan
+from .retrieval import DataFiles, NamedPaths, download, plan
 from .selection import Collections, load_collections
 from .staging import apply_staging, classify_staged, staged_only
 from .verify import Finding, repair, verify
@@ -119,7 +119,6 @@ __all__ = [
     "UnknownCollection",
     "UnknownDataset",
     "apply_staging",
-    "cache_dir",
     "catalog",
     "classify_staged",
     "collections",
@@ -131,7 +130,6 @@ __all__ = [
     "unlink",
     "load_catalog",
     "load_collections",
-    "local_path",
     "materialize",
     "paths",
     "plan",

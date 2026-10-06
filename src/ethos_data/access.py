@@ -13,18 +13,18 @@ per-dataset configuration table, which matters because this cache is shared by
 a whole institute: the information is already on disk, so nobody has to write it
 down, and re-pointing a link migrates every user at once.
 
-Where a file is read is decided by one chain of locators, each looking in
-one place, in this order:
+Where a file is read is decided by one chain of locators, built from the
+settings snapshot of a handle or a command, each looking in one place, in this
+order:
 
   1. the staging root -- work in progress, shadowing the catalogue during
      development.  Never applies to restricted data.
-  2. the package's bundles (planned: the repository is the source of truth for
-     its test data)
-  3. the restricted cache, for restricted datasets: always in place, never
+  2. the restricted cache, for restricted datasets: always in place, never
      downloaded, never written to
-  4. a link in the public cache, the dataset's own or its family's: in place
-  5. a copy already in the public cache
-  6. a download from the publication root, for public data only
+  3. the public cache: in place where the dataset's entry, or its family's, is
+     a link; otherwise a copy of the size the catalogue records
+  4. a download from the publication root into the public cache, for public
+     data only
 
 Each locator answers *found* with a :class:`Location`, *pass* with None, or
 *refuse* by raising :class:`AccessError`. A refusal ends the chain, which is what
@@ -60,7 +60,6 @@ __all__ = [
     "entry_for",
     "Location",
     "locate",
-    "requires_local_root",
     "unavailable",
     "ORIGIN_STAGING",
     "ORIGIN_RESTRICTED",
@@ -117,11 +116,6 @@ def access_class(dataset: Dataset) -> str:
     # From the catalogue index, not the descriptor: deciding *where* a dataset
     # comes from must never be the thing that pulls its file inventory in.
     return dataset.access
-
-
-def requires_local_root(dataset: Dataset) -> bool:
-    """Restricted data can only ever be used from a configured local root."""
-    return access_class(dataset) == RESTRICTED
 
 
 def entry_for(catalog: Catalog, roots: Roots, name: str) -> Path:
@@ -215,7 +209,7 @@ class Staging(Locator):
 
 @dataclass
 class RestrictedCache(Locator):
-    """3. Licensed data: found in the restricted cache, or refused. Never passes.
+    """2. Licensed data: found in the restricted cache, or refused. Never passes.
 
     Having no restricted cache is a legitimate, permanent state -- most people,
     most of the time, are not on the institute cluster and have no right to the
@@ -286,14 +280,23 @@ def linked_entry(root: Path, name: str) -> Path | None:
 
 
 @dataclass
-class PublicLinks(Locator):
-    """4. A link in the public cache: data already on this machine, read in place."""
+class PublicCache(Locator):
+    """3. The public cache: data already on this machine, or a copy it holds.
+
+    In place where the dataset's entry, or a family entry above it, is a link.
+    Otherwise a file of the size the catalogue records, which is still a
+    download location: fetching it checks the hash, and replaces the copy if
+    it differs.
+    """
 
     root: Path
     _linked: dict[str, bool] = field(default_factory=dict, repr=False)
 
     def describe(self) -> str:
-        return f"links in the public cache {self.root}"
+        return (
+            f"public cache {self.root}: in place where an entry is a link, "
+            "else a copy of the recorded size"
+        )
 
     def reset(self) -> None:
         self._linked.clear()
@@ -306,27 +309,9 @@ class PublicLinks(Locator):
             linked = self._linked[dataset.name] = (
                 linked_entry(self.root, dataset.name) is not None
             )
-        if not linked:
-            return None
-        entry = self.root / dataset.name
-        return Location(resource, entry / resource.path, "in-place", ORIGIN_LINK)
-
-
-@dataclass
-class PublicCopies(Locator):
-    """5. A copy already in the public cache, of the size the catalogue records.
-
-    Still a download location: fetching it checks the hash, and replaces the
-    copy if it differs.
-    """
-
-    root: Path
-
-    def describe(self) -> str:
-        return f"copies in the public cache {self.root}"
-
-    def locate(self, catalog, dataset, resource):
         target = self.root / dataset.name / resource.path
+        if linked:
+            return Location(resource, target, "in-place", ORIGIN_LINK)
         try:
             present = target.stat().st_size == resource.bytes
         except OSError:
@@ -338,7 +323,7 @@ class PublicCopies(Locator):
 
 @dataclass
 class Download(Locator):
-    """6. A download from the publication root into the public cache.
+    """4. A download from the publication root into the public cache.
 
     For public data only. Internal data is not published, so it is not
     downloaded: it is read where the shared cache holds it. Refuses rather than
@@ -407,17 +392,16 @@ class Chain:
 
 
 def chain_for(roots: Roots, *, skip_unavailable: bool = False) -> Chain:
-    """The lookup chain the decision record names, built from ``roots``.
+    """The lookup chain, built from ``roots``; building it touches nothing.
 
-    The package's bundles join it as the second locator when bundles are part of
-    the chain; until then they are read through :func:`ethos_data.load_bundle`.
+    Bundles are not in the chain: they are read through
+    :func:`ethos_data.load_bundle`.
     """
     return Chain(
         (
             Staging(roots.staging),
             RestrictedCache(roots.restricted, skip_unavailable),
-            PublicLinks(roots.public),
-            PublicCopies(roots.public),
+            PublicCache(roots.public),
             Download(roots.public),
         )
     )
@@ -426,13 +410,13 @@ def chain_for(roots: Roots, *, skip_unavailable: bool = False) -> Chain:
 def locate(
     catalog: Catalog,
     resources: list[Resource],
-    roots: "Roots | str | Path | None" = None,
+    roots: Roots | None = None,
     skip_unavailable: bool | None = None,
 ) -> list[Location]:
     """Work out where every resource should be read from.
 
-    ``roots`` is a :class:`~ethos_data.config.Roots`, or a bare path naming the
-    public cache; without either, the roots of the catalogue's settings.
+    ``roots`` are the cache roots to read; without them, those of the
+    catalogue's settings snapshot.
 
     ``skip_unavailable`` decides what happens to licensed data this machine has
     no access to: ``False`` raises, ``True`` marks it "unavailable" and carries
@@ -443,7 +427,7 @@ def locate(
     falling back to the cache or to a download when neither is permitted. The
     chain it runs is :func:`chain_for`.
     """
-    roots = catalog._roots(roots)
+    roots = roots if roots is not None else catalog.settings.roots
     if skip_unavailable is None:
         skip_unavailable = resolve_skip_unavailable()[0]
     return chain_for(roots, skip_unavailable=skip_unavailable).locate(

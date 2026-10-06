@@ -105,7 +105,7 @@ class MaterializeReport:
 def plan_materialize(
     catalog: Catalog,
     names: list[str],
-    roots: "Roots | str | Path | None" = None,
+    roots: Roots | None = None,
     force: bool = False,
     source: "str | Path | None" = None,
     catalog_root: "str | Path | None" = None,
@@ -119,7 +119,7 @@ def plan_materialize(
     Note that this pulls the full inventory of every dataset named, including
     every shard of a sharded one -- that is what "how many bytes is this" costs.
     """
-    roots = catalog._roots(roots)
+    roots = roots if roots is not None else catalog.settings.roots
     given = Path(source).expanduser() if source is not None else None
     reports = []
     for name in sorted(set(names)):
@@ -260,7 +260,7 @@ def _check_space(root: Path, needed: int) -> None:
 def materialize(
     catalog: Catalog,
     names: list[str],
-    roots: "Roots | str | Path | None" = None,
+    roots: Roots | None = None,
     force: bool = False,
     verify_hashes: bool = True,
     dry_run: bool = False,
@@ -278,7 +278,7 @@ def materialize(
     target, and applies to every name given -- which is why the command line
     takes it with exactly one.
     """
-    roots = catalog._roots(roots)
+    roots = roots if roots is not None else catalog.settings.roots
     planned = plan_materialize(
         catalog, names, roots, force=force, source=source, catalog_root=catalog_root
     )

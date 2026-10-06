@@ -72,9 +72,9 @@ costs one redundant download at worst.
 ## What would break it
 
 Anything that lets two tools compute *different* paths for the same catalogue
-entry. That is why `Resource.key` (`"<dataset>/<resource path>"`) and
-`local_path` are treated as compatibility surface rather than implementation
-detail: a change there does not fail loudly, it just quietly stops the
+entry. That is why `Resource.key` (`"<dataset>/<resource path>"`) and the
+cache layout `<public cache>/<dataset>/<resource path>` are treated as
+compatibility surface rather than implementation detail: a change there does not fail loudly, it just quietly stops the
 deduplication and nobody finds out for months.
 
 The same reasoning explains a smaller decision. A collection's `files:` patterns

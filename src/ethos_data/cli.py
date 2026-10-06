@@ -691,11 +691,7 @@ class _ToolSource:
             return self._loaded
         settings = read_settings(root=args.root, catalog=args.catalog or self.catalog)
         loaded = load_collections(
-            self.file_path,
-            catalog=settings.catalog,
-            roots=settings.roots,
-            tool=self.tool,
-            settings=settings,
+            self.file_path, roots=settings.roots, tool=self.tool, settings=settings
         )
         if not overridden:
             self._loaded = loaded

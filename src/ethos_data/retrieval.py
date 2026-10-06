@@ -1,13 +1,10 @@
 """Downloading catalogue resources into the shared, hash-verified cache.
 
-(Module named ``retrieval`` rather than ``fetch`` so it can never shadow the
-public ``ethos_data.fetch`` function -- the same reason ``selection`` is not
-called ``collections``. At runtime the function won anyway, because ``def
-fetch`` in ``__init__`` runs after the ``from .fetch import ...`` line, but
-static tooling saw only the module: griffe could not document the package's
-main entry point, and editors and type checkers offered the module's members
-for ``ethos_data.fetch``. ``download`` and ``plan`` are exported from here under
-their own names for the same reason -- do not rename this module to either.)
+(Named ``retrieval`` rather than ``fetch``, ``download`` or ``plan``, so that
+it never shadows the public functions of those names in the view static tooling
+takes of the package: griffe documents them, and editors and type checkers
+offer them, only while no module has their name. ``selection`` is not called
+``collections`` for the same reason.)
 
 The cache layout is the whole trick behind cross-tool deduplication:
 
@@ -39,18 +36,15 @@ from .access import (
     unavailable,
 )
 from .catalogs import Catalog
-from .config import ENV_VAR, Roots, read_settings
+from .config import Roots
 from .errors import AccessError, NotFetched
 from .formats import keys as k
 from .model.resource import Resource
 
 __all__ = [
     "DataFiles",
-    "ENV_VAR",
     "NamedPaths",
-    "cache_dir",
     "download",
-    "local_path",
     "plan",
 ]
 
@@ -132,28 +126,14 @@ class DataFiles(dict):
         return self[matches[0]]
 
 
-def cache_dir(explicit: str | Path | None = None) -> Path:
-    """Root of the shared public cache.
-
-    Resolved from an explicit argument, then $ETHOS_DATA_DIR, then the settings
-    file, then the per-user cache directory.
-    See :mod:`ethos_data.config` for the full precedence and the reasoning.
-    """
-    return read_settings(root=explicit).roots.public
-
-
-def local_path(resource: Resource, root: Path | None = None) -> Path:
-    return (root or cache_dir()) / resource.dataset / resource.path
-
-
 def plan(
     catalog: Catalog,
     resources: list[Resource],
-    roots: "Roots | str | Path | None" = None,
+    roots: Roots | None = None,
     skip_unavailable: bool | None = None,
 ) -> dict:
     """Report what a fetch would do, without touching the network."""
-    roots = catalog._roots(roots)
+    roots = roots if roots is not None else catalog.settings.roots
     locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)
 
     present, missing, in_place = [], [], []
@@ -191,7 +171,7 @@ def plan(
 def download(
     catalog: Catalog,
     resources: list[Resource],
-    root: "Roots | str | Path | None" = None,
+    root: Roots | None = None,
     progressbar: bool = True,
     skip_unavailable: bool | None = None,
     *,
@@ -209,7 +189,7 @@ def download(
     would have to be downloaded raises :class:`~ethos_data.errors.NotFetched`,
     naming the path it belongs at.
     """
-    roots = catalog._roots(root)
+    roots = root if root is not None else catalog.settings.roots
     _warn_about_licensing(catalog, resources)
 
     locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)

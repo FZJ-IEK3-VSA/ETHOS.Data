@@ -90,12 +90,13 @@ downloaded:
 [One lookup chain](architecture/decisions/0012-one-lookup-chain.md) gives what
 each place considers and when it refuses.
 
-!!! warning "Gap: the code reads three places and knows three access classes"
-    The code reads staging, one restricted cache and the public cache. It
-    has no bundles in the chain, and `skip_unavailable` leaves an unreachable input
-    out. It also knows a third access class, `internal`, which it downloads
-    like public data; in the target, that is restricted data that every member
-    of the institute may read. On the cluster, its repair replaces a dataset's
+!!! warning "Gap: no bundles in the chain, and three access classes"
+    The code's chain is staging, one restricted cache, the public cache and
+    the download. It has no bundles in the chain, and `skip_unavailable`
+    leaves an unreachable input out. It also knows a third access class,
+    `internal`, which it reads from the public cache and never downloads; in
+    the target, that is restricted data that every member of the institute
+    may read. On the cluster, its repair replaces a dataset's
     link with a downloaded copy when a file behind it is damaged, which every
     user then reads; in the target, `verify --repair` never removes or
     replaces a link

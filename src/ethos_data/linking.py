@@ -205,7 +205,7 @@ def link(
     catalog: Catalog,
     name: str,
     directory: str | Path | None = None,
-    roots: "Roots | str | Path | None" = None,
+    roots: Roots | None = None,
     force: bool = False,
     catalog_root: str | Path | None = None,
 ) -> LinkReport:
@@ -226,7 +226,7 @@ def link(
     already a link and ``force`` is not set, or if the entry is a real directory
     -- which is never replaced, because it is data the cache owns.
     """
-    roots = catalog._roots(roots)
+    roots = roots if roots is not None else catalog.settings.roots
     try:
         entry = entry_for(catalog, roots, name)
     except AccessError as error:
@@ -269,7 +269,7 @@ def link(
 def unlink(
     catalog: Catalog,
     name: str,
-    roots: "Roots | str | Path | None" = None,
+    roots: Roots | None = None,
 ) -> LinkReport:
     """Remove this dataset's cache entry, if it is a link.
 
@@ -277,7 +277,7 @@ def unlink(
     the cache's own copy, and deleting somebody's downloaded or materialised
     dataset is not something a command called ``unlink`` should do.
     """
-    roots = catalog._roots(roots)
+    roots = roots if roots is not None else catalog.settings.roots
     try:
         entry = entry_for(catalog, roots, name)
     except AccessError as error:

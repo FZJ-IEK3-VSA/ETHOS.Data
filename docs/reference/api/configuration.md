@@ -48,7 +48,6 @@ later read of a setting goes through it.
         - Locator
         - linked_entry
         - Location
-        - requires_local_root
         - check_missing
         - unavailable
       show_root_heading: false

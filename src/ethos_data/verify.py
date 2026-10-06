@@ -98,7 +98,7 @@ def _broken_link(roots: Roots, dataset: str, origin: str) -> tuple[Path, Path] |
 def verify(
     catalog: Catalog,
     resources: list[Resource],
-    roots: "Roots | str | Path | None" = None,
+    roots: Roots | None = None,
     deep: bool = False,
     skip_unavailable: bool | None = None,
 ) -> list[Finding]:
@@ -109,7 +109,7 @@ def verify(
     the cost of one ``stat`` per file. With ``deep`` it compares checksums,
     which catches everything and reads every byte.
     """
-    roots = catalog._roots(roots)
+    roots = roots if roots is not None else catalog.settings.roots
     locations = locate(catalog, resources, roots, skip_unavailable=skip_unavailable)
 
     findings: list[Finding] = []
@@ -195,7 +195,7 @@ def summarise(findings: list[Finding]) -> dict[str, list[Finding]]:
 def repair(
     catalog: Catalog,
     findings: list[Finding],
-    roots: "Roots | str | Path | None" = None,
+    roots: Roots | None = None,
     dry_run: bool = False,
     progressbar: bool = True,
 ) -> dict:
@@ -213,7 +213,7 @@ def repair(
         download,
     )  # local: retrieval imports access, which imports config
 
-    roots = catalog._roots(roots)
+    roots = roots if roots is not None else catalog.settings.roots
     broken = [f for f in findings if not f.ok]
 
     skipped: dict[str, str] = {
