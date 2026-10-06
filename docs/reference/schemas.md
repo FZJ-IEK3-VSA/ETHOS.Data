@@ -471,7 +471,7 @@ published catalogue.
 
 How it renders — see [below](#datapackagejson).
 
-### Where the bytes are
+### The draft's files and the store folder
 
 **`source_dir`** — *string (path); in a draft.* Where the files are **on
 this machine**. A relative path is resolved against the dataset directory; an
@@ -485,17 +485,6 @@ published.
 **`ethos:remote_prefix`** — *string; default: the value of `name`.* Folder name on
 the public store. **Must not be set** for restricted data — the build rejects it,
 because restricted bytes are never uploaded.
-
-**`ethos:uploaded`**, **`ethos:frozen`** — *bool; default: false; before
-status files.* What a dataset without a `status.yaml` states about its
-inventory: `ethos:uploaded: true` that dCache holds the copy its hashes
-describe, `ethos:frozen: true` the same freeze without the claim about dCache.
-The build still reads both, with a warning, and keeps their rules: `source_dir`
-must be absent, a `datapackage.json` must exist, and restricted data is never
-marked uploaded. `ethos-data catalog migrate` turns either into the `frozen`
-state of the dataset's status file, and from then on
-`ethos-data catalog record` freezes a dataset. Stripped from anything
-published.
 
 Freezing rather than repointing `source_dir` at the copy is deliberate: a rebuild
 re-hashes whatever it is pointed at, so a corrupted copy would be recorded as

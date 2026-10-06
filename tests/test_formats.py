@@ -33,7 +33,6 @@ class TestTemplates:
     def test_every_dataset_template_passes_the_build_rules_and_lints_clean(self, name):
         meta = render(name)
         formats.dataset.check(meta)
-        formats.dataset.check_legacy_state(meta)  # a draft `catalog migrate` takes
         assert formats.dataset.lint(meta) == []
 
     def test_the_catalogue_template_is_a_valid_catalog_yaml(self):
@@ -185,32 +184,6 @@ def test_where_the_bytes_are_is_not_a_rule_of_the_description():
     formats.dataset.check({})
 
 
-@pytest.mark.legacy(
-    reason="status files: source_dir, ethos:uploaded and ethos:frozen move into "
-    "status.yaml, and these rules apply only to a dataset not migrated yet"
-)
-class TestTheStateBeforeStatusFiles:
-    def test_a_frozen_dataset_needs_no_source_and_a_built_one_does(self):
-        formats.dataset.check_legacy_state({"ethos:frozen": True})
-        with pytest.raises(DescriptorError, match="source_dir is required"):
-            formats.dataset.check_legacy_state({})
-
-    def test_uploaded_and_a_source_together_are_refused(self):
-        with pytest.raises(DescriptorError) as raised:
-            formats.dataset.check_legacy_state(
-                {"source_dir": ".", "ethos:uploaded": True}
-            )
-        assert raised.value.message.startswith(
-            "declares ethos:uploaded: true and still has source_dir"
-        )
-
-    def test_restricted_data_is_frozen_rather_than_marked_uploaded(self):
-        with pytest.raises(DescriptorError, match="ethos:frozen: true"):
-            formats.dataset.check_legacy_state(
-                {"ethos:access": "restricted", "ethos:uploaded": True}
-            )
-
-
 def test_defaults_are_written_in_the_fixed_key_order():
     meta = {"name": "x", "title": "X"}
     formats.dataset.apply_defaults(meta)
@@ -242,8 +215,6 @@ def test_publish_strips_what_the_specification_marks_unpublished():
 
     assert set(STRIP_FROM_PACKAGE) == {
         "source_dir",
-        "ethos:uploaded",
-        "ethos:frozen",
         "ethos:embargo",
         "ethos:license_note",
     }

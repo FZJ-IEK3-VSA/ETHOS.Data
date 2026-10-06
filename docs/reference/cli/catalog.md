@@ -48,13 +48,10 @@ The build reads `source_dir` from the dataset's `status.yaml` and records
 there what it changed: a draft's first build makes it `built`, and an
 inventory that differs from the one before is recorded as a change, which
 returns an `available` dataset to `built` with a warning. A frozen dataset
-keeps its inventory and re-derives the rest. A dataset without a status file
-is built from `source_dir`, `ethos:uploaded` and `ethos:frozen` in its
-`dataset.yaml`, with a warning naming [`migrate`](#migrate-datasets).
-
-A sharded dataset built before the shard directory was renamed still has
-`manifests/`. The build moves its shards to `shards/` and deletes the old
-directory, and `--check` fails until that has happened.
+keeps its inventory and re-derives the rest. A dataset without a status file,
+or whose `dataset.yaml` states `source_dir` beside one, is refused, naming
+[`migrate`](#migrate-datasets). Shards are read from and written to `shards/`
+only.
 
 | Flag | |
 |---|---|
@@ -72,7 +69,7 @@ ethos-data catalog publish ../ETHOS.Data-Catalogue --check
 
 Emits `datacatalog.json`, each public `datasets/<name>/datapackage.json` with
 the keys the dataset.yaml format marks unpublished stripped (`source_dir`,
-`ethos:embargo`, `ethos:license_note`, `ethos:uploaded`, `ethos:frozen`), and
+`ethos:embargo`, `ethos:license_note`), and
 the README table — for every dataset marked `ethos:visibility: public`.
 Anything in the target that it does not generate is deleted, so `publish` refuses a target that holds a `catalog.yaml`, a source checkout.
 
@@ -153,8 +150,9 @@ The dataset's state must allow the step: a built dataset is uploaded, a frozen
 one is refused and only rechecked with `--verify-only`. A verified upload, and
 a recheck that passes, is recorded in the dataset's `status.yaml` as its copy
 on dCache, which makes a built dataset `available`; [`record`](#record-dataset)
-freezes it afterwards. A dataset without a status file is uploaded as before,
-and a warning says nothing was recorded.
+freezes it afterwards. A dataset without a status file is refused, naming
+[`migrate`](#migrate-datasets). The guards of the step refuse restricted data
+and unresolved licensing with `TransitionError`.
 
 !!! warning "Gap: `--allow-internal` is to be removed"
     With [decision
@@ -185,13 +183,14 @@ ethos-data catalog status --check          # and whether each record still holds
 ```text
   dataset          state      access      next
   era5             built      public      ethos-data catalog upload era5
-  climate-inputs   available  internal    none while its source_dir stays; materialize it before that goes
+  climate-inputs   available  public      none while its source_dir stays; materialize it before that goes
   gadm-3.6         frozen     restricted  -
   old-dataset      -          public      ethos-data catalog migrate old-dataset
 ```
 
-A dataset without a status file shows `-`, and one whose status file cannot be
-read shows `?` with the reason. `--check` compares each record with the
+A dataset without a status file shows `-` and names
+[`migrate`](#migrate-datasets), and one whose status file cannot be read shows
+`?` with the reason; either fails the command. `--check` compares each record with the
 evidence, one line per comparison:
 
 - the `datapackage.json` the build would write, against the one there;
@@ -220,9 +219,9 @@ ethos-data catalog record gadm-3.6 --copy /shared/ethos/restricted/gadm-3.6
 ```
 
 Which copy, unless `--copy` names one: the upload, else the copy a cache owns,
-else, for restricted data, the registered installation. A link to public or
-internal data borrows the build input, which a rebuild still reads, and is the
-authoritative copy only when named. A dataset that is not `available` is
+else, for restricted data, the registered installation, a link in a
+restricted cache. A link to public data borrows the build input, which a
+rebuild still reads, and is the authoritative copy only when named. A dataset that is not `available` is
 refused, and one already frozen may have its authoritative copy changed to
 another recorded copy.
 
@@ -233,8 +232,9 @@ another recorded copy.
 
 ## `migrate [datasets...]` {#migrate-datasets}
 
-Write each dataset's `status.yaml` from the keys its `dataset.yaml` held
-before status files, and remove those keys.
+The one converter of the clean break: write each dataset's `status.yaml`
+from `source_dir`, `ethos:uploaded` and `ethos:frozen` in its `dataset.yaml`,
+remove those keys, and move a dataset's shards from `manifests/` to `shards/`.
 
 ```bash
 ethos-data catalog migrate --dry-run
@@ -244,15 +244,15 @@ ethos-data catalog migrate my-dataset
 
 | `dataset.yaml` says | `status.yaml` says |
 |---|---|
-| `source_dir`, never built | `draft`, with the `source_dir` |
-| `source_dir`, built | `built`, with the `source_dir` |
+| `source_dir`, never built | `draft`, with the `source_dir` as an absolute path |
+| `source_dir`, built | `built`, with the `source_dir` as an absolute path |
 | `ethos:uploaded: true` | `frozen`, its copy on dCache the authoritative one |
 | `ethos:frozen: true` | `frozen`, where its authoritative copy is not recorded |
 
 The keys are removed line by line, so every other line of `dataset.yaml`,
 comments included, stays as it was; the result is read back and compared, and
 a file that cannot be edited that way is left alone and reported, as is a
-dataset whose keys the build would refuse. Nothing is checked against the
+dataset whose keys contradict each other. Nothing is checked against the
 bytes: run `status --check` afterwards. A key left in `dataset.yaml` beside a
 status file is removed when the two agree and reported when they do not.
 

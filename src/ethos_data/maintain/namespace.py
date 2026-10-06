@@ -7,9 +7,9 @@ The result is one entry per dataset, named for the dataset, pointing at wherever
 that data already sits on this machine:
 
     <public cache>/
-    |-- global-wind-atlas  -> /legacy/shared/Global_Wind_Atlas/GWA_4.0
-    |-- corine-land-cover  -> /legacy/shared/landcover/clc2018
-    |-- test-data/era5     -> /legacy/shared/era5-subset   (a nested dataset,
+    |-- global-wind-atlas  -> /projects/shared/Global_Wind_Atlas/GWA_4.0
+    |-- corine-land-cover  -> /projects/shared/landcover/clc2018
+    |-- test-data/era5     -> /projects/shared/era5-subset   (a nested dataset,
     |                                                       entry where its name says)
     `-- submarine-cables/     (a real directory, downloaded from dCache)
 
@@ -33,7 +33,9 @@ replacing it with a link would silently discard it.
 Given ``--catalog-root``, the command also takes the ``link`` step of each
 dataset it links (see :mod:`.status`): a dataset whose state does not allow it,
 a draft not built yet, is skipped, and every link is recorded as a copy in the
-dataset's ``status.yaml``.
+dataset's ``status.yaml``. The copies ``ethos-data link`` and ``materialize``
+make by name are recorded here too, with :func:`allow`, :func:`record_link`
+and :func:`record_materialized`: reading data never writes a catalogue.
 """
 
 from __future__ import annotations
@@ -46,6 +48,8 @@ from ..errors import MaintenanceError
 from ..formats import keys as k
 from ..formats.derived import license_settled
 from ..formats.status_file import Copy
+from ..linking import LinkReport
+from ..materialize import MaterializeReport
 from ..model import lifecycle
 from . import (
     dataset_name_for,
@@ -56,7 +60,15 @@ from . import (
 )
 from . import status as dataset_status
 
-__all__ = ["Action", "plan", "apply", "run"]
+__all__ = [
+    "Action",
+    "allow",
+    "apply",
+    "plan",
+    "record_link",
+    "record_materialized",
+    "run",
+]
 
 RESTRICTED = k.RESTRICTED
 
@@ -147,26 +159,18 @@ def plan(
             )
             continue
 
-        if not license_settled(meta):
-            # Building this namespace is how a dataset reaches everybody on the
-            # machine. An absent licence is a question, not a permission, and
-            # answering it is one line in dataset.yaml.
-            actions.append(
-                Action(
-                    name,
-                    "skip",
-                    entry,
-                    detail="unresolved licensing: record the terms in dataset.yaml before "
-                    "linking it into a cache other people read",
-                )
-            )
+        # Building this namespace is how a dataset reaches everybody on the
+        # machine: the guard of the link step applies to every dataset in it.
+        reason = lifecycle.refusal("link", name, settled=license_settled(meta))
+        if reason:
+            actions.append(Action(name, "skip", entry, detail=reason.splitlines()[0]))
             continue
 
         try:
             built_from = dataset_status.build_input(
                 datasets_dir(catalog_root) / name, meta, name
             )
-            if record and built_from.status is not None:
+            if record:
                 lifecycle.step("link", built_from.status.state, name)
         except MaintenanceError as error:
             first = error.message.splitlines()[0]
@@ -229,23 +233,53 @@ def plan(
     return actions
 
 
-def _record(catalog_root: Path, actions: list[Action]) -> tuple[int, list[str]]:
-    """Record every link the namespace has now; (recorded, without a status file)."""
-    recorded, unrecorded = 0, []
+def _record(catalog_root: Path, actions: list[Action]) -> int:
+    """Record every link the namespace has now; how many were recorded."""
+    recorded = 0
     for action in actions:
         if action.verb not in ("link", "repoint", "unchanged"):
             continue
         copy = Copy(
             kind=k.COPY_LINKED, location=str(action.entry), target=str(action.target)
         )
-        state = dataset_status.record_copy(
+        dataset_status.record_copy(
             catalog_root, action.dataset, "link", copy, repeat=False
         )
-        if state is None:
-            unrecorded.append(action.dataset)
-        else:
-            recorded += 1
-    return recorded, unrecorded
+        recorded += 1
+    return recorded
+
+
+def allow(catalog_root: Path, dataset: str, step: str) -> None:
+    """Refuse, before anything is linked or copied, a step the dataset's state does not allow."""
+    dataset_status.allow(catalog_root, dataset, step)
+
+
+def record_link(catalog_root: Path, link: LinkReport) -> str:
+    """Take the ``link`` step for a link made by name; the dataset's state after it."""
+    return dataset_status.record_copy(
+        catalog_root,
+        link.dataset,
+        "link",
+        Copy(kind=k.COPY_LINKED, location=str(link.entry), target=str(link.target)),
+    )
+
+
+def record_materialized(
+    catalog_root: Path, made: MaterializeReport, *, verified: bool
+) -> str:
+    """Take the ``materialize`` step for a copy made in place of a link; the state after it."""
+    return dataset_status.record_copy(
+        catalog_root,
+        made.dataset,
+        "materialize",
+        Copy(
+            kind=k.COPY_MATERIALIZED,
+            location=str(made.entry),
+            verified=dataset_status.now() if verified else None,
+        ),
+        files=made.files,
+        bytes=made.bytes,
+    )
 
 
 def apply(actions: list[Action]) -> list[Action]:
@@ -314,11 +348,9 @@ def run(
     if changes:
         apply(changes)
     if record:
-        recorded, unrecorded = _record(catalog_root, actions)
+        recorded = _record(catalog_root, actions)
         if recorded:
             report.info(f"\nrecorded {recorded} link(s) in the datasets' status files.")
-        if unrecorded:
-            report.warning(dataset_status.unrecorded(unrecorded))
     if not changes:
         report.info("\nnothing to do.")
         return NamespaceResult(actions)

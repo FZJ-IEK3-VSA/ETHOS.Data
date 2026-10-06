@@ -174,17 +174,6 @@ def source_dir_of(dataset_dir: Path, meta: Mapping) -> Path | None:
     return source
 
 
-# A sharded dataset keeps its split inventory in SHARD_DIR, beside its own
-# ``datapackage.json``: one ``shards/<prefix>.json`` per shard. The build owns
-# this directory outright and deletes whatever in it it did not just generate.
-
-#: What SHARD_DIR was called before it was renamed. The build still owns it, so
-#: the first rebuild of an older catalogue moves every shard across and deletes
-#: it, and ``--check`` reports it until somebody does. Readers never needed
-#: either name: they follow the path the ``ethos:shards`` index records.
-LEGACY_SHARD_DIR = "manifests"
-
-
 #: Set on a namespace node's generated descriptor. A namespace has no files of
 #: its own -- it exists to name a family and to carry the metadata its members
 #: share -- so tools must not treat it as something to download.
@@ -220,18 +209,14 @@ def iter_dataset_dirs(root: Path) -> list[Path]:
     as ``reskit-test-data/era5``.
 
     Recursion does not stop at the first dataset.yaml -- that is the whole point,
-    a dataset directory may contain more of them. It does skip ``shards/`` (and
-    the legacy ``manifests/``), which holds generated shard files and never a
-    dataset.
+    a dataset directory may contain more of them. It does skip ``shards/``,
+    which holds generated shard files and never a dataset.
     """
     found: list[Path] = []
     if not root.is_dir():
         return found
     for path in sorted(root.rglob("dataset.yaml")):
-        if any(
-            part in (SHARD_DIR, LEGACY_SHARD_DIR)
-            for part in path.relative_to(root).parts
-        ):
+        if SHARD_DIR in path.relative_to(root).parts:
             continue
         found.append(path.parent)
     return found
@@ -240,8 +225,7 @@ def iter_dataset_dirs(root: Path) -> list[Path]:
 def dataset_name_for(root: Path, dataset_dir: Path) -> str:
     """A dataset's name: its path relative to ``datasets/``, slash-separated.
 
-    For a top-level dataset this is just the directory name, exactly as before
-    nesting existed. For a nested one it is ``parent/child``, which is also its
+    For a top-level dataset this is just the directory name. For a nested one it is ``parent/child``, which is also its
     cache path, its default remote prefix, and how a collections file addresses
     it -- one string, meaning the same thing everywhere.
     """
@@ -272,12 +256,11 @@ def parent_chain(root: Path, dataset_dir: Path) -> list[Path]:
 def source_dir_for(name: str, catalog_root: str | Path | None = None) -> Path:
     """The ``source_dir`` a source catalogue records for this dataset.
 
-    ``source_dir`` is popped out of the descriptor when it is built, so it lives
-    in the hand-written ``datasets/<name>/dataset.yaml`` and nowhere else -- not
-    in ``datapackage.json``, not in any ``datacatalog.json``. Reading it means
-    reading the checkout, exactly as ``catalog build`` and ``catalog upload`` do;
-    ``catalog_root`` names it, or it is searched for upward from the current
-    directory.
+    It lives in the dataset's ``status.yaml`` and nowhere else -- not in
+    ``datapackage.json``, not in any ``datacatalog.json``. Reading it means
+    reading the checkout, exactly as ``catalog build`` and ``catalog upload``
+    do; ``catalog_root`` names it, or it is searched for upward from the
+    current directory.
 
     ``ethos-data link`` and ``materialize`` ask it when they are given no
     directory; reading a checkout is catalogue maintenance, so the data-access
@@ -296,12 +279,15 @@ def source_dir_for(name: str, catalog_root: str | Path | None = None) -> Path:
     descriptor = dataset_dir / "dataset.yaml"
     if not descriptor.is_file():
         raise LinkError(f"no dataset called {name!r} in {datasets_dir(root)}")
-    source = source_dir_of(dataset_dir, read_descriptor(dataset_dir))
+    from .status import build_input
+
+    source = build_input(dataset_dir, read_descriptor(dataset_dir), name).source_dir
     if source is None:
         raise LinkError(
-            f"{descriptor} has no source_dir, so there is nothing to link from.\n"
-            "An uploaded dataset has none by design -- dCache holds it. Name the "
-            f"directory instead:\n    ethos-data link {name} /path/to/{name}"
+            f"{name} has no source_dir left in {dataset_dir}, so there is nothing "
+            "to link from: its inventory is final, and its authoritative copy is "
+            f"elsewhere. Name the directory instead:\n    ethos-data link {name} "
+            f"/path/to/{name}"
         )
     return source
 

@@ -5,33 +5,50 @@
     ethos-data catalog record gadm-3.6 --copy /shared/restricted/gadm-3.6
 
 Once its bytes are uploaded and verified, or copied into a cache that owns
-them, a dataset's build input is no longer needed, and should no longer be
-read: a rebuild hashes whatever it is pointed at, so a corrupted original
-would be recorded as correct. Freezing the dataset keeps the inventory as it
+them, a dataset needs its build input no more, and should not read it again:
+a rebuild hashes whatever it is pointed at, so a corrupted original would be
+recorded as correct. Freezing the dataset keeps the inventory as it
 was built and retires ``source_dir``, so the recorded hashes stay an
 independent witness to the copy.
 
 The copy is checked, file by file, before the dataset is frozen: an upload
-anonymously over HTTP, a cache entry on this machine. Which copy, when there
-are several: the upload, else the copy a cache owns, else, for restricted
-data, the registered installation. A link to public or internal data borrows
-the build input and is the authoritative copy only when named with ``--copy``.
+read back anonymously through the store, a cache entry on this machine. Which
+copy, when there are several: the upload, else the copy a cache owns, else,
+for restricted data, the registered installation, a link in a restricted
+cache. A link to public data borrows the build input and is the authoritative
+copy only when named with ``--copy``.
 """
 
 from __future__ import annotations
 
-import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from .. import report
+from ..adapters import Store
 from ..errors import MaintenanceError
 from ..formats import keys as k
 from ..formats.status_file import Copy, StatusFile
 from ..model import lifecycle
-from . import is_namespace, read_descriptor, resources_of
+from . import inventory_of, is_namespace, read_descriptor
 from . import status as dataset_status
 
-__all__ = ["choose", "run"]
+__all__ = ["RecordResult", "choose", "run"]
+
+
+@dataclass(frozen=True)
+class RecordResult:
+    """The dataset ``catalog record`` froze, or would freeze, and its authoritative copy."""
+
+    dataset: str
+    authority: str
+    #: Whether the status file was written: not for a dry run, nor for a
+    #: dataset frozen with this copy already.
+    written: bool
+
+    @property
+    def ok(self) -> bool:
+        return True
 
 
 def _same(location: str, other: str) -> bool:
@@ -79,30 +96,37 @@ def choose(dataset: str, status: StatusFile, access: str, named: str | None) -> 
 
 @report.reported
 def run(
-    catalog_root: Path, dataset: str, *, copy: str | None = None, dry_run: bool = False
-) -> int:
-    """Freeze ``dataset`` with its authoritative copy checked; returns 0, or raises."""
+    catalog_root: Path,
+    dataset: str,
+    *,
+    copy: str | None = None,
+    dry_run: bool = False,
+    store: Store | None = None,
+) -> RecordResult:
+    """Freeze ``dataset`` with its authoritative copy checked, or raise why not.
+
+    ``store`` reads an upload back, dCache's public door by default.
+    """
     from .upload import resolve_name
 
+    if store is None:
+        from ..adapters.dcache import DcacheStore
+
+        store = DcacheStore()
     name = resolve_name(catalog_root, dataset)
     directory = dataset_status.dataset_dir_in(catalog_root, name)
     if is_namespace(directory):
         raise MaintenanceError(
             f"{name} is a family and has no bytes of its own; record each member."
         )
-    status = dataset_status.read(directory)
-    if status is None:
-        raise MaintenanceError(
-            f"{name} has no {dataset_status.STATUS} yet, so there is nothing to "
-            f"record the freeze in. Write one from its dataset.yaml with\n"
-            f"    ethos-data catalog migrate {name}"
-        )
+    meta = read_descriptor(directory)
+    status = dataset_status.build_input(directory, meta, name).status
     lifecycle.step("record", status.state, name)
-    access = read_descriptor(directory).get(k.ACCESS, k.PUBLIC)
+    access = meta.get(k.ACCESS, k.PUBLIC)
     chosen = choose(name, status, access, copy)
 
-    package = json.loads((directory / "datapackage.json").read_text(encoding="utf-8"))
-    finding = dataset_status.check_copy(chosen, resources_of(package, directory))
+    records = inventory_of(name, directory).records()
+    finding = dataset_status.check_copy(chosen, records, store)
     report.info(f"  {finding}")
     if not finding.ok:
         raise MaintenanceError(
@@ -113,7 +137,7 @@ def run(
         report.info(
             f"\n{name} is frozen already, with this copy as its authoritative one."
         )
-        return 0
+        return RecordResult(name, chosen.location, written=False)
     retired = status.source_dir
     if dry_run:
         report.info(
@@ -121,7 +145,7 @@ def run(
             + (f" and its source_dir {retired} is retired." if retired else ".")
             + " Nothing was written."
         )
-        return 0
+        return RecordResult(name, chosen.location, written=False)
     dataset_status.take(
         directory,
         status,
@@ -139,4 +163,4 @@ def run(
             f"             its source_dir {retired} is not read again; a rebuild "
             "keeps the inventory as it is"
         )
-    return 0
+    return RecordResult(name, chosen.location, written=True)

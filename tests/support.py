@@ -52,6 +52,29 @@ def digest(content: bytes | str) -> str:
     return "sha256:" + hashlib.sha256(as_bytes(content)).hexdigest()
 
 
+def write_descriptor(
+    dataset_dir: Path, meta: dict | str, encoding: str = "utf-8"
+) -> Path:
+    """Write a ``dataset.yaml`` as a catalogue keeps it, from a mapping or YAML text.
+
+    Its ``source_dir`` goes into a ``status.yaml`` saying the dataset is a
+    draft; every other line stays as written.
+    """
+    from ethos_data.formats.edit import without_keys
+
+    text = meta if isinstance(meta, str) else yaml.safe_dump(meta, sort_keys=False)
+    source = (yaml.safe_load(text) or {}).get("source_dir")
+    if source is not None:
+        text = without_keys(text, ["source_dir"])
+        (dataset_dir / "status.yaml").write_text(
+            yaml.safe_dump({"state": "draft", "source_dir": str(source)}),
+            encoding="utf-8",
+        )
+    path = dataset_dir / "dataset.yaml"
+    path.write_text(text, encoding=encoding)
+    return path
+
+
 def run_cli(argv: list[str]) -> tuple[int, str, str]:
     """Run ``ethos-data`` as a process would: exit code, standard output, standard error.
 
@@ -303,7 +326,6 @@ class SourceCatalogue:
         files: dict[str, bytes | str] | None = None,
         *,
         documents: dict[str, bytes | str] | None = None,
-        legacy: bool = False,
         **meta: object,
     ) -> Path:
         """Describe a dataset; ``files`` become its ``source_dir`` unless ``meta`` names one.
@@ -313,9 +335,7 @@ class SourceCatalogue:
         ``documents`` are archived licence files written beside ``dataset.yaml``.
 
         The ``source_dir`` goes into a ``status.yaml`` saying the dataset is a
-        draft, as a catalogue keeps it. ``legacy=True`` writes it into
-        ``dataset.yaml`` instead, as before status files, where
-        ``ethos_uploaded`` and ``ethos_frozen`` belong too.
+        draft, as a catalogue keeps it.
         """
         descriptor: dict = {"title": f"The {name} dataset"}
         descriptor["licenses"] = DEFAULT_LICENSES
@@ -330,9 +350,7 @@ class SourceCatalogue:
             descriptor["source_dir"] = str(source)
         for key in [k for k, v in descriptor.items() if v is None]:
             del descriptor[key]
-        if not legacy and {"ethos:uploaded", "ethos:frozen"} & set(descriptor):
-            raise TypeError("ethos:uploaded and ethos:frozen need legacy=True")
-        source_dir = None if legacy else descriptor.pop("source_dir", None)
+        source_dir = descriptor.pop("source_dir", None)
         directory = self.directory(name)
         for relative, content in (documents or {}).items():
             target = directory / relative

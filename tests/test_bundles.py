@@ -19,10 +19,6 @@ from ethos_data.bundles import (
 )
 from ethos_data.errors import BundleError
 
-pytestmark = pytest.mark.legacy(
-    "bundles become repository-first: bundle.json gains a family, a version and per-member dataset.yaml files"
-)
-
 
 def digest(data):
     return "sha256:" + hashlib.sha256(data).hexdigest()
@@ -77,7 +73,6 @@ def catalogue(tmp_path, monkeypatch):
         ],
         "ethos:embargo": {"reason": "old private review"},
         "ethos:license_note": "private review",
-        "ethos:uploaded": True,
         "source_dir": "/private/workstation/path",
         "resources": resources,
     }
@@ -167,10 +162,7 @@ def test_portable_snapshot_with_sidecars_and_provenance(
     assert bundle.datasets["fixture"]["licenses"] == [{"name": "CC0-1.0"}]
     assert bundle.datasets["fixture"]["sources"][0]["title"] == "Generated example"
     package = bundle.datasets["fixture"]
-    assert not (
-        {"ethos:embargo", "ethos:license_note", "ethos:uploaded", "source_dir"}
-        & package.keys()
-    )
+    assert not ({"ethos:embargo", "ethos:license_note", "source_dir"} & package.keys())
     shape_record = next(
         record for record in package["resources"] if record["path"] == "sites.shp"
     )

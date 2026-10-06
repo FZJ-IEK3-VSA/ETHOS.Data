@@ -180,7 +180,8 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         help="each dataset's state and next step, from its status.yaml",
         description="List every dataset with its state -- draft, built, available, "
         "frozen, withdrawn or purged -- its access class and what it needs next. "
-        "A dataset without a status.yaml shows '-'.",
+        "A dataset without a status.yaml is named with `catalog migrate`, and fails "
+        "the command.",
     )
     stater.add_argument(
         "datasets",
@@ -215,10 +216,10 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
 
     migrator = catalog_sub.add_parser(
         "migrate",
-        help="move source_dir, ethos:uploaded and ethos:frozen into status.yaml",
-        description="Write each dataset's status.yaml from the keys its dataset.yaml "
-        "held before status files, and remove them line by line, keeping every "
-        "other line and comment.",
+        help="convert source_dir, ethos:uploaded and ethos:frozen into status.yaml",
+        description="Write each dataset's status.yaml from source_dir, ethos:uploaded "
+        "and ethos:frozen in its dataset.yaml, remove those keys line by line, keeping "
+        "every other line and comment, and move manifests/ to shards/.",
     )
     migrator.add_argument("datasets", nargs="*", help="dataset names (default: all)")
     migrator.add_argument(
@@ -284,16 +285,18 @@ def dispatch(args) -> int:
     if args.catalog_command == "status":
         from . import status
 
-        return status.run(root, args.datasets, check=args.check)
+        return _status(status.run(root, args.datasets, check=args.check))
 
     if args.catalog_command == "record":
         from . import freeze
 
-        return freeze.run(root, args.dataset, copy=args.copy, dry_run=args.dry_run)
+        return _status(
+            freeze.run(root, args.dataset, copy=args.copy, dry_run=args.dry_run)
+        )
 
     if args.catalog_command == "migrate":
         from . import migrate
 
-        return migrate.run(root, args.datasets, dry_run=args.dry_run)
+        return _status(migrate.run(root, args.datasets, dry_run=args.dry_run))
 
     raise MaintenanceError(f"unknown catalog command: {args.catalog_command}")

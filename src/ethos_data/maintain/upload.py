@@ -61,7 +61,6 @@ from . import (
     iter_dataset_dirs,
     read_catalog_meta,
     read_descriptor,
-    source_dir_of,
 )
 from . import status as dataset_status
 
@@ -125,35 +124,22 @@ def preflight(
     # dataset's own name unless it declares a prefix.
     prefix = remote_prefix_of(package)
 
-    if access == k.RESTRICTED:
-        raise UploadError(
-            f"{name} is restricted and must never be uploaded.\n"
-            "Restricted data stays where it is; register it in a restricted cache:\n"
-            f"    ethos-data link {name} /path/to/{name}"
-        )
+    # The guards of the step, ahead of the mechanical checks below: they do
+    # not depend on how the dataset is configured, and being told about a
+    # missing prefix instead would send somebody off to fix the wrong thing.
+    # --verify-only rechecks what is published and hands nothing out.
+    lifecycle.guard(
+        "upload",
+        name,
+        access=access,
+        settled=verify_only or license_settled(package),
+        note=package.get(k.LICENSE_NOTE, ""),
+    )
     if access == "internal" and not allow_internal:
         raise UploadError(
             f"{name} is internal (not published). Upload it only if the VO-only "
             "prefix is really where you want it, and pass --allow-internal.\n"
             "It will NOT be made world-readable."
-        )
-
-    # Ahead of the mechanical checks below, and no longer a warning. Publishing
-    # is the irreversible half of this: once the bytes are on dCache under terms
-    # nobody has read, "we were not sure" stops being a position anybody can
-    # take. It comes first because it is the reason that does not depend on how
-    # the dataset is configured -- being told about a missing prefix instead
-    # sends somebody off to fix the wrong thing. --verify-only is still allowed:
-    # rechecking what is already published copies nothing.
-    if not verify_only and not license_settled(package):
-        note = package.get(k.LICENSE_NOTE, "")
-        raise UploadError(
-            f"{name} has unresolved licensing and is not uploaded. {note}\n".rstrip()
-            + "\n"
-            "Record the terms in its dataset.yaml -- a `licenses:` entry, or "
-            "`ethos:license_status: resolved` once somebody has read them -- and rebuild.\n"
-            "Development against it does not need an upload; stage it instead:\n"
-            f"    staging add {name} <directory>  (with your package's data command)"
         )
 
     if source_dir is None:
@@ -283,8 +269,8 @@ class Plan(NamedTuple):
     source_dir: Path | None
     dataset_dir: Path
     prefix: str
-    #: Its status file; None for a dataset without one, whose upload is not recorded.
-    status: StatusFile | None = None
+    #: Its status file, which records the upload.
+    status: StatusFile
 
 
 def upload_one(
@@ -391,14 +377,11 @@ class UploadResult:
         return not self.failed
 
 
-def _record(plan: Plan, options: UploadOptions, base_url: str) -> bool:
-    """Record a verified upload, or a recheck that passed; False without a status file."""
-    status = dataset_status.read(plan.dataset_dir)
-    if status is None:
-        return False
+def _record(plan: Plan, options: UploadOptions, base_url: str) -> None:
+    """Record a verified upload, or a recheck that passed, in the status file."""
     taken = dataset_status.take(
         plan.dataset_dir,
-        status,
+        dataset_status.read(plan.dataset_dir),
         "verify" if options.verify_only else "upload",
         dataset=plan.name,
         copy=Copy(
@@ -412,7 +395,6 @@ def _record(plan: Plan, options: UploadOptions, base_url: str) -> bool:
     report.info(
         f"\nrecorded     {plan.name} is {taken.state}, its copy on dCache verified"
     )
-    return True
 
 
 @report.reported
@@ -471,11 +453,8 @@ def run(
         prefix = preflight(
             name, package, source_dir, options.allow_internal, options.verify_only
         )
-        status = dataset_status.read(dataset_dir)
-        if status is not None:
-            lifecycle.step(
-                "verify" if options.verify_only else "upload", status.state, name
-            )
+        status = dataset_status.build_input(dataset_dir, _meta, name).status
+        lifecycle.step("verify" if options.verify_only else "upload", status.state, name)
         plans.append(Plan(name, package, source_dir, dataset_dir, prefix, status))
 
     # One token for the whole run, fetched only if something actually needs it:
@@ -495,7 +474,6 @@ def run(
         report.info(f"  {', '.join(plan.name for plan in plans)}\n")
 
     failed: dict[str, str] = {}
-    unrecorded: list[str] = []
     for index, plan in enumerate(plans, start=1):
         if len(plans) > 1:
             report.info(
@@ -511,12 +489,10 @@ def run(
             failed[plan.name] = error.message
             report.warning(error.message)
         else:
-            if not options.dry_run and not _record(plan, options, base_url):
-                unrecorded.append(plan.name)
+            if not options.dry_run:
+                _record(plan, options, base_url)
         if len(plans) > 1:
             report.info()
-    if unrecorded:
-        report.warning(dataset_status.unrecorded(unrecorded))
 
     result = UploadResult([plan.name for plan in plans], failed)
     if len(plans) == 1:

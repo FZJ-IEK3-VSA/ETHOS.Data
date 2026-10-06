@@ -103,6 +103,7 @@ here, and every step a command takes checked against the
     options:
       members:
         - run
+        - StatusResult
         - read
         - write
         - take
@@ -111,7 +112,7 @@ here, and every step a command takes checked against the
         - evidence
         - check_copy
         - Finding
-        - LEGACY_KEYS
+        - CONVERTED
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3
@@ -120,6 +121,7 @@ here, and every step a command takes checked against the
     options:
       members:
         - run
+        - RecordResult
         - choose
       show_root_heading: false
       show_root_toc_entry: false
@@ -129,7 +131,7 @@ here, and every step a command takes checked against the
     options:
       members:
         - run
-        - without_keys
+        - MigrateResult
         - Outcome
       show_root_heading: false
       show_root_toc_entry: false
@@ -167,6 +169,9 @@ be a whole link tree built somewhere nobody named.
         - plan
         - apply
         - Action
+        - allow
+        - record_link
+        - record_materialized
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

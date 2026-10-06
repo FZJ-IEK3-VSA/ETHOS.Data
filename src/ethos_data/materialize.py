@@ -49,10 +49,10 @@ Every copy is checksummed against the manifest before it is put in place, and
 the old link target is recorded in ``.ethos-data-materialized.json`` so that a copy
 can always be traced back to where it came from.
 
-Given ``--catalog-root``, each copy is also the ``materialize`` step of the
-dataset in that checkout: a dataset whose state does not allow it is not
-copied, and every copy made is recorded in the dataset's ``status.yaml``, in
-place of the link it replaced.
+A dataset with unread terms is not copied: the guard of the ``materialize``
+step. Given ``--catalog-root``, the command line takes each copy as a step of
+the dataset in that checkout, through :mod:`ethos_data.maintain.namespace`;
+this module records nothing.
 """
 
 from __future__ import annotations
@@ -70,6 +70,7 @@ from .catalogs import Catalog
 from .config import Roots, current_user
 from .errors import AccessError, LinkError, UnknownDataset
 from .formats import keys as k
+from .linking import raise_if_refused
 from .model import digest
 from .model.resource import Resource
 
@@ -100,10 +101,6 @@ class MaterializeReport:
     #: whether there is a link to remove before the copy is put in place, and one
     #: to restore if that fails.
     was_link: bool = False
-    #: The dataset's state in the checkout after the copy was recorded there.
-    recorded: str = ""
-    #: Recording was asked for and the dataset has no status file to record in.
-    unrecorded: bool = False
 
     def __str__(self) -> str:
         head = f"{self.action:<14} {self.dataset}"
@@ -130,15 +127,14 @@ def plan_materialize(
     catalog: Catalog,
     names: list[str],
     roots: Roots | None = None,
-    force: bool = False,
     source: "str | Path | None" = None,
     source_dir: Callable[[str], Path] | None = None,
     cache: str | Path | None = None,
 ) -> list[MaterializeReport]:
     """Classify each dataset without copying anything.
 
-    ``record`` classifies a dataset whose state in the checkout does not allow
-    the ``materialize`` step as one that cannot be copied.
+    A dataset with unread terms cannot be copied (the guard of the
+    ``materialize`` step).
 
     ``source`` is a directory to copy from in place of whatever the entry points
     at. It also makes an *absent* entry copyable, which is the only way to fill
@@ -177,19 +173,15 @@ def plan_materialize(
             reports.append(MaterializeReport(name, "cannot", error.message))
             continue
 
-        if record:
-            from .linking import _checkout
-            from .maintain import status as dataset_status
-
-            try:
-                dataset_status.allow(_checkout(catalog_root), name, "materialize")
-            except (MaintenanceError, LinkError) as error:
-                reports.append(
-                    MaterializeReport(
-                        name, "cannot", error.message.splitlines()[0], entry=entry
-                    )
+        try:
+            raise_if_refused(catalog, name, "materialize", LinkError)
+        except LinkError as error:
+            reports.append(
+                MaterializeReport(
+                    name, "cannot", error.message.splitlines()[0], entry=entry
                 )
-                continue
+            )
+            continue
 
         was_link = entry.is_symlink()
 
@@ -197,25 +189,14 @@ def plan_materialize(
             # A real directory is data the cache already owns, and ``--from`` does
             # not change that: "copy these bytes in" must never be a way to write
             # over a verified copy that is already there.
-            if force:
-                reports.append(
-                    MaterializeReport(
-                        name,
-                        "already real",
-                        f"{entry} is a real directory; --force re-copies "
-                        "nothing, it is already owned",
-                        entry=entry,
-                    )
+            reports.append(
+                MaterializeReport(
+                    name,
+                    "already real",
+                    f"{entry} is already a real directory",
+                    entry=entry,
                 )
-            else:
-                reports.append(
-                    MaterializeReport(
-                        name,
-                        "already real",
-                        f"{entry} is already a real directory",
-                        entry=entry,
-                    )
-                )
+            )
             continue
 
         if given is not None:
@@ -307,7 +288,6 @@ def materialize(
     catalog: Catalog,
     names: list[str],
     roots: Roots | None = None,
-    force: bool = False,
     verify_hashes: bool = True,
     dry_run: bool = False,
     on_file=None,
@@ -324,16 +304,12 @@ def materialize(
     ``source`` copies from that directory rather than from the entry's link
     target, and applies to every name given -- which is why the command line
     takes it with exactly one.
-
-    ``record`` makes each copy the ``materialize`` step of its dataset in the
-    checkout ``catalog_root`` names, recorded in its ``status.yaml``.
     """
     roots = roots if roots is not None else catalog.settings.roots
     planned = plan_materialize(
         catalog,
         names,
         roots,
-        force=force,
         source=source,
         source_dir=source_dir,
         cache=cache,
@@ -346,33 +322,8 @@ def materialize(
         if report.action != "would copy":
             done.append(report)
             continue
-        made = _materialize_one(catalog, report, roots, verify_hashes, on_file)
-        if record and made.action == "materialized":
-            _record(made, catalog_root, verify_hashes)
-        done.append(made)
+        done.append(_materialize_one(catalog, report, roots, verify_hashes, on_file))
     return done
-
-
-def _record(made: MaterializeReport, catalog_root, verified: bool) -> None:
-    """Record the copy ``made`` in its dataset's status file, in place of its link."""
-    from .formats.status_file import Copy
-    from .linking import _checkout
-    from .maintain import status as dataset_status
-
-    state = dataset_status.record_copy(
-        _checkout(catalog_root),
-        made.dataset,
-        "materialize",
-        Copy(
-            kind=k.COPY_MATERIALIZED,
-            location=str(made.entry),
-            verified=dataset_status.now() if verified else None,
-        ),
-        files=made.files,
-        bytes=made.bytes,
-    )
-    made.recorded = state or ""
-    made.unrecorded = state is None
 
 
 def _materialize_one(

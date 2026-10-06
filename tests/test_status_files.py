@@ -15,12 +15,14 @@ import pytest
 import yaml
 from support import SourceCatalogue, run_cli
 
+from ethos_data.adapters import dcache
 from ethos_data.adapters.fakes import FakeStore
 from ethos_data.errors import DescriptorError, TransitionError
 from ethos_data.formats import status_file
+from ethos_data.formats.edit import without_keys
 from ethos_data.formats.status_file import Copy, StatusFile
-from ethos_data.maintain import migrate, upload
 from ethos_data.maintain import status as dataset_status
+from ethos_data.maintain import upload
 from ethos_data.model import lifecycle
 
 EMBARGO = {
@@ -32,19 +34,35 @@ EMBARGO = {
 
 @pytest.fixture
 def uploading(tmp_path, store, monkeypatch):
-    """A built public dataset, and dCache a fake that puts what it is sent on the store."""
+    """A built public dataset, and dCache a fake that keeps and reads back what it is sent."""
     catalogue = SourceCatalogue(tmp_path, publication_url=f"{store.url}/ethos-data")
     catalogue.dataset("flat", {"a.csv": "1\n", "b.csv": "22\n"})
     assert catalogue.build()[0] == 0
-    dcache = FakeStore(put=store.put)
-    monkeypatch.setattr(upload, "DcacheStore", lambda remote: dcache)
-    return catalogue, dcache
+    fake = FakeStore(put=store.put)
+    monkeypatch.setattr(upload, "DcacheStore", lambda remote: fake)
+    monkeypatch.setattr(dcache, "DcacheStore", lambda remote="HIFIS": fake)
+    return catalogue, fake
+
+
+def unconverted(source, name, files=None, **keys) -> object:
+    """A dataset as a catalogue ``catalog migrate`` converts keeps it.
+
+    Where its bytes are is in its ``dataset.yaml`` -- ``source_dir``, and any
+    of ``keys`` (``ethos_uploaded``, ``ethos_frozen``) -- and it has no status
+    file. A ``source_dir`` of None leaves it out.
+    """
+    directory = source.dataset(name, files)
+    status = yaml.safe_load((directory / "status.yaml").read_text(encoding="utf-8"))
+    (directory / "status.yaml").unlink()
+    keys.setdefault("source_dir", status["source_dir"])
+    source.edit(name, **keys)
+    return directory
 
 
 @pytest.fixture
 def linking(source, tmp_path):
-    """A built internal dataset, its catalogue to read, and an empty shared cache."""
-    source.dataset("shared", {"a.csv": "1", "sub/b.csv": "22"}, ethos_access="internal")
+    """A built public dataset, its catalogue to read, and an empty public cache."""
+    source.dataset("shared", {"a.csv": "1", "sub/b.csv": "22"})
     assert source.build()[0] == 0
     cache = tmp_path / "public"
 
@@ -104,8 +122,7 @@ class TestLifecycle:
             (None, "public", (), None, "ethos-data catalog migrate era5"),
             ("draft", "public", (), None, "ethos-data catalog build era5"),
             ("built", "public", (), None, "ethos-data catalog upload era5"),
-            ("built", "internal", (), None, "link it into the shared cache"),
-            ("built", "restricted", (), None, "register its installation"),
+            ("built", "restricted", (), None, "register its installation by name"),
             (
                 "available",
                 "public",
@@ -113,7 +130,7 @@ class TestLifecycle:
                 None,
                 "ethos-data catalog record era5",
             ),
-            ("available", "internal", ("linked",), None, "materialize it before"),
+            ("available", "public", ("linked",), None, "materialize it before"),
             (
                 "available",
                 "restricted",
@@ -121,7 +138,8 @@ class TestLifecycle:
                 None,
                 "ethos-data catalog record era5",
             ),
-            ("frozen", "internal", (), None, "record its authoritative copy"),
+            ("frozen", "public", (), None, "record its authoritative copy"),
+            ("withdrawn", "public", (), None, "once a major release is recorded"),
         ],
     )
     def test_the_next_step_follows_from_the_state_and_the_copies(
@@ -273,18 +291,17 @@ class TestTheBuild:
         code, _, err = source.build()
 
         assert code == 1
-        assert "flat: its dataset.yaml still states source_dir" in err
+        assert "flat: its dataset.yaml states source_dir" in err
         assert "ethos-data catalog migrate flat" in err
 
-    def test_a_dataset_without_one_still_builds_with_a_warning(self, source):
-        source.dataset("old", {"a.csv": "1"}, legacy=True)
+    def test_a_dataset_without_one_is_not_built(self, source):
+        unconverted(source, "old", {"a.csv": "1"})
 
         code, _, err = source.build()
 
-        assert code == 0
-        assert "old keeps its build input in dataset.yaml" in err
-        assert "`ethos-data catalog migrate` moves it across" in err
-        assert not (source.directory("old") / "status.yaml").exists()
+        assert code == 1
+        assert "old: its dataset.yaml states source_dir" in err
+        assert "ethos-data catalog migrate old" in err
 
     def test_a_withdrawn_dataset_is_not_built(self, source):
         source.dataset("flat", {"a.csv": "1"})
@@ -329,7 +346,7 @@ class TestUpload:
 
     def test_an_upload_that_does_not_verify_records_nothing(self, uploading):
         catalogue, dcache = uploading
-        dcache.put = None  # the transfer lands nowhere, so reading it back fails
+        dcache.readable = False  # nobody may read it back
 
         assert catalogue.catalog("upload", "flat")[0] == 1
 
@@ -371,20 +388,15 @@ class TestUpload:
         assert "flat is withdrawn" in err
         assert dcache.copies == []
 
-    def test_a_dataset_without_a_status_file_is_uploaded_and_not_recorded(
-        self, tmp_path, store, monkeypatch
-    ):
-        catalogue = SourceCatalogue(tmp_path, publication_url=f"{store.url}/ethos-data")
-        catalogue.dataset("old", {"a.csv": "1\n"}, legacy=True)
-        assert catalogue.build()[0] == 0
-        monkeypatch.setattr(
-            upload, "DcacheStore", lambda remote: FakeStore(put=store.put)
-        )
+    def test_a_dataset_without_a_status_file_is_refused(self, uploading):
+        catalogue, fake = uploading
+        (catalogue.directory("flat") / "status.yaml").unlink()
 
-        code, _, err = catalogue.catalog("upload", "old")
+        code, _, err = catalogue.catalog("upload", "flat")
 
-        assert code == 0
-        assert "not recorded: old has no status.yaml" in err
+        assert code == 1
+        assert "ethos-data catalog migrate flat" in err
+        assert fake.copies == []
 
 
 class TestLinkAndMaterialize:
@@ -497,10 +509,10 @@ class TestRecord:
         assert code == 1
         assert "flat is built" in err and "Make its bytes available first" in err
 
-    def test_a_copy_that_no_longer_holds_the_files_is_refused(self, uploading, store):
-        catalogue, _ = uploading
+    def test_a_copy_that_no_longer_holds_the_files_is_refused(self, uploading):
+        catalogue, dcache = uploading
         assert catalogue.catalog("upload", "flat")[0] == 0
-        (store.root / "ethos-data" / "flat" / "a.csv").unlink()
+        del dcache.objects["ethos-data/flat/a.csv"]
 
         code, out, _ = catalogue.catalog("record", "flat")
 
@@ -508,7 +520,7 @@ class TestRecord:
         assert "FAIL  uploaded" in out and "1 of 2 files not readable" in out
         assert catalogue.status("flat")["state"] == "available"
 
-    def test_a_link_to_internal_data_is_the_authority_only_when_named(self, linking):
+    def test_a_link_to_public_data_is_the_authority_only_when_named(self, linking):
         source, cache, cli = linking
         assert cli("link", "shared", "--catalog-root", str(source.root))[0] == 0
 
@@ -526,7 +538,7 @@ class TestRecord:
         self, source, tmp_path, monkeypatch
     ):
         restricted = tmp_path / "restricted"
-        monkeypatch.setenv("ETHOS_RESTRICTED_DIR", str(restricted))
+        monkeypatch.setenv("ETHOS_RESTRICTED_DIRS", str(restricted))
         source.dataset(
             "licensed",
             {"a.tif": "x"},
@@ -549,8 +561,9 @@ class TestRecord:
         assert source.status("licensed")["authority"] == str(restricted / "licensed")
 
     def test_a_dataset_without_a_status_file_is_migrated_first(self, source):
-        source.dataset("old", {"a.csv": "1"}, legacy=True)
+        source.dataset("old", {"a.csv": "1"})
         assert source.build()[0] == 0
+        (source.directory("old") / "status.yaml").unlink()
 
         code, _, err = source.catalog("record", "old")
 
@@ -559,12 +572,16 @@ class TestRecord:
 
 
 class TestMigrate:
-    def test_each_old_state_becomes_its_status(self, source):
+    def test_each_state_in_the_description_becomes_its_status(self, source):
         for name in ("drafted", "built", "uploaded", "frozen"):
-            source.dataset(name, {"a.csv": "1"}, legacy=True)
+            source.dataset(name, {"a.csv": "1"})
         assert source.build("built", "uploaded", "frozen")[0] == 0
-        source.edit("uploaded", source_dir=None, ethos_uploaded=True)
-        source.edit("frozen", source_dir=None, ethos_frozen=True)
+        for name in ("drafted", "built", "uploaded", "frozen"):
+            (source.directory(name) / "status.yaml").unlink()
+        source.edit("drafted", source_dir=str(source.bytes / "drafted"))
+        source.edit("built", source_dir=str(source.bytes / "built"))
+        source.edit("uploaded", ethos_uploaded=True)
+        source.edit("frozen", ethos_frozen=True)
 
         code, _, err = source.catalog("migrate")
 
@@ -587,11 +604,11 @@ class TestMigrate:
         assert source.build("built", "uploaded", "frozen", check=True)[0] == 0
 
     def test_every_other_line_and_comment_is_kept(self, source):
-        path = source.dataset("flat", {"a.csv": "1"}, legacy=True) / "dataset.yaml"
+        path = unconverted(source, "flat", {"a.csv": "1"}) / "dataset.yaml"
         path.write_text(
             "# Reviewed by the custodian.\n"
             "title: Flat\n"
-            "source_dir: '/data/flat'   # where the bytes are\n"
+            "source_dir: '../../../bytes/flat'   # where the bytes are\n"
             "ethos:frozen: false\n"
             "licenses:\n"
             "  - name: CC0-1.0\n"
@@ -608,10 +625,13 @@ class TestMigrate:
             "  - name: CC0-1.0\n"
             "# the end\n"
         )
-        assert source.status("flat")["source_dir"] == "/data/flat"
+        # Written absolute: the status file is read from other checkouts too.
+        assert source.status("flat")["source_dir"] == str(
+            (source.bytes / "flat").resolve()
+        )
 
     def test_a_file_that_cannot_be_edited_line_by_line_is_left_alone(self, source):
-        directory = source.dataset("flat", {"a.csv": "1"}, legacy=True)
+        directory = unconverted(source, "flat", {"a.csv": "1"})
         path = directory / "dataset.yaml"
         path.write_text("{title: Flat, source_dir: /data/flat}\n", encoding="utf-8")
 
@@ -625,18 +645,70 @@ class TestMigrate:
         )
         assert not (directory / "status.yaml").exists()
 
-    def test_keys_the_build_would_refuse_are_left_alone(self, source):
-        directory = source.dataset("flat", {"a.csv": "1"}, legacy=True)
-        source.edit("flat", ethos_frozen=True)
+    @pytest.mark.parametrize(
+        "keys, message",
+        [
+            (
+                {"ethos_frozen": True},
+                "declares ethos:frozen: true and still has source_dir",
+            ),
+            ({"source_dir": None}, "has no source_dir, and neither ethos:uploaded"),
+        ],
+    )
+    def test_keys_that_contradict_each_other_are_left_alone(
+        self, source, keys, message
+    ):
+        directory = unconverted(source, "flat", {"a.csv": "1"}, **keys)
 
         code, out, _ = source.catalog("migrate")
 
         assert code == 1
-        assert "declares ethos:frozen: true and still has source_dir" in out
+        assert message in out
         assert not (directory / "status.yaml").exists()
 
+    def test_restricted_data_is_frozen_rather_than_marked_uploaded(self, source):
+        directory = source.dataset(
+            "licensed",
+            {"a.csv": "1"},
+            ethos_access="restricted",
+            ethos_visibility="hidden",
+            ethos_embargo=EMBARGO,
+        )
+        assert source.build()[0] == 0
+        (directory / "status.yaml").unlink()
+        source.edit("licensed", ethos_uploaded=True)
+
+        code, out, _ = source.catalog("migrate")
+
+        assert code == 1
+        assert "restricted data is never uploaded" in out
+        assert "ethos:frozen: true instead" in out
+
+    def test_shards_move_from_manifests_to_shards(self, source):
+        directory = source.dataset(
+            "tiles", {"2019/a.tif": "x", "2020/a.tif": "y"}, ethos_shard_depth=1
+        )
+        assert source.build()[0] == 0
+        built = {p.name: p.read_bytes() for p in (directory / "shards").iterdir()}
+        (directory / "shards").rename(directory / "manifests")
+        package_file = directory / "datapackage.json"
+        package_file.write_text(
+            package_file.read_text(encoding="utf-8").replace('"shards/', '"manifests/'),
+            encoding="utf-8",
+        )
+
+        code, out, _ = source.catalog("migrate")
+
+        assert code == 0
+        assert "manifests/ moved to shards/" in out
+        assert not (directory / "manifests").exists()
+        assert {
+            p.name: p.read_bytes() for p in (directory / "shards").iterdir()
+        } == built
+        assert source.build(check=True)[0] == 0
+
     def test_a_dry_run_writes_nothing(self, source):
-        directory = source.dataset("flat", {"a.csv": "1"}, legacy=True)
+        directory = unconverted(source, "flat", {"a.csv": "1"})
         before = (directory / "dataset.yaml").read_bytes()
 
         code, out, _ = source.catalog("migrate", "--dry-run")
@@ -672,19 +744,19 @@ class TestMigrate:
     def test_without_keys_removes_a_value_that_continues_on_the_next_lines(self):
         text = "title: T\nsource_dir: >-\n  /data/a\n  long\nlicenses: []\n"
 
-        assert migrate.without_keys(text, ["source_dir"]) == "title: T\nlicenses: []\n"
+        assert without_keys(text, ["source_dir"]) == "title: T\nlicenses: []\n"
 
 
 class TestStatus:
     def test_it_lists_each_dataset_with_its_state_and_next_step(self, source):
         source.dataset("drafted", {"a.csv": "1"})
         source.dataset("ready", {"a.csv": "1"})
-        source.dataset("old", {"a.csv": "1"}, legacy=True)
+        unconverted(source, "old", {"a.csv": "1"})
         assert source.build("ready")[0] == 0
 
         code, out, _ = source.catalog("status")
 
-        assert code == 0
+        assert code == 1, "a dataset without a status file fails the command"
         rows = {line.split()[0]: line for line in out.splitlines()[1:] if line.strip()}
         assert rows["drafted"].split()[1:3] == ["draft", "public"]
         assert "ethos-data catalog build drafted" in rows["drafted"]
@@ -748,9 +820,10 @@ class TestStatus:
         assert rows["fine"].split()[1] == "draft"
 
     def test_check_asks_where_a_migrated_frozen_dataset_is(self, source):
-        source.dataset("frozen", {"a.csv": "1"}, legacy=True)
+        directory = source.dataset("frozen", {"a.csv": "1"})
         assert source.build()[0] == 0
-        source.edit("frozen", source_dir=None, ethos_frozen=True)
+        (directory / "status.yaml").unlink()
+        source.edit("frozen", ethos_frozen=True)
         assert source.catalog("migrate")[0] == 0
 
         code, out, _ = source.catalog("status", "--check")

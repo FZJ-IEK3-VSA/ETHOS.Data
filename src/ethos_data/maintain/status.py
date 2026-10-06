@@ -11,17 +11,15 @@ they are given ``--catalog-root``. Each of them asks :mod:`~ethos_data.model.lif
 first whether the dataset's state allows the step, so a draft is never
 uploaded and a frozen dataset never rebuilt from local files.
 
-``dataset.yaml`` describes the data and nothing else. ``source_dir``,
-``ethos:uploaded`` and ``ethos:frozen`` were the state before there was a
-status file; a dataset without one is still built from them, with a warning,
-until ``catalog migrate`` moves them across.
+``dataset.yaml`` describes the data and nothing else. A dataset without a
+status file, or whose ``dataset.yaml`` says where its bytes are as well, is
+refused by every step; ``catalog migrate`` writes the status file.
 """
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -29,6 +27,7 @@ import yaml
 from pydantic import ValidationError
 
 from .. import report
+from ..adapters import Store
 from ..config import current_user
 from ..errors import DescriptorError, MaintenanceError
 from ..formats import keys as k
@@ -41,18 +40,19 @@ from . import (
     _read_mapping,
     dataset_name_for,
     datasets_dir,
+    inventory_of,
     is_namespace,
     iter_dataset_dirs,
     read_descriptor,
-    resources_of,
     source_dir_of,
 )
 
 __all__ = [
-    "LEGACY_KEYS",
+    "CONVERTED",
     "STATUS",
     "BuildInput",
     "Finding",
+    "StatusResult",
     "build_input",
     "check_copy",
     "datasets",
@@ -65,9 +65,9 @@ __all__ = [
 
 STATUS = status_file.FILENAME
 
-#: What ``dataset.yaml`` held before status files: ``catalog migrate`` moves
-#: them, and the build reads them, with a warning, from a dataset without one.
-LEGACY_KEYS = (k.SOURCE_DIR, k.UPLOADED, k.FROZEN)
+#: The keys of ``dataset.yaml`` that ``catalog migrate`` moves into a status
+#: file. A dataset that states one is refused; `catalog migrate` converts it.
+CONVERTED = (k.SOURCE_DIR, "ethos:uploaded", "ethos:frozen")
 
 HEADER = (
     "# Written by the ethos-data catalog commands; do not edit it by hand.\n"
@@ -181,29 +181,27 @@ class BuildInput:
 
     source_dir: Path | None
     frozen: bool
-    status: StatusFile | None
-    #: The keys of ``dataset.yaml`` it was read from, for a dataset without a
-    #: status file; empty otherwise.
-    legacy: tuple[str, ...] = ()
+    status: StatusFile
 
 
 def build_input(dataset_dir: Path, meta: Mapping, dataset: str) -> BuildInput:
     """The build input of the dataset in ``dataset_dir``, ``meta`` its ``dataset.yaml``.
 
-    From its status file when it has one, in which case ``dataset.yaml`` may
-    not state any of :data:`LEGACY_KEYS` as well: two records of where the bytes
-    are can disagree. Without one, from those keys, as before status files.
+    From its status file, the one record of where the bytes are: a dataset
+    without one, or whose ``dataset.yaml`` states any of :data:`CONVERTED` as
+    well, is refused, naming ``catalog migrate``.
     """
     status = read(dataset_dir)
-    legacy = tuple(key for key in LEGACY_KEYS if key in meta)
-    if status is None:
-        frozen = bool(meta.get(k.FROZEN)) or bool(meta.get(k.UPLOADED))
-        return BuildInput(source_dir_of(dataset_dir, meta), frozen, None, legacy)
-    if legacy:
+    stated = [key for key in CONVERTED if key in meta]
+    if status is None or stated:
+        what = (
+            f"its dataset.yaml states {', '.join(stated)}"
+            if stated
+            else f"it has no {STATUS}"
+        )
         raise DescriptorError(
-            f"{dataset}: its dataset.yaml still states {', '.join(legacy)}, which its "
-            f"{STATUS} records now. Move them across with\n"
-            f"    ethos-data catalog migrate {dataset}"
+            f"{dataset}: {what}; its {STATUS} says where its bytes are. Write it "
+            f"with\n    ethos-data catalog migrate {dataset}"
         )
     return BuildInput(
         source_dir_of(dataset_dir, {k.SOURCE_DIR: status.source_dir}),
@@ -212,11 +210,10 @@ def build_input(dataset_dir: Path, meta: Mapping, dataset: str) -> BuildInput:
     )
 
 
-def checked_status(dataset_dir: Path, dataset: str, step: str) -> StatusFile | None:
-    """The dataset's status, after checking it allows ``step``; None without one."""
-    status = read(dataset_dir)
-    if status is not None:
-        lifecycle.step(step, status.state, dataset)
+def checked_status(dataset_dir: Path, dataset: str, step: str) -> StatusFile:
+    """The dataset's status, after checking it allows ``step``."""
+    status = build_input(dataset_dir, read_descriptor(dataset_dir), dataset).status
+    lifecycle.step(step, status.state, dataset)
     return status
 
 
@@ -243,32 +240,19 @@ def record_copy(
     *,
     repeat: bool = True,
     **details,
-) -> str | None:
+) -> str:
     """Take ``step`` for ``dataset`` in the checkout, recording ``copy``.
 
-    Returns the dataset's state afterwards, or None when it has no status
-    file to record in. ``repeat=False`` records nothing when the step would
-    change nothing: the same copy, already recorded, in a state it keeps.
+    Returns the dataset's state afterwards. ``repeat=False`` records nothing
+    when the step would change nothing: the same copy, already recorded, in a
+    state it keeps.
     """
     directory = dataset_dir_in(catalog_root, dataset)
-    status = read(directory)
-    if status is None:
-        return None
+    status = build_input(directory, read_descriptor(directory), dataset).status
     after = lifecycle.step(step, status.state, dataset)
     if not repeat and after == status.state and copy in status.copies:
         return after
     return take(directory, status, step, dataset=dataset, copy=copy, **details).state
-
-
-def unrecorded(names: list[str]) -> str:
-    """The warning for datasets a step could not be recorded for."""
-    listed = ", ".join(names[:5]) + (
-        f" and {len(names) - 5} more" if len(names) > 5 else ""
-    )
-    return (
-        f"not recorded: {listed} {'has' if len(names) == 1 else 'have'} no {STATUS} "
-        "yet; `ethos-data catalog migrate` writes one from dataset.yaml"
-    )
 
 
 # -- whether the record still holds ----------------------------------------------
@@ -307,17 +291,17 @@ def _files_under(entry: Path, resources: list[dict]) -> list[str]:
     return wrong
 
 
-def check_copy(copy: Copy, resources: list[dict]) -> Finding:
+def check_copy(copy: Copy, resources: list[dict], store: Store) -> Finding:
     """Whether ``copy`` still holds every file of the inventory, at its recorded size.
 
-    An upload is asked anonymously over HTTP, as any public reader would ask
-    it; a cache entry is looked at on this machine.
+    An upload is read back through ``store`` anonymously, as any public reader
+    would ask for it; a cache entry is looked at on this machine.
     """
     where = f"{copy.kind} {copy.location}"
     if copy.kind == k.COPY_UPLOADED:
-        from .upload import remote_manifest_check
+        from .upload import read_back
 
-        _ok, missing, wrong = remote_manifest_check(resources, copy.location)
+        _ok, missing, wrong = read_back(store, resources, copy.location)
         if missing or wrong:
             return Finding(
                 False,
@@ -365,23 +349,19 @@ def _inventory(catalog_root: Path, dataset_dir: Path, dataset: str) -> Finding:
     return Finding(True, "datapackage.json is current")
 
 
-def _resources(dataset_dir: Path) -> list[dict]:
-    package = json.loads((dataset_dir / "datapackage.json").read_text(encoding="utf-8"))
-    return resources_of(package, dataset_dir)
-
-
 def evidence(
-    catalog_root: Path, dataset_dir: Path, dataset: str, status: StatusFile | None
+    catalog_root: Path,
+    dataset_dir: Path,
+    dataset: str,
+    status: StatusFile,
+    store: Store,
 ) -> list[Finding]:
     """What a dataset's record claims, compared with what is there.
 
     The descriptor a build would write, the build input a draft needs, and
-    every recorded copy, file by file. A dataset without a status file has
-    only its descriptor to compare.
+    every recorded copy, file by file.
     """
     meta = read_descriptor(dataset_dir)
-    if status is None:
-        return [_inventory(catalog_root, dataset_dir, dataset)]
     if status.state == lifecycle.DRAFT:
         try:
             source = build_input(dataset_dir, meta, dataset).source_dir
@@ -396,7 +376,7 @@ def evidence(
     findings = [_inventory(catalog_root, dataset_dir, dataset)]
     if not (dataset_dir / "datapackage.json").is_file():
         return findings
-    resources = _resources(dataset_dir)
+    resources = inventory_of(dataset, dataset_dir).records()
     access = meta.get(k.ACCESS, k.PUBLIC)
     for copy in status.copies:
         if copy.kind == k.COPY_UPLOADED and access == k.RESTRICTED:
@@ -408,7 +388,7 @@ def evidence(
                 )
             )
             continue
-        findings.append(check_copy(copy, resources))
+        findings.append(check_copy(copy, resources, store))
     if status.state == lifecycle.AVAILABLE and not status.copies:
         findings.append(Finding(False, "available, but no copy is recorded"))
     if status.state == lifecycle.FROZEN and status.authority is None:
@@ -450,43 +430,79 @@ def datasets(catalog_root: Path, names: list[str]) -> list[tuple[str, Path]]:
     ]
 
 
+@dataclass
+class StatusResult:
+    """Each dataset's state, and the findings ``--check`` made, by dataset."""
+
+    states: dict[str, str] = field(default_factory=dict)
+    findings: dict[str, list[Finding]] = field(default_factory=dict)
+    #: The datasets whose status file is missing or cannot be read.
+    unreadable: list[str] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not self.unreadable and all(
+            finding.ok for found in self.findings.values() for finding in found
+        )
+
+
 @report.reported
-def run(catalog_root: Path, names: list[str], *, check: bool = False) -> int:
+def run(
+    catalog_root: Path,
+    names: list[str],
+    *,
+    check: bool = False,
+    store: Store | None = None,
+) -> StatusResult:
     """List each dataset's state and next step; with ``check``, test the record.
 
-    Returns 1 when a status file cannot be read, or ``check`` found a record
-    that does not hold, else 0.
+    ``store`` reads uploads back, dCache's public door by default. The result
+    is not ``ok`` when a status file is missing or cannot be read, or a record
+    does not hold.
     """
+    if store is None:
+        from ..adapters.dcache import DcacheStore
+
+        store = DcacheStore()
+    result = StatusResult()
     rows = datasets(catalog_root, names)
     width = max([len(name) for name, _ in rows] + [7])
     report.info(f"  {'dataset':<{width}}  {'state':<10} {'access':<11} next")
-    failed = 0
     for name, dataset_dir in rows:
         meta = read_descriptor(dataset_dir)
         access = meta.get(k.ACCESS, k.PUBLIC)
         try:
             status = read(dataset_dir)
         except DescriptorError as error:
-            failed += 1
+            result.unreadable.append(name)
             report.info(f"  {name:<{width}}  {'?':<10} {access:<11} {error.message}")
             continue
-        state = status.state if status else "-"
+        if status is None:
+            result.unreadable.append(name)
+            hint = f"ethos-data catalog migrate {name}"
+            report.info(f"  {name:<{width}}  {'-':<10} {access:<11} {hint}")
+            continue
+        result.states[name] = status.state
         hint = lifecycle.next_step(
             name,
-            status.state if status else None,
+            status.state,
             access=access,
-            kinds={copy.kind for copy in status.copies} if status else (),
-            authority=status.authority if status else None,
+            kinds={copy.kind for copy in status.copies},
+            authority=status.authority,
             licensed=license_settled(meta),
             checkout=str(catalog_root),
         )
-        report.info(f"  {name:<{width}}  {state:<10} {access:<11} {hint or '-'}")
+        report.info(f"  {name:<{width}}  {status.state:<10} {access:<11} {hint or '-'}")
         if check:
-            for finding in evidence(catalog_root, dataset_dir, name, status):
-                failed += not finding.ok
+            found = evidence(catalog_root, dataset_dir, name, status, store)
+            result.findings[name] = found
+            for finding in found:
                 report.info(f"  {'':<{width}}    {finding}")
     if check:
+        failed = sum(
+            not finding.ok for found in result.findings.values() for finding in found
+        )
         report.info(
             f"\n{failed} finding(s) do not hold." if failed else "\nEvery record holds."
         )
-    return 1 if failed else 0
+    return result

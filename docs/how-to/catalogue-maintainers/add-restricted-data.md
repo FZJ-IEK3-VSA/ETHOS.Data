@@ -17,7 +17,7 @@ publicly, `ethos:visibility: hidden` with an embargo block. Say in
 `ethos:restriction` who may obtain it and how, with `homepage` and
 `ethos:contact`: a user without a copy sees them in the error. Record the
 terms in `licenses` or `ethos:license_note`. A restricted dataset has no
-`ethos:remote_prefix` and is never marked `ethos:uploaded`. Build it.
+`ethos:remote_prefix`: its bytes are never uploaded. Build it.
 
 ## 2. Register the installation
 
@@ -33,7 +33,8 @@ registered, by somebody who knows it is authorised; `link --all` never does
 this. The entry goes into a restricted cache your account lists: the one
 `--root` names, or the only one listed. With several listed and no `--root`,
 or none listed, `link` refuses. `--catalog-root` records the installation in
-your own clone of the source catalogue.
+your own clone of the source catalogue. Commit the dataset's status file on a
+branch and merge it by merge request on JuGit.
 
 ## 3. Or move it into the restricted cache
 

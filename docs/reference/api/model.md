@@ -99,12 +99,16 @@ dataset, the part and its location.
 ## Lifecycle
 
 A dataset's states in its source catalogue, and the step that leads from
-each to the next; the commands that take a step ask `step` first.
+each to the next; the commands that take a step ask `step` first. The guards
+are part of the step: restricted data is never uploaded, and data with unread
+terms is not uploaded, linked or copied into a cache other people read.
 
 ::: ethos_data.model.lifecycle
     options:
       members:
         - step
+        - refusal
+        - guard
         - next_step
         - freezable
         - Step

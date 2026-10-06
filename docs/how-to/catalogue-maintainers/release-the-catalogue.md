@@ -113,8 +113,8 @@ ethos-data catalog publish ../ETHOS.Data-Catalogue
     `git checkout HEAD -- <path>`; untracked files do not.
 
 `publish` emits, for every dataset with `ethos:visibility: public`, the index,
-the descriptor and shards with `source_dir`, `ethos:embargo`,
-`ethos:license_note`, `ethos:uploaded` and `ethos:frozen` stripped, the
+the descriptor and shards with `source_dir`, `ethos:embargo` and
+`ethos:license_note` stripped, the
 licence documents, and the README table; status files are never published.
 It stamps `ethos:catalog_role: published` into the index.
 

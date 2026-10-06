@@ -17,11 +17,11 @@ from pathlib import Path
 
 import pytest
 import yaml
+from support import write_descriptor
 
 from ethos_data.adapters.fakes import FakeStore
-from ethos_data.errors import UploadError
+from ethos_data.errors import TransitionError, UploadError
 from ethos_data.maintain import upload
-from ethos_data.maintain.manifest import render_dataset, write_dataset
 from ethos_data.maintain.manifest import run as build_run
 
 CATALOG = (
@@ -56,8 +56,9 @@ def make_catalog(root: Path, datasets: dict[str, dict]) -> Path:
         # remote prefix -- it is never uploaded, so it has nowhere to be.
         if meta.get("ethos:access") == "restricted":
             del meta["ethos:remote_prefix"]
-        (dataset_dir / "dataset.yaml").write_text(yaml.safe_dump(meta))
-        write_dataset(dataset_dir, render_dataset(dataset_dir))
+        write_descriptor(dataset_dir, yaml.safe_dump(meta))
+    # Built by the command, which records each first build in the status file.
+    assert build_run(root, list(datasets)).ok
     return root
 
 
@@ -135,7 +136,7 @@ class TestSubsetIsCheckedBeforeAnythingUploads:
         # published, and a loop would already have uploaded `a` before finding out.
         make_catalog(workspace, {"a": {}, "b": {"ethos:access": "restricted"}})
 
-        with pytest.raises(UploadError, match="restricted"):
+        with pytest.raises(TransitionError, match="restricted"):
             upload.run(workspace, *make_args(["a", "b"]))
         assert no_rclone == [], "nothing may be uploaded once any dataset is ineligible"
 
@@ -201,8 +202,8 @@ def make_family(root: Path, members: dict[str, dict]) -> Path:
     family = root / "datasets" / "fam"
     family.mkdir(parents=True)
     # A namespace names the family and describes no files of its own.
-    (family / "dataset.yaml").write_text(
-        "title: the family" + chr(10) + "description: members only" + chr(10)
+    write_descriptor(
+        family, "title: the family" + chr(10) + "description: members only" + chr(10)
     )
     for member, extra in members.items():
         source = root / "src" / "fam" / member
@@ -218,7 +219,7 @@ def make_family(root: Path, members: dict[str, dict]) -> Path:
         if meta.get("ethos:access") == "restricted":
             del meta["ethos:remote_prefix"]
         (family / member).mkdir()
-        (family / member / "dataset.yaml").write_text(yaml.safe_dump(meta))
+        write_descriptor(family / member, yaml.safe_dump(meta))
     assert build_run(root, []).ok
     return root
 
@@ -247,6 +248,6 @@ class TestNamingAFamily:
 
     def test_an_ineligible_member_stops_the_whole_family(self, workspace, no_rclone):
         make_family(workspace, {"a": {}, "b": {"ethos:access": "restricted"}})
-        with pytest.raises(UploadError, match="restricted"):
+        with pytest.raises(TransitionError, match="restricted"):
             upload.run(workspace, *make_args(["fam"]))
         assert no_rclone == []

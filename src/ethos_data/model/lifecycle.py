@@ -11,6 +11,11 @@ Some steps keep the state: a rebuild of a built dataset, a second link, a
 check of an upload already recorded. They are steps all the same, so a command
 cannot take one in a state that does not allow it: a draft has no inventory to
 upload, and a frozen dataset has no build input left to upload from.
+
+The guards are part of the step, whatever the state: restricted data is never
+uploaded, and data with unread terms is not handed out, by an upload, a link
+or a copy into a cache other people read. :func:`refusal` says why a guard
+refuses a step, and :func:`guard` raises it.
 """
 
 from __future__ import annotations
@@ -33,7 +38,9 @@ __all__ = [
     "WITHDRAWN",
     "Step",
     "freezable",
+    "guard",
     "next_step",
+    "refusal",
     "step",
 ]
 
@@ -76,7 +83,7 @@ STEPS: Mapping[str, Step] = {
         Step("build", "ethos-data catalog build",
              {DRAFT: BUILT, BUILT: BUILT, AVAILABLE: AVAILABLE, FROZEN: FROZEN}),
         # A rebuild that found other bytes than the ones made available: what
-        # was checked is no longer what the inventory describes.
+        # was checked is not what the inventory describes now.
         Step("change", "ethos-data catalog build", {BUILT: BUILT, AVAILABLE: BUILT}),
         Step("upload", "ethos-data catalog upload", {BUILT: AVAILABLE, AVAILABLE: AVAILABLE}),
         Step("verify", "ethos-data catalog upload --verify-only",
@@ -133,12 +140,60 @@ def _first(name: str, state: str, dataset: str) -> str:
     return ""
 
 
+#: What each guarded step does with the bytes, as its refusal says it.
+_HANDS_OUT = {
+    "upload": "uploaded",
+    "link": "linked into a cache other people read",
+    "materialize": "copied into a cache other people read",
+}
+
+
+def refusal(
+    step_name: str,
+    dataset: str,
+    *,
+    access: str = k.PUBLIC,
+    settled: bool = True,
+    note: str = "",
+) -> str:
+    """Why the guards of a step refuse it for this dataset; empty when they do not.
+
+    ``access`` is the dataset's access class, ``settled`` whether its licensing
+    is, and ``note`` its licence note, for the message.
+    """
+    if step_name == "upload" and access == k.RESTRICTED:
+        return (
+            f"{dataset} is restricted and must never be uploaded.\n"
+            "Restricted data stays where it is; register its installation by name "
+            "in a restricted cache:\n"
+            f"    ethos-data [--root <restricted cache>] link {dataset} DIR"
+        )
+    if step_name in _HANDS_OUT and not settled:
+        return (
+            f"{dataset} has unresolved licensing, so it is not {_HANDS_OUT[step_name]}. "
+            f"{note}".rstrip()
+            + "\nRecord the terms in its dataset.yaml -- a `licenses:` entry, or "
+            "`ethos:license_status: resolved` once somebody has read them -- and "
+            "rebuild.\nTo work with it meanwhile, stage it instead:\n"
+            f"    staging add {dataset} <directory>  (with your package's data command)"
+        )
+    return ""
+
+
+def guard(step_name: str, dataset: str, **facts) -> None:
+    """Raise :class:`~ethos_data.errors.TransitionError` when a guard refuses the step."""
+    reason = refusal(step_name, dataset, **facts)
+    if reason:
+        raise TransitionError(reason)
+
+
 def freezable(access: str, kinds: Collection[str]) -> bool:
     """Whether one of the recorded copies can be a dataset's authoritative one.
 
-    An upload, a copy the cache owns, or for restricted data the authorised
-    installation registered in the restricted cache. A link to public or
-    internal data borrows the build input, which a rebuild still reads.
+    An upload, a copy a cache owns, or for restricted data the registered
+    installation, a link in a restricted cache. A link to public data borrows
+    the build input, which a rebuild still reads; ``catalog record --copy``
+    makes one the authority only when it is named.
     """
     return (
         k.COPY_UPLOADED in kinds
@@ -171,9 +226,11 @@ def next_step(
         if not licensed:
             return "settle its licensing in dataset.yaml, then rebuild"
         if access == k.RESTRICTED:
-            return f"register its installation: ethos-data link {dataset} DIR --catalog-root {checkout}"
-        if access == k.INTERNAL:
-            return f"link it into the shared cache: ethos-data link {dataset} --catalog-root {checkout}"
+            return (
+                "register its installation by name in a restricted cache: "
+                f"ethos-data [--root <restricted cache>] link {dataset} DIR "
+                f"--catalog-root {checkout}"
+            )
         return f"ethos-data catalog upload {dataset}"
     if state == AVAILABLE:
         if freezable(access, kinds):
@@ -184,5 +241,8 @@ def next_step(
             return ""
         return f"record its authoritative copy: ethos-data catalog record {dataset}"
     if state == WITHDRAWN:
-        return f"ethos-data catalog remove {dataset} --purge, after the release that drops it"
+        return (
+            f"ethos-data catalog remove {dataset} --purge, once a major release is "
+            "recorded after its removal"
+        )
     return ""

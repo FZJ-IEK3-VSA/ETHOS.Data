@@ -34,6 +34,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from support import write_descriptor
 
 from ethos_data import cli, config
 from ethos_data.formats import keys as k
@@ -70,8 +71,8 @@ def build_catalog(root: Path) -> Path:
     dataset_dir = root / "datasets" / "d"
     dataset_dir.mkdir(parents=True)
     write_utf8(root / "catalog.yaml", CATALOG)
-    write_utf8(
-        dataset_dir / "dataset.yaml",
+    write_descriptor(
+        dataset_dir,
         f"name: d\ntitle: {CJK}\ndescription: {UMLAUT}\n"
         f"source_dir: {source}\nethos:remote_prefix: d\n"
         f"ethos:attribution: {UMLAUT}\n",

@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from support import write_descriptor
 
 from ethos_data.errors import DescriptorError
 from ethos_data.formats import dataset as spec
@@ -204,7 +205,8 @@ def test_build_renders_package_and_resource_licences():
 
         dataset_dir = root / "datasets" / "demo"
         dataset_dir.mkdir(parents=True)
-        (dataset_dir / "dataset.yaml").write_text(
+        write_descriptor(
+            dataset_dir,
             yaml.safe_dump(
                 {
                     "name": "demo",
@@ -223,7 +225,7 @@ def test_build_renders_package_and_resource_licences():
                         {"name": "CC0-1.0"},
                     ],
                 }
-            )
+            ),
         )
 
         package = json.loads(render_dataset(dataset_dir)["datapackage.json"])

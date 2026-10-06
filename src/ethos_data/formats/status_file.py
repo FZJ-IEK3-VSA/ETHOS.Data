@@ -5,10 +5,9 @@ One beside each ``dataset.yaml`` that describes files, written by the
 ``--catalog-root``. Never by hand, and never published: it names directories
 on the maintainers' machines.
 
-It holds what ``dataset.yaml`` held before and is not a description of the
-data: the build input while there is one, the copies of the bytes, which of
-them is authoritative once the inventory is final, and the history of every
-step taken.
+It is not a description of the data: it holds the build input while there is
+one, the copies of the bytes, which of them is authoritative once the
+inventory is final, and the history of every step taken.
 """
 
 from __future__ import annotations

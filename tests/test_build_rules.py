@@ -60,25 +60,6 @@ class TestClassification:
         assert code != 0
         assert "ethos:remote_prefix" in err
 
-    @pytest.mark.legacy(
-        reason="status files: a dataset not migrated yet keeps ethos:uploaded in "
-        "dataset.yaml; once migrated, an upload of restricted data is never recorded"
-    )
-    def test_restricted_data_is_frozen_rather_than_marked_uploaded(self, source):
-        source.dataset(
-            "licensed",
-            {"a.csv": "1"},
-            legacy=True,
-            ethos_access="restricted",
-            ethos_visibility="hidden",
-            ethos_embargo=EMBARGO,
-        )
-        assert source.build()[0] == 0
-        source.edit("licensed", ethos_uploaded=True, source_dir=None)
-        code, _, err = source.build()
-        assert code != 0
-        assert "ethos:frozen" in err
-
 
 class TestStaleness:
     def test_check_reports_changed_source_bytes_and_writes_nothing(self, source):
@@ -150,4 +131,4 @@ class TestWarnings:
         code, _, err = source.build()
 
         assert code == 1
-        assert "empty: source_dir is required" in err
+        assert "empty: it has no status.yaml" in err

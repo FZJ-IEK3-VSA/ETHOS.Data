@@ -8,9 +8,6 @@ Three things live here, for the one file:
   code typed access and the package its JSON Schema.
 * :func:`check`, the rules the build enforces, with the messages maintainers
   already know. The first broken rule raises :class:`~ethos_data.errors.DescriptorError`.
-  :func:`check_legacy_state` adds the rules on ``source_dir``,
-  ``ethos:uploaded`` and ``ethos:frozen`` for a dataset that keeps them here
-  rather than in a ``status.yaml``.
 * :func:`lint`, what the structure says beyond those rules: a value of the
   wrong type, an ``ethos:`` key the format does not know, a value outside a
   closed vocabulary. Reported as warnings: the build names each one and goes
@@ -40,7 +37,6 @@ __all__ = [
     "Upstream",
     "apply_defaults",
     "check",
-    "check_legacy_state",
     "check_namespace",
     "lint",
 ]
@@ -230,18 +226,6 @@ class DatasetDescriptor(_Part):
         description="Folder on the public store; defaults to the name.",
         promoted=True,
     )
-    uploaded: bool = field(
-        k.UPLOADED,
-        False,
-        description="Before status.yaml: dCache holds the copy the inventory describes.",
-        published=False,
-    )
-    frozen: bool = field(
-        k.FROZEN,
-        False,
-        description="Before status.yaml: the inventory is final, nothing local is left to build from.",
-        published=False,
-    )
 
     # -- classification ----------------------------------------------------
     access: str = field(
@@ -347,22 +331,9 @@ def check(meta: dict) -> None:
         raise DescriptorError(problem)
 
 
-def check_legacy_state(meta: dict) -> None:
-    """The rules on where the bytes are, for a dataset without a ``status.yaml``.
-
-    Before status files, ``source_dir``, ``ethos:uploaded`` and
-    ``ethos:frozen`` in ``dataset.yaml`` said where the bytes were and whether
-    the inventory was final; ``catalog migrate`` moves them into the status
-    file, which keeps the same rules.
-    """
-    problem = _legacy_upload(meta) or _freeze(meta)
-    if problem:
-        raise DescriptorError(problem)
-
-
 def check_namespace(meta: dict) -> None:
     """The same for a family's ``dataset.yaml``: it may not describe files or terms."""
-    for forbidden in (k.SOURCE_DIR, k.UPLOADED, k.SHARD_DEPTH, k.INCLUDE, k.EXCLUDE):
+    for forbidden in (k.SOURCE_DIR, k.SHARD_DEPTH, k.INCLUDE, k.EXCLUDE):
         if forbidden in meta:
             raise DescriptorError(
                 "is a namespace -- it holds other datasets -- so it cannot also "
@@ -410,18 +381,6 @@ def _classification(meta: dict) -> str | None:
         return (
             "restricted data must not declare ethos:remote_prefix -- "
             "it is never uploaded. Each machine reads it from a restricted cache."
-        )
-    return None
-
-
-def _legacy_upload(meta: dict) -> str | None:
-    """``ethos:uploaded`` on restricted data: the freeze is right, the claim is not."""
-    if meta.get(k.ACCESS, k.PUBLIC) == k.RESTRICTED and meta.get(k.UPLOADED):
-        return (
-            f"restricted data is never uploaded, so {k.UPLOADED}: true cannot "
-            f"be right. If its inventory is final -- the authorised installation is the "
-            f"permanent copy and there is nothing local left to build from -- say that "
-            f"instead:\n    {k.FROZEN}: true"
         )
     return None
 
@@ -572,35 +531,6 @@ def _patterns(meta: dict) -> str | None:
                 return "ethos:shard_depth must not be negative"
         except (TypeError, ValueError):
             return f"ethos:shard_depth must be a whole number, got {depth!r}"
-    return None
-
-
-def _freeze(meta: dict) -> str | None:
-    """``source_dir`` against ``ethos:uploaded`` / ``ethos:frozen``."""
-    uploaded = bool(meta.get(k.UPLOADED, False))
-    frozen = bool(meta.get(k.FROZEN, False)) or uploaded
-    source_dir = meta.get(k.SOURCE_DIR)
-    if frozen and source_dir is not None:
-        reason = (
-            "Once uploaded, dCache is the source of truth and source_dir is never "
-            "read again -- remove it."
-            if uploaded
-            else "A frozen inventory is never rebuilt from local files; the copy it "
-            "describes is the permanent one -- remove it."
-        )
-        declared = k.UPLOADED if uploaded else k.FROZEN
-        return (
-            f"declares {declared}: true and still has "
-            f"source_dir: {source_dir!r}. {reason}"
-        )
-    # Empty counts as absent: resolved against the dataset directory, an empty
-    # source_dir would build the dataset from its own descriptor files.
-    if not frozen and not source_dir:
-        return (
-            f"source_dir is required, unless {k.UPLOADED}: true says the "
-            f"dataset was already uploaded, or {k.FROZEN}: true says its inventory "
-            "is final and there is nothing local left to build from."
-        )
     return None
 
 

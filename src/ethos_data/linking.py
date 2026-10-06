@@ -34,9 +34,9 @@ copy. A real directory means the opposite -- data the cache owns -- so neither
 mode of ``ethos-data link`` will ever replace one with a link.
 
 A catalogue maintainer who links a dataset into a shared cache, or registers
-an installation, passes ``--catalog-root``: the link is then a step in the
-dataset's lifecycle, checked against its state and recorded as a copy in its
-``status.yaml``.
+an installation, passes ``--catalog-root``: the command line then takes the
+link as a step of the dataset in that checkout, through
+:mod:`ethos_data.maintain.namespace`. This module records nothing.
 """
 
 from __future__ import annotations
@@ -48,8 +48,9 @@ from pathlib import Path
 from .access import entry_for
 from .catalogs import Catalog
 from .config import Roots
-from .errors import AccessError, LinkError
+from .errors import AccessError, CatalogUnavailable, IncompleteCatalog, LinkError
 from .formats import keys as k
+from .model import lifecycle
 
 __all__ = ["LinkReport", "link", "unlink"]
 
@@ -66,11 +67,6 @@ class LinkReport:
     #: a link made one directory too high or too low. Empty when nothing is
     #: wrong, or when the inventory could not be read to check.
     missing: str = ""
-    #: The dataset's state in the checkout after the link was recorded there;
-    #: empty when nothing was recorded.
-    recorded: str = ""
-    #: Recording was asked for and the dataset has no status file to record in.
-    unrecorded: bool = False
 
     def __str__(self) -> str:
         if self.target is None:
@@ -118,34 +114,28 @@ def _sample_missing(catalog: Catalog, name: str, target: Path) -> str:
 def _require_settled_licence(catalog: Catalog, name: str) -> None:
     """Refuse to put a dataset with unread terms into a cache other people read.
 
-    A cache entry is how a dataset reaches everybody sharing that cache, and an
-    absent licence is a question, not a permission. The reader has always warned
-    about this; a warning is the right answer when somebody already has the data
-    in front of them and the wrong one at the moment it is being handed out.
-
-    Staging is deliberately exempt, and named here because it is the answer to
-    "but I need to work with it now": a staging entry is one person's, shadows
-    nothing for anybody else, and is unverifiable by construction.
+    The guard of the ``link`` step (see :func:`ethos_data.model.lifecycle.refusal`),
+    which a link made by name takes whether or not it is recorded. Staging is
+    the answer to "but I need to work with it now": a staging entry is one
+    person's, and shadows nothing for anybody else.
     """
-    if catalog.dataset(name).license_status == k.RESOLVED:
+    raise_if_refused(catalog, name, "link", LinkError)
+
+
+def raise_if_refused(catalog: Catalog, name: str, step: str, error: type) -> None:
+    """Raise ``error`` when the guards of ``step`` refuse it for this dataset."""
+    dataset = catalog.dataset(name)
+    if dataset.license_status == k.RESOLVED:
         return
     try:
-        note = catalog.dataset(name).descriptor.get(k.LICENSE_NOTE, "")
-    except Exception:
-        # The status is promoted into the index precisely so that asking this
-        # costs no fetch. The note is a nicety on top -- and it is stripped from
-        # published catalogues anyway -- so not having the descriptor to hand
-        # must not turn a clear refusal into a crash.
+        note = dataset.descriptor.get(k.LICENSE_NOTE, "")
+    except (IncompleteCatalog, CatalogUnavailable):
+        # The status is promoted into the index so that asking costs no read.
+        # The note is a nicety on top, and must not turn the refusal into a crash.
         note = ""
-    raise LinkError(
-        f"{name!r} has unresolved licensing, so it is not linked into a cache other "
-        f"people read. {note}\n".rstrip()
-        + "\n"
-        "Record the terms in its dataset.yaml -- a `licenses:` entry, or "
-        "`ethos:license_status: resolved` once somebody has read them -- and rebuild.\n"
-        "To work with it meanwhile, stage it instead:\n"
-        f"    staging add {name} <directory>  (with your package's data command)"
-    )
+    reason = lifecycle.refusal(step, repr(name), settled=False, note=note)
+    if reason:
+        raise error(reason)
 
 
 def _on_windows() -> bool:
@@ -229,22 +219,9 @@ def link(
     except OSError as error:
         raise LinkError(_refusal(name, target, error)) from None
 
-    result = LinkReport(
+    return LinkReport(
         name, verb, entry, target, missing=_sample_missing(catalog, name, target)
     )
-    if checkout is not None:
-        from .formats.status_file import Copy
-        from .maintain import status as dataset_status
-
-        state = dataset_status.record_copy(
-            checkout,
-            name,
-            "link",
-            Copy(kind=k.COPY_LINKED, location=str(entry), target=str(target)),
-        )
-        result.recorded = state or ""
-        result.unrecorded = state is None
-    return result
 
 
 def unlink(

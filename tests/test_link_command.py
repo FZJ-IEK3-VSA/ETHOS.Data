@@ -20,6 +20,7 @@ import json
 import shutil
 
 import pytest
+from support import write_descriptor
 
 from ethos_data.access import ORIGIN_LINK, locate
 from ethos_data.catalogs import Catalog, Dataset
@@ -275,11 +276,11 @@ def test_unlink_refuses_a_real_directory(workspace):
 
 
 def _checkout(tmp_path, datasets: dict[str, str]) -> pytest.TempPathFactory:
-    """A source catalogue: catalog.yaml and hand-written dataset.yaml files.
+    """A source catalogue: catalog.yaml, and each dataset's description and status.
 
-    source_dir lives here and nowhere else -- it is popped out of the descriptor
-    when the manifest is built -- so this is what `link` without a directory has
-    to read.
+    A dataset's source_dir lives in its status.yaml and nowhere else, so this
+    is what `link` without a directory has to read. Each dataset is built, so
+    linking it is a step its state allows.
     """
     root = tmp_path / "catalogue"
     (root / "datasets").mkdir(parents=True)
@@ -287,7 +288,13 @@ def _checkout(tmp_path, datasets: dict[str, str]) -> pytest.TempPathFactory:
     for name, body in datasets.items():
         directory = root / "datasets" / name
         directory.mkdir()
-        (directory / "dataset.yaml").write_text(body)
+        write_descriptor(directory, body)
+        status = directory / "status.yaml"
+        if status.is_file():
+            text = status.read_text(encoding="utf-8")
+            status.write_text(
+                text.replace("state: draft", "state: built"), encoding="utf-8"
+            )
     return root
 
 
@@ -308,10 +315,12 @@ def test_links_the_source_dir_when_no_directory_is_given(workspace, tmp_path):
 
 
 def test_a_dataset_with_no_source_dir_says_what_to_do_instead(workspace, tmp_path):
-    """An uploaded dataset has none by design: dCache holds it."""
+    """A frozen dataset has none by design: its authoritative copy is elsewhere."""
     cache, _, _ = workspace
-    checkout = _checkout(
-        tmp_path, {"example": "name: example\ntitle: Example\nethos:uploaded: true\n"}
+    checkout = _checkout(tmp_path, {"example": "name: example\ntitle: Example\n"})
+    (checkout / "datasets" / "example" / "status.yaml").write_text(
+        "state: frozen\nauthority: https://store.invalid/example/\n"
+        "copies:\n- kind: uploaded\n  location: https://store.invalid/example/\n"
     )
 
     with pytest.raises(LinkError, match="no source_dir"):

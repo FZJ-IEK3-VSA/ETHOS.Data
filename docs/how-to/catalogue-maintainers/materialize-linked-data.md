@@ -64,11 +64,6 @@ retires `source_dir`. The recorded inventory is kept as it is; the copy is not
 rehashed, so the independent baseline that detects later corruption survives.
 Commit the status file on a branch and merge it by merge request on JuGit.
 
-!!! warning "Gap: no `catalog record`"
-    The code keeps the state in `dataset.yaml`: remove `source_dir` there, set
-    `ethos:frozen: true` and rebuild. See [dataset status
-    files](../../explanation/architecture/decisions/0022-dataset-status-files.md).
-
 Ask the owner of the original to check for scripts and links that still read
 the old path before deleting it. A public copy can afterwards be
 [uploaded](upload-a-dataset.md); a restricted copy stays in its restricted

@@ -73,12 +73,11 @@ about an unresolved legal question is not something to publish.
 ## Whose data is it
 
 An absent licence is one question; *whose rights are these anyway* is a
-different one, and for a long time nothing in a descriptor answered it. Most of
-the catalogue is mirrored data — somebody else made it, we hold a copy, the
-upstream terms are the terms. Some of it is not: the GeoTIFF conversions sitting
-beside the netCDF originals in `landcover`, the whole of
-`geothermal-resource`. That distinction had to be read out of prose in
-`ethos:attribution`, one dataset at a time.
+different one. Most of the catalogue is mirrored data — somebody else made it,
+we hold a copy, the upstream terms are the terms. Some of it is not: the
+GeoTIFF conversions sitting beside the netCDF originals in `landcover`, the
+whole of `geothermal-resource`. Prose in `ethos:attribution` cannot be
+checked, one dataset at a time.
 
 `ethos:origin` states it:
 

@@ -152,7 +152,7 @@ maintainer. It refuses to write a tree that still carries one, or that names
 a hidden dataset. To see for yourself that none of them leaked:
 
 ```bash
-grep -rn -E 'source_dir|ethos:uploaded|ethos:license_note|ethos:embargo' ../public-catalogue
+grep -rn -E 'source_dir|ethos:license_note|ethos:embargo' ../public-catalogue
 ```
 
 No output means no leak. You now have both views of the catalogue: the
