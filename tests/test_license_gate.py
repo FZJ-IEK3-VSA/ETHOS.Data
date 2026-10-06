@@ -15,14 +15,15 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ethos_data.catalogs import Catalog, Dataset, Resource, license_settled
+from ethos_data.catalogs import Catalog, Dataset
 from ethos_data.config import Roots
-from ethos_data.errors import LinkError
+from ethos_data.errors import LinkError, UploadError
+from ethos_data.formats import license_settled
 from ethos_data.linking import link
 from ethos_data.maintain import namespace
 from ethos_data.maintain.manifest import render_dataset, write_dataset
 from ethos_data.maintain.upload import preflight
-from ethos_data.errors import UploadError
+from ethos_data.model.resource import Resource
 
 PAYLOAD = b"first file"
 RESOLVED = {"licenses": [{"name": "CC-BY-4.0"}]}

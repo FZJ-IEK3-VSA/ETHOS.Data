@@ -7,7 +7,8 @@ import pytest
 
 import ethos_data
 from ethos_data import config, tool_main
-from ethos_data.catalogs import Catalog, Dataset, Resource
+from ethos_data.catalogs import Catalog, Dataset
+from ethos_data.model.resource import Resource
 
 
 @pytest.fixture

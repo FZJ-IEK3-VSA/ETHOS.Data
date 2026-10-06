@@ -38,7 +38,6 @@ second. `ethos_data.catalog()` builds the handle for the configured catalogue;
         - load_catalog
         - Catalog
         - Dataset
-        - Resource
         - shard_key
         - describe_catalog
       show_root_heading: false

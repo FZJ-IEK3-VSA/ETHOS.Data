@@ -36,10 +36,11 @@ from .access import (
     locate,
     unavailable,
 )
-from .catalogs import Catalog, Resource
+from .catalogs import Catalog
 from .config import ENV_VAR, Roots, dataset_roots, resolve_public_cache
 from .errors import AccessError
 from .formats import keys as k
+from .model.resource import Resource
 
 __all__ = [
     "DataFiles",

@@ -1135,12 +1135,22 @@ def _verify_command(args, loaded, roots) -> int:
         return 0
 
     if not args.repair:
-        print(f"\n{len(broken)} file(s) do not match. Re-fetch them with:")
-        print(
-            f"    {args.prog} verify {args.collection or '--all'} --repair"
-            + (" --deep" if args.deep else "")
-            + (" --test" if args.test else "")
-        )
+        unrecorded = [f for f in broken if f.status == UNVERIFIABLE]
+        if unrecorded:
+            print(
+                f"\n{len(unrecorded):,} file(s) could NOT be checked -- the catalogue "
+                f"records no SHA-256 for them. Report it to the catalogue maintainers."
+            )
+        if len(unrecorded) < len(broken):
+            print(
+                f"\n{len(broken) - len(unrecorded)} file(s) do not match. "
+                "Re-fetch them with:"
+            )
+            print(
+                f"    {args.prog} verify {args.collection or '--all'} --repair"
+                + (" --deep" if args.deep else "")
+                + (" --test" if args.test else "")
+            )
         return 1
 
     outcome = repair(loaded.catalog, findings, roots, dry_run=args.dry_run)

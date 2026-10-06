@@ -37,10 +37,9 @@ GENERATED_MARKER = "datacatalog.json"
 def catalogue_role(path: Path) -> str | None:
     """The role a directory's ``datacatalog.json`` declares, if it has one.
 
-    Read rather than inferred. The old guess -- index present, ``catalog.yaml``
-    absent -- happened to be right, but it could not tell a published catalogue
-    from a source checkout someone had half-deleted, and it had nothing to say
-    about a catalogue that is neither.
+    Read rather than inferred: an index without a ``catalog.yaml`` beside it
+    may be a published catalogue or a source checkout someone half-deleted, and
+    says nothing about a catalogue that is neither.
     """
     index = path / GENERATED_MARKER
     if not index.is_file():
@@ -278,17 +277,18 @@ def resources_of(package: dict, dataset_dir: Path) -> list[dict]:
     without re-reading source_dir) and the uploader (finding what to copy and
     verify) so the two can never disagree about what a sharded package contains.
     """
-    if "resources" in package:
-        return package["resources"]
+    if k.RESOURCES in package:
+        return package[k.RESOURCES]
+    name = package[k.NAME]
     resources: list[dict] = []
-    for shard in package.get("ethos:shards", []):
-        shard_file = dataset_dir / shard["path"]
+    for shard in package.get(k.SHARDS, []):
+        shard_file = dataset_dir / shard[k.PATH]
         if not shard_file.is_file():
             raise DescriptorError(
-                f"{package['name']}: shard {shard['path']} is missing. Run:\n"
-                f"    ethos-data catalog build {package['name']}"
+                f"{name}: shard {shard[k.PATH]} is missing. Run:\n"
+                f"    ethos-data catalog build {name}"
             )
         resources.extend(
-            json.loads(shard_file.read_text(encoding="utf-8"))["resources"]
+            json.loads(shard_file.read_text(encoding="utf-8"))[k.RESOURCES]
         )
     return resources

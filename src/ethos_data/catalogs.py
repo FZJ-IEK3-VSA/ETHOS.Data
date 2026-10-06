@@ -43,7 +43,6 @@ from .errors import (
 )
 from .formats import keys
 from .formats.derived import (
-    license_settled,
     license_status_of,
     remote_prefix_of,
     resource_url,
@@ -58,9 +57,7 @@ __all__ = [
     "LICENSE_RESOLVED",
     "Catalog",
     "Dataset",
-    "Resource",
     "directory_of",
-    "license_settled",
     "load_catalog",
     "select_key",
     "split_key",

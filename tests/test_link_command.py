@@ -23,11 +23,12 @@ import shutil
 import pytest
 
 from ethos_data.access import ORIGIN_LINK, locate
-from ethos_data.catalogs import Catalog, Dataset, Resource
+from ethos_data.catalogs import Catalog, Dataset
 from ethos_data.cli import main
 from ethos_data.config import Roots
 from ethos_data.errors import LinkError, UnknownDataset
 from ethos_data.linking import link, unlink
+from ethos_data.model.resource import Resource
 
 CONTENT = {"a.txt": b"first file", "sub/b.txt": b"second file"}
 

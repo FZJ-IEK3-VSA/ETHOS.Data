@@ -1,11 +1,10 @@
 """One model under every reader: digests, records, sidecars, names, source paths.
 
-Each rule here used to be written in several modules, and the copies
-disagreed: a hash spelled in capitals failed ``verify --deep`` but passed a
-bundle, sidecars were followed one level in a selection and every level in a
-bundle export, staging saw only top-level names, and an empty ``source_dir``
-built a dataset from its own descriptor. ``ethos_data.model`` holds each rule
-once; these tests hold the rules, and the cases where the copies differed.
+``ethos_data.model`` holds each rule once, and every reader goes through it:
+a hash means the same in any case to ``verify --deep`` and to a bundle,
+sidecars are followed to every level in a selection and in a bundle export,
+staging sees family members as well as top-level names, and an empty
+``source_dir`` is refused rather than read as the dataset's own directory.
 """
 
 from __future__ import annotations

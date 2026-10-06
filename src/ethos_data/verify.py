@@ -24,9 +24,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .access import ORIGIN_STAGING, RESTRICTED, Location, locate
-from .catalogs import Catalog, Resource
+from .catalogs import Catalog
 from .config import Roots, dataset_roots
 from .model import digest
+from .model.resource import Resource
 
 __all__ = ["Finding", "verify", "repair", "summarise", "STATUSES", "OK", "UNAVAILABLE"]
 
@@ -62,8 +63,13 @@ class Finding:
         UNAVAILABLE counts as nothing-to-act-on because there is genuinely no
         action: the machine has no access to those bytes and never will. It is
         still reported, so it can never be mistaken for a clean check.
+        UNVERIFIABLE counts so only for staged data, which carries no checksum
+        by design; a catalogue record without a SHA-256 is a fault of the
+        catalogue's.
         """
-        return self.status in (OK, UNVERIFIABLE, UNAVAILABLE)
+        if self.status == UNVERIFIABLE:
+            return self.location.origin == ORIGIN_STAGING
+        return self.status in (OK, UNAVAILABLE)
 
     def __str__(self) -> str:
         line = f"{self.status:<14} {self.resource.key}"
@@ -155,11 +161,12 @@ def _check_one(location: Location, deep: bool) -> Finding:
 
     wanted = digest.expected(location.resource.hash)
     if wanted is None:
-        # Staged data, or a catalogue that records a digest we cannot check.
+        if not deep:
+            return Finding(location, OK)
+        if location.origin == ORIGIN_STAGING:
+            return Finding(location, UNVERIFIABLE, "staged: no checksum")
         return Finding(
-            location,
-            UNVERIFIABLE if deep else OK,
-            "no sha256 in the manifest" if deep else "",
+            location, UNVERIFIABLE, "the catalogue records no SHA-256 for this file"
         )
     if not deep:
         return Finding(location, OK)
@@ -221,6 +228,10 @@ def repair(
             skipped[finding.resource.key] = "restricted: never downloaded"
         elif finding.location.origin == ORIGIN_STAGING:
             skipped[finding.resource.key] = "staged: fix the staging entry yourself"
+        elif finding.status == UNVERIFIABLE:
+            skipped[finding.resource.key] = (
+                "the catalogue records no SHA-256, so no download can be checked"
+            )
         else:
             fetchable.append(finding)
 

@@ -88,6 +88,26 @@ class TestFindings:
         assert "unverifiable: 1" in out
         assert "could NOT be checked" in out
 
+    def test_a_catalogue_record_without_sha256_fails_the_deep_check(
+        self, wind, reader, store, capsys
+    ):
+        package = reader.root / "datasets" / "wind" / "datapackage.json"
+        package.write_text(
+            package.read_text("utf-8").replace('"sha256:', '"md5:', 1), "utf-8"
+        )
+
+        assert verify(wind) == 0, "sizes still match"
+        capsys.readouterr()
+        assert verify(wind, "--deep") == 1
+        out = capsys.readouterr().out
+        assert "unverifiable: 1" in out
+        assert "the catalogue records no SHA-256" in out
+        assert "--repair" not in out, "a download cannot fix the record"
+
+        assert verify(wind, "--deep", "--repair") == 1
+        assert "no download can be checked" in capsys.readouterr().out
+        assert store.downloads() == []
+
     def test_the_api_reports_the_same_findings(self, wind, reader):
         (reader.cache / "wind" / "v.nc").write_bytes(b"v")
         catalog = ethos_data.catalog(str(reader.index))

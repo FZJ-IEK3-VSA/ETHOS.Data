@@ -19,12 +19,12 @@ from typing import Iterable, Mapping, Sequence
 import pooch
 import yaml
 
-from .catalogs import Catalog, Resource, _join, _read_binary
+from .catalogs import Catalog, _join, _read_binary
 from .errors import BundleError
 from .formats import keys as k
 from .formats.derived import resource_url
 from .model import digest, names
-from .model.resource import checked, to_record
+from .model.resource import Resource, checked, to_record
 from .retrieval import DataFiles
 from .selection import load_collections
 

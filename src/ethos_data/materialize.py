@@ -61,12 +61,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .access import entry_for
-from .catalogs import Catalog, Resource
+from .catalogs import Catalog
 from .config import Roots, current_user
 from .errors import AccessError, LinkError, UnknownDataset
 from .formats import keys as k
 from .linking import source_dir_for
 from .model import digest
+from .model.resource import Resource
 
 __all__ = ["MaterializeReport", "materialize", "plan_materialize", "PROVENANCE_FILE"]
 

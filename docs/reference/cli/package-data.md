@@ -209,6 +209,8 @@ unless `--repair` is given.
 
 Statuses, worst first: `dangling`, `wrong checksum`, `wrong size`, `missing`,
 `unreadable`, `unavailable here`, `unverifiable`, `ok`.
+`unverifiable` fails the check for a catalogue file whose record holds no
+SHA-256, and only reports a staged file; `--repair` skips both.
 
 `--all` prints `skipped <name> [<variant>]: <reason>` for every collection or
 variant it cannot resolve — a dataset this catalogue does not describe, an

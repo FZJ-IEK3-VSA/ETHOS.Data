@@ -8,9 +8,6 @@ so a hash, a sidecar or a family member means the same to each of them. It
 reads no settings, makes no network request and prints nothing; its one input
 is hashing a file it is handed.
 
-[`Resource`][ethos_data.catalogs.Resource], the file these records describe,
-is documented with the [catalogue](catalog.md).
-
 ## Digests
 
 A resource's `hash` is recorded as `sha256:<hex>`. A bare digest, as the
@@ -48,9 +45,13 @@ dataset or bundle may hold.
 
 ## Resource records
 
+A [`Resource`][ethos_data.model.resource.Resource] is one file of a dataset,
+the same whether the catalogue, a shard or a bundle records it.
+
 ::: ethos_data.model.resource
     options:
       members:
+        - Resource
         - from_record
         - to_record
         - extras_of

@@ -40,11 +40,12 @@ import warnings
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from .catalogs import Catalog, Dataset, Resource
+from .catalogs import Catalog, Dataset
 from .config import Roots, current_user, resolve_staging_cache
 from .errors import AccessError, StagingError
 from .formats import keys as k
 from .model import names
+from .model.resource import Resource
 
 __all__ = [
     "NEW",
