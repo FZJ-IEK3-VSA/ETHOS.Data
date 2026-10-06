@@ -1,0 +1,185 @@
+{
+  "$defs": {
+    "StoreSettings": {
+      "additionalProperties": false,
+      "description": "How the maintainer commands reach the publication store; the institute's dCache by default.",
+      "properties": {
+        "remote": {
+          "default": "HIFIS",
+          "description": "The rclone remote that reaches the store.",
+          "title": "Remote",
+          "type": "string"
+        },
+        "vo_path": {
+          "default": "Helmholtz/FZJ-ICE2",
+          "description": "The VO's path in the store's namespace.",
+          "title": "Vo Path",
+          "type": "string"
+        },
+        "oidc_profile": {
+          "default": "HIFIS",
+          "description": "The oidc-agent profile that issues the store's tokens.",
+          "title": "Oidc Profile",
+          "type": "string"
+        },
+        "frontend": {
+          "default": "https://hifis-storage-web.desy.de/api/v1",
+          "description": "The store's REST interface, for permissions and locality.",
+          "title": "Frontend",
+          "type": "string"
+        }
+      },
+      "title": "StoreSettings",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "A source catalogue's name, contact and publication root.",
+  "properties": {
+    "name": {
+      "default": null,
+      "description": "The catalogue's name; the public catalogue shares it.",
+      "title": "Name",
+      "type": "string",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "A short human-readable title.",
+      "title": "Title",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "What the catalogue is for.",
+      "title": "Description",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:publication_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Root of the public data store: a resource is `<url>/<remote_prefix>/<path>`.",
+      "title": "Ethos:Publication Url",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:contact": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Team or username.",
+      "title": "Ethos:Contact",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The release this is, vMAJOR.MINOR.PATCH; the build writes it into the index.",
+      "pattern": "^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "title": "Version",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:catalog_role": {
+      "default": "source",
+      "description": "Always `source` in a hand-written file; `publish` stamps `published`.",
+      "enum": [
+        "source",
+        "published"
+      ],
+      "title": "Ethos:Catalog Role",
+      "type": "string",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:store": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StoreSettings"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "How upload, release and purge reach the store; the institute's dCache by default.",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": false,
+        "user_facing": false
+      }
+    }
+  },
+  "title": "catalog.yaml",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data/main/src/ethos_data/formats/schemas/dataset.schema.json
+#
+# A dataset downloaded from somewhere else. Record the source, the date you
+# fetched it and the licence as the source publishes it.
+name: ${name}
+title: ${title}
+description: What it contains and which release.
+source_dir: ${source_dir}
+ethos:access: public
+ethos:visibility: public
+ethos:origin: downloaded
+sources:
+  - title: The original release
+    path: https://example.org/dataset-release
+licenses:
+  - name: CC-BY-4.0
+    path: https://creativecommons.org/licenses/by/4.0/
+ethos:retrieved: "2026-09-01"
+ethos:attribution: The attribution text the source requires.
+ethos:contact: ${contact}

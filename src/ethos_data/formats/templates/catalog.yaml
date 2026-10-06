@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data/main/src/ethos_data/formats/schemas/catalog.schema.json
+#
+# A source catalogue's own description, written once. `ethos-data catalog build`
+# merges it into datacatalog.json.
+name: ${name}
+title: ${title}
+ethos:catalog_role: source
+ethos:publication_url: ${publication_url}
+ethos:contact: ${contact}

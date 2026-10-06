@@ -7,7 +7,7 @@ once.
 
     import ethos_data
 
-    data = ethos_data.collections("reskit/data/collections.yaml", tool="reskit")
+    data = ethos_data.collections("mytool/data/collections.yaml", tool="mytool")
     inputs = data.paths("onshore_wind", test=True)    # {handle: Path}
     files = data.fetch("onshore_wind")                # {key: Path}
     clc = data.catalog.path("landcover/C3S-LC-L4-LCCS-Map-300m-P1Y-2018-v2.1.1.tif")
@@ -19,8 +19,8 @@ needs, named once by its maintainer in the tool's ``collections.yaml``;
 ``test=True`` selects the small fixtures the maintainer paired with the full
 data, so an example runs in seconds and the same code runs on the real inputs.
 A **key** (``"<dataset>/<path>"``) names one dataset, folder or file in the
-catalogue; :func:`catalog` -- or a handle's ``.catalog``, for the version a tool
-pins -- answers those with ``path`` and ``resources``.
+catalogue; :func:`catalog` -- or a handle's ``.catalog``, for the release a
+tool's bounds admit -- answers those with ``path`` and ``resources``.
 
 A tool builds its handle once, from the file beside its own code, and exposes
 the same commands as its own console script with :meth:`Collections.main`;
@@ -29,68 +29,93 @@ nothing is registered anywhere. See :func:`collections`.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
-from .bundles import Bundle, BundleError, export_bundle, load_bundle
-from .access import AccessError, Location, locate
+from .access import Location, locate
+from .bundles import Bundle, BundleAlignmentWarning, export_bundle, load_bundle
 from .catalogs import (
     Catalog,
-    CatalogUnavailable,
     Dataset,
-    IncompleteCatalog,
-    Resource,
-    UnknownDataset,
+    catalog_for,
     load_catalog,
 )
 from .config import (
     CATALOG_ENV_VAR,
+    CONFIG_ENV_VAR,
     DEFAULT_CATALOG,
     ENV_VAR,
     RESTRICTED_ENV_VAR,
     STAGING_ENV_VAR,
-    Resolved,
     Roots,
+    Settings,
+    add_restricted_cache,
     config_path,
-    config_sources,
-    dataset_roots,
-    find_project_config,
-    resolve_cache_dir,
-    resolve_catalog,
-    resolve_public_cache,
-    resolve_restricted_cache,
-    resolve_roots,
-    resolve_skip_unavailable,
-    resolve_staging_cache,
-    set_dataset_root,
+    read_settings,
+    remove_restricted_cache,
+    set_cache,
     set_option,
-    unset_dataset_root,
     unset_option,
 )
-from .retrieval import DataFiles, NamedPaths, cache_dir, download, local_path, plan
-from .materialize import materialize
-from .linking import LinkError, link, unlink
-from .selection import (
+from .errors import (
+    AccessError,
+    BundleError,
+    CatalogueRootError,
+    CatalogUnavailable,
+    CatalogVersionError,
     CollectionError,
-    Collections,
-    CollectionsNotFound,
+    ConfigurationError,
+    DescriptorError,
+    DownloadError,
+    EthosDataError,
+    IncompleteCatalog,
+    LinkError,
+    MaintenanceError,
+    NotFetched,
+    PublishError,
+    StagingError,
+    TransitionError,
     UnknownCollection,
-    load_collections,
+    UnknownDataset,
+    UnknownKey,
+    UploadError,
 )
-from .staging import apply_staging, classify_staged, staged_only
+from .linking import link, unlink
+from .materialize import materialize
+from .model.resource import Resource
+from .retrieval import DataFiles, NamedPaths, download, plan
+from .selection import Collections, load_collections
+from .selftest import EXAMPLE_COLLECTIONS, run_selftest
+from .staging import classify_staged, staged_only
 from .verify import Finding, repair, verify
 
 __all__ = [
+    "CatalogueRootError",
+    "ConfigurationError",
+    "DescriptorError",
+    "DownloadError",
+    "EthosDataError",
+    "MaintenanceError",
+    "NotFetched",
+    "PublishError",
+    "StagingError",
+    "TransitionError",
+    "UnknownKey",
+    "UploadError",
     "Bundle",
+    "BundleAlignmentWarning",
     "BundleError",
     "export_bundle",
     "load_bundle",
     "CATALOG_ENV_VAR",
+    "CONFIG_ENV_VAR",
     "Catalog",
     "CatalogUnavailable",
+    "CatalogVersionError",
     "CollectionError",
     "Collections",
-    "CollectionsNotFound",
     "DEFAULT_CATALOG",
+    "EXAMPLE_COLLECTIONS",
     "Dataset",
     "AccessError",
     "DataFiles",
@@ -100,19 +125,16 @@ __all__ = [
     "Finding",
     "NamedPaths",
     "RESTRICTED_ENV_VAR",
-    "Resolved",
     "Resource",
     "Roots",
     "STAGING_ENV_VAR",
+    "Settings",
     "UnknownCollection",
     "UnknownDataset",
-    "apply_staging",
-    "cache_dir",
     "catalog",
     "classify_staged",
     "collections",
     "config_path",
-    "config_sources",
     "download",
     "fetch",
     "LinkError",
@@ -120,31 +142,25 @@ __all__ = [
     "unlink",
     "load_catalog",
     "load_collections",
-    "local_path",
     "materialize",
     "paths",
     "plan",
+    "read_settings",
     "repair",
     "resolve",
-    "resolve_public_cache",
-    "resolve_restricted_cache",
-    "resolve_roots",
-    "resolve_skip_unavailable",
-    "resolve_staging_cache",
-    "dataset_roots",
-    "find_project_config",
+    "run_selftest",
     "locate",
-    "resolve_cache_dir",
-    "set_dataset_root",
     "staged_only",
+    "add_restricted_cache",
+    "remove_restricted_cache",
+    "set_cache",
     "set_option",
     "tool_main",
-    "unset_dataset_root",
     "unset_option",
     "verify",
 ]
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 
 def collections(
@@ -153,6 +169,8 @@ def collections(
     tool: str | None = None,
     catalog: str | Catalog | None = None,
     root: str | Path | None = None,
+    bundles: Sequence[str | Path] = (),
+    download: bool | None = None,
 ) -> Collections:
     """A handle on a collections file: what a tool's workflows need, by name.
 
@@ -160,21 +178,40 @@ def collections(
     calls ``fetch``, ``paths``, ``resolve`` and ``plan`` on::
 
         COLLECTIONS_FILE = Path(__file__).with_name("collections.yaml")
-        data = ethos_data.collections(COLLECTIONS_FILE, tool="reskit")
+        data = ethos_data.collections(COLLECTIONS_FILE, tool="mytool")
         inputs = data.paths("onshore_wind", test=True)
 
     ``tool`` is the tool's short name, used in messages and as the default
-    name of its command (``reskit-data``; see :meth:`Collections.main`). The
+    name of its command (``<tool>-data``; see :meth:`Collections.main`). The
     catalogue is ``catalog`` if given, else ``$ETHOS_DATA_CATALOG`` or a
-    configured one, else the version the file pins, else the built-in public
-    catalogue -- so a user can repoint every tool at once without any tool
-    knowing. ``root`` overrides the public cache directory. The file is read
-    once, here, and ``.catalog`` is the catalogue it resolved to, for access
-    by key.
+    configured one, else the public catalogue at the newest release the file's
+    bounds admit -- so a user can repoint every tool at once without any tool
+    knowing. A catalogue outside the bounds raises
+    :class:`~ethos_data.errors.CatalogVersionError`. ``root`` overrides the
+    public cache directory. The file and the
+    settings are read once, here: ``.settings`` reports what every later call
+    uses, and ``.catalog`` is the catalogue it resolved to, for access by key.
+
+    ``bundles`` are the bundle directories the package ships in its
+    repository: what they hold is read from them first, hash-checked, and the
+    catalogue is opened only for the rest, so a handle whose bundles hold
+    every input reads no catalogue index. A bundle ahead of the catalogue is
+    read all the same, with a :class:`BundleAlignmentWarning`. ``download=True``,
+    or ``$ETHOS_DATA_DOWNLOAD=1``, reads a bundled file whose bytes the
+    catalogue holds under the same key through the catalogue route, and every
+    other bundled file from its bundle.
     """
-    roots = Roots.coerce(root) if root is not None else None
+    settings = read_settings(
+        root=root, catalog=catalog if isinstance(catalog, str) else None
+    )
     return load_collections(
-        path, catalog=_configured_catalog(catalog), roots=roots, tool=tool
+        path,
+        catalog=catalog if isinstance(catalog, Catalog) else None,
+        roots=settings.roots,
+        tool=tool,
+        settings=settings,
+        bundles=bundles,
+        download=download,
     )
 
 
@@ -187,17 +224,18 @@ def catalog(
 
     ``location`` is a ``datacatalog.json`` path or URL; without one, the
     catalogue is ``$ETHOS_DATA_CATALOG`` or a configured one, else the
-    built-in public catalogue. The staging overlay is applied once, here. A
-    tool's pinned catalogue is ``ethos_data.collections(...).catalog``::
+    built-in public catalogue. The settings are read and the staging overlay
+    is applied once, here; ``.settings`` reports them. The catalogue a tool
+    reads within its release bounds is ``ethos_data.collections(...).catalog``::
 
         era5 = ethos_data.catalog().path("era5/2015")
         files = ethos_data.catalog().resources("global-wind-atlas-v3")
     """
-    roots = Roots.coerce(root)
     if isinstance(location, Catalog):
+        roots = location.settings.roots if root is None else location._roots(root)
         return location.overlaid(roots)
-    chosen = _configured_catalog(location)
-    return load_catalog(chosen or DEFAULT_CATALOG).overlaid(roots)
+    loaded = catalog_for(read_settings(root=root, catalog=location))
+    return loaded.overlaid(loaded.settings.roots)
 
 
 def tool_main(
@@ -206,33 +244,38 @@ def tool_main(
     tool: str | None = None,
     prog: str | None = None,
     catalog: str | None = None,
+    bundles: Sequence[str | Path] = (),
     argv: list[str] | None = None,
 ) -> int:
     """The body of a tool's data command, bound to its shipped collections file.
 
     Two lines in the tool make the command::
 
-        # reskit/data/__init__.py
+        # mytool/data/__init__.py
         def main(argv=None):
-            return ethos_data.tool_main(COLLECTIONS_FILE, tool="reskit", argv=argv)
+            return ethos_data.tool_main(COLLECTIONS_FILE, tool="mytool", argv=argv)
 
         # pyproject.toml
         [project.scripts]
-        reskit-data = "reskit.data:main"
+        mytool-data = "mytool.data:main"
 
     ``show``, ``fetch`` and ``verify`` for the file's collections, against the
-    catalogue it pins, plus ``bundle``, ``staging`` and ``config``. A single
-    catalogue key belongs to ``ethos-data``, not here -- which is what keeps
-    this to six commands whatever the tool.
+    catalogue release the settings choose within the file's release bounds,
+    plus ``bundle``, ``staging``, ``config``, ``propose`` and ``report``. A
+    single catalogue key belongs to ``ethos-data``, not here -- which is what
+    keeps this to eight commands whatever the tool.
     ``prog`` names the command in help and messages
     (default ``<tool>-data``); ``catalog`` is the tool's own catalogue override,
     applied below ``--catalog`` and above ``$ETHOS_DATA_CATALOG``. The handle
     is built only for the commands that need one, so ``--help`` and ``config
-    show`` never load the catalogue.
+    show`` never load the catalogue. ``bundles`` are the package's bundle
+    directories, read first, as for :func:`collections`.
     """
     from .cli import run_tool
 
-    return run_tool(path, tool=tool, prog=prog, catalog=catalog, argv=argv)
+    return run_tool(
+        path, tool=tool, prog=prog, catalog=catalog, bundles=bundles, argv=argv
+    )
 
 
 def resolve(
@@ -259,7 +302,7 @@ def fetch(
     progressbar: bool = True,
     *,
     test: bool = False,
-    skip_unavailable: bool | None = None,
+    fetch: bool = True,
 ) -> DataFiles:
     """Make a collection in the file ``collections`` available locally.
 
@@ -272,7 +315,7 @@ def fetch(
         collection,
         test=test,
         progressbar=progressbar,
-        skip_unavailable=skip_unavailable,
+        fetch=fetch,
     )
 
 
@@ -284,7 +327,7 @@ def paths(
     progressbar: bool = True,
     *,
     test: bool = False,
-    skip_unavailable: bool | None = None,
+    fetch: bool = True,
 ) -> NamedPaths:
     """The inputs a collection names, as ``{handle: absolute Path}``, fetched.
 
@@ -295,7 +338,7 @@ def paths(
         collection,
         test=test,
         progressbar=progressbar,
-        skip_unavailable=skip_unavailable,
+        fetch=fetch,
     )
 
 
@@ -307,15 +350,3 @@ def _handle(
     if isinstance(source, Collections):
         return source
     return collections(source, catalog=catalog, root=root)
-
-
-def _configured_catalog(catalog: str | Catalog | None) -> str | Catalog | None:
-    """An explicit catalogue, else ``$ETHOS_DATA_CATALOG`` or a configured one.
-
-    ``None`` leaves the choice to the collections file's pin, and after that to
-    the built-in public catalogue.
-    """
-    if catalog is not None:
-        return catalog
-    configured = resolve_catalog()
-    return configured[0] if configured else None

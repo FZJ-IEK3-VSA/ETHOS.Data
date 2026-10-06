@@ -21,10 +21,36 @@ exactly why its command sits with the user-facing `link` rather than under
 `catalog`.
 
 The catalogue-locating helpers below serve both entry points: `link --all` reads
-`source_dir` from the hand-written `dataset.yaml` of a source checkout, and it
-finds that checkout the same way the maintainer commands find theirs.
+`source_dir` from the status files of a source checkout, and it finds that
+checkout the same way the maintainer commands find theirs.
 
-## Locating a catalogue
+## Reporting
+
+Every entry point below that runs a command (`manifest.run`, `publish.run`,
+`upload.run`, `status.run`, `migrate.run`, the pipelines' `run`, the namespace
+builder's `run`) takes a `reporter=` keyword and sends its progress and
+warnings there. Without one, progress goes to standard output and warnings are
+Python warnings. Each returns a result whose `ok` says whether the command
+succeeded, and the command line chooses the exit status from it. Refusals are
+raised, never reported.
+
+::: ethos_data.report
+    options:
+      members:
+        - Reporter
+        - ConsoleReporter
+        - NullReporter
+        - RecordingReporter
+        - PythonWarnings
+        - reporting
+        - reported
+        - info
+        - warning
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+## Locating and reading a catalogue
 
 ::: ethos_data.maintain
     options:
@@ -33,6 +59,11 @@ finds that checkout the same way the maintainer commands find theirs.
         - resolve_catalog_root
         - catalogue_role
         - datasets_dir
+        - read_descriptor
+        - read_catalog_meta
+        - source_dir_of
+        - source_dir_for
+        - inventory_of
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3
@@ -43,6 +74,8 @@ finds that checkout the same way the maintainer commands find theirs.
     options:
       members:
         - run
+        - BuildResult
+        - Build
         - render_dataset
         - write_dataset
         - stale_files
@@ -54,13 +87,136 @@ finds that checkout the same way the maintainer commands find theirs.
         - build_resource
         - split_into_shards
         - shard_path
-        - validate_classification
-        - validate_provenance
-        - validate_licenses
         - apply_resource_licenses
         - slugify
         - mediatype_of
-        - sha256_of
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+## Dataset status
+
+Each dataset's [`status.yaml`](../schemas.md#statusyaml): read and written
+here, and every step a command takes checked against the
+[lifecycle](model.md#lifecycle) and recorded with `take`.
+
+::: ethos_data.maintain.status
+    options:
+      members:
+        - run
+        - StatusResult
+        - read
+        - write
+        - take
+        - build_input
+        - BuildInput
+        - evidence
+        - check_copy
+        - Finding
+        - CONVERTED
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.migrate
+    options:
+      members:
+        - run
+        - MigrateResult
+        - Outcome
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+## Pipelines
+
+Every catalogue workflow that writes is a pipeline: every stage plans before
+any acts, so a refusal comes before the first write and a dry run is the plan.
+Building, uploading, publishing and the cache namespace are below; adding,
+freezing, removing and checking a dataset here.
+
+::: ethos_data.maintain.pipeline
+    options:
+      members:
+        - Pipeline
+        - Stage
+        - Action
+        - Run
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.accept
+    options:
+      members:
+        - run
+        - AddResult
+        - Draft
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.freeze
+    options:
+      members:
+        - run
+        - RecordResult
+        - choose
+        - Freeze
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.remove
+    options:
+      members:
+        - run
+        - RemoveResult
+        - Removal
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.bundle_intake
+    options:
+      members:
+        - run
+        - IntakeResult
+        - BundleIntake
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.release
+    options:
+      members:
+        - run
+        - ReleaseResult
+        - Release
+        - changes_since
+        - next_release
+        - Changes
+        - stamped
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.checkout
+    options:
+      members:
+        - run
+        - UpdateResult
+        - Update
+        - latest
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
+::: ethos_data.maintain.provenance
+    options:
+      members:
+        - run
+        - Check
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3
@@ -71,17 +227,23 @@ finds that checkout the same way the maintainer commands find theirs.
     options:
       members:
         - run
+        - PublishResult
+        - Publication
         - render
         - public_datasets
         - strip
+        - leaks
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3
 
 ## The cache namespace
 
-Built by [`ethos-data link --all`](../cli/ethos-data.md#link-dataset-directory).
-`run` takes the catalogue checkout and the namespace root as plain arguments,
+Built by [`ethos-data link --all`](../cli/ethos-data.md#link-dataset-directory),
+which also records the links in a clone given `--catalog-root`; the links and
+copies [`link`](../cli/ethos-data.md#link-dataset-directory) and
+[`materialize`](../cli/ethos-data.md#materialize-datasets) make by name are
+recorded here too. `run` takes the catalogue checkout and the namespace root as plain arguments,
 neither of them optional, because the command decides which cache it means once
 and hands the answer down: a planner that looked the cache up for itself could
 answer differently from the caller that had already looked, and the result would
@@ -91,9 +253,13 @@ be a whole link tree built somewhere nobody named.
     options:
       members:
         - run
-        - plan
-        - apply
-        - Action
+        - NamespaceResult
+        - Namespace
+        - link
+        - Linking
+        - materialize_and_record
+        - Copying
+        - CopyResult
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3
@@ -104,12 +270,11 @@ be a whole link tree built somewhere nobody named.
     options:
       members:
         - run
+        - UploadResult
+        - UploadOptions
+        - Upload
         - preflight
-        - resources_of
-        - remote_manifest_check
-        - locality
-        - chmod
-        - token
+        - read_back
         - load
       show_root_heading: false
       show_root_toc_entry: false

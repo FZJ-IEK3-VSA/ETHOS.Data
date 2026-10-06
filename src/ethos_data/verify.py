@@ -8,25 +8,38 @@ files it fetches, but data read *in place* has never been checked at all -- so
 this is the one place where the promise "these bytes are the ones in the
 manifest" is actually tested.
 
-    reskit-data verify onshore_wind            # sizes: cheap, run it often
-    reskit-data verify onshore_wind --deep     # checksums: slow, run it before you publish
-    reskit-data verify --all --deep --repair   # and re-fetch whatever drifted
+    <tool>-data verify onshore_wind            # sizes: cheap, run it often
+    <tool>-data verify onshore_wind --deep     # checksums: slow, run it before you publish
+    <tool>-data verify --all --deep --repair   # and re-fetch whatever drifted
 
-It is deliberately link-agnostic. A symbolic link, a hard link, a configured
-root and an ordinary downloaded directory are all just paths by the time they
-get here, which is what makes this useful during a migration where a dataset may
-be any of those on any given day.
+It is deliberately link-agnostic. A symbolic link, a hard link, a staged entry
+and an ordinary downloaded directory are all just paths by the time they get
+here. What it reports about the caches themselves -- a broken link, an entry in
+a restricted cache the lookup passed over -- names the cache.
+
+Repair downloads a damaged copy again into the public cache. It never removes or
+replaces a link, and never touches restricted or staged data: those are reported
+for whoever owns them, on the cluster the maintainers.
 """
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
-from pathlib import Path
 
-from .access import ORIGIN_STAGING, RESTRICTED, Location, locate
-from .catalogs import Catalog, Resource
-from .config import Roots, dataset_roots
+from .access import (
+    ORIGIN_BUNDLE,
+    ORIGIN_LINK,
+    ORIGIN_STAGING,
+    RESTRICTED,
+    Location,
+    linked_entry,
+    locate,
+    restricted_entry,
+)
+from .catalogs import Catalog
+from .config import Roots
+from .model import digest
+from .model.resource import Resource
 
 __all__ = ["Finding", "verify", "repair", "summarise", "STATUSES", "OK", "UNAVAILABLE"]
 
@@ -38,11 +51,22 @@ SIZE = "wrong size"
 HASH = "wrong checksum"
 UNREADABLE = "unreadable"
 UNVERIFIABLE = "unverifiable"
+#: About a cache rather than a file, for whoever maintains that cache; never a
+#: failure of the check.
+NOTE = "note"
 
 #: Ordered worst-first, which is the order a report should print them in.
-STATUSES = (DANGLING, HASH, SIZE, MISSING, UNREADABLE, UNAVAILABLE, UNVERIFIABLE, OK)
-
-CHUNK = 8 * 1024 * 1024
+STATUSES = (
+    DANGLING,
+    HASH,
+    SIZE,
+    MISSING,
+    UNREADABLE,
+    UNAVAILABLE,
+    UNVERIFIABLE,
+    NOTE,
+    OK,
+)
 
 
 @dataclass(frozen=True)
@@ -64,95 +88,125 @@ class Finding:
         UNAVAILABLE counts as nothing-to-act-on because there is genuinely no
         action: the machine has no access to those bytes and never will. It is
         still reported, so it can never be mistaken for a clean check.
+        UNVERIFIABLE counts so only for staged data, which carries no checksum
+        by design; a catalogue record without a SHA-256 is a fault of the
+        catalogue's. A NOTE is about a cache, not about the file that was read.
         """
-        return self.status in (OK, UNVERIFIABLE, UNAVAILABLE)
+        if self.status == UNVERIFIABLE:
+            return self.location.origin == ORIGIN_STAGING
+        return self.status in (OK, UNAVAILABLE, NOTE)
 
     def __str__(self) -> str:
         line = f"{self.status:<14} {self.resource.key}"
         return f"{line}\n                 {self.detail}" if self.detail else line
 
 
-def sha256_of(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(CHUNK), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def _expected_digest(recorded: str) -> str:
-    """The bare hex digest from a Frictionless ``hash`` field.
-
-    Written as "sha256:<hex>" by our manifest builder, but the spec permits a
-    bare digest, and a catalogue built by another tool may use one.
-    """
-    if ":" in recorded:
-        algorithm, _, digest = recorded.partition(":")
-        return digest if algorithm.lower() == "sha256" else ""
-    return recorded
-
-
-def _broken_link(roots: Roots, dataset: str, origin: str) -> tuple[Path, Path] | None:
-    """The dataset's entry if it is a symbolic link pointing nowhere.
+def _broken_link(
+    roots: Roots, dataset: str, origin: str, entry_name: str | None = None
+) -> str | None:
+    """Why the dataset's entry is a symbolic link pointing nowhere, naming the cache.
 
     Checked once per dataset rather than once per file: a dataset with 170,000
-    resources behind a dangling link should cost one ``stat``, not 170,000.
+    resources behind a dangling link should cost one ``stat``, not 170,000. A
+    restricted dataset is read only from an entry that is readable, so its
+    broken entries are notes; see :func:`_notes`. ``entry_name`` is where the
+    revision the catalogue names lies in a cache, the dataset's name by default.
     """
-    candidates = []
     if origin == ORIGIN_STAGING and roots.staging is not None:
-        candidates.append(roots.staging / dataset)
+        entry = roots.staging / dataset
+        where = f"the staging root {roots.staging}"
+    elif origin == ORIGIN_LINK:
+        entry = linked_entry(roots.public, entry_name or dataset)
+        where = f"the public cache {roots.public}"
     else:
-        candidates.append(roots.public / dataset)
-        if roots.restricted is not None:
-            candidates.append(roots.restricted / dataset)
-    for entry in candidates:
-        if entry.is_symlink() and not entry.exists():
-            return entry, entry.readlink()
+        return None
+    if entry is not None and entry.is_symlink() and not entry.exists():
+        return f"{entry} in {where} points at {entry.readlink()}, which does not exist"
     return None
+
+
+def _notes(catalog: Catalog, roots: Roots, dataset: str) -> list[str]:
+    """What the restricted caches say about one dataset that its read does not.
+
+    For restricted data, an entry the lookup passed over because it is
+    dangling or cannot be read, in a cache listed before the one it read. For
+    public data, an entry in a restricted cache, which the lookup never reads
+    and its maintainer removes.
+    """
+    described = catalog.dataset(dataset)
+    entry_name = described.entry_name
+    if described.access == RESTRICTED:
+        entry, reasons = restricted_entry(roots.restricted, entry_name)
+        return reasons if entry is not None else []
+    return [
+        f"{cache / entry_name} is an entry in a restricted cache, but the dataset is "
+        f"public; its maintainer removes it: "
+        f"ethos-data --root {cache} unlink {dataset}"
+        for cache in roots.restricted
+        if (cache / entry_name).exists() or (cache / entry_name).is_symlink()
+    ]
 
 
 def verify(
     catalog: Catalog,
     resources: list[Resource],
-    roots: "Roots | str | Path | None" = None,
+    roots: Roots | None = None,
     deep: bool = False,
-    skip_unavailable: bool | None = None,
 ) -> list[Finding]:
     """Check every resource against the manifest. Never writes anything.
 
     Without ``deep`` this compares sizes, which catches truncation, replacement
     by a different file, and an empty placeholder -- the common failures -- for
     the cost of one ``stat`` per file. With ``deep`` it compares checksums,
-    which catches everything and reads every byte.
+    which catches everything and reads every byte. Restricted data this
+    account cannot read is reported as ``unavailable here``, with the reason.
+    Like a fetch, it warns about a dataset whose licensing is unsettled.
     """
-    roots = Roots.coerce(roots)
-    locations = locate(catalog, resources, roots, dataset_roots(), skip_unavailable)
+    from .retrieval import warn_about_licensing
+
+    roots = roots if roots is not None else catalog.settings.roots
+    warn_about_licensing(catalog, resources)
+    locations = locate(catalog, resources, roots, describe=True)
 
     findings: list[Finding] = []
-    link_state: dict[str, tuple[Path, Path] | None] = {}
+    link_state: dict[str, str | None] = {}
+    noted: set[str] = set()
 
     for location in locations:
-        if not location.available:
+        name = location.resource.dataset
+        if name not in noted:
+            noted.add(name)
+            findings.extend(
+                Finding(location, NOTE, note) for note in _notes(catalog, roots, name)
+            )
+        if not location.available and location.origin == ORIGIN_BUNDLE:
+            # A bundle is authoritative for its package: a bundled file that is
+            # missing or changed without `bundle update` is a failure, never
+            # "unavailable here".
+            status = MISSING if "missing" in location.reason else HASH
             findings.append(
                 Finding(
                     location,
-                    UNAVAILABLE,
-                    "no access to this dataset from this machine; nothing was checked",
+                    status,
+                    f"{location.reason}; restore it from the repository, or record "
+                    "the change with `bundle update`",
                 )
             )
             continue
-        name = location.resource.dataset
-        if name not in link_state:
-            link_state[name] = _broken_link(roots, name, location.origin)
-        broken = link_state[name]
-        if broken is not None:
+        if not location.available:
             findings.append(
                 Finding(
-                    location,
-                    DANGLING,
-                    f"{broken[0]} points at {broken[1]}, which does not exist",
+                    location, UNAVAILABLE, f"{location.reason}; nothing was checked"
                 )
             )
+            continue
+        if name not in link_state:
+            link_state[name] = _broken_link(
+                roots, name, location.origin, catalog.dataset(name).entry_name
+            )
+        broken = link_state[name]
+        if broken is not None:
+            findings.append(Finding(location, DANGLING, broken))
             continue
         findings.append(_check_one(location, deep))
     return findings
@@ -175,24 +229,25 @@ def _check_one(location: Location, deep: bool) -> Finding:
             location, SIZE, f"{path}: expected {expected:,} bytes, found {actual:,}"
         )
 
-    digest = _expected_digest(location.resource.hash or "")
-    if not digest:
-        # Staged data, or a catalogue that records a digest we cannot check.
+    wanted = digest.expected(location.resource.hash)
+    if wanted is None:
+        if not deep:
+            return Finding(location, OK)
+        if location.origin == ORIGIN_STAGING:
+            return Finding(location, UNVERIFIABLE, "staged: no checksum")
         return Finding(
-            location,
-            UNVERIFIABLE if deep else OK,
-            "no sha256 in the manifest" if deep else "",
+            location, UNVERIFIABLE, "the catalogue records no SHA-256 for this file"
         )
     if not deep:
         return Finding(location, OK)
 
     try:
-        found = sha256_of(path)
+        found = digest.of_file(path)
     except OSError as error:
         return Finding(location, UNREADABLE, f"{path}: {error}")
-    if found != digest:
+    if found != wanted:
         return Finding(
-            location, HASH, f"{path}: expected {digest[:16]}..., found {found[:16]}..."
+            location, HASH, f"{path}: expected {wanted[:16]}..., found {found[:16]}..."
         )
     return Finding(location, OK)
 
@@ -210,25 +265,25 @@ def summarise(findings: list[Finding]) -> dict[str, list[Finding]]:
 def repair(
     catalog: Catalog,
     findings: list[Finding],
-    roots: "Roots | str | Path | None" = None,
+    roots: Roots | None = None,
     dry_run: bool = False,
     progressbar: bool = True,
 ) -> dict:
-    """Re-fetch from dCache whatever no longer matches the manifest.
+    """Download again, into the public cache, the copies that no longer match.
 
-    Restricted data is never repaired -- there is nothing to fetch it from, by
-    definition -- and staged data is never repaired either, because the whole
-    point of a staging entry is that it is *not* the catalogue's version.
-
-    A dangling link in a shared cache is removed so that the download has
-    somewhere to land. That is a change other people see, which is why it is
-    listed explicitly before it happens and why ``dry_run`` exists.
+    Only copies the public cache owns are repaired. A link is never removed or
+    replaced: a broken link, and a file behind a link that does not match, are
+    reported for whoever owns the link -- on the cluster, the maintainers, since
+    every user reads the cluster's public cache. Restricted data is never
+    repaired -- there is nothing to fetch it from, by definition -- and staged
+    data is never repaired either, because the whole point of a staging entry is
+    that it is *not* the catalogue's version.
     """
     from .retrieval import (
         download,
     )  # local: retrieval imports access, which imports config
 
-    roots = Roots.coerce(roots)
+    roots = roots if roots is not None else catalog.settings.roots
     broken = [f for f in findings if not f.ok]
 
     skipped: dict[str, str] = {
@@ -243,30 +298,32 @@ def repair(
             skipped[finding.resource.key] = "restricted: never downloaded"
         elif finding.location.origin == ORIGIN_STAGING:
             skipped[finding.resource.key] = "staged: fix the staging entry yourself"
+        elif finding.status == DANGLING:
+            skipped[finding.resource.key] = (
+                "a broken link: repair never changes a link; report it to whoever "
+                "maintains the cache"
+            )
+        elif finding.location.origin == ORIGIN_LINK:
+            skipped[finding.resource.key] = (
+                "read through a link: repair never changes a link; report it to "
+                "whoever maintains the linked data"
+            )
+        elif finding.status == UNVERIFIABLE:
+            skipped[finding.resource.key] = (
+                "the catalogue records no SHA-256, so no download can be checked"
+            )
         else:
             fetchable.append(finding)
-
-    links_to_remove = sorted(
-        {
-            roots.public / f.resource.dataset
-            for f in fetchable
-            if (roots.public / f.resource.dataset).is_symlink()
-        }
-    )
 
     report = {
         "broken": broken,
         "skipped": skipped,
-        "links_to_remove": links_to_remove,
         "resources": [f.resource for f in fetchable],
         "dry_run": dry_run,
         "downloaded": 0,
     }
     if dry_run or not fetchable:
         return report
-
-    for link in links_to_remove:
-        link.unlink()
 
     files = download(
         catalog, [f.resource for f in fetchable], root=roots, progressbar=progressbar

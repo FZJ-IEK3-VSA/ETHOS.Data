@@ -1,45 +1,77 @@
-# Withdraw a dataset
+# Remove a dataset
 
-Remove an entry from the current public catalogue, and only delete remote bytes
-if withdrawal requires it. For a correction, publish a new version while
-retaining the old paths; see [Licensing and immutability](../../explanation/licensing.md).
+Take a dataset that should not have been added out of the catalogue, the
+cluster's caches and dCache. Removal is for data that must stop existing: a
+wrongly accepted candidate, a licence that turned out to forbid what was done,
+test data nobody needs. A correction is not a removal; it is a
+[new version](publish-a-new-version.md).
 
-## 1. Remove the current public entry
+The order is the reverse of publishing: **metadata first, bytes second**.
+A catalogue that points at deleted bytes breaks every reader half-way. The
+bytes go only after a major release, because the releases of the current
+major made before the withdrawal still describe the dataset.
 
-In the source catalogue, set `ethos:visibility: hidden` and add the required
-`ethos:embargo` block, or remove the dataset's metadata directory if the entry
-is being removed entirely.
+## 1. Withdraw it and release
+
+In your own clone of the source catalogue:
 
 ```bash
-ethos-data catalog build
-ethos-data catalog publish ../ETHOS.Data-Catalogue
+ethos-data catalog remove <name> --reason "<why>" --dry-run
+ethos-data catalog remove <name> --reason "<why>"
 ```
 
-Review the generated diff. Release the source/public revisions and deploy the
-updated internal tree as appropriate. Record why the dataset was withdrawn and
-which replacement, if any, consumers should use.
+`remove` records the dataset as withdrawn in its `status.yaml`, with the
+reason, and rebuilds the index without it; a family name withdraws every
+member. Its description, its status file, its cache entries and its bytes
+stay. Commit, merge on JuGit, then [release](release-the-catalogue.md) the
+internal and the public catalogue: a withdrawal needs a minor release. Note
+why the dataset was removed and what replaces it in the commit and in the
+issue.
 
-## 2. Check old consumers before deleting bytes
+If only the public listing was wrong, keep the dataset and hide it instead:
+`ethos:visibility: hidden` with an embargo block that says why.
 
-An older pinned catalogue still describes the dataset. Hiding today's entry does
-not revoke those pins, erase existing caches, or prevent access through a known
-URL. Prefer retaining bytes needed for reproduction.
+## 2. Purge it after a major release
 
-If withdrawal requires removing bytes, identify the exact remote prefix and
-check whether other datasets share it. Follow
-[Delete a file or folder](manage-dcache-folders.md#delete-a-file-or-an-entire-folder)
-with a preview first. Do not delete the publication root.
+After the next major release:
 
-## 3. Verify and communicate the withdrawal
+```bash
+ethos-data catalog remove <name> --purge --dry-run
+ethos-data catalog remove <name> --purge
+```
 
-Confirm the entry is absent from the newly published index. If bytes were deleted,
-check the exact former resource URL without credentials and confirm it is no
-longer retrievable.
+Before it deletes anything, `--purge` refuses when no major release is
+recorded after the removal, when another dataset's folder on dCache lies in or
+around this one, and when a recorded entry lies in a cache your account cannot
+write; it names the dataset and the cache. Whoever purges therefore needs
+write access to every cache that holds the dataset, the restricted cache of
+its group included.
 
-Tell affected package maintainers the withdrawn identifiers, reason, last usable
-revision, and replacement. Ask them to update their collections or document why
-an old pin is retained. Existing copies remain on users' machines; deletion does
-not notify users or correct their previous results.
+Then it deletes the links and copies recorded in the cluster's public cache
+and in the restricted caches, purges the dataset's folders on dCache, which
+has no trash area, and deletes the dataset's directory except its
+`status.yaml`. That file stays as a tombstone, so `catalog add` refuses the
+name for other bytes. Entries nobody recorded, such as downloads in the
+cluster's public cache or links made without `--catalog-root`, are reported,
+not deleted. Public caches on other machines are never touched. Commit and
+merge the deletion.
 
-See [Publish the catalogue](publish-the-catalogue.md) and
-[Report a problem](../data-users/troubleshoot-catalogue.md#report-a-problem).
+A purge deletes withdrawn datasets only. Earlier revisions of a dataset that
+is still in the catalogue stay as long as the dataset does. If the bytes must
+go at once, for example because a licence forbids further distribution, make
+an unplanned major release.
+
+## 3. Check and tell people
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://hifis-storage.desy.de/Helmholtz/FZJ-ICE2/ethos-data/<remote prefix>/<one file>
+ethos-data --catalog /shared/ethos/catalogue/datacatalog.json ls | grep <name>
+```
+
+Expect `404` and no listing. Then tell the maintainers of every package whose
+collections name the dataset: the removed name, the reason, the last release
+that describes it, and the replacement. `catalog remove` drafted that notice
+in step 1. Releases before the major release still describe the dataset, but
+its bytes are gone, and copies on users' own machines remain; removal
+notifies nobody by itself and corrects no earlier result.
+

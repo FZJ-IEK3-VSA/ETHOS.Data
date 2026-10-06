@@ -84,13 +84,13 @@ inventory in.
 
 A large dataset may go further. Its `datapackage.json` carries an `ethos:shards`
 index instead of a `resources` array, and the inventory is split across
-`manifests/<prefix>.json` files, one per directory prefix of
+`shards/<prefix>.json` files, one per directory prefix of
 `ethos:shard_depth` segments:
 
 ```
 datasets/era5/
 |-- datapackage.json          # shard index only, no resources
-`-- manifests/
+`-- shards/
     |-- _root.json
     |-- 4/6/5.json            # shard_depth: 3
     `-- 4/6/6.json
@@ -127,7 +127,7 @@ Two cases the general rule cannot express, handled explicitly:
 
 ## Catalogue caching
 
-A descriptor fetched from a version-pinned URL is written to disk and reused
+A descriptor fetched from a URL naming a release tag is written to disk and reused
 forever — its contents cannot change, so there is nothing to invalidate. Writes
 go through a temporary file and a rename, because two processes racing must
 never see a half-written file.
@@ -143,5 +143,5 @@ without the header `urllib` sends `Accept-Encoding: identity`.
 ## See also
 
 - [File formats](../reference/schemas.md) — every key, exhaustively.
-- [Describe a dataset](../how-to/catalogue-maintainers/describe-a-dataset.md) — writing one.
+- [Add a dataset](../how-to/catalogue-maintainers/add-a-dataset.md) — writing one.
 - [API: catalogue and collections](../reference/api/catalog.md).

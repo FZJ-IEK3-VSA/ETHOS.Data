@@ -34,12 +34,11 @@ used, exactly as ``ethos-data link`` uses it:
 
     ethos-data materialize licensed-example           # from its source_dir
 
-That is the restricted-data workflow in one command. Licensed data belongs in
-the restricted cache as a **real, owned copy** rather than a link -- which is
-why ``ethos-data link --all`` skips it -- so there is no link for a copy to
-follow and never was one. The entry still goes wherever the access class says,
-and ``--all`` still walks the public cache only: copying licensed bytes is
-subject to that installation's terms, and is something somebody names on purpose.
+The entry goes where :func:`ethos_data.access.entry_for` puts it: into the
+cache the global ``--root`` names, else a public dataset's into the public cache
+and a restricted dataset's into the only listed restricted cache. ``--all``
+walks the public cache only: copying restricted bytes is subject to that
+installation's terms, and is something somebody names on purpose.
 
 Only files the catalogue describes are copied. A cache is not a backup of
 somebody's project directory -- it holds the inventory the manifest lists, and
@@ -49,6 +48,11 @@ source of truth.
 Every copy is checksummed against the manifest before it is put in place, and
 the old link target is recorded in ``.ethos-data-materialized.json`` so that a copy
 can always be traced back to where it came from.
+
+A dataset with unread terms is not copied: the guard of the ``materialize``
+step. Given ``--catalog-root``, the command line takes each copy as a step of
+the dataset in that checkout, through :mod:`ethos_data.maintain.namespace`;
+this module records nothing.
 """
 
 from __future__ import annotations
@@ -57,19 +61,23 @@ import json
 import os
 import shutil
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .access import entry_for
-from .catalogs import Catalog, Resource, UnknownDataset
+from .access import cache_entries, entry_for
+from .catalogs import Catalog
 from .config import Roots, current_user
-from .linking import LinkError, source_dir_for
-from .verify import sha256_of, _expected_digest
+from .errors import AccessError, LinkError, UnknownDataset
+from .formats import keys as k
+from .linking import raise_if_refused
+from .model import digest, names
+from .model.resource import Resource
 
 __all__ = ["MaterializeReport", "materialize", "plan_materialize", "PROVENANCE_FILE"]
 
 #: Written into a materialised directory so the copy can be traced back.
-PROVENANCE_FILE = ".ethos-data-materialized.json"
+PROVENANCE_FILE = k.MATERIALIZED_RECORD_FILE
 
 #: Refuse if the copy would leave less than this fraction of the filesystem
 #: free. A cache that fills the disk it lives on takes everyone else down too.
@@ -99,29 +107,59 @@ class MaterializeReport:
         return f"{head}  {self.detail}" if self.detail else head
 
 
+def linked_entries(roots: Roots, cache: str | Path | None = None) -> list[str]:
+    """The entries ``materialize --all`` converts: every link in a public cache.
+
+    The public cache, or the one ``cache`` names. A listed restricted cache is
+    refused: copying restricted bytes is something somebody names dataset by
+    dataset. A cache that does not exist holds nothing to convert.
+    """
+    walked = Path(cache).expanduser() if cache is not None else roots.public
+    if roots.restricted_cache(walked) is not None:
+        raise AccessError(
+            f"{walked} is a restricted cache; --all walks a public cache only. "
+            "Name each restricted dataset to copy."
+        )
+    return sorted(
+        {
+            names.of_entry(entry)[0]
+            for entry, path in cache_entries(walked)
+            if path.is_symlink()
+        }
+    )
+
+
 def plan_materialize(
     catalog: Catalog,
     names: list[str],
-    roots: "Roots | str | Path | None" = None,
-    force: bool = False,
+    roots: Roots | None = None,
     source: "str | Path | None" = None,
-    catalog_root: "str | Path | None" = None,
+    source_dir: Callable[[str], Path] | None = None,
+    cache: str | Path | None = None,
 ) -> list[MaterializeReport]:
     """Classify each dataset without copying anything.
+
+    A dataset with unread terms cannot be copied (the guard of the
+    ``materialize`` step).
 
     ``source`` is a directory to copy from in place of whatever the entry points
     at. It also makes an *absent* entry copyable, which is the only way to fill
     one for a dataset that has no ``source_dir`` left to be linked from.
+    ``source_dir(name)`` answers where an absent entry's build input is; the
+    command line reads it from a source checkout, and without it an absent
+    entry needs ``source``.
+    ``cache`` is the cache that holds the entries, as the global ``--root``
+    names it; see :func:`ethos_data.access.entry_for`.
 
     Note that this pulls the full inventory of every dataset named, including
     every shard of a sharded one -- that is what "how many bytes is this" costs.
     """
-    roots = Roots.coerce(roots)
+    roots = roots if roots is not None else catalog.settings.roots
     given = Path(source).expanduser() if source is not None else None
     reports = []
     for name in sorted(set(names)):
         try:
-            entry = entry_for(catalog, roots, name)
+            entry = entry_for(catalog, roots, name, cache)
         except UnknownDataset:
             # A cache directory accumulates links nobody remembers making, and
             # ``--all`` walks the directory rather than the catalogue. One
@@ -137,8 +175,18 @@ def plan_materialize(
                 )
             )
             continue
-        except ValueError as error:
-            reports.append(MaterializeReport(name, "cannot", str(error)))
+        except AccessError as error:
+            reports.append(MaterializeReport(name, "cannot", error.message))
+            continue
+
+        try:
+            raise_if_refused(catalog, name, "materialize", LinkError)
+        except LinkError as error:
+            reports.append(
+                MaterializeReport(
+                    name, "cannot", error.message.splitlines()[0], entry=entry
+                )
+            )
             continue
 
         was_link = entry.is_symlink()
@@ -147,25 +195,14 @@ def plan_materialize(
             # A real directory is data the cache already owns, and ``--from`` does
             # not change that: "copy these bytes in" must never be a way to write
             # over a verified copy that is already there.
-            if force:
-                reports.append(
-                    MaterializeReport(
-                        name,
-                        "already real",
-                        f"{entry} is a real directory; --force re-copies "
-                        "nothing, it is already owned",
-                        entry=entry,
-                    )
+            reports.append(
+                MaterializeReport(
+                    name,
+                    "already real",
+                    f"{entry} is already a real directory",
+                    entry=entry,
                 )
-            else:
-                reports.append(
-                    MaterializeReport(
-                        name,
-                        "already real",
-                        f"{entry} is already a real directory",
-                        entry=entry,
-                    )
-                )
+            )
             continue
 
         if given is not None:
@@ -185,12 +222,11 @@ def plan_materialize(
             target = given
         elif not was_link:
             # Nothing in the cache and no --from: the source catalogue knows
-            # where the bytes are. This is the whole workflow for restricted
-            # data, which belongs in the restricted cache as a real, owned copy
-            # rather than a link -- so there is no link here for a copy to
-            # follow, and never was one.
+            # where the bytes are, when the caller can ask it.
             try:
-                target = source_dir_for(name, catalog_root)
+                if source_dir is None:
+                    raise LinkError(f"no source_dir for {name!r}")
+                target = source_dir(name)
             except LinkError:
                 reports.append(
                     MaterializeReport(
@@ -257,13 +293,13 @@ def _check_space(root: Path, needed: int) -> None:
 def materialize(
     catalog: Catalog,
     names: list[str],
-    roots: "Roots | str | Path | None" = None,
-    force: bool = False,
+    roots: Roots | None = None,
     verify_hashes: bool = True,
     dry_run: bool = False,
     on_file=None,
     source: "str | Path | None" = None,
-    catalog_root: "str | Path | None" = None,
+    source_dir: Callable[[str], Path] | None = None,
+    cache: str | Path | None = None,
 ) -> list[MaterializeReport]:
     """Replace symbolic-link cache entries with real, verified copies.
 
@@ -275,9 +311,14 @@ def materialize(
     target, and applies to every name given -- which is why the command line
     takes it with exactly one.
     """
-    roots = Roots.coerce(roots)
+    roots = roots if roots is not None else catalog.settings.roots
     planned = plan_materialize(
-        catalog, names, roots, force=force, source=source, catalog_root=catalog_root
+        catalog,
+        names,
+        roots,
+        source=source,
+        source_dir=source_dir,
+        cache=cache,
     )
     if dry_run:
         return planned
@@ -414,12 +455,12 @@ def _verify_copy(path: Path, resource: Resource) -> str:
     size = path.stat().st_size
     if resource.bytes and size != resource.bytes:
         return f"expected {resource.bytes:,} bytes, copied {size:,}"
-    digest = _expected_digest(resource.hash or "")
-    if not digest:
+    wanted = digest.expected(resource.hash)
+    if wanted is None:
         return ""
-    found = sha256_of(path)
-    if found != digest:
+    found = digest.of_file(path)
+    if found != wanted:
         return (
-            f"checksum {found[:16]}... does not match the manifest's {digest[:16]}..."
+            f"checksum {found[:16]}... does not match the manifest's {wanted[:16]}..."
         )
     return ""

@@ -7,10 +7,13 @@ key. The rest is here for completeness.
 
 | Topic | Contents |
 |-------|----------|
-| [Catalogue and collections](catalog.md) | `Catalog`, `Dataset`, `Resource`, `Collections`, `load_catalog`, `load_collections`, `catalog_pin`; the errors `CatalogUnavailable`, `UnknownDataset`, `IncompleteCatalog`, `CollectionError`, `UnknownCollection` |
-| [Configuration and access](configuration.md) | cache roots, scopes, provenance, `Location`, `locate`, `AccessError` |
-| [Integrity and staging](integrity.md) | `verify`, `repair`, `Finding`, `materialize`, the staging root |
+| [Catalogue and collections](catalog.md) | `Catalog`, `Dataset`, `Resource`, `Collections`, `load_catalog`, `load_collections`; the errors `CatalogUnavailable`, `CatalogVersionError`, `UnknownDataset`, `IncompleteCatalog`, `CollectionError`, `UnknownCollection` |
+| [Configuration and access](configuration.md) | the settings snapshot, cache roots, provenance, `Location`, `locate`, `AccessError` |
+| [Integrity and staging](integrity.md) | `verify`, `repair`, `Finding`, `run_selftest`, `materialize`, the staging root |
+| [Shared model](model.md) | `ethos_data.formats` — the file formats, their schemas, templates and reference tables; `ethos_data.model` — digests, dataset names and families, releases, the lifecycle, resource records |
 | [Maintainer tooling](maintain.md) | `ethos_data.maintain` — building, publishing, uploading |
+| [Adapters](adapters.md) | `ethos_data.adapters` — dCache, downloads and git behind ports, each with a fake |
+| [Errors](errors.md) | `EthosDataError` and every refusal the library raises, with the exit status the command line gives each |
 
 Consumers usually need no `ethos_data.maintain` imports. The public API includes
 local download, cache, staging, and configuration operations as well as reads.
@@ -27,11 +30,12 @@ script: it builds the handle only for the commands that need one. A **key**
 (`<dataset>/<path>`) names one dataset, folder or file; `catalog()` loads the
 configured or public catalogue into a [`Catalog`](catalog.md#catalogue) whose
 `path()` and `resources()` answer by key, and a handle's `.catalog` does the
-same for the catalogue the file pins — so `fetch()` and `.catalog.path()` on
+same for the catalogue it reads within the file's release bounds — so
+`fetch()` and `.catalog.path()` on
 one handle read the same catalogue. The one-call forms `fetch()`, `paths()`
 and `resolve()` take the file's path and build a handle each time. A catalogue
 index that cannot be read raises
-[`CatalogUnavailable`][ethos_data.catalogs.CatalogUnavailable].
+[`CatalogUnavailable`][ethos_data.errors.CatalogUnavailable].
 
 ::: ethos_data
     options:
@@ -47,11 +51,9 @@ index that cannot be read raises
       heading_level: 3
 
 A collection defined in a way that cannot be resolved raises
-[`CollectionError`][ethos_data.selection.CollectionError]; a name the file does
-not define raises [`UnknownCollection`][ethos_data.selection.UnknownCollection];
-a command run where no collections file can be found raises
-[`CollectionsNotFound`][ethos_data.selection.CollectionsNotFound]. All are
-documented with [`Collections`](catalog.md#collections).
+[`CollectionError`][ethos_data.errors.CollectionError]; a name the file does
+not define raises [`UnknownCollection`][ethos_data.errors.UnknownCollection].
+Both are documented with the other [errors](errors.md).
 
 ## Downloading
 
@@ -59,11 +61,17 @@ The module behind `fetch`. It is called `retrieval`, not `fetch`, so that it
 can never shadow the function above — the same reason `selection` is not called
 `collections`.
 
-`fetch()` and `paths()` take `skip_unavailable=`, forwarded to `download()`:
-under it, a `paths` handle whose data this machine cannot reach is left out
-of the result's `.named`, recorded in `NamedPaths.omitted` and named in a
-`UserWarning`, and asking the mapping for it raises a `KeyError` that says it
-was left out here rather than never defined.
+Every input a collection names is required: `fetch()`, `paths()` and
+`download()` raise [`AccessError`][ethos_data.errors.AccessError] for restricted
+data this account cannot read, before anything is downloaded, naming the
+dataset, how to obtain it as far as the catalogue records that, and the
+commands that register a copy. `plan()` and `verify()` only describe, and
+report such data as not available here, with the state of every listed
+restricted cache; they report a file with no publication URL to download it
+from the same way. A file that cannot be downloaded, or whose bytes do not
+match the recorded hash, raises
+[`DownloadError`][ethos_data.errors.DownloadError], an `AccessError` that
+names the URL.
 
 ::: ethos_data.retrieval
     options:
@@ -72,8 +80,6 @@ was left out here rather than never defined.
         - NamedPaths
         - download
         - plan
-        - cache_dir
-        - local_path
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3

@@ -1,0 +1,51 @@
+{
+  "$defs": {
+    "StagingEntry": {
+      "additionalProperties": true,
+      "description": "Who staged a directory under a name, and why.",
+      "properties": {
+        "target": {
+          "description": "The directory the entry links to or was copied from.",
+          "title": "Target",
+          "type": "string"
+        },
+        "note": {
+          "default": "",
+          "description": "What the entry is for.",
+          "title": "Note",
+          "type": "string"
+        },
+        "added": {
+          "default": "",
+          "description": "When it was staged, in local time with its UTC offset.",
+          "title": "Added",
+          "type": "string"
+        },
+        "added_by": {
+          "default": "",
+          "description": "The account that staged it.",
+          "title": "Added By",
+          "type": "string"
+        },
+        "copied": {
+          "default": false,
+          "description": "A copy the staging root owns, rather than a link.",
+          "title": "Copied",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "title": "StagingEntry",
+      "type": "object"
+    }
+  },
+  "additionalProperties": {
+    "$ref": "#/$defs/StagingEntry"
+  },
+  "description": "Who staged which directory, and why.",
+  "title": ".ethos-data-staging.json",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

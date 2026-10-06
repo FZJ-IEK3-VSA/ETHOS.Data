@@ -1,17 +1,72 @@
-\begin{tikzpicture}
-\node[actor, text width=25mm, minimum height=18mm] (root) at (0,0) {Quality\\goals};
-\node[artifact, text width=40mm, minimum height=14mm] (trace) at (5,4) {Traceability\\and integrity};
-\node[artifact, text width=40mm, minimum height=14mm] (control) at (5,2) {Controlled access\\and publication};
-\node[artifact, text width=40mm, minimum height=14mm] (reuse) at (5,0) {Reuse\\and availability};
-\node[artifact, text width=40mm, minimum height=14mm] (maint) at (5,-2) {Safe maintenance};
-\node[artifact, text width=40mm, minimum height=14mm] (scale) at (5,-4) {Metadata scalability};
-\node[artifact, text width=57mm, minimum height=14mm] (traceq) at (12,4) {Q2: hash checks; Q10: pinned inputs\\Q9: explicit local divergence};
-\node[artifact, text width=57mm, minimum height=14mm] (controlq) at (12,2) {Q3: restricted access fails safely\\Q4: internal metadata stripped};
-\node[artifact, text width=57mm, minimum height=14mm] (reuseq) at (12,0) {Q1: shared file reuse\\Q8: required offline tests};
-\node[artifact, text width=57mm, minimum height=14mm] (maintq) at (12,-2) {Q6: batch preflight before transfer\\Q7: manifest-limited upload};
-\node[artifact, text width=57mm, minimum height=14mm] (scaleq) at (12,-4) {Q5: inventories stay lazy};
-\foreach \n in {trace,control,reuse,maint,scale}{
-  \draw[link] (root.east) -- ++(8mm,0) |- (\n.west);
-  \draw[link] (\n.east) -- (\n q.west);
-}
+% Quality tree: the six quality goals of section 1, in priority order, and
+% the scenarios of section 10 that make each one checkable. One leaf per
+% scenario; a leaf belongs to exactly one goal.
+%
+% Leaves are placed on a 7 mm pitch with a wider gap between goals; each goal
+% sits level with the middle of its leaves, and the root level with the
+% middle of the goals. Coordinates are millimetres; the picture is 163 wide.
+\begin{tikzpicture}[
+  x=1mm, y=1mm,
+  root/.style={c4system, text width=11mm, minimum height=14mm,
+    font=\sffamily\small\bfseries},
+  goal/.style={c4container, text width=26.3mm, minimum height=9mm,
+    inner sep=1.4mm, font=\sffamily\footnotesize\bfseries},
+  leaf/.style={c4component, text width=104.5mm, minimum height=5.6mm,
+    inner sep=1.1mm, align=left, font=\sffamily\footnotesize,
+    anchor=west},
+  tie/.style={link},
+]
+\newcommand{\q}[1]{\makebox[8mm][l]{\bfseries #1}}
+
+% ---- leaves --------------------------------------------------------------
+% 1 Traceable, repeatable inputs
+\node[leaf] (q2)  at (56.3,0)      {\q{Q2}A corrupt cached file is refused and downloaded again};
+\node[leaf] (q9)  at (56.3,-7)     {\q{Q9}An unrecorded change in a bundle is refused, or read with \texttt{allow\_modified}};
+\node[leaf] (q10) at (56.3,-14)    {\q{Q10}A rerun on an older release of this major reads the same keys and objects};
+\node[leaf] (q17) at (56.3,-21)    {\q{Q17}\texttt{fetch=False} contacts no store and names each missing file};
+\node[leaf] (q21) at (56.3,-28)    {\q{Q21}A handle keeps the catalogue and roots it was built with};
+% 2 Controlled access and publication
+\node[leaf] (q3)  at (56.3,-38.5)  {\q{Q3}Restricted data without a readable copy is refused before any download};
+\node[leaf] (q4)  at (56.3,-45.5)  {\q{Q4}The public view leaves out hidden datasets and unpublished keys};
+\node[leaf] (q13) at (56.3,-52.5)  {\q{Q13}A purge deletes nothing before a major release after the removal};
+\node[leaf] (q23) at (56.3,-59.5)  {\q{Q23}An account that lists no restricted cache runs collections of public data};
+% 3 Reuse and availability
+\node[leaf] (q1)  at (56.3,-70)    {\q{Q1}Two packages reuse one download in the same public cache};
+\node[leaf] (q8)  at (56.3,-77)    {\q{Q8}Required tests run offline from the package's bundles};
+\node[leaf] (q22) at (56.3,-84)    {\q{Q22}A bundle ahead of the catalogue is read, with one warning per bundle};
+% 4 Safe maintenance and diagnosis
+\node[leaf] (q6)  at (56.3,-94.5)  {\q{Q6}One failing dataset stops an upload batch before any transfer};
+\node[leaf] (q7)  at (56.3,-101.5) {\q{Q7}An upload transfers only the files of the inventory};
+\node[leaf] (q11) at (56.3,-108.5) {\q{Q11}A step the dataset's state does not allow is refused};
+\node[leaf] (q12) at (56.3,-115.5) {\q{Q12}A rerun finishes an interrupted release, removal or purge};
+\node[leaf] (q18) at (56.3,-122.5) {\q{Q18}The report holds no token, credential, home path or account name};
+\node[leaf] (q19) at (56.3,-129.5) {\q{Q19}A dry run changes no file, git ref or store object};
+% 5 Scalable metadata access
+\node[leaf] (q5)  at (56.3,-140)   {\q{Q5}A request reads only the descriptors and shards it needs};
+% 6 Changeable code
+\node[leaf] (q14) at (56.3,-150.5) {\q{Q14}A new key changes validation, schema and reference together};
+\node[leaf] (q15) at (56.3,-157.5) {\q{Q15}An import from a higher layer fails a test};
+\node[leaf] (q16) at (56.3,-164.5) {\q{Q16}Readers and maintainers refuse a missing shard with one error};
+\node[leaf] (q20) at (56.3,-171.5) {\q{Q20}Data access importing catalogue maintenance fails a test};
+
+% ---- goals, in priority order -----------------------------------------------
+\node[goal] (g1) at (35.55,-14)  {1\enspace Traceable,\\repeatable inputs};
+\node[goal] (g2) at (35.55,-49)  {2\enspace Controlled access\\and publication};
+\node[goal] (g3) at (35.55,-77)  {3\enspace Reuse and\\availability};
+\node[goal] (g4) at (35.55,-112) {4\enspace Safe maintenance\\and diagnosis};
+\node[goal] (g5) at (35.55,-140) {5\enspace Scalable\\metadata access};
+\node[goal] (g6) at (35.55,-161) {6\enspace Changeable code};
+
+\node[root] (root) at (7.1,-87.5) {Quality\\goals};
+
+% ---- ties ----------------------------------------------------------------------
+\foreach \g in {g1,g2,g3,g4,g5,g6}
+  \draw[tie] (root.east) -- (17.6,0 |- root.east) |- (\g.west);
+\foreach \g/\leaves in {g1/{q2,q9,q10,q17,q21}, g2/{q3,q4,q13,q23}, g3/{q1,q8,q22},
+                        g4/{q6,q7,q11,q12,q18,q19}, g5/{q5}, g6/{q14,q15,q16,q20}}
+  \foreach \l in \leaves
+    \draw[tie] (\g.east) -- (53.2,0 |- \g.east) |- (\l.west);
+
+\node[note, anchor=north west, align=left] at (0,-178)
+  {Goals in priority order; each leaf is a quality scenario, numbered as in the scenario table.};
 \end{tikzpicture}

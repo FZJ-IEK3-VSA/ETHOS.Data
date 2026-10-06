@@ -42,11 +42,11 @@ def _write(path: Path, text: str) -> dict:
 def _no_network(*args, **kwargs):
     """Stands in for ``urllib.request.urlopen`` where a test must stay offline.
 
-    Nothing here configures a catalogue, so the only way a command could reach
-    the network is by falling back to the public one instead of the pin.
+    The catalogue is named in the environment here, so the only way a command
+    could reach the network is by falling back to the public one instead.
     """
     pytest.fail(
-        "the public catalogue was contacted; the pinned one should have been read"
+        "the public catalogue was contacted; the configured one should have been read"
     )
 
 
@@ -79,14 +79,13 @@ def world(tmp_path, monkeypatch):
     """A catalogue whose every file is already in the cache, so nothing downloads.
 
     The developer's own configuration must never leak in: a user-level
-    ``catalog`` override would replace every pin these tests write.
+    ``catalog`` setting would replace the catalogue these tests name.
     """
     monkeypatch.setattr(config, "load_config", lambda: ({}, {}))
     for variable in (
         "ETHOS_DATA_CATALOG",
         "ETHOS_STAGING_DIR",
-        "ETHOS_RESTRICTED_DIR",
-        "ETHOS_SKIP_UNAVAILABLE",
+        "ETHOS_RESTRICTED_DIRS",
         "ETHOS_PUBLICATION_URL",
     ):
         monkeypatch.delenv(variable, raising=False)
@@ -94,7 +93,14 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setenv("ETHOS_DATA_DIR", str(cache))
 
     catalogue = tmp_path / "catalogue"
-    entries = [{"name": "reskit-test-data", "ethos:namespace": True}]
+    entries = [
+        {
+            "name": "reskit-test-data",
+            "ethos:namespace": True,
+            "ethos:total_bytes": 0,
+            "ethos:file_count": 0,
+        }
+    ]
     for name, files in LAYOUT.items():
         resources = []
         for relative, text in files.items():
@@ -109,11 +115,15 @@ def world(tmp_path, monkeypatch):
         package = catalogue / "datasets" / name / "datapackage.json"
         package.parent.mkdir(parents=True, exist_ok=True)
         package.write_text(json.dumps({"name": name, "resources": resources}))
+        # The row the build writes: totals and remote prefix cost no descriptor.
         entries.append(
             {
                 "name": name,
                 "path": f"datasets/{name}/datapackage.json",
                 "ethos:license_status": "resolved",
+                "ethos:remote_prefix": name,
+                "ethos:total_bytes": sum(r["bytes"] for r in resources),
+                "ethos:file_count": len(resources),
             }
         )
     # Licensed data with no restricted cache on this machine: the one way a
@@ -124,6 +134,8 @@ def world(tmp_path, monkeypatch):
             "path": "datasets/licensed/datapackage.json",
             "ethos:access": "restricted",
             "ethos:license_status": "resolved",
+            "ethos:total_bytes": 3,
+            "ethos:file_count": 1,
         }
     )
     licensed = catalogue / "datasets" / "licensed" / "datapackage.json"
@@ -157,8 +169,12 @@ def world(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def define(world):
-    """Write a collections file pinned to the synthetic catalogue; returns its path."""
+def define(world, monkeypatch):
+    """Write a collections file; returns its path.
+
+    The catalogue it reads, the synthetic one unless ``catalog`` names
+    another, is named by ``$ETHOS_DATA_CATALOG``, as a user's settings would.
+    """
     tmp_path, _, index = world
 
     def write(
@@ -169,10 +185,10 @@ def define(world):
         collections = "".join(
             textwrap.dedent(body).strip("\n") + "\n" for body in bodies
         )
+        monkeypatch.setenv("ETHOS_DATA_CATALOG", str(catalog))
         path = tmp_path / name
         path.write_text(
-            f"catalog: {catalog.as_posix()}\ncollections:\n"
-            + textwrap.indent(collections, "  "),
+            "collections:\n" + textwrap.indent(collections, "  "),
             encoding="utf-8",
         )
         return path
@@ -315,10 +331,10 @@ class TestVariants:
         assert loaded.variants("onshore_wind") == ("test", "full")
         assert loaded.variants("landcover") == ()
         assert (
-            loaded.definition("onshore_wind", test=True)["paths"]["era5"]
+            loaded.definition("onshore_wind", test=True).paths["era5"]
             == "reskit-test-data/era5"
         )
-        assert loaded.definition("onshore_wind")["paths"]["era5"] == "era5"
+        assert loaded.definition("onshore_wind").paths["era5"] == "era5"
         # A plain collection's definition is the whole thing, title included.
         assert loaded.definition("landcover", test=True) is loaded.describe("landcover")
 
@@ -332,7 +348,6 @@ class TestVariants:
         assert selection.variant_name(True) == "test"
         assert selection.variant_name(False) == "full"
         assert selection.PATHS_KEY == "paths"
-        assert selection.SELECTION_KEYS == ("extends", "include", "paths")
 
     def test_the_test_flag_propagates_through_extends(self, define):
         """A test selection is built from its parents' test selections; a plain
@@ -378,14 +393,15 @@ class TestVariants:
         """The one promise test and full make is interchangeability; a handle
         present in only one breaks it on the machine that has the real data."""
         file = define(LOPSIDED)
-        with pytest.raises(
-            ethos_data.CollectionError,
-            match="only in test: gwa_50m; only in full: gwa_200m",
-        ):
+        with pytest.raises(ethos_data.CollectionError) as caught:
             ethos_data.resolve("lopsided", file)
+        assert str(caught.value) == (
+            "collection 'lopsided': the named path 'gwa_50m' is in its test"
+            " variant only, and the named path 'gwa_200m' is in its full variant only"
+        )
         # Checked whichever variant is asked for: the mistake is in the file, not the call.
         with pytest.raises(
-            ethos_data.CollectionError, match="must name the same paths"
+            ethos_data.CollectionError, match="'gwa_200m' is in its full variant only"
         ):
             ethos_data.resolve("lopsided", file, test=True)
         with pytest.raises(ethos_data.CollectionError):
@@ -407,14 +423,14 @@ class TestVariants:
               extends: [onshore_wind, lopsided]
             """,
         )
-        with pytest.raises(
-            ethos_data.CollectionError,
-            match="collection 'lopsided': its test and full variants must name",
-        ):
+        with pytest.raises(ethos_data.CollectionError) as caught:
             ethos_data.resolve("all", file)
+        assert str(caught.value) == (
+            "collection 'all' extends 'lopsided', whose named path 'gwa_50m' is"
+            " in its test variant only, and whose named path 'gwa_200m' is in its full variant only"
+        )
         with pytest.raises(
-            ethos_data.CollectionError,
-            match="only in test: gwa_50m; only in full: gwa_200m",
+            ethos_data.CollectionError, match="collection 'all' extends 'lopsided'"
         ):
             ethos_data.fetch("all", file, progressbar=False, test=True)
         assert download_spy == []
@@ -423,13 +439,10 @@ class TestVariants:
             r.key for r in ethos_data.resolve("onshore_wind", file, test=True)
         ] == TEST_KEYS
 
-    def test_a_variant_that_cannot_be_resolved_is_reported_as_a_failed_comparison(
-        self, define
-    ):
-        """Comparing the variants means resolving both. When the *other* one
-        fails, its own message gives advice ("pass test=True") that contradicts
-        what the caller typed; the wrapper says what was being compared and
-        keeps the inner diagnosis as the cause."""
+    def test_a_variant_missing_through_extends_names_both_collections(self, define):
+        """Comparing the variants means resolving both, so a parent's missing
+        variant stops the child whichever variant was asked for, and the
+        message says where it was asked for and where the variant is missing."""
         file = define("""
             full_only:
               full:
@@ -445,16 +458,11 @@ class TestVariants:
                 extends: [full_only]
             """)
         # The full variant asked for here is fine on its own; the test one is not.
-        with pytest.raises(ethos_data.CollectionError) as caught:
-            ethos_data.resolve("wrapped", file)
-        assert str(caught.value).startswith(
-            "collection 'wrapped': its 'test' variant cannot be resolved, so its test and "
-            "full variants cannot be compared: collection 'full_only' has no 'test' variant"
-        )
-        assert isinstance(caught.value.__cause__, ethos_data.CollectionError)
-        # Asked for the test variant: the same wrapper, not a bare "ask for the full data".
-        with pytest.raises(ethos_data.CollectionError, match="cannot be compared"):
-            ethos_data.resolve("wrapped", file, test=True)
+        message = "collection 'wrapped' extends 'full_only', which has no test variant"
+        for test in (False, True):
+            with pytest.raises(ethos_data.CollectionError) as caught:
+                ethos_data.resolve("wrapped", file, test=test)
+            assert str(caught.value) == message
         # The parent alone is fine: nothing to compare.
         assert len(ethos_data.resolve("full_only", file)) == 1
 
@@ -476,9 +484,7 @@ class TestVariants:
         ):
             ethos_data.resolve("mixed", file)
 
-    def test_asking_for_a_variant_that_is_not_defined_says_how_to_get_the_other(
-        self, define
-    ):
+    def test_asking_for_a_variant_that_is_not_defined_says_so(self, define):
         """No silent fall-back: the other variant would download the full inputs
         under a test, or run a real calculation on the fixtures."""
         file = define("""
@@ -491,12 +497,12 @@ class TestVariants:
                 include:
                   - dataset: landcover
             """)
-        with pytest.raises(
-            ethos_data.CollectionError, match=r"test=True \(or --test\)"
-        ):
+        with pytest.raises(ethos_data.CollectionError) as caught:
             ethos_data.resolve("test_only", file)
-        with pytest.raises(ethos_data.CollectionError, match="no small test selection"):
+        assert str(caught.value) == "collection 'test_only' has no full variant"
+        with pytest.raises(ethos_data.CollectionError) as caught:
             ethos_data.resolve("full_only", file, test=True)
+        assert str(caught.value) == "collection 'full_only' has no test variant"
         # Each is fine when asked for the variant it does define.
         assert len(ethos_data.resolve("test_only", file, test=True)) == 3
         assert len(ethos_data.resolve("full_only", file)) == 3
@@ -821,11 +827,12 @@ class TestValidationBeforeDownload:
               paths:
                 thing: {key}
             """)
-        with pytest.raises(
-            ethos_data.CollectionError, match="not in the catalogue"
-        ) as caught:
+        with pytest.raises(KeyError) as caught:
             ethos_data.fetch("lost", file, progressbar=False)
-        assert f"paths.thing names {key!r}" in str(caught.value)
+        assert caught.value.message.startswith("collection 'lost': ")
+        assert "cannot be found" in caught.value.message
+        if key.split("/")[0] in ("nowhere", "reskit-test-data"):
+            assert isinstance(caught.value, ethos_data.UnknownDataset)
         assert download_spy == []
 
     def test_validation_passes_before_the_download_and_then_downloads_once(
@@ -833,105 +840,6 @@ class TestValidationBeforeDownload:
     ):
         ethos_data.paths("onshore_wind", define(ONSHORE), progressbar=False, test=True)
         assert download_spy == [TEST_KEYS]
-
-    def test_unreachable_data_is_an_access_error_unless_the_caller_said_to_skip_it(
-        self, define, monkeypatch
-    ):
-        """Having no restricted cache is a legitimate state, not a broken one --
-        but a result with a hole in it is worse than a command that stops and
-        says so. locate() raises before any transfer; the explicit keyword beats
-        the configured answer in both directions."""
-        file = define(LICENSED)
-        with pytest.raises(ethos_data.AccessError) as caught:
-            ethos_data.paths("with_licensed", file, progressbar=False)
-        message = str(caught.value)
-        assert message.startswith(
-            "dataset 'licensed' is restricted and is never downloaded."
-        )
-        assert "--skip-unavailable" in message
-        with pytest.raises(ethos_data.AccessError):
-            ethos_data.fetch(
-                "with_licensed", file, progressbar=False, skip_unavailable=False
-            )
-        # skip_unavailable=False is forwarded as such, over a configured True.
-        monkeypatch.setenv("ETHOS_SKIP_UNAVAILABLE", "true")
-        with pytest.raises(ethos_data.AccessError):
-            ethos_data.fetch(
-                "with_licensed", file, progressbar=False, skip_unavailable=False
-            )
-        # ...and None takes the configured answer, as download() always has.
-        with pytest.warns(UserWarning):
-            assert ethos_data.fetch(
-                "with_licensed", file, progressbar=False
-            ).named.omitted == ["secret"]
-
-    def test_under_skip_unavailable_an_unreachable_handle_is_left_out_and_named(
-        self, world, define
-    ):
-        """The same contract the files themselves get: absent from the mapping,
-        never a path to nothing -- and named in a warning, so a workflow hears
-        which handle went missing rather than failing on ``inputs["secret"]``
-        three frames deep in a raster reader."""
-        _, cache, _ = world
-        file = define(LICENSED)
-        with pytest.warns(UserWarning) as record:
-            files = ethos_data.fetch(
-                "with_licensed", file, progressbar=False, skip_unavailable=True
-            )
-        messages = [str(warning.message) for warning in record]
-        assert any(
-            m.startswith("1 file(s) from licensed are not available on this machine")
-            for m in messages
-        )
-        assert (
-            "collection 'with_licensed': the named path(s) secret are not available on this "
-            "machine and have been left out -- the mapping has no entry for them."
-        ) in messages
-        assert sorted(files) == ["landcover/clc.tif"]
-        assert files.named == {"clc": cache / "landcover/clc.tif"}
-        assert files.named.omitted == ["secret"]
-
-        with pytest.warns(UserWarning) as record:
-            inputs = ethos_data.paths(
-                "with_licensed", file, progressbar=False, skip_unavailable=True
-            )
-        assert any("named path(s) secret" in str(w.message) for w in record)
-        assert inputs == {"clc": cache / "landcover/clc.tif"}
-        assert inputs.omitted == ["secret"]
-        with pytest.raises(KeyError) as caught:
-            inputs["secret"]
-        message = caught.value.args[0]
-        assert (
-            "named path 'secret' in collection 'with_licensed' is not available on this machine"
-            in message
-        )
-        assert "left out under skip_unavailable" in message
-        assert "available: clc" in message
-        # A handle nobody defined is still "no such handle", not "unavailable".
-        with pytest.raises(KeyError, match="no named path 'nope'"):
-            inputs["nope"]
-        assert inputs.get("secret") is None
-
-    def test_paths_is_empty_not_an_error_when_every_handle_was_left_out(self, define):
-        """ "Declares no named paths" is about the file. A collection whose one
-        handle is unreachable *here* declared it fine; the caller who chose to
-        skip unavailable data gets an empty mapping that says why."""
-        file = define("""
-            only_secret:
-              include:
-                - dataset: licensed
-              paths:
-                secret: licensed/secret.tif
-            """)
-        with pytest.warns(UserWarning) as record:
-            inputs = ethos_data.paths(
-                "only_secret", file, progressbar=False, skip_unavailable=True
-            )
-        assert any("named path(s) secret" in str(w.message) for w in record)
-        assert inputs == {}
-        assert inputs.omitted == ["secret"]
-        with pytest.raises(KeyError, match="left out under skip_unavailable"):
-            inputs["secret"]
 
 
 class TestListResources:
@@ -958,12 +866,16 @@ class TestListResources:
 
     def test_a_typo_and_an_unknown_dataset_raise_their_own_errors(self, world):
         _, _, index = world
-        with pytest.raises(KeyError, match="no file or folder 'typo'"):
-            ethos_data.catalog(str(index)).resources("era5/typo")
         with pytest.raises(
-            ethos_data.UnknownDataset, match="unknown dataset 'nowhere'"
+            KeyError, match="'era5/typo' cannot be found in the dataset 'era5'"
         ):
+            ethos_data.catalog(str(index)).resources("era5/typo")
+        with pytest.raises(ethos_data.UnknownDataset) as caught:
             ethos_data.catalog(str(index)).resources("nowhere")
+        assert caught.value.message == (
+            "the dataset 'nowhere' cannot be found. "
+            "Maybe it was mistyped, or it is not published."
+        )
         assert issubclass(ethos_data.UnknownDataset, KeyError)
 
 
@@ -983,7 +895,7 @@ def incomplete(world):
         json.dumps(
             {
                 "name": "sharded",
-                "ethos:shards": [{"prefix": "a", "path": "manifests/a.json"}],
+                "ethos:shards": [{"prefix": "a", "path": "shards/a.json"}],
                 "ethos:shard_depth": 1,
             }
         )
@@ -1014,7 +926,7 @@ class TestIncompleteCatalog:
         gives no hint that the catalogue copy is the problem."""
         catalog = ethos_data.load_catalog(str(incomplete))
         with pytest.raises(ethos_data.IncompleteCatalog) as caught:
-            catalog.dataset("ghost").load()
+            _ = catalog.dataset("ghost").descriptor
         assert isinstance(caught.value, FileNotFoundError)
         message = str(caught.value)
         assert "dataset 'ghost' is listed in the catalogue index" in message
@@ -1025,14 +937,14 @@ class TestIncompleteCatalog:
     def test_a_missing_shard_is_diagnosed_the_same_way(self, incomplete):
         catalog = ethos_data.load_catalog(str(incomplete))
         dataset = catalog.dataset("sharded")
-        dataset.load()  # the shard index itself is there
-        assert dataset.pending_shards == ["a"]
+        # The descriptor, with the shard list, is there.
+        assert dataset.inventory.pending_shards == ["a"]
         with pytest.raises(ethos_data.IncompleteCatalog) as caught:
             _ = dataset.resources
         message = str(caught.value)
         assert "dataset 'sharded'" in message
         assert "shard 'a' is missing" in message
-        assert "manifests/a.json" in message
+        assert "shards/a.json" in message
 
     def test_a_collection_selecting_from_a_ghost_dataset_raises_it(
         self, define, incomplete, download_spy
@@ -1058,8 +970,8 @@ def shipped(world, monkeypatch):
     (package / "data").mkdir(parents=True)
     (package / "__init__.py").write_text("")
     (package / "data" / "__init__.py").write_text("")
+    monkeypatch.setenv("ETHOS_DATA_CATALOG", str(index))
     (package / "data" / "collections.yaml").write_text(
-        f"catalog: {index.as_posix()}\n"
         "collections:\n"
         "  wind:\n"
         "    title: Wind inputs\n"
@@ -1225,14 +1137,14 @@ class TestCommandLine:
             == 0
         )
         assert capsys.readouterr().out.startswith(
-            "onshore_wind [test]: all 6 available files already present"
+            "onshore_wind [test]: all 6 files already present"
         )
         assert (
             tool_main(str(file), prog="example-data", argv=["fetch", "onshore_wind"])
             == 0
         )
         assert capsys.readouterr().out.startswith(
-            "onshore_wind [full]: all 7 available files already present"
+            "onshore_wind [full]: all 7 files already present"
         )
 
     def test_paths_prints_tab_separated_handle_and_path_lines(
@@ -1303,9 +1215,13 @@ class TestCommandLine:
     def test_ls_of_something_unknown_exits_two(self, world, capsys):
         _, _, index = world
         assert main(["--catalog", str(index), "ls", "nowhere"]) == 2
-        assert capsys.readouterr().err.startswith("error: unknown dataset 'nowhere'")
+        assert capsys.readouterr().err.startswith(
+            "error: the dataset 'nowhere' cannot be found."
+        )
         assert main(["--catalog", str(index), "ls", "era5/2099"]) == 2
-        assert "no file or folder '2099'" in capsys.readouterr().err
+        assert "'era5/2099' cannot be found in the dataset 'era5'." in (
+            capsys.readouterr().err
+        )
 
     def test_verify_all_covers_the_files_of_every_variant(self, define, capsys):
         """What is on disk is one cache; a file only the test variant selects
@@ -1352,7 +1268,7 @@ class TestCommandLine:
         assert captured.err.startswith("error: unknown collection 'nope'")
         assert "Traceback" not in captured.err
 
-    def test_a_missing_variant_is_a_message_that_names_the_flag(self, define, capsys):
+    def test_a_missing_variant_is_a_message_without_advice(self, define, capsys):
         file = define("""
             test_only:
               test:
@@ -1363,8 +1279,7 @@ class TestCommandLine:
             tool_main(str(file), prog="example-data", argv=["show", "test_only"]) == 2
         )
         err = capsys.readouterr().err
-        assert err.startswith("error: collection 'test_only' has no 'full' variant")
-        assert "--test" in err
+        assert err == "error: collection 'test_only' has no full variant\n"
         assert (
             tool_main(
                 str(file), prog="example-data", argv=["show", "test_only", "--test"]
@@ -1443,12 +1358,12 @@ class TestCommandLine:
             re.MULTILINE,
         )
         assert re.search(
-            r"^  broken\s+\[unresolvable\]\s+collection 'broken' must be a mapping .*got NoneType$",
+            r"^  broken\s+\[unresolvable\]\s+collection 'broken': must be a mapping, got NoneType$",
             out,
             re.MULTILINE,
         )
         assert re.search(
-            r"^  alsobroken\s+\[unresolvable\]\s+collection 'alsobroken' must be a mapping .*got list$",
+            r"^  alsobroken\s+\[unresolvable\]\s+collection 'alsobroken': must be a mapping, got list$",
             out,
             re.MULTILINE,
         )
@@ -1459,45 +1374,6 @@ class TestCommandLine:
         )
         assert re.search(r"^  onshore_wind \[test\]\s+6 files", out, re.MULTILINE)
         assert re.search(r"^  onshore_wind \[full\]\s+7 files", out, re.MULTILINE)
-
-    def test_paths_under_skip_unavailable_prints_only_the_handles_this_machine_can_honour(
-        self, world, define, capsys
-    ):
-        """One ``handle<TAB>path`` line per reachable input; the unreachable one
-        is a warning, never a path to nothing that a shell loop would hand on."""
-        _, cache, _ = world
-        file = define(LICENSED)
-        with pytest.warns(UserWarning) as record:
-            assert (
-                tool_main(
-                    str(file),
-                    prog="example-data",
-                    argv=["--skip-unavailable", "fetch", "with_licensed", "--paths"],
-                )
-                == 0
-            )
-        assert capsys.readouterr().out.splitlines() == [
-            f"clc\t{cache / 'landcover/clc.tif'}"
-        ]
-        assert any(
-            "named path(s) secret are not available on this machine" in str(w.message)
-            for w in record
-        )
-        # Without the flag the command stops, as the API does, before any transfer.
-        assert (
-            tool_main(
-                str(file),
-                prog="example-data",
-                argv=["fetch", "with_licensed", "--paths"],
-            )
-            == 2
-        )
-        captured = capsys.readouterr()
-        assert captured.out == ""
-        assert captured.err.startswith(
-            "error: dataset 'licensed' is restricted and is never downloaded."
-        )
-        assert "--skip-unavailable" in captured.err
 
     def test_verify_all_skips_what_it_cannot_resolve_and_says_so_in_its_exit_status(
         self, define, incomplete, capsys
@@ -1528,8 +1404,7 @@ class TestCommandLine:
             re.MULTILINE,
         )
         assert re.search(
-            r"^skipped lopsided \[test\]: collection 'lopsided': its test and full variants "
-            r"must name the same paths",
+            r"^skipped lopsided \[test\]: collection 'lopsided': the named path",
             out,
             re.MULTILINE,
         )
@@ -1573,25 +1448,24 @@ class TestCommandLine:
             == 0
         )
         assert capsys.readouterr().out.startswith(
-            "onshore_wind [test]: all 6 available files already present"
+            "onshore_wind [test]: all 6 files already present"
         )
         # A command without the flag ignores it rather than rejecting it.
         assert tool_main(str(file), prog="example-data", argv=["--test", "show"]) == 0
 
-    def test_the_collection_commands_read_the_catalogue_the_file_pins(
+    def test_the_collection_commands_read_the_configured_catalogue(
         self, world, define, other_catalog, monkeypatch, capsys
     ):
-        """Nothing is configured here, so the alternative to the pin would be
-        the public catalogue on the network, which must not be contacted."""
+        """The alternative to the configured catalogue would be the public one
+        on the network, which must not be contacted."""
         file = define(ONSHORE)
         monkeypatch.setattr(urllib.request, "urlopen", _no_network)
         assert tool_main(str(file), prog="example-data", argv=["show"]) == 0
         assert "onshore_wind" in capsys.readouterr().out
-        # A different working directory cannot change the wrapper's pin.
         monkeypatch.chdir(file.parent)
         assert tool_main(file, prog="example-data", argv=["show", "onshore_wind"]) == 0
         assert capsys.readouterr().out.startswith("onshore_wind [full]: 7 files, ")
-        # --catalog and $ETHOS_DATA_CATALOG still win over the pin.
+        # --catalog wins over the environment, for one run.
         assert (
             tool_main(
                 str(file),
@@ -1600,51 +1474,13 @@ class TestCommandLine:
             )
             == 2
         )
-        assert "unknown dataset 'landcover'" in capsys.readouterr().err
+        assert "the dataset 'landcover' cannot be found" in capsys.readouterr().err
         monkeypatch.setenv("ETHOS_DATA_CATALOG", str(other_catalog))
         assert (
             tool_main(str(file), prog="example-data", argv=["show", "onshore_wind"])
             == 2
         )
-        assert "unknown dataset 'landcover'" in capsys.readouterr().err
-
-    @pytest.mark.parametrize(
-        ("retired", "replacement"),
-        [
-            ("list", "example-data show"),
-            ("info", "example-data show <collection>"),
-            ("plan", "example-data fetch <collection> --plan"),
-            ("paths", "example-data fetch <collection> --paths"),
-            ("path", "ethos-data fetch <key>"),
-            ("ls", "ethos-data ls [<key>]"),
-        ],
-    )
-    def test_a_retired_command_names_what_replaces_it(
-        self, define, capsys, retired, replacement
-    ):
-        """A hard rename, but not a silent one: the names that went away, and
-        the two that moved to ethos-data with the catalogue, each answer with
-        the line to type instead rather than argparse's 'invalid choice'."""
-        file = define(ONSHORE)
-        assert (
-            tool_main(str(file), prog="example-data", argv=[retired, "onshore_wind"])
-            == 2
-        )
-        captured = capsys.readouterr()
-        assert captured.out == ""
-        assert captured.err.startswith(f"error: `example-data {retired}` is gone")
-        assert replacement in captured.err
-
-    def test_a_retired_name_is_not_read_out_of_an_option_value(self, define, capsys):
-        """``--catalog list`` names a file; only the subcommand slot is checked."""
-        file = define(ONSHORE)
-        assert (
-            tool_main(
-                str(file), prog="example-data", argv=["--catalog", "list", "show"]
-            )
-            == 2
-        )
-        assert "is gone" not in capsys.readouterr().err
+        assert "the dataset 'landcover' cannot be found" in capsys.readouterr().err
 
 
 @pytest.fixture
@@ -1658,7 +1494,7 @@ def other_catalog(world):
 
 
 class TestCollectionsFileRoute:
-    """A handle's ``.catalog``: the file's pin, for the key-taking calls."""
+    """A handle's ``.catalog``: the catalogue it reads, for the key-taking calls."""
 
     def test_path_and_list_resources_take_a_collections_file(
         self, world, define, monkeypatch
@@ -1668,27 +1504,26 @@ class TestCollectionsFileRoute:
         _, cache, _ = world
         file = define(ONSHORE)
         monkeypatch.setattr(urllib.request, "urlopen", _no_network)
-        pinned = ethos_data.collections(file).catalog
-        assert pinned.path("landcover/clc.tif") == cache / "landcover/clc.tif"
+        catalog = ethos_data.collections(file).catalog
+        assert catalog.path("landcover/clc.tif") == cache / "landcover/clc.tif"
         assert (
             ethos_data.collections(str(file)).catalog.path("era5/2015")
             == cache / "era5/2015"
         )
-        listed = pinned.resources("era5/2015")
+        listed = catalog.resources("era5/2015")
         assert [r.key for r in listed] == ["era5/2015/u.nc", "era5/2015/v.nc"]
 
-    def test_an_explicit_or_configured_catalogue_wins_over_the_pin(
+    def test_an_explicit_or_configured_catalogue_is_the_one_read(
         self, define, other_catalog, monkeypatch
     ):
-        """Below, not instead of: ``--catalog`` and the environment exist to
-        repoint every tool at once, pins included."""
+        """``catalog=`` for one handle, the environment for every tool at once."""
         file = define(ONSHORE)
-        with pytest.raises(ethos_data.UnknownDataset, match="unknown dataset 'era5'"):
+        with pytest.raises(ethos_data.UnknownDataset, match="'era5' cannot be found"):
             ethos_data.collections(file, catalog=str(other_catalog)).catalog.resources(
                 "era5"
             )
         monkeypatch.setenv("ETHOS_DATA_CATALOG", str(other_catalog))
-        with pytest.raises(ethos_data.UnknownDataset, match="unknown dataset 'era5'"):
+        with pytest.raises(ethos_data.UnknownDataset, match="'era5' cannot be found"):
             ethos_data.collections(file).catalog.resources("era5")
 
 
@@ -1698,9 +1533,8 @@ class TestCatalogUnavailable:
     def test_a_missing_local_index_names_the_path_and_says_how_to_point_elsewhere(
         self, world
     ):
-        """The common cause is a pin, not a network fault, and the person hitting
-        it usually did not write that pin -- so the message says how to use
-        another catalogue for this run, this shell, or for good."""
+        """The message says how to use another catalogue for this run, this
+        shell, or for good."""
         tmp_path, _, _ = world
         nowhere = tmp_path / "nowhere" / "datacatalog.json"
         with pytest.raises(ethos_data.CatalogUnavailable) as caught:
@@ -1723,8 +1557,8 @@ class TestCatalogUnavailable:
         self, world, monkeypatch
     ):
         """HTTPError is a URLError; left alone it reads "HTTP Error 404: Not
-        Found" -- nothing about which URL, or that a pin chose it."""
-        url = "https://example.invalid/catalogue/v9.9/datacatalog.json"
+        Found" -- nothing about which URL."""
+        url = "https://example.invalid/catalogue/v9.9.0/datacatalog.json"
 
         def not_found(*args, **kwargs):
             raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
@@ -1736,8 +1570,8 @@ class TestCatalogUnavailable:
         assert message.startswith(
             f"cannot read the catalogue index at {url}: HTTP 404 Not Found"
         )
-        assert "pin may name a revision or repository that does not exist" in message
-        assert isinstance(caught.value.__cause__, urllib.error.HTTPError)
+        assert "--catalog" in message
+        assert isinstance(caught.value.__cause__, ethos_data.IncompleteCatalog)
 
         def unreachable(*args, **kwargs):
             raise urllib.error.URLError("no such host")
@@ -1760,102 +1594,34 @@ class TestCatalogUnavailable:
             assert "Traceback" not in captured.err
 
 
-class TestCatalogPin:
-    """``catalog_pin``: the one reading of a file's ``catalog:`` key, shared by fetch, path and ls."""
-
-    def test_a_relative_pin_belongs_to_the_file_not_the_working_directory(
-        self, tmp_path, monkeypatch
-    ):
-        """A collections file is committed beside the catalogue it pins; where
-        the user happens to stand when running the tool must not change what
-        the file means."""
-        folder = tmp_path / "project" / "config"
-        folder.mkdir(parents=True)
-        file = folder / "collections.yaml"
-        file.write_text(
-            "catalog: ../catalogue/datacatalog.json\ncollections: {}\n",
-            encoding="utf-8",
-        )
-        monkeypatch.chdir(tmp_path)
-        expected = str(
-            (tmp_path / "project" / "catalogue" / "datacatalog.json").resolve()
-        )
-        assert selection.catalog_pin(file) == expected
-        assert selection.catalog_pin(str(file)) == expected
-        # An absolute path is taken as it is.
-        absolute = str((tmp_path / "elsewhere" / "datacatalog.json").resolve())
-        assert selection.catalog_pin(file, {"catalog": absolute}) == absolute
-
-    def test_no_pin_is_none_and_a_parsed_document_may_be_handed_in(self, tmp_path):
-        file = tmp_path / "collections.yaml"
-        file.write_text("collections: {}\n", encoding="utf-8")
-        assert selection.catalog_pin(file) is None
-        assert selection.catalog_pin(file, {"catalog": ""}) is None
-        url = "https://example.invalid/catalogue/v1/datacatalog.json"
-        assert selection.catalog_pin(file, {"catalog": url}) == url
-        # With a document the file is not read: load_collections has already parsed it.
-        assert selection.catalog_pin(
-            tmp_path / "never-written.yaml", {"catalog": "index.json"}
-        ) == str((tmp_path / "index.json").resolve())
-
-    def test_a_legacy_ref_suffix_is_stripped(self, tmp_path):
-        """Collections files used to pin ``<location>@<ref>``. A revision now
-        lives in the URL itself, so the suffix is dropped rather than looked for
-        on disk -- while a Git host's branch or tag segment is left alone."""
-        file = tmp_path / "collections.yaml"
-        assert selection.catalog_pin(
-            file, {"catalog": "catalogue/datacatalog.json@v1.2"}
-        ) == str((tmp_path / "catalogue" / "datacatalog.json").resolve())
-        assert (
-            selection.catalog_pin(
-                file, {"catalog": "https://example.invalid/cat/datacatalog.json@v2"}
-            )
-            == "https://example.invalid/cat/datacatalog.json"
-        )
-        tagged = "https://raw.githubusercontent.com/org/repo/v1.2/datacatalog.json"
-        assert selection.catalog_pin(file, {"catalog": tagged}) == tagged
-
-    def test_load_collections_follows_the_pin_from_any_working_directory(
-        self, world, define, monkeypatch
-    ):
-        """The relative form is what a committed file carries; it must hold
-        wherever the tool is run from, and never fall back to the network."""
-        _, cache, index = world
-        file = define(ONSHORE, catalog=Path("catalogue/datacatalog.json"))
-        monkeypatch.chdir(cache)
-        monkeypatch.setattr(urllib.request, "urlopen", _no_network)
-        assert selection.catalog_pin(file) == str(index)
-        assert ethos_data.load_collections(file).catalog.location == str(index)
-        assert [r.key for r in ethos_data.resolve("landcover", file)] == [
-            "landcover/clc.tif"
-        ]
-
-
 class TestSecondReviewRound:
     """Loose ends a second adversarial pass found; each was demonstrated first."""
 
     @pytest.mark.parametrize(
         "body, complaint",
         [
-            ("strinclude:\n  include: landcover\n", "include must be a list"),
+            (
+                "strinclude:\n  include: landcover\n",
+                "include: Input should be a valid list",
+            ),
             (
                 'nodataset:\n  include:\n    - files: ["clc.tif"]\n',
-                "needs a 'dataset' name",
+                "include[0].dataset: Field required",
             ),
             (
                 'badfiles:\n  include:\n    - dataset: landcover\n      files: "clc.tif"\n',
-                "must be a list of glob strings",
+                "include[0].files: Input should be a valid list",
             ),
         ],
     )
     def test_a_malformed_include_is_a_collection_error_not_a_traceback(
         self, define, capsys, body, complaint
     ):
-        """These used to escape as TypeError/KeyError from inside the glob loop
-        and take every other row of `ethos-data list` down with them."""
+        """Checked through the model, with the place of the mistake, and
+        without taking every other row of `show` down with them."""
         file = define(ONSHORE, body)
         name = body.split(":", 1)[0]
-        with pytest.raises(ethos_data.CollectionError, match=complaint):
+        with pytest.raises(ethos_data.CollectionError, match=re.escape(complaint)):
             ethos_data.resolve(name, file)
         assert tool_main(str(file), prog="example-data", argv=["show"]) == 1
         out = capsys.readouterr().out
@@ -1883,25 +1649,6 @@ class TestSecondReviewRound:
         message = str(caught.value)
         assert "at the top level and also the variant(s)" in message
         assert "cannot be compared" not in message
-
-    def test_a_fetch_with_nothing_reachable_says_so(self, define, capsys):
-        """ "all 0 available files already present" described a collection none
-        of which is on this machine; the sentence now says what happened."""
-        file = define("""
-            only_licensed:
-              include:
-                - dataset: licensed
-        """)
-        assert (
-            tool_main(
-                str(file),
-                prog="example-data",
-                argv=["--skip-unavailable", "fetch", "only_licensed"],
-            )
-            == 0
-        )
-        out = capsys.readouterr().out
-        assert "nothing to fetch" in out and "none of its 1 file(s)" in out
 
     @pytest.fixture
     def staged_landcover(self, world, monkeypatch):

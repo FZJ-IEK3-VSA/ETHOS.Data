@@ -1,0 +1,221 @@
+{
+  "$defs": {
+    "CatalogBounds": {
+      "additionalProperties": true,
+      "description": "The catalogue releases a package works with: one exactly, or a range.\n\nEach version is a release, ``v1.2.0``, or a prefix of one, ``v1.3`` or\n``v1``: as ``min_version`` its first release, as ``max_version`` its last,\nas ``exact_version`` every one of them.",
+      "properties": {
+        "min_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The oldest release the package was tested with.",
+          "pattern": "^v(0|[1-9][0-9]*)(\\.(0|[1-9][0-9]*)){0,2}$",
+          "title": "Min Version"
+        },
+        "max_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Refuse anything newer.",
+          "pattern": "^v(0|[1-9][0-9]*)(\\.(0|[1-9][0-9]*)){0,2}$",
+          "title": "Max Version"
+        },
+        "exact_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The release, or the releases, to resolve to.",
+          "pattern": "^v(0|[1-9][0-9]*)(\\.(0|[1-9][0-9]*)){0,2}$",
+          "title": "Exact Version"
+        }
+      },
+      "title": "CatalogBounds",
+      "type": "object"
+    },
+    "Collection": {
+      "additionalProperties": true,
+      "description": "One collection; written plainly, or twice under ``test:`` and ``full:``.",
+      "properties": {
+        "extends": {
+          "default": [],
+          "description": "Other collections in this file.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Extends",
+          "type": "array"
+        },
+        "include": {
+          "default": [],
+          "description": "The data this collection adds.",
+          "items": {
+            "$ref": "#/$defs/IncludeRule"
+          },
+          "title": "Include",
+          "type": "array"
+        },
+        "paths": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Handle to catalogue key, for the workflow's arguments.",
+          "title": "Paths",
+          "type": "object"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "One line, shown by `show`.",
+          "title": "Title"
+        },
+        "test": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Selection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The small selection for tests."
+        },
+        "full": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Selection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The real inputs; the default."
+        }
+      },
+      "title": "Collection",
+      "type": "object"
+    },
+    "IncludeRule": {
+      "additionalProperties": true,
+      "description": "One ``include`` entry: a dataset, family or glob, and the files to take from it.",
+      "properties": {
+        "dataset": {
+          "description": "A dataset or family name, or a glob over names.",
+          "title": "Dataset",
+          "type": "string"
+        },
+        "files": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Globs against each dataset's paths; omit for every file.",
+          "title": "Files"
+        }
+      },
+      "required": [
+        "dataset"
+      ],
+      "title": "IncludeRule",
+      "type": "object"
+    },
+    "Selection": {
+      "additionalProperties": true,
+      "description": "What a collection, or one of its variants, selects.",
+      "properties": {
+        "extends": {
+          "default": [],
+          "description": "Other collections in this file.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Extends",
+          "type": "array"
+        },
+        "include": {
+          "default": [],
+          "description": "The data this collection adds.",
+          "items": {
+            "$ref": "#/$defs/IncludeRule"
+          },
+          "title": "Include",
+          "type": "array"
+        },
+        "paths": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Handle to catalogue key, for the workflow's arguments.",
+          "title": "Paths",
+          "type": "object"
+        }
+      },
+      "title": "Selection",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "A package's selection of catalogue data, by workflow.",
+  "properties": {
+    "catalog": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CatalogBounds"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The catalogue releases the package works with."
+    },
+    "collections": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Collection"
+      },
+      "default": {},
+      "description": "Collection name to definition.",
+      "title": "Collections",
+      "type": "object"
+    }
+  },
+  "title": "collections.yaml",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

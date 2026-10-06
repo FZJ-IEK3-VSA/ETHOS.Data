@@ -14,13 +14,18 @@ from pathlib import Path
 
 import pytest
 import yaml
+from support import write_descriptor
 
-from ethos_data.catalogs import Catalog, Dataset, Resource, license_settled
+from ethos_data.catalogs import Catalog, Dataset
 from ethos_data.config import Roots
-from ethos_data.linking import LinkError, link
+from ethos_data.errors import LinkError, TransitionError
+from ethos_data.formats import license_settled
+from ethos_data.linking import link
 from ethos_data.maintain import namespace
 from ethos_data.maintain.manifest import render_dataset, write_dataset
 from ethos_data.maintain.upload import preflight
+from ethos_data.model.inventory import Inventory
+from ethos_data.model.resource import Resource
 
 PAYLOAD = b"first file"
 RESOLVED = {"licenses": [{"name": "CC-BY-4.0"}]}
@@ -64,8 +69,7 @@ def _catalog(status: str | None) -> Catalog:
         "example",
         "Example",
         entry=entry,
-        _descriptor={"resources": []},
-        _resources={"a.txt": resource},
+        inventory=Inventory.from_resources("example", {}, [resource]),
     )
     return Catalog("local", {}, {"example": dataset})
 
@@ -115,7 +119,7 @@ def _checkout(root: Path, extra: dict) -> Path:
         "ethos:remote_prefix": "example",
         **extra,
     }
-    (dataset_dir / "dataset.yaml").write_text(yaml.safe_dump(meta))
+    write_descriptor(dataset_dir, yaml.safe_dump(meta))
     write_dataset(dataset_dir, render_dataset(dataset_dir))
     return root
 
@@ -133,12 +137,13 @@ def test_link_all_skips_it_rather_than_linking_it(tmp_path):
     checkout = _checkout(tmp_path / "catalogue", {"ethos:license_status": "unresolved"})
     cache = tmp_path / "cache"
 
-    actions = namespace.plan(checkout, cache)
+    found = namespace.Namespace(checkout, cache)
+    planned = namespace.LINK_ALL.plan(found)
 
-    assert [(a.verb, a.dataset) for a in actions] == [("skip", "example")]
-    assert "unresolved licensing" in actions[0].detail
-    namespace.apply([a for a in actions if a.changes_anything])
-    assert not (cache / "example").exists()
+    ((verb, dataset, detail),) = found.findings
+    assert (verb, dataset) == ("skip", "example")
+    assert "unresolved licensing" in detail
+    assert [actions for _, actions in planned] == [[], [], []]
 
 
 def test_link_all_links_it_once_the_terms_are_recorded(tmp_path):
@@ -151,9 +156,12 @@ def test_link_all_links_it_once_the_terms_are_recorded(tmp_path):
     checkout = _checkout(tmp_path / "catalogue", RESOLVED)
     cache = tmp_path / "cache"
 
-    actions = namespace.plan(checkout, cache)
+    found = namespace.Namespace(checkout, cache)
+    namespace.LINK_ALL.plan(found)
 
-    assert [(a.verb, a.dataset) for a in actions] == [("link", "example")]
+    assert [(verb, dataset) for verb, dataset, _ in found.findings] == [
+        ("link", "example")
+    ]
 
 
 def _package(extra: dict) -> dict:
@@ -168,12 +176,11 @@ def _package(extra: dict) -> dict:
 def test_upload_refuses_it(tmp_path):
     source = tmp_path / "src"
     source.mkdir()
-    with pytest.raises(SystemExit, match="unresolved licensing"):
+    with pytest.raises(TransitionError, match="unresolved licensing"):
         preflight(
             "example",
             _package({"ethos:license_status": "unresolved"}),
             source,
-            allow_internal=False,
             verify_only=False,
         )
 
@@ -182,10 +189,8 @@ def test_upload_refuses_a_descriptor_that_says_nothing_at_all(tmp_path):
     """The default has to be "nobody has looked", not "nothing applies"."""
     source = tmp_path / "src"
     source.mkdir()
-    with pytest.raises(SystemExit, match="unresolved licensing"):
-        preflight(
-            "example", _package({}), source, allow_internal=False, verify_only=False
-        )
+    with pytest.raises(TransitionError, match="unresolved licensing"):
+        preflight("example", _package({}), source, verify_only=False)
 
 
 def test_verify_only_still_works(tmp_path):
@@ -197,7 +202,6 @@ def test_verify_only_still_works(tmp_path):
             "example",
             _package({"ethos:license_status": "unresolved"}),
             source,
-            allow_internal=False,
             verify_only=True,
         )
         == "example"
@@ -212,7 +216,6 @@ def test_upload_allows_a_settled_licence(tmp_path):
             "example",
             _package(RESOLVED),
             source,
-            allow_internal=False,
             verify_only=False,
         )
         == "example"

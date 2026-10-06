@@ -13,10 +13,12 @@ import json
 
 import pytest
 
-from ethos_data.catalogs import Catalog, Dataset, Resource
+from ethos_data.catalogs import Catalog, Dataset
 from ethos_data.cli import main
 from ethos_data.config import Roots
 from ethos_data.materialize import PROVENANCE_FILE, materialize, plan_materialize
+from ethos_data.model.inventory import Inventory
+from ethos_data.model.resource import Resource
 
 CONTENT = {"a.txt": b"first file", "sub/b.txt": b"second file"}
 
@@ -40,8 +42,7 @@ def _catalog(access: str = "public") -> Catalog:
         "example",
         "Example",
         entry={"ethos:access": access, "ethos:license_status": "resolved"},
-        _descriptor={"resources": []},
-        _resources=resources,
+        inventory=Inventory.from_resources("example", {}, resources.values()),
     )
     return Catalog("local", {}, {"example": dataset})
 
@@ -202,7 +203,7 @@ def test_dry_run_writes_nothing(workspace):
 def test_restricted_data_is_copied_into_the_restricted_root(workspace, tmp_path):
     cache, source, _ = workspace
     restricted = tmp_path / "restricted"
-    roots = Roots(public=cache, restricted=restricted)
+    roots = Roots(public=cache, restricted=(restricted,))
 
     reports = materialize(_catalog("restricted"), ["example"], roots, source=source)
 

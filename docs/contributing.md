@@ -49,12 +49,51 @@ The comment style in this codebase is unusual on purpose: comments explain
 patch that changes a rule should change the comment that justifies it in the
 same commit — the reasoning is the part that is expensive to recover.
 
+### What the test suite guarantees
+
+`tests/conftest.py` applies two things to every test. Nothing but the loopback
+interface can be reached, so a test that would fall back to the public
+catalogue or reach dCache fails instead of passing on a connected machine. And
+none of your own settings apply: every `ETHOS_*` variable is cleared and the
+settings files and the default cache move into a temporary directory, so a
+catalogue configured on your account cannot replace the one a test wrote.
+
+`tests/support.py` holds the builders the tests share: a reader-side
+catalogue, a source catalogue that runs the real `ethos-data catalog`
+commands, and a local HTTP server standing in for the published store, so the
+download path runs with real checksums and no network. Prefer them, and the
+public entry points they go through, to building `Dataset` objects by hand.
+
+## Library code does not print
+
+Only `ethos_data.cli` prints and chooses an exit status. Below it, a refusal
+is one of the typed errors in `ethos_data.errors`, a command returns a result
+that says whether it succeeded, and progress and warnings go through
+`ethos_data.report`: `report.info(...)` and `report.warning(..., category)`
+reach the reporter of the command being run. The command line prints a
+warning; outside any command it is a Python warning of its category, so a
+script filters it like any other. The maintainer entry points take
+`reporter=`, so a test records what a build said with
+`report.RecordingReporter()` and a script silences it with
+`report.NullReporter()`. A test fails when a `print` or a `warnings.warn`
+appears below the command line.
+
+## External systems sit behind ports
+
+dCache, downloads and git are reached through the ports of
+`ethos_data.adapters`, and code that needs one takes it as an argument:
+`upload.run(..., store=)`, `ethos_data.download(..., downloader=)`. A test
+hands the code the fake, `FakeStore`, `FakeDownloader` or `FakeGit`, rather
+than patching `subprocess` or a module function, and `tests/conftest.py`
+refuses to run rclone or `oidc-token` at all.
+
 ## Two invariants that a patch must not break
 
 **Deduplication depends on path agreement.** Every tool must derive the same
 cache path from the same catalogue entry, or the sharing stops silently and
-nobody finds out for months. Anything touching `local_path`, `Resource.key`, or
-the cache layout is a compatibility change, not a refactor.
+nobody finds out for months. Anything touching `Resource.key` or the cache
+layout `<root>/<dataset>/<resource path>` is a compatibility change, not a
+refactor.
 
 **Retrieval never writes restricted data into the public cache or downloads
 it.** If it cannot be reached, asking for it fails with an explanation.
@@ -63,14 +102,26 @@ See [Caches, classes and roots](explanation/caches-and-access.md).
 ## Changing the catalogue format
 
 `ethos:` keys are the format's extension points, and both halves have to move
-together:
+together. Every file format is specified once, in `ethos_data/formats/`:
 
-1. Emit it in `ethos_data/maintain/manifest.py`.
-2. Read it in `ethos_data/catalogs.py`.
-3. Decide whether `ethos_data/maintain/publish.py` should **strip** it from the
-   public catalogue (`source_dir`, `ethos:embargo` and `ethos:license_note` are
-   stripped; a leak of any of them is the failure that matters).
-4. Document it in [File formats](reference/schemas.md).
+1. Declare the key in the file's model (`formats/dataset.py` for
+   `dataset.yaml`), with its type, default and description, and say what the
+   tools do with it: `published=False` strips it from the public catalogue
+   (`source_dir`, `ethos:embargo` and `ethos:license_note` are stripped; a leak
+   of any of them is the failure that matters, and `publish` refuses a tree
+   that still carries one), `promoted=True` copies it into
+   the index row, `user_facing=True` prints it for a user without a copy,
+   `inherited=True` hands it from a family to its members. Name it in
+   `formats/keys.py` rather than as a string literal.
+2. A rule that crosses keys belongs in the same module's `check`, with a
+   message written for the person who has to fix the file.
+3. Add it to the template it belongs in, under `formats/templates/`; the
+   annotated `dataset-full.yaml` is the one [File formats](reference/schemas.md)
+   shows.
+4. Regenerate the JSON Schemas, which are committed: `python -m
+   ethos_data.formats`. A test fails while one is out of date.
+5. Emit it in `ethos_data/maintain/manifest.py` and read it in
+   `ethos_data/catalogs.py`, and describe it in [File formats](reference/schemas.md).
 
 Manifests are generated, never hand-edited. `ethos-data catalog build --check` fails
 if any is stale, which is what CI should run.
@@ -156,7 +207,7 @@ and node vocabulary in `ethosstyle.tex`; the rendered SVGs live in
 
 ```bash
 python docs/diagrams/render.py                # re-render what changed
-python docs/diagrams/render.py usecases-overview --force
+python docs/diagrams/render.py usecases-interactions --force
 ```
 
 That means an ordinary `mkdocs build` needs no LaTeX — only editing a diagram

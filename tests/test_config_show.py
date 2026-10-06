@@ -15,7 +15,8 @@ from pathlib import Path
 import pytest
 
 from ethos_data import config
-from ethos_data.cli import _unreachable, main
+from ethos_data.cli import main
+from ethos_data.config import unreachable
 
 
 @pytest.fixture
@@ -26,7 +27,6 @@ def public(monkeypatch, tmp_path) -> Path:
         config.RESTRICTED_ENV_VAR,
         config.STAGING_ENV_VAR,
         config.CATALOG_ENV_VAR,
-        config.SKIP_UNAVAILABLE_ENV_VAR,
         "ETHOS_PUBLICATION_URL",
     ):
         monkeypatch.delenv(variable, raising=False)
@@ -78,7 +78,7 @@ class TestTheListingIsOneDirectoryRead:
         public.mkdir()
         (public / "one").mkdir()
         out = show(capsys)
-        assert out.index("catalogue:") < out.index("public cache holds")
+        assert out.index("\ncatalogue ") < out.index("public cache holds")
 
     def test_links_are_listed_with_their_targets(self, public, tmp_path, capsys):
         public.mkdir()
@@ -102,7 +102,7 @@ class TestAnUnreachableCacheSaysWhy:
         out = show(capsys)
         assert "[not created yet -- the first download creates it]" in out
         assert "NOT REACHABLE" not in out
-        assert "catalogue:" in out
+        assert "\ncatalogue " in out
 
     def test_a_missing_restricted_cache_is_flagged(
         self, public, monkeypatch, tmp_path, capsys
@@ -112,6 +112,29 @@ class TestAnUnreachableCacheSaysWhy:
         out = show(capsys)
         assert "restricted cache" in out
         assert "[NOT REACHABLE -- does not exist]" in out
+
+    def test_the_restricted_caches_are_numbered_in_reading_order(
+        self, public, monkeypatch, tmp_path, capsys
+    ):
+        first, second = tmp_path / "group-a", tmp_path / "group-b"
+        first.mkdir()
+        monkeypatch.setenv(
+            config.RESTRICTED_ENV_VAR, os.pathsep.join([str(first), str(second)])
+        )
+
+        lines = show(capsys).splitlines()
+
+        one = next(line for line in lines if line.startswith("restricted cache 1"))
+        two = next(line for line in lines if line.startswith("restricted cache 2"))
+        assert str(first) in one and "NOT REACHABLE" not in one
+        assert str(second) in two and "[NOT REACHABLE -- does not exist]" in two
+
+    def test_an_account_without_a_restricted_cache_is_a_normal_state(
+        self, public, capsys
+    ):
+        out = show(capsys)
+        assert "restricted caches  none listed: public data only" in out
+        assert "config add-restricted-cache" in out
 
     def test_an_error_from_the_operating_system_is_repeated(
         self, public, monkeypatch, capsys
@@ -132,30 +155,12 @@ class TestAnUnreachableCacheSaysWhy:
             "(The specified network name is no longer available)]"
         ) in out
         assert "public cache contents: not listed -- cannot be reached" in out
-        assert "catalogue:" in out
+        assert "\ncatalogue " in out
 
     def test_a_file_where_the_cache_should_be(self, public, capsys):
         public.write_text("not a directory")
         out = show(capsys)
         assert "[NOT REACHABLE -- is not a directory]" in out
-
-    def test_a_per_dataset_root_that_is_gone(
-        self, public, monkeypatch, tmp_path, capsys
-    ):
-        gone = tmp_path / "gone"
-        monkeypatch.setattr(
-            config,
-            "load_config",
-            lambda: (
-                {"dataset_roots": {"era5": str(gone)}},
-                {
-                    "dataset_roots": "user config x",
-                    "dataset_roots.era5": "user config x",
-                },
-            ),
-        )
-        out = show(capsys)
-        assert f"  {'era5':<28} {gone}   [MISSING -- does not exist]" in out
 
     @pytest.mark.skipif(os.name != "nt", reason="drive letters are a Windows concept")
     def test_a_disconnected_drive_is_named(self):
@@ -166,6 +171,6 @@ class TestAnUnreachableCacheSaysWhy:
             if not Path(f"{letter}:/").exists()
         )
         assert (
-            _unreachable(Path(f"{free}/shared_data/public"))
+            unreachable(Path(f"{free}/shared_data/public"))
             == f"drive {free} is not connected"
         )

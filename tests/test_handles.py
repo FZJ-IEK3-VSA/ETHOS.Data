@@ -26,8 +26,7 @@ def world(tmp_path, monkeypatch):
     for variable in (
         "ETHOS_DATA_CATALOG",
         "ETHOS_STAGING_DIR",
-        "ETHOS_RESTRICTED_DIR",
-        "ETHOS_SKIP_UNAVAILABLE",
+        "ETHOS_RESTRICTED_DIRS",
     ):
         monkeypatch.delenv(variable, raising=False)
     cache = tmp_path / "cache"
@@ -43,7 +42,14 @@ def world(tmp_path, monkeypatch):
         "flat": {"one.csv": "1", "sub/two.csv": "2", "sub.csv": "s"},
     }
     catalogue = tmp_path / "catalogue"
-    entries = [{"name": "family", "ethos:namespace": True}]
+    entries = [
+        {
+            "name": "family",
+            "ethos:namespace": True,
+            "ethos:total_bytes": 0,
+            "ethos:file_count": 0,
+        }
+    ]
     for name, files in layout.items():
         resources = []
         for relative, text in files.items():
@@ -58,11 +64,15 @@ def world(tmp_path, monkeypatch):
         package = catalogue / "datasets" / name / "datapackage.json"
         package.parent.mkdir(parents=True, exist_ok=True)
         package.write_text(json.dumps({"name": name, "resources": resources}))
+        # The row the build writes: totals and remote prefix cost no descriptor.
         entries.append(
             {
                 "name": name,
                 "path": f"datasets/{name}/datapackage.json",
                 "ethos:license_status": "resolved",
+                "ethos:remote_prefix": name,
+                "ethos:total_bytes": sum(r["bytes"] for r in resources),
+                "ethos:file_count": len(resources),
             }
         )
     index = catalogue / "datacatalog.json"
@@ -122,7 +132,9 @@ def test_a_folder_a_dataset_or_a_family(world, key, expected):
 def test_an_unknown_key_says_so(world):
     _, _, index = world
     catalog = ethos_data.catalog(str(index))
-    with pytest.raises(KeyError, match="no file or folder 'nope'"):
+    with pytest.raises(
+        KeyError, match="'flat/nope' cannot be found in the dataset 'flat'"
+    ):
         catalog.path("flat/nope")
     with pytest.raises(ethos_data.UnknownDataset, match="missing"):
         catalog.path("missing/file.csv")
@@ -148,7 +160,7 @@ def test_a_handle_is_built_once_and_reused(world, monkeypatch):
     catalog = ethos_data.catalog(str(index))
     loads = []
     monkeypatch.setattr(
-        ethos_data, "load_catalog", lambda location: loads.append(location)
+        ethos_data, "load_catalog", lambda location, **settings: loads.append(location)
     )
     assert catalog.path("family/alpha/era5/y.nc") == cache / "family/alpha/era5/y.nc"
     assert catalog.path("flat/one.csv") == cache / "flat/one.csv"
@@ -160,17 +172,17 @@ def test_without_a_catalogue_the_public_one_is_used(monkeypatch):
     monkeypatch.delenv("ETHOS_DATA_CATALOG", raising=False)
     asked = []
 
-    def stop(location):
+    def stop(location, **settings):
         asked.append(location)
         raise RuntimeError("no network in tests")
 
-    monkeypatch.setattr(ethos_data, "load_catalog", stop)
+    monkeypatch.setattr(ethos_data.catalogs, "load_catalog", stop)
     with pytest.raises(RuntimeError):
         ethos_data.catalog()
     assert asked == [config.DEFAULT_CATALOG]
 
 
-def test_a_collections_file_without_a_pin_uses_the_public_catalogue(
+def test_a_collections_file_without_bounds_uses_the_public_catalogue(
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr(config, "load_config", lambda: ({}, {}))
@@ -179,7 +191,9 @@ def test_a_collections_file_without_a_pin_uses_the_public_catalogue(
     monkeypatch.setattr(
         selection,
         "load_catalog",
-        lambda location: asked.append(location) or ethos_data.Catalog(location, {}, {}),
+        lambda location, **settings: (
+            asked.append(location) or ethos_data.Catalog(location, {}, {})
+        ),
     )
     collections = tmp_path / "collections.yaml"
     collections.write_text("collections: {}\n")
@@ -194,26 +208,28 @@ def test_the_catalogue_variable_beats_a_config_file(monkeypatch):
         lambda: ({"catalog": "/from/config.json"}, {"catalog": "user config"}),
     )
     monkeypatch.setenv("ETHOS_DATA_CATALOG", "https://example.invalid/datacatalog.json")
-    assert config.resolve_catalog() == (
+    settings = config.read_settings()
+    assert (settings.catalog, settings.catalog_source) == (
         "https://example.invalid/datacatalog.json",
         "$ETHOS_DATA_CATALOG",
     )
-    assert config.resolve_catalog("explicit.json")[0] == "explicit.json"
+    assert config.read_settings(catalog="explicit.json").catalog == "explicit.json"
 
 
 # -- the collections handle: a tool's file -------------------------------------------------
 
 
 @pytest.fixture
-def shipped(world):
+def shipped(world, monkeypatch):
     """A tool, faketool, with a collections file beside its data module -- and
-    nothing registered anywhere. Returns the file."""
+    nothing registered anywhere. Returns the file; the environment names the
+    catalogue."""
     tmp_path, _, index = world
+    monkeypatch.setenv("ETHOS_DATA_CATALOG", str(index))
     package = tmp_path / "site" / "faketool" / "data"
     package.mkdir(parents=True)
     file = package / "collections.yaml"
     file.write_text(
-        f"catalog: {index.as_posix()}\n"
         "collections:\n  wind:\n    include:\n      - dataset: family/alpha\n        files: ['era5/*.nc']\n"
     )
     return file
@@ -226,7 +242,7 @@ def test_a_tool_builds_its_handle_from_the_file_beside_its_code(shipped, world):
     assert data.names() == ["wind"]
     files = data.fetch("wind", progressbar=False)
     assert sorted(files) == ["family/alpha/era5/x.nc", "family/alpha/era5/y.nc"]
-    # .catalog is the catalogue the file pins, for keys.
+    # .catalog is the catalogue the handle reads, for keys.
     assert data.catalog.path("family/alpha/era5") == cache / "family/alpha/era5"
     assert data.catalog.staged, "the overlay is applied once, when the handle is built"
 
@@ -260,11 +276,12 @@ def test_the_tool_command_runs_the_collection_commands_on_its_file(
     assert data.main(["fetch", "wind", "--paths"]) == 2
     assert "declares no named paths" in capsys.readouterr().err
     # A single catalogue key is ethos-data's job: this command works in
-    # collections, and says so rather than failing with 'invalid choice'.
-    assert data.main(["path", "family/alpha/sites.shp"]) == 2
-    assert "use `ethos-data fetch <key>`" in capsys.readouterr().err
-    assert data.main(["ls", "family/alpha/era5"]) == 2
-    assert "use `ethos-data ls [<key>]`" in capsys.readouterr().err
+    # collections only.
+    for command in (["path", "family/alpha/sites.shp"], ["ls", "family/alpha/era5"]):
+        with pytest.raises(SystemExit) as refused:
+            data.main(command)
+        assert refused.value.code == 2
+    capsys.readouterr()
     # A refusal is a message naming the tool, not a traceback.
     assert data.main(["fetch", "nosuch"]) == 2
     assert "faketool defines: wind" in capsys.readouterr().err
@@ -315,6 +332,8 @@ def test_ethos_data_rejects_collection_commands(world, tmp_path, monkeypatch, ca
         ["info", "wind"],
         ["plan", "wind"],
         ["paths", "wind"],
+        # ethos-data verifies a catalogue key; without one there is nothing
+        # to check, since it has no collections file to take a default from.
         ["verify"],
         ["bundle", "--help"],
         ["staging", "--help"],
@@ -346,32 +365,27 @@ def test_ethos_data_fetches_catalogue_keys(world, key, capsys):
 
 
 def test_catalogue_listing_only_reads_the_index(world, monkeypatch, capsys):
+    from ethos_data.adapters.metadata import FileSource
+
     _, _, index = world
+    read = []
+    original = FileSource.read
     monkeypatch.setattr(
-        ethos_data.Dataset,
-        "load",
-        lambda self: pytest.fail("loaded a dataset inventory"),
+        FileSource,
+        "read",
+        lambda self, location: read.append(location) or original(self, location),
     )
     assert main(["--catalog", str(index), "ls"]) == 0
     out = capsys.readouterr().out
     assert "family/alpha" in out and "flat" in out
+    assert [Path(location).name for location in read] == ["datacatalog.json"]
 
 
-def test_ethos_data_ignores_collection_pins_and_uses_catalogue_precedence(
-    world, shipped, monkeypatch, capsys
-):
-    from ethos_data import cli
-
+def test_ethos_data_follows_the_catalogue_precedence(world, monkeypatch, capsys):
     root, cache, index = world
     other = root / "other.json"
     other.write_text(json.dumps({"datasets": []}))
-    # Both a configured file and a file in the working directory pin an empty catalogue.
-    shipped.write_text(f"catalog: {other.as_posix()}\ncollections: {{}}\n")
-    monkeypatch.chdir(shipped.parent)
-    monkeypatch.setattr(
-        config, "load_config", lambda: ({"collections": str(shipped)}, {})
-    )
-    monkeypatch.setattr(cli, "DEFAULT_CATALOG", str(index))
+    monkeypatch.setattr(config, "DEFAULT_CATALOG", str(index))
     assert main(["fetch", "flat/one.csv"]) == 0
     assert capsys.readouterr().out.strip() == str(cache / "flat/one.csv")
     monkeypatch.setattr(
@@ -446,12 +460,12 @@ def test_tool_main_builds_the_handle_only_when_a_command_needs_it(
     monkeypatch.setattr(
         selection,
         "load_catalog",
-        lambda location: pytest.fail(f"loaded the catalogue at {location}"),
+        lambda location, **settings: pytest.fail(f"loaded the catalogue at {location}"),
     )
     monkeypatch.setattr(
         ethos_data,
         "load_catalog",
-        lambda location: pytest.fail(f"loaded the catalogue at {location}"),
+        lambda location, **settings: pytest.fail(f"loaded the catalogue at {location}"),
     )
     with pytest.raises(SystemExit) as stop:
         ethos_data.tool_main(shipped, tool="faketool", argv=["--help"])
@@ -472,7 +486,7 @@ def test_tool_main_runs_the_commands_and_reuses_one_handle(
     monkeypatch.setattr(
         selection,
         "load_catalog",
-        lambda location: loads.append(location) or real(location),
+        lambda location, **settings: loads.append(location) or real(location),
     )
     assert ethos_data.tool_main(shipped, tool="faketool", argv=["fetch", "wind"]) == 0
     assert len(loads) == 1
@@ -485,14 +499,16 @@ def test_tool_main_runs_the_commands_and_reuses_one_handle(
     assert "faketool defines: wind" in capsys.readouterr().err
 
 
-def test_an_unreachable_pin_can_still_be_overridden_with_catalog(
-    shipped, world, tmp_path, capsys
+def test_an_unreachable_catalogue_can_be_overridden_with_catalog(
+    shipped, world, monkeypatch, capsys
 ):
-    """The point of --catalog: a tag nobody has cut yet must not block the command."""
+    """The point of --catalog: a catalogue nobody can reach must not block the command."""
     _, _, index = world
+    monkeypatch.setenv(
+        "ETHOS_DATA_CATALOG", "https://example.invalid/nowhere/datacatalog.json"
+    )
     broken = shipped.with_name("broken.yaml")
     broken.write_text(
-        "catalog: https://example.invalid/nowhere/datacatalog.json\n"
         "collections:\n  wind:\n    include:\n      - dataset: family/alpha\n"
     )
     assert ethos_data.tool_main(broken, tool="faketool", argv=["show"]) == 2

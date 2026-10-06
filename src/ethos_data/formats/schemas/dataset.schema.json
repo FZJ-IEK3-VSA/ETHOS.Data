@@ -1,0 +1,946 @@
+{
+  "$defs": {
+    "Contributor": {
+      "additionalProperties": true,
+      "description": "One entry of ``contributors``; Data Package v2, so ``roles`` is a list.",
+      "properties": {
+        "title": {
+          "description": "The person's or the group's name.",
+          "title": "Title",
+          "type": "string"
+        },
+        "roles": {
+          "default": [],
+          "description": "What they did; a list, as in Data Package v2.",
+          "items": {
+            "enum": [
+              "author",
+              "contributor",
+              "maintainer",
+              "publisher",
+              "wrangler"
+            ],
+            "type": "string"
+          },
+          "title": "Roles",
+          "type": "array"
+        },
+        "organization": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where they work.",
+          "title": "Organization"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A page about them, such as an ORCID.",
+          "title": "Path"
+        },
+        "email": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How to reach them.",
+          "title": "Email"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "Contributor",
+      "type": "object"
+    },
+    "Embargo": {
+      "additionalProperties": true,
+      "description": "Why a hidden dataset is hidden, and until when.",
+      "properties": {
+        "until": {
+          "description": "The date it becomes visible, quoted, or \"unspecified\" with a reason.",
+          "title": "Until",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why it is hidden.",
+          "title": "Reason"
+        },
+        "becomes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Its visibility after that date.",
+          "title": "Becomes"
+        }
+      },
+      "required": [
+        "until"
+      ],
+      "title": "Embargo",
+      "type": "object"
+    },
+    "License": {
+      "additionalProperties": true,
+      "description": "One entry of ``licenses``: an Open Definition ``name``, a ``path`` to the terms, or both.",
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An Open Definition id, such as `CC-BY-4.0`; or give `path`.",
+          "title": "Name"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The terms' URL; or give `name`.",
+          "title": "Path"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The licence's name, for terms that have no Open Definition id.",
+          "title": "Title"
+        },
+        "ethos:applies_to": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Globs of the files this licence covers; omit to cover every file.",
+          "title": "Ethos:Applies To",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "ethos:document": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An archived copy of the terms, relative to the dataset directory.",
+          "title": "Ethos:Document",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "ethos:document_sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The archived document's digest; written by the build, or a pin it verifies.",
+          "title": "Ethos:Document Sha256",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        }
+      },
+      "title": "License",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": true,
+      "description": "One entry of ``sources``: where the data came from, or what it was derived from.",
+      "properties": {
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the source is called.",
+          "title": "Title"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where it is, a URL.",
+          "title": "Path"
+        }
+      },
+      "title": "Source",
+      "type": "object"
+    },
+    "Upstream": {
+      "additionalProperties": true,
+      "description": "Whether the original source still serves this delivery.",
+      "properties": {
+        "status": {
+          "default": null,
+          "description": "Whether upstream still serves this delivery.",
+          "enum": [
+            "available",
+            "superseded",
+            "withdrawn",
+            "on-request",
+            "no-upstream"
+          ],
+          "title": "Status",
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "checked": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When somebody last verified this, quoted.",
+          "title": "Checked"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What was checked, and any route to the data that remains.",
+          "title": "Note"
+        }
+      },
+      "title": "Upstream",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "One dataset's description, in the source catalogue or a proposal.",
+  "properties": {
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The dataset's name; the directory decides it, and a stated one must agree.",
+      "title": "Name",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": true,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "A short human-readable title.",
+      "title": "Title",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": true,
+        "published": true,
+        "user_facing": true
+      }
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "What it is and what it is for.",
+      "title": "Description",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": true
+      }
+    },
+    "homepage": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The product's landing page.",
+      "title": "Homepage",
+      "x-ethos": {
+        "inherited": true,
+        "promoted": false,
+        "published": true,
+        "user_facing": true
+      }
+    },
+    "id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The most persistent identifier of this release.",
+      "title": "Id",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The publisher's own release designation, verbatim and quoted.",
+      "title": "Version",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": true,
+        "published": true,
+        "user_facing": true
+      }
+    },
+    "sources": {
+      "default": [],
+      "description": "Where it came from.",
+      "items": {
+        "$ref": "#/$defs/Source"
+      },
+      "title": "Sources",
+      "type": "array",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": true
+      }
+    },
+    "contributors": {
+      "default": [],
+      "description": "Who made it; an author is required for derived and created data.",
+      "items": {
+        "$ref": "#/$defs/Contributor"
+      },
+      "title": "Contributors",
+      "type": "array",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "licenses": {
+      "default": [],
+      "description": "The terms; several entries for several licences.",
+      "items": {
+        "$ref": "#/$defs/License"
+      },
+      "title": "Licenses",
+      "type": "array",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": true
+      }
+    },
+    "ethos:retrieved": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The date the bytes were fetched from upstream, quoted, or \"unknown\".",
+      "title": "Ethos:Retrieved",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:contact": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The person or team to ask about this dataset.",
+      "title": "Ethos:Contact",
+      "x-ethos": {
+        "inherited": true,
+        "promoted": false,
+        "published": true,
+        "user_facing": true
+      }
+    },
+    "ethos:attribution": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The statement anyone redistributing the data has to reproduce.",
+      "title": "Ethos:Attribution",
+      "x-ethos": {
+        "inherited": true,
+        "promoted": false,
+        "published": true,
+        "user_facing": true
+      }
+    },
+    "ethos:coverage_note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "What a user would assume is here and is not.",
+      "title": "Ethos:Coverage Note",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:upstream": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Upstream"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Present when upstream no longer serves this delivery.",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": true
+      }
+    },
+    "ethos:supersedes": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The dataset this one replaces, with another layout and other keys.",
+      "title": "Ethos:Supersedes",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": true,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:origin": {
+      "default": "downloaded",
+      "description": "How the dataset came to exist.",
+      "enum": [
+        "downloaded",
+        "derived",
+        "created"
+      ],
+      "title": "Ethos:Origin",
+      "type": "string",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:derivation": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The method, parameters and inputs of derived data.",
+      "title": "Ethos:Derivation",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:provenance": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "How this copy was obtained or restored, where sources and retrieval do not say it.",
+      "title": "Ethos:Provenance",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:verified": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The date this copy was last checked against its source, quoted.",
+      "title": "Ethos:Verified",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:input_datasets": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The catalogue names of the datasets derived data was computed from.",
+      "title": "Ethos:Input Datasets",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:tiling": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The tiling scheme of a dataset split into tiles.",
+      "title": "Ethos:Tiling",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:additional_variables": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Variable name to description, for variables beyond the dataset's main ones.",
+      "title": "Ethos:Additional Variables",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "source_dir": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Where a draft's files are; status.yaml keeps it once the dataset is in a catalogue.",
+      "title": "Source Dir",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": false,
+        "user_facing": false
+      }
+    },
+    "ethos:remote_prefix": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Folder on the public store; defaults to the name.",
+      "title": "Ethos:Remote Prefix",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": true,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:access": {
+      "default": "public",
+      "description": "Who may read the bytes; picks the cache root.",
+      "enum": [
+        "public",
+        "restricted"
+      ],
+      "title": "Ethos:Access",
+      "type": "string",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": true,
+        "published": true,
+        "user_facing": true
+      }
+    },
+    "ethos:visibility": {
+      "default": "public",
+      "description": "Whether the dataset appears in the published catalogue.",
+      "enum": [
+        "public",
+        "hidden"
+      ],
+      "title": "Ethos:Visibility",
+      "type": "string",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": true,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:embargo": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Embargo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Required when hidden: until when, why, and what it becomes.",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": false,
+        "user_facing": false
+      }
+    },
+    "ethos:license_status": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Derived from licenses; set unresolved while nobody has read the terms.",
+      "enum": [
+        "resolved",
+        "unresolved",
+        "unknown"
+      ],
+      "title": "Ethos:License Status",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": true,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:license_note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Internal working note on the licence.",
+      "title": "Ethos:License Note",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": false,
+        "user_facing": false
+      }
+    },
+    "ethos:restriction": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Why restricted data is restricted and how somebody entitled to it gets a copy.",
+      "title": "Ethos:Restriction",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": true
+      }
+    },
+    "ethos:include": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Only these files are the dataset.",
+      "title": "Ethos:Include",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:exclude": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Applied after include.",
+      "title": "Ethos:Exclude",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    },
+    "ethos:shard_depth": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Split the inventory into shards at this directory depth.",
+      "title": "Ethos:Shard Depth",
+      "x-ethos": {
+        "inherited": false,
+        "promoted": false,
+        "published": true,
+        "user_facing": false
+      }
+    }
+  },
+  "title": "dataset.yaml",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

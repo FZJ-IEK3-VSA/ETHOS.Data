@@ -1,12 +1,14 @@
-"""Where the caches live, and how that gets decided.
+"""Where the caches and the catalogue are, for one person on one machine.
 
-There are three roots, and a user is expected to set at most two of them:
+There are three kinds of root:
 
-    public_cache       public and internal data -- a namespace of symbolic
-                       links to data already on this machine, plus real
-                       directories for anything downloaded from dCache
-    restricted_cache   licensed data, held as real files we own and can make
-                       read-only; never downloaded, never written to
+    public_cache       public data -- a namespace of symbolic links to data
+                       already on this machine, plus real directories for
+                       anything downloaded from dCache; one per account, and
+                       on the cluster one shared directory
+    restricted_caches  restricted data, read in place and never downloaded:
+                       an ordered list of directories, each admitting one
+                       access combination; none by default
     staging_cache      optional: work in progress that is not in the catalogue
                        yet, shadowing it during development
 
@@ -14,478 +16,465 @@ Deliberately *not* one setting per dataset. A cache shared by a whole institute
 has to be configurable in one line, or people will not configure it at all.
 Which root a dataset comes from follows from its access class, and whether it is
 read in place follows from whether its entry in the root is a symbolic link --
-both facts already available without anybody writing them down.
+both facts already available without anybody writing them down. A local copy of
+one dataset is linked into a cache with ``ethos-data link NAME DIR``.
 
-``dataset_roots`` survives as a per-dataset escape hatch for somebody working
-offline from a private copy. Normal users never touch it.
+Each setting is resolved from the first of:
 
-Each root is resolved from several sources so that it can be set once and then
-forgotten -- per user, per environment, or site-wide -- while still being
-overridable for a single job. First match wins:
+    1. an explicit argument        fetch(..., root=...) / --root, catalog= / --catalog
+    2. an environment variable     $ETHOS_DATA_DIR, $ETHOS_RESTRICTED_DIRS, ...
+    3. the settings file           the file $ETHOS_DATA_CONFIG names, else the
+                                   one in the account
+    4. the built-in default        the per-user cache directory (public cache only)
 
-    1. an explicit argument        fetch(..., root=...) / --root
-    2. an environment variable     $ETHOS_DATA_DIR, $ETHOS_RESTRICTED_DIR, ...
-    3. project file                ./ethos-data.yaml, searched upward from the cwd
-    4. user config                 per-user config directory (all platforms)
-    5. environment config          <sys.prefix>/etc/ethos-data/config.yaml
-    6. site config                 machine-wide config directory
-    7. built-in default            the per-user OS cache directory
+One file, in the account, because a script has to find the same settings however
+it is started: from its own folder or another, from an editor, a notebook or a
+batch job, in whichever Python environment. ``$ETHOS_DATA_CONFIG`` replaces the
+account's file rather than merging with it, so a CI job or a test run is
+isolated from the account it runs under.
 
-Nothing has to be configured for public data: layer 7 works on Linux, macOS and
-Windows alike. The restricted and staging roots have *no* built-in default on
-purpose -- where licensed bytes land is a decision somebody has to make out
-loud, and staging is opt-in by nature.
+The restricted caches are a list with no explicit argument:
+``$ETHOS_RESTRICTED_DIRS`` holds paths separated by :data:`os.pathsep` and
+replaces the file's list; nothing is merged.
 
-Layer 3 is for people who want the setting to be *visible*. It is an ordinary
-file sitting next to the work it belongs to, found by walking up from the
-current directory the way git finds .git, and it can be committed so a whole
-team shares one answer.
+Nothing has to be configured for public data: layer 4 works on Linux, macOS and
+Windows alike. The restricted caches and the staging root have *no* built-in
+default on purpose -- where restricted bytes are read is a decision somebody has
+to make out loud, and staging is opt-in by nature. An account that lists no
+restricted cache reads public data only, which is a valid set-up everywhere.
+No root contains another: :func:`set_cache` and :func:`add_restricted_cache`
+refuse a directory that is, contains or lies inside another root.
 
-Every lookup records *where* the value came from, because "why is my data going
-there?" is the question people actually ask.
+:func:`read_settings` reads every setting at once and records *where* each value
+came from, because "why is my data going there?" is the question people actually
+ask. The :class:`Settings` it returns is what a handle or a command keeps, and
+every later read of a setting goes through it.
 """
 
 from __future__ import annotations
 
 import getpass
 import os
-import sys
+import stat
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 import platformdirs
 import yaml
 
+from .errors import CatalogVersionError, ConfigurationError
+from .formats import keys as k
+from .model.versions import Bounds
+
 __all__ = [
-    "SCOPES",
-    "dataset_roots",
-    "set_dataset_root",
-    "unset_dataset_root",
-    "CONFIG_FILENAME",
+    "CATALOG_ENV_VAR",
+    "CONFIG_ENV_VAR",
+    "DEFAULT_CATALOG",
     "ENV_VAR",
+    "PUBLICATION_URL_ENV_VAR",
     "RESTRICTED_ENV_VAR",
     "STAGING_ENV_VAR",
-    "SKIP_UNAVAILABLE_ENV_VAR",
-    "SKIP_UNAVAILABLE_KEY",
-    "PUBLIC_CACHE_KEY",
-    "LEGACY_CACHE_KEY",
-    "RESTRICTED_CACHE_KEY",
-    "STAGING_CACHE_KEY",
-    "Resolved",
     "Roots",
+    "Settings",
+    "account_config_path",
+    "add_restricted_cache",
+    "catalog_index",
     "config_path",
-    "find_project_config",
-    "writable_config_path",
-    "config_sources",
+    "current_user",
     "load_config",
-    "resolve_cache_dir",
-    "resolve_public_cache",
-    "resolve_restricted_cache",
-    "resolve_staging_cache",
-    "resolve_roots",
-    "resolve_skip_unavailable",
-    "resolve_catalog",
-    "resolve_collections",
-    "resolve_publication_url",
+    "read_settings",
+    "remove_restricted_cache",
+    "set_cache",
     "set_option",
     "unset_option",
-    "CATALOG_ENV_VAR",
-    "DEFAULT_CATALOG",
+    "unreachable",
+    "PUBLIC_RELEASE_URL",
 ]
 
 #: The public catalogue, used whenever nothing else names one -- so that public
-#: data needs no configuration at all. It follows a moving branch; a package
-#: that must resolve to the same bytes release after release pins a version in
-#: its own collections file instead.
+#: data needs no configuration at all. It follows a moving branch, and lists
+#: every release; a collections file's release bounds choose one of them.
 DEFAULT_CATALOG = "https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/main/datacatalog.json"
+#: Where the public catalogue keeps one release: the tag of that release.
+PUBLIC_RELEASE_URL = "https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data-Catalogue/{version}/datacatalog.json"
 #: Point every tool in one shell or job at another catalogue -- the internal one,
-#: say -- without editing a file. Wins over config files and over the version a
-#: collections file pins; an explicit ``catalog=`` / ``--catalog`` wins over it.
-#: One variable for every package, where each used to need its own.
+#: say -- without editing a file. Wins over the settings file and over the
+#: public release a collections file's bounds select; an explicit ``catalog=`` /
+#: ``--catalog`` wins over it. One variable for every package.
 CATALOG_ENV_VAR = "ETHOS_DATA_CATALOG"
+#: A settings file to read instead of the one in the account -- for a CI job, a
+#: container, a lesson, or a team's file on a shared machine. Replaces the
+#: account's file; nothing is merged.
+CONFIG_ENV_VAR = "ETHOS_DATA_CONFIG"
 
-#: The public cache. Named for the era when there was only one root; kept
-#: because it is in scripts, job files and people's shell profiles.
+#: The public cache.
 ENV_VAR = "ETHOS_DATA_DIR"
-RESTRICTED_ENV_VAR = "ETHOS_RESTRICTED_DIR"
+#: The restricted caches, separated by :data:`os.pathsep`; replaces the file's list.
+RESTRICTED_ENV_VAR = "ETHOS_RESTRICTED_DIRS"
 STAGING_ENV_VAR = "ETHOS_STAGING_DIR"
+PUBLICATION_URL_ENV_VAR = "ETHOS_PUBLICATION_URL"
 
-PUBLIC_CACHE_KEY = "public_cache"
-#: What ``public_cache`` used to be called. Still read, still writable by
-#: ``config set-cache``, so existing ethos-data.yaml files keep working.
-LEGACY_CACHE_KEY = "cache_dir"
-RESTRICTED_CACHE_KEY = "restricted_cache"
-STAGING_CACHE_KEY = "staging_cache"
-#: "I do not have the licensed data, carry on without it." Set once by anybody
-#: working away from the institute cluster, where the restricted cache does not
-#: and cannot exist.
-SKIP_UNAVAILABLE_KEY = "skip_unavailable"
-SKIP_UNAVAILABLE_ENV_VAR = "ETHOS_SKIP_UNAVAILABLE"
 
-CONFIG_FILENAME = "config.yaml"
-PROJECT_FILENAME = "ethos-data.yaml"
 APP = "ethos-data"
 
-#: Config scopes, highest precedence first.
-SCOPES = ("project", "user", "environment", "site")
-
-
-@dataclass(frozen=True)
-class Resolved:
-    """A resolved setting plus a human-readable account of where it came from."""
-
-    value: Path
-    source: str
-
-    def __str__(self) -> str:
-        return f"{self.value}  (from {self.source})"
+#: Where the account's settings file is, the source a value read from it names.
+ACCOUNT = "your account"
 
 
 @dataclass(frozen=True)
 class Roots:
-    """The three cache roots, resolved together with their provenance.
+    """The cache roots, resolved together with their provenance.
 
     Passed around as one object so that adding a root later does not mean
     changing every signature between the command line and ``locate()``.
+    ``restricted`` are the restricted caches in the order they are read; the
+    list has one source.
     """
 
     public: Path
-    restricted: Path | None = None
+    restricted: tuple[Path, ...] = ()
     staging: Path | None = None
     public_source: str = ""
     restricted_source: str = ""
     staging_source: str = ""
 
-    @classmethod
-    def coerce(cls, value: "Roots | str | Path | None") -> "Roots":
-        """Accept a Roots, a bare path meaning "the public cache", or nothing.
-
-        The bare-path form is what keeps ``fetch(root=...)`` and ``--root``
-        working unchanged: they always meant the public cache, and still do.
-        """
-        if isinstance(value, cls):
-            return value
-        if value is None:
-            return resolve_roots()
+    def with_public(self, value: str | Path) -> Roots:
+        """These roots with the public cache named explicitly, for one call or handle."""
         return replace(
-            resolve_roots(),
-            public=Path(value).expanduser(),
-            public_source="explicit argument",
+            self, public=Path(value).expanduser(), public_source="explicit argument"
         )
 
-    def for_access(self, access: str) -> Path | None:
-        """The root a dataset of this access class is read from."""
-        return self.restricted if access == "restricted" else self.public
+    def restricted_cache(self, directory: str | Path) -> Path | None:
+        """The listed restricted cache ``directory`` names, or None if it is not one."""
+        wanted = _same(directory)
+        return next(
+            (cache for cache in self.restricted if _same(cache) == wanted), None
+        )
 
 
-def find_project_config(start: Path | None = None) -> Path | None:
-    """Nearest ethos-data.yaml at or above ``start`` (default: the cwd).
+def _same(directory: str | Path) -> str:
+    """A directory's spelling for comparison: absolute, normalised, case-folded where the system is."""
+    return os.path.normcase(os.path.abspath(Path(directory).expanduser()))
 
-    Searched the way git finds .git, so it works from anywhere inside a project.
+
+# -- the settings file ---------------------------------------------------------
+
+
+def account_config_path() -> Path:
+    """The settings file in the account: one per person and machine.
+
+    ``~/.config/ethos-data/config.yaml`` on Linux (``$XDG_CONFIG_HOME``
+    respected), ``%LOCALAPPDATA%\\ethos-data\\config.yaml`` on Windows and
+    ``~/Library/Application Support/ethos-data/config.yaml`` on macOS.
     """
-    current = (start or Path.cwd()).resolve()
-    for directory in (current, *current.parents):
-        candidate = directory / PROJECT_FILENAME
-        if candidate.is_file():
-            return candidate
+    return Path(platformdirs.user_config_dir(APP, appauthor=False)) / k.SETTINGS_FILE
+
+
+def config_path() -> Path:
+    """The settings file in effect: the one ``$ETHOS_DATA_CONFIG`` names, else the account's.
+
+    This is the file every ``config set-*`` and ``unset-*`` writes to. It may
+    not exist yet; :func:`load_config` says what that means.
+    """
+    named = os.environ.get(CONFIG_ENV_VAR)
+    return Path(named).expanduser() if named else account_config_path()
+
+
+def _config_source() -> str:
+    """Why :func:`config_path` is the file in effect."""
+    return f"${CONFIG_ENV_VAR}" if os.environ.get(CONFIG_ENV_VAR) else ACCOUNT
+
+
+def _missing_named_file(path: Path) -> ConfigurationError:
+    return ConfigurationError(
+        f"${CONFIG_ENV_VAR} names {path}, which does not exist.\n"
+        f"Create it with a setter, such as `ethos-data config set-public-cache DIR`, "
+        f"or unset {CONFIG_ENV_VAR} to use the settings file in your account."
+    )
+
+
+def _file_to_read() -> Path | None:
+    """The file settings are read from, or None if there is none.
+
+    A file ``$ETHOS_DATA_CONFIG`` names must exist: a mistyped path would
+    otherwise quietly read as "nothing set". The account's file may be absent,
+    and then nothing is set.
+    """
+    path = config_path()
+    if path.is_file():
+        return path
+    if os.environ.get(CONFIG_ENV_VAR):
+        raise _missing_named_file(path)
     return None
 
 
-def config_path(scope: str = "user") -> Path:
-    """Location of the config file for a given scope.
+def _read_document(path: Path) -> dict:
+    try:
+        document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as error:
+        raise ConfigurationError(f"{path} is not valid YAML: {error}") from None
+    if not isinstance(document, dict):
+        raise ConfigurationError(
+            f"{path} must contain a YAML mapping, got {type(document).__name__}"
+        )
+    return document
 
-    For the project scope this is the file that would be *written* -- one in the
-    current directory. Reading uses find_project_config(), which searches upward.
+
+def _check(path: Path, document: dict) -> None:
+    """Raise naming every way ``document`` breaks the settings file's specification."""
+    from pydantic import ValidationError
+
+    from .formats.fields import describe
+    from .formats.settings_file import SettingsFile
+
+    try:
+        SettingsFile.model_validate(document)
+    except ValidationError as error:
+        problems = "".join(f"\n  {line}" for line in describe(error))
+        raise ConfigurationError(
+            f"{path} is not a valid settings file:{problems}"
+        ) from None
+
+
+def load_config() -> tuple[dict, dict[str, str]]:
+    """The settings file's values, and where each came from.
+
+    The file is checked against its specification,
+    :class:`~ethos_data.formats.SettingsFile`, and every problem is reported at
+    once. One file, so the provenance of every key is the same file; it is kept
+    per key because the snapshot reports it per value.
     """
-    if scope == "project":
-        return Path.cwd() / PROJECT_FILENAME
-    if scope == "user":
-        return Path(platformdirs.user_config_dir(APP)) / CONFIG_FILENAME
-    if scope == "environment":
-        return Path(sys.prefix) / "etc" / APP / CONFIG_FILENAME
-    if scope == "site":
-        return Path(platformdirs.site_config_dir(APP)) / CONFIG_FILENAME
-    raise ValueError(f"unknown scope {scope!r}; expected one of {', '.join(SCOPES)}")
+    path = _file_to_read()
+    if path is None:
+        return {}, {}
+    document = _read_document(path)
+    _check(path, document)
+    where = f"settings file {path}"
+    return document, {key: where for key in document}
 
 
-def writable_config_path(scope: str = "user") -> Path:
-    """The file a write should land in.
-
-    For the project scope, update an existing ethos-data.yaml found above the cwd
-    rather than shadowing it with a second one in a subdirectory.
-    """
-    if scope == "project":
-        return find_project_config() or config_path("project")
-    return config_path(scope)
-
-
-#: Prefixes every config file we write, so somebody who opens one knows what it is.
-CONFIG_HEADER = "# ethos-data configuration. See `ethos-data config show`.\n"
+#: Prefixes every settings file we write, so somebody who opens one knows what it is.
+CONFIG_HEADER = "# ethos-data settings. See `ethos-data config show`.\n"
 
 
 def _write(path: Path, document: dict) -> None:
-    """Write a configuration file: UTF-8, LF, on every platform.
+    """Write the settings file: UTF-8, LF, on every platform.
 
     Both arguments are load-bearing. Left to its defaults ``write_text`` encodes
     with the *locale* codec -- cp1252 on a German Windows, which cannot spell a
     cache path containing anything outside it -- and rewrites every "\\n" as
-    "\\r\\n". A project-scope ethos-data.yaml is committed and shared, so its
-    bytes must not depend on who wrote it.
+    "\\r\\n", so the same settings would read differently on another machine.
     """
     text = CONFIG_HEADER + yaml.safe_dump(
         document, default_flow_style=False, sort_keys=True
     )
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
-def config_sources() -> list[tuple[str, Path, bool]]:
-    """Every config file we consult, in precedence order, with existence flags."""
-    sources = []
-    for scope in SCOPES:
-        if scope == "project":
-            found = find_project_config()
-            sources.append((scope, found or config_path(scope), found is not None))
-        else:
-            path = config_path(scope)
-            sources.append((scope, path, path.is_file()))
-    return sources
+def _editable() -> tuple[Path, dict]:
+    """The settings file to change, and what it holds now.
+
+    A setter may create the file, even one ``$ETHOS_DATA_CONFIG`` names; that is
+    how such a file comes to exist.
+    """
+    path = config_path()
+    return path, _read_document(path) if path.is_file() else {}
 
 
-#: Settings merged entry-by-entry rather than replaced wholesale. A site-wide
-#: dataset_roots must survive a user adding one root of their own.
-MERGED_KEYS = ("dataset_roots",)
+def _existing() -> tuple[Path, dict] | None:
+    """The settings file to remove a value from, or None if there is none.
+
+    Removing needs no file to exist, except that a file ``$ETHOS_DATA_CONFIG``
+    names must: only a setter creates one.
+    """
+    path = config_path()
+    if not path.is_file():
+        if os.environ.get(CONFIG_ENV_VAR):
+            raise _missing_named_file(path)
+        return None
+    document = _read_document(path)
+    return (path, document) if document else None
 
 
-def load_config() -> tuple[dict, dict[str, str]]:
-    """Merge the config files. Returns (settings, provenance per key)."""
-    merged: dict = {}
-    origin: dict[str, str] = {}
-    # Reverse order so that higher-precedence scopes overwrite lower ones.
-    for scope, path, exists in reversed(config_sources()):
-        if not exists:
-            continue
-        try:
-            document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except yaml.YAMLError as error:
-            raise ValueError(f"{path} is not valid YAML: {error}") from None
-        if not isinstance(document, dict):
-            raise ValueError(
-                f"{path} must contain a YAML mapping, got {type(document).__name__}"
+def set_option(key: str, value: object) -> Path:
+    """Write one setting into the settings file in effect, creating it if need be."""
+    path, document = _editable()
+    document[key] = value
+    _write(path, document)
+    return path
+
+
+def unset_option(key: str) -> Path | None:
+    """Remove one setting from the settings file in effect; None if it was not set."""
+    found = _existing()
+    if found is None or key not in found[1]:
+        return None
+    path, document = found
+    del document[key]
+    # Kept even when it is left empty: a file $ETHOS_DATA_CONFIG names has to
+    # go on existing, and an empty one in the account means what none does.
+    _write(path, document)
+    return path
+
+
+def _overlapping(directory: Path, others: dict[str, Path]) -> None:
+    """Refuse ``directory`` if it is, contains or lies inside one of ``others``."""
+    mine = Path(_same(directory))
+    for label, other in others.items():
+        theirs = Path(_same(other))
+        if mine == theirs or mine in theirs.parents or theirs in mine.parents:
+            raise ConfigurationError(
+                f"{directory} is, contains or lies inside the {label}, {other}. The "
+                "public cache, the staging root and each restricted cache are separate "
+                "directories; choose another."
             )
-        for key, value in document.items():
-            if key in MERGED_KEYS and isinstance(value, dict):
-                combined = dict(merged.get(key) or {})
-                combined.update(value)
-                merged[key] = combined
-                for entry in value:
-                    origin[f"{key}.{entry}"] = f"{scope} config {path}"
-            else:
-                merged[key] = value
-            origin[key] = f"{scope} config {path}"
-    return merged, origin
 
 
-def _from_config(keys: tuple[str, ...]) -> Resolved | None:
-    """First of ``keys`` that any config file sets, with its provenance."""
-    settings, origin = load_config()
-    for key in keys:
-        if settings.get(key):
-            return Resolved(Path(str(settings[key])).expanduser(), origin[key])
+def _other_roots(roots: Roots, *, keep: str) -> dict[str, Path]:
+    """Every root of ``roots`` but the one the setting ``keep`` names."""
+    others: dict[str, Path] = {}
+    if keep != k.SETTING_PUBLIC_CACHE:
+        others["public cache"] = roots.public
+    if keep != k.SETTING_STAGING_CACHE and roots.staging is not None:
+        others["staging root"] = roots.staging
+    for number, cache in enumerate(roots.restricted, start=1):
+        others[f"restricted cache {number}"] = cache
+    return others
+
+
+def _current_roots() -> Roots:
+    """The roots in effect, as a setter sees them.
+
+    A setter may create the file ``$ETHOS_DATA_CONFIG`` names, so a missing one
+    holds no roots here rather than stopping the command, and a value the
+    specification would refuse can still be replaced.
+    """
+    path = config_path()
+    document = _read_document(path) if path.is_file() else {}
+    return _roots(None, document, {key: f"settings file {path}" for key in document})
+
+
+def set_cache(key: str, directory: str | Path) -> Path:
+    """Set the public cache or the staging root, refusing a directory that overlaps another root."""
+    if key not in (k.SETTING_PUBLIC_CACHE, k.SETTING_STAGING_CACHE):
+        raise ValueError(f"{key!r} is not the public cache or the staging root")
+    target = Path(directory).expanduser()
+    _overlapping(target, _other_roots(_current_roots(), keep=key))
+    return set_option(key, str(target))
+
+
+def add_restricted_cache(directory: str | Path) -> Path:
+    """Append a restricted cache to the settings file's list.
+
+    Refuses a directory the list already holds, and one that is, contains or
+    lies inside another root.
+    """
+    target = Path(directory).expanduser()
+    path, document = _editable()
+    listed = [str(item) for item in document.get(k.SETTING_RESTRICTED_CACHES) or []]
+    if any(_same(item) == _same(target) for item in listed):
+        raise ConfigurationError(f"{target} is already a restricted cache in {path}.")
+    others = _other_roots(replace(_current_roots(), restricted=()), keep="")
+    for number, item in enumerate(listed, start=1):
+        others[f"restricted cache {number}"] = Path(item)
+    _overlapping(target, others)
+    document[k.SETTING_RESTRICTED_CACHES] = [*listed, str(target)]
+    _write(path, document)
+    return path
+
+
+def remove_restricted_cache(directory: str | Path) -> Path:
+    """Remove a restricted cache from the settings file's list."""
+    found = _existing()
+    listed = [
+        str(item)
+        for item in (found[1] if found else {}).get(k.SETTING_RESTRICTED_CACHES) or []
+    ]
+    kept = [item for item in listed if _same(item) != _same(directory)]
+    if found is None or len(kept) == len(listed):
+        where = found[0] if found else config_path()
+        shown = ", ".join(listed) or "none"
+        raise ConfigurationError(
+            f"{directory} is not a restricted cache in {where}; it lists {shown}."
+        )
+    path, document = found
+    if kept:
+        document[k.SETTING_RESTRICTED_CACHES] = kept
+    else:
+        del document[k.SETTING_RESTRICTED_CACHES]
+    _write(path, document)
+    return path
+
+
+# -- resolving each setting --------------------------------------------------------
+
+
+def _from_file(
+    key: str, settings: dict, origin: dict[str, str]
+) -> tuple[Path, str] | None:
+    """The path the settings file sets for ``key``, with its provenance."""
+    if settings.get(key):
+        return Path(str(settings[key])).expanduser(), origin[key]
     return None
 
 
-def resolve_public_cache(explicit: str | Path | None = None) -> Resolved:
-    """Where public and internal data is read from, and downloaded into."""
+def _public(explicit, settings: dict, origin: dict[str, str]) -> tuple[Path, str]:
     if explicit is not None:
-        return Resolved(Path(explicit).expanduser(), "explicit argument")
-
+        return Path(explicit).expanduser(), "explicit argument"
     from_env = os.environ.get(ENV_VAR)
     if from_env:
-        return Resolved(Path(from_env).expanduser(), f"${ENV_VAR}")
-
-    found = _from_config((PUBLIC_CACHE_KEY, LEGACY_CACHE_KEY))
-    if found is not None:
-        return found
-
-    return Resolved(
-        Path(platformdirs.user_cache_dir(APP)), "built-in default (OS cache directory)"
+        return Path(from_env).expanduser(), f"${ENV_VAR}"
+    return _from_file(k.SETTING_PUBLIC_CACHE, settings, origin) or (
+        Path(platformdirs.user_cache_dir(APP, appauthor=False)),
+        "built-in default, the per-user cache directory",
     )
 
 
-def resolve_restricted_cache(explicit: str | Path | None = None) -> Resolved | None:
-    """Where licensed data lives on this machine, or None if nobody has said.
+def _optional_root(
+    variable: str, key: str, settings: dict, origin: dict[str, str]
+) -> tuple[Path, str] | None:
+    from_env = os.environ.get(variable)
+    if from_env:
+        return Path(from_env).expanduser(), f"${variable}"
+    return _from_file(key, settings, origin)
 
-    No built-in default, deliberately. Restricted bytes landing somewhere by
-    accident is exactly the failure this package exists to prevent, so the
-    absence of a setting is reported as a question rather than guessed at.
+
+def _restricted(settings: dict, origin: dict[str, str]) -> tuple[tuple[Path, ...], str]:
+    """The restricted caches in order, and where the list came from.
+
+    ``$ETHOS_RESTRICTED_DIRS`` replaces the file's list; nothing is merged.
     """
-    if explicit is not None:
-        return Resolved(Path(explicit).expanduser(), "explicit argument")
     from_env = os.environ.get(RESTRICTED_ENV_VAR)
     if from_env:
-        return Resolved(Path(from_env).expanduser(), f"${RESTRICTED_ENV_VAR}")
-    return _from_config((RESTRICTED_CACHE_KEY,))
-
-
-def resolve_staging_cache(explicit: str | Path | None = None) -> Resolved | None:
-    """Where work-in-progress data lives, or None if staging is not in use.
-
-    Opt-in by design: an unset staging root means the catalogue is the only
-    thing that can answer for a dataset, which is what you want everywhere
-    except on the machine where somebody is preparing new data.
-    """
-    if explicit is not None:
-        return Resolved(Path(explicit).expanduser(), "explicit argument")
-    from_env = os.environ.get(STAGING_ENV_VAR)
-    if from_env:
-        return Resolved(Path(from_env).expanduser(), f"${STAGING_ENV_VAR}")
-    return _from_config((STAGING_CACHE_KEY,))
-
-
-#: Strings a person plausibly types meaning yes.
-_TRUTHY = {"1", "true", "yes", "on"}
-_FALSY = {"0", "false", "no", "off"}
-
-
-def resolve_skip_unavailable(explicit: bool | None = None) -> tuple[bool, str]:
-    """Whether to carry on when licensed data cannot be reached here.
-
-    Off by default: a dataset quietly missing from a result is worse than a
-    command that stops and says so. Somebody who simply does not have access to
-    the licensed data -- most people, most of the time, away from the institute
-    cluster -- sets this once and stops being asked.
-    """
-    if explicit is not None:
-        return bool(explicit), "explicit argument"
-    from_env = os.environ.get(SKIP_UNAVAILABLE_ENV_VAR)
-    if from_env is not None:
-        lowered = from_env.strip().lower()
-        if lowered in _TRUTHY:
-            return True, f"${SKIP_UNAVAILABLE_ENV_VAR}"
-        if lowered in _FALSY:
-            return False, f"${SKIP_UNAVAILABLE_ENV_VAR}"
-        raise ValueError(
-            f"${SKIP_UNAVAILABLE_ENV_VAR}={from_env!r} is not a yes/no value; "
-            f"use one of {', '.join(sorted(_TRUTHY | _FALSY))}"
-        )
-    settings, origin = load_config()
-    if SKIP_UNAVAILABLE_KEY in settings:
-        return bool(settings[SKIP_UNAVAILABLE_KEY]), origin[SKIP_UNAVAILABLE_KEY]
-    return False, "built-in default (stop rather than omit data)"
-
-
-def resolve_roots(public: str | Path | None = None) -> Roots:
-    """All three roots at once, each with its provenance."""
-    resolved_public = resolve_public_cache(public)
-    restricted = resolve_restricted_cache()
-    staging = resolve_staging_cache()
-    return Roots(
-        public=resolved_public.value,
-        restricted=restricted.value if restricted else None,
-        staging=staging.value if staging else None,
-        public_source=resolved_public.source,
-        restricted_source=restricted.source if restricted else "",
-        staging_source=staging.source if staging else "",
-    )
-
-
-def resolve_cache_dir(explicit: str | Path | None = None) -> Resolved:
-    """The public cache. Retained under its old name for existing callers."""
-    return resolve_public_cache(explicit)
-
-
-def current_user() -> str:
-    """Who is running this, for the provenance records that say so.
-
-    ``$USER`` is a POSIX convention; Windows sets ``$USERNAME`` instead, so
-    reading ``$USER`` directly signed every Windows-written provenance record
-    with an empty string. ``getpass.getuser`` knows both, and falls back to the
-    password database. An unattended account may have neither, and a provenance
-    record with no name is still worth writing -- so this reports "" rather
-    than raising, exactly as the environment lookup it replaces did.
-    """
-    try:
-        return getpass.getuser()
-    except (OSError, KeyError, ImportError):
-        return ""
-
-
-def dataset_roots() -> dict[str, str]:
-    """Per-dataset local roots for this machine.
-
-    The escape hatch, not the main road: a dataset listed here is read where it
-    lies and never downloaded, whatever the three roots say. Use it for a
-    private copy on a laptop; on a shared machine, put a symbolic link in the
-    public cache instead, which needs no per-user configuration at all.
-    """
-    settings, _ = load_config()
-    roots = settings.get("dataset_roots") or {}
-    if not isinstance(roots, dict):
-        raise ValueError("dataset_roots must be a mapping of dataset name -> path")
-    return {str(k): str(v) for k, v in roots.items()}
-
-
-def set_dataset_root(dataset: str, path: str, scope: str = "user") -> Path:
-    config_file = writable_config_path(scope)
-    document = (
-        yaml.safe_load(config_file.read_text(encoding="utf-8"))
-        if config_file.is_file()
-        else {}
-    )
-    document = document or {}
-    document.setdefault("dataset_roots", {})[dataset] = str(Path(path).expanduser())
-    config_file.parent.mkdir(parents=True, exist_ok=True)
-    _write(config_file, document)
-    return config_file
-
-
-def unset_dataset_root(dataset: str, scope: str = "user") -> Path | None:
-    config_file = writable_config_path(scope)
-    if not config_file.is_file():
-        return None
-    document = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
-    if dataset not in (document.get("dataset_roots") or {}):
-        return None
-    del document["dataset_roots"][dataset]
-    if not document["dataset_roots"]:
-        del document["dataset_roots"]
-    if document:
-        _write(config_file, document)
+        listed = [item for item in from_env.split(os.pathsep) if item.strip()]
+        source = f"${RESTRICTED_ENV_VAR}"
     else:
-        config_file.unlink()
-    return config_file
+        listed = [str(item) for item in settings.get(k.SETTING_RESTRICTED_CACHES) or []]
+        source = origin.get(k.SETTING_RESTRICTED_CACHES, "")
+    if not listed:
+        return (), ""
+    return tuple(Path(item).expanduser() for item in listed), source
 
 
-def resolve_publication_url(catalog_default: str = "") -> tuple[str, str]:
-    """Where to fetch bytes from, allowing a site override of the catalogue value.
-
-    The catalogue names DESY's compatible, redirect-free door, which is right for
-    anonymous public users. CI and bulk transfers want the high-throughput door
-    instead -- uncapped, but it redirects to a pool host on a high port, so it
-    needs an environment that permits outbound connections there.
-    """
-    # Deliberately NOT a Path: pathlib collapses the "//" in "https://host".
-    from_env = os.environ.get("ETHOS_PUBLICATION_URL")
-    if from_env:
-        return from_env, "$ETHOS_PUBLICATION_URL"
-    settings, origin = load_config()
-    if settings.get("publication_url"):
-        return str(settings["publication_url"]), origin["publication_url"]
-    return catalog_default, "catalogue"
+def _roots(public, settings: dict, origin: dict[str, str]) -> Roots:
+    public_path, public_source = _public(public, settings, origin)
+    restricted, restricted_source = _restricted(settings, origin)
+    staging = _optional_root(STAGING_ENV_VAR, k.SETTING_STAGING_CACHE, settings, origin)
+    return Roots(
+        public=public_path,
+        restricted=restricted,
+        staging=staging[0] if staging else None,
+        public_source=public_source,
+        restricted_source=restricted_source,
+        staging_source=staging[1] if staging else "",
+    )
 
 
-def resolve_catalog(explicit: str | None = None) -> tuple[str, str] | None:
-    """Optional catalogue override: explicit, then $ETHOS_DATA_CATALOG, then config.
-
-    Returns ``None`` if nothing is set, so a caller falls back to whatever a
-    collections.yaml pins for itself via its own ``catalog:`` key, and after that
-    to ``DEFAULT_CATALOG``.
-
-    Deliberately returns a plain string rather than a ``Resolved`` -- a
-    catalogue location is as often an http(s) URL as a local path, and
-    ``pathlib.Path`` collapses the "//" in "https://", which would silently
-    corrupt it (see resolve_publication_url for the same issue).
-    """
+def _catalog(
+    explicit: str | None, settings: dict, origin: dict[str, str]
+) -> tuple[str, str] | None:
+    # A string, not a Path: pathlib collapses the "//" in "https://host".
     if explicit:
         return explicit, "explicit argument"
     from_env = os.environ.get(CATALOG_ENV_VAR)
@@ -493,53 +482,324 @@ def resolve_catalog(explicit: str | None = None) -> tuple[str, str] | None:
         if not from_env.startswith(("http://", "https://")):
             from_env = str(Path(from_env).expanduser())
         return from_env, f"${CATALOG_ENV_VAR}"
-    settings, origin = load_config()
-    catalog = settings.get("catalog")
+    catalog = settings.get(k.SETTING_CATALOG)
     if not catalog:
         return None
     catalog = str(catalog)
     if not catalog.startswith(("http://", "https://")):
         catalog = str(Path(catalog).expanduser())
-    return catalog, origin["catalog"]
+    return catalog, origin[k.SETTING_CATALOG]
 
 
-def resolve_collections(explicit: str | None = None) -> tuple[str, str] | None:
-    """Optional default collections-file location, same precedence as catalog.
+def _publication_url(settings: dict, origin: dict[str, str]) -> tuple[str, str] | None:
+    # Deliberately NOT a Path: pathlib collapses the "//" in "https://host".
+    from_env = os.environ.get(PUBLICATION_URL_ENV_VAR)
+    if from_env:
+        return from_env, f"${PUBLICATION_URL_ENV_VAR}"
+    if settings.get(k.SETTING_PUBLICATION_URL):
+        return (
+            str(settings[k.SETTING_PUBLICATION_URL]),
+            origin[k.SETTING_PUBLICATION_URL],
+        )
+    return None
 
-    Unlike a catalogue, a collections file is always local -- there is no
-    URL form -- so this always resolves to a filesystem path.
+
+def current_user() -> str:
+    """Who is running this, for the provenance records that say so.
+
+    ``$USER`` is a POSIX convention; Windows sets ``$USERNAME`` instead.
+    ``getpass.getuser`` knows both, and falls back to the password database. An
+    unattended account may have neither, and a provenance record with no name
+    is still worth writing -- so this reports "" rather than raising.
     """
-    if explicit:
-        return explicit, "explicit argument"
+    try:
+        return getpass.getuser()
+    except (OSError, KeyError, ImportError):
+        return ""
+
+
+# -- answers about paths, for whoever shows the settings -----------------------------
+
+
+def unreachable(path: Path) -> str | None:
+    """Why ``path`` is not a usable directory, or None when it is one.
+
+    To ``Path.is_dir()`` a cache on a network drive that is not mounted looks
+    exactly like a cache nobody has created yet: both are ``False``. The person
+    reading ``config show`` needs the difference, so the reason is spelled out
+    -- a drive that is not connected, a path that does not exist, or whatever
+    the operating system said when it tried.
+    """
+    try:
+        info = os.stat(path)
+    except OSError as error:
+        if path.drive and not os.path.exists(path.anchor):
+            return f"drive {path.drive} is not connected"
+        if isinstance(error, FileNotFoundError):
+            return "does not exist"
+        return f"cannot be reached ({error.strerror or error})"
+    return None if stat.S_ISDIR(info.st_mode) else "is not a directory"
+
+
+def catalog_index(location: str) -> str:
+    """A catalogue location fit to be set, so a typo fails now, not on the next
+    unrelated command with a stack trace three frames from the actual cause.
+
+    Also accepts a directory and fills in ``datacatalog.json`` -- the mistake
+    of pointing at the catalogue repo itself rather than its generated index
+    is common enough to just handle.
+    """
+    if location.startswith(("http://", "https://")):
+        return location
+    candidate = Path(location).expanduser()
+    if candidate.is_dir():
+        auto = candidate / "datacatalog.json"
+        if auto.is_file():
+            return str(auto)
+        raise ConfigurationError(
+            f"{candidate} is a directory with no datacatalog.json in it.\n"
+            "Point at the generated index file itself, e.g.:\n"
+            f"    ethos-data config set-catalog {auto}"
+        )
+    if not candidate.is_file():
+        raise ConfigurationError(
+            f"no such file: {candidate}\n"
+            "Expected the generated datacatalog.json inside a catalogue checkout "
+            "-- not catalog.yaml (that's hand-written metadata, not the loadable index)."
+        )
+    return str(candidate)
+
+
+# -- every setting at once ----------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Settings:
+    """Every setting, read once, with where each value came from.
+
+    What a handle or a command keeps, so a script that changes directory or
+    environment half-way keeps the catalogue and caches it began with.
+    ``print(settings)`` names the settings file, the catalogue and its version,
+    the caches and the source of each, ready to be recorded next to results;
+    :meth:`as_dict` gives the same as plain values.
+
+    ``catalog`` is the catalogue override from the settings alone until a
+    handle fills in the catalogue it actually uses: the public release a
+    collections file's bounds select, or the built-in default.
+    """
+
+    file: Path
+    file_source: str
+    file_exists: bool
+    roots: Roots
+    catalog: str | None = None
+    catalog_source: str = ""
+    catalog_version: str | None = None
+    publication_url: str | None = None
+    publication_url_source: str = ""
+    #: The download switch: a package's bundled files the catalogue holds too
+    #: are read through the catalogue route.
+    download: bool = False
+    download_source: str = ""
+
+    def choose_catalog(
+        self, *, explicit: str | None = None, bounds: Bounds | None = None
+    ) -> tuple[str, str]:
+        """The catalogue to read, and why: one order for every handle and command.
+
+        An explicit location; then ``$ETHOS_DATA_CATALOG`` or the settings
+        file, as these settings read them; then the public catalogue, so that
+        public data needs nothing configured. A collections file's ``bounds``
+        choose the public release: a full ``exact_version`` reads that
+        release's tag, any other bounds the newest release they admit among
+        those the public ``main`` index lists. A catalogue chosen any other way
+        is checked against the bounds once it is loaded.
+        """
+        if explicit:
+            return explicit, "explicit argument"
+        if self.catalog is not None:
+            return self.catalog, self.catalog_source
+        if bounds is None:
+            return DEFAULT_CATALOG, "built-in public catalogue"
+        release = bounds.release()
+        if release is not None:
+            return (
+                PUBLIC_RELEASE_URL.format(version=release),
+                f"the public release {release}",
+            )
+        from .catalogs import public_releases
+
+        published = public_releases(self)
+        newest = bounds.newest(published)
+        if newest is None:
+            listed = ", ".join(map(str, published)) or "none"
+            raise CatalogVersionError(
+                f"no public catalogue release is within {bounds}; the public "
+                f"releases are: {listed}."
+            )
+        return (
+            PUBLIC_RELEASE_URL.format(version=newest),
+            f"the public release {newest}, the newest within {bounds}",
+        )
+
+    def with_catalog(
+        self, location: str, source: str, version: str | None = None
+    ) -> Settings:
+        """These settings with the catalogue a handle actually uses."""
+        return replace(
+            self, catalog=location, catalog_source=source, catalog_version=version
+        )
+
+    def with_public(self, value: str | Path) -> Settings:
+        """These settings with the public cache named explicitly."""
+        return replace(self, roots=self.roots.with_public(value))
+
+    def with_download(self, explicit: bool | None) -> Settings:
+        """These settings with a handle's ``download=``, when it gives one."""
+        if explicit is None:
+            return self
+        return replace(self, download=explicit, download_source="explicit argument")
+
+    def as_dict(self) -> dict:
+        """Every value and its source, as strings, for a results file."""
+
+        def cache(path: Path | None, source: str) -> dict | None:
+            return None if path is None else {"path": str(path), "source": source}
+
+        roots = self.roots
+        return {
+            "settings_file": {
+                "path": str(self.file),
+                "source": self.file_source,
+                "exists": self.file_exists,
+            },
+            "catalog": None
+            if self.catalog is None
+            else {
+                "location": self.catalog,
+                "source": self.catalog_source,
+                "version": self.catalog_version,
+            },
+            "public_cache": cache(roots.public, roots.public_source),
+            "restricted_caches": [
+                cache(path, roots.restricted_source) for path in roots.restricted
+            ],
+            "staging_cache": cache(roots.staging, roots.staging_source),
+            "publication_url": None
+            if self.publication_url is None
+            else {"url": self.publication_url, "source": self.publication_url_source},
+            "download": {"on": self.download, "source": self.download_source},
+        }
+
+    def rows(self) -> list[tuple[str, str]]:
+        """``(label, value)`` per line of the report, in the order it prints."""
+        roots = self.roots
+        file = f"{self.file}  ({self.file_source}"
+        file += ")" if self.file_exists else "; not created yet, nothing set)"
+        rows = [("settings file", file)]
+
+        def source(text: str) -> str:
+            # The first line names the file; every value from it says so briefly.
+            return "settings file" if text == f"settings file {self.file}" else text
+
+        if self.catalog is not None:
+            rows.append(
+                ("catalogue", f"{self.catalog}  ({source(self.catalog_source)})")
+            )
+            rows.append(("catalogue version", self.catalog_version or "not recorded"))
+        else:
+            rows.append(
+                ("catalogue", "not set: the public one, at a package's release bounds")
+            )
+        rows.append(
+            ("public cache", f"{roots.public}  ({source(roots.public_source)})")
+        )
+        if not roots.restricted:
+            rows.append(("restricted caches", "none listed: public data only"))
+        for number, path in enumerate(roots.restricted, start=1):
+            rows.append(
+                (
+                    f"restricted cache {number}",
+                    f"{path}  ({source(roots.restricted_source)})",
+                )
+            )
+        staging = roots.staging
+        rows.append(
+            (
+                "staging cache",
+                f"{staging}  ({source(roots.staging_source)})"
+                if staging
+                else "not set",
+            )
+        )
+        if self.publication_url is not None:
+            rows.append(
+                (
+                    "publication URL",
+                    f"{self.publication_url}  ({source(self.publication_url_source)})",
+                )
+            )
+        if self.download:
+            rows.append(
+                (
+                    "download switch",
+                    (
+                        "on: bundled files the catalogue holds are read through it  "
+                        f"({self.download_source})"
+                    ),
+                )
+            )
+        return rows
+
+    def __str__(self) -> str:
+        rows = self.rows()
+        width = max(len(label) for label, _ in rows)
+        return "\n".join(f"{label:<{width}}  {value}" for label, value in rows)
+
+
+def read_settings(
+    *, root: str | Path | None = None, catalog: str | None = None
+) -> Settings:
+    """Every setting at once, from one read of the settings file.
+
+    ``root`` and ``catalog`` are explicit arguments, and win over every other
+    source. A file ``$ETHOS_DATA_CONFIG`` names that does not exist stops here,
+    naming it.
+    """
     settings, origin = load_config()
-    collections = settings.get("collections")
-    if not collections:
-        return None
-    return str(Path(str(collections)).expanduser()), origin["collections"]
+    path = config_path()
+    catalog_found = _catalog(catalog, settings, origin)
+    url = _publication_url(settings, origin)
+    download = download_requested()
+    return Settings(
+        file=path,
+        file_source=_config_source(),
+        file_exists=path.is_file(),
+        roots=_roots(root, settings, origin),
+        catalog=catalog_found[0] if catalog_found else None,
+        catalog_source=catalog_found[1] if catalog_found else "",
+        publication_url=url[0] if url else None,
+        publication_url_source=url[1] if url else "",
+        download=download,
+        download_source=f"${DOWNLOAD_ENV_VAR}" if download else "",
+    )
 
 
-def set_option(key: str, value: str, scope: str = "user") -> Path:
-    """Write one setting into the config file for a scope."""
-    path = writable_config_path(scope)
-    document = {}
-    if path.is_file():
-        document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    document[key] = value
-    path.parent.mkdir(parents=True, exist_ok=True)
-    _write(path, document)
-    return path
+#: Reads the catalogue route instead of a package's bundles, for one job.
+DOWNLOAD_ENV_VAR = "ETHOS_DATA_DOWNLOAD"
 
 
-def unset_option(key: str, scope: str = "user") -> Path | None:
-    path = writable_config_path(scope)
-    if not path.is_file():
-        return None
-    document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    if key not in document:
-        return None
-    del document[key]
-    if document:
-        _write(path, document)
-    else:
-        path.unlink()
-    return path
+def download_requested(explicit: bool | None = None) -> bool:
+    """Whether the download switch is on: the catalogue route for bundled files.
+
+    ``explicit``, a handle's ``download=``, when given; else
+    ``$ETHOS_DATA_DOWNLOAD`` set to ``1``, ``true``, ``yes`` or ``on``.
+    """
+    if explicit is not None:
+        return explicit
+    return os.environ.get(DOWNLOAD_ENV_VAR, "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )

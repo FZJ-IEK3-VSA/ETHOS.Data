@@ -6,8 +6,11 @@ import urllib.request
 import pytest
 
 import ethos_data
-from ethos_data import config, tool_main
-from ethos_data.catalogs import Catalog, Dataset, Resource
+from ethos_data import config, staging, tool_main
+from ethos_data.catalogs import Catalog, Dataset
+from ethos_data.config import Roots
+from ethos_data.model.inventory import Inventory
+from ethos_data.model.resource import Resource
 
 
 @pytest.fixture
@@ -15,8 +18,8 @@ def workspace(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "load_config", lambda: ({}, {}))
     monkeypatch.setenv("ETHOS_DATA_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("ETHOS_STAGING_DIR", str(tmp_path / "staging"))
-    monkeypatch.delenv("ETHOS_RESTRICTED_DIR", raising=False)
-    monkeypatch.delenv("ETHOS_SKIP_UNAVAILABLE", raising=False)
+    monkeypatch.setenv("ETHOS_DATA_CATALOG", str(tmp_path / "datacatalog.json"))
+    monkeypatch.delenv("ETHOS_RESTRICTED_DIRS", raising=False)
 
     def no_network(*args, **kwargs):
         pytest.fail("Staged resource attempted network access")
@@ -28,7 +31,7 @@ def workspace(tmp_path, monkeypatch):
     (tmp_path / "datacatalog.json").write_text(json.dumps({"datasets": []}))
     collections = tmp_path / "collections.yaml"
     collections.write_text(
-        'catalog: datacatalog.json\ncollections:\n  test:\n    include:\n      - dataset: example\n        files: ["**"]\n'
+        'collections:\n  test:\n    include:\n      - dataset: example\n        files: ["**"]\n'
     )
     return tmp_path, collections, staged
 
@@ -49,9 +52,10 @@ def test_new_dataset_matches_cli_and_python(workspace):
     assert not (root / "cache" / "example").exists()
 
 
-def test_wrapper_staging_lifecycle_needs_no_catalogue(workspace, capsys):
+def test_wrapper_staging_lifecycle_needs_no_catalogue(workspace, capsys, monkeypatch):
     root, collections, source = workspace
-    collections.write_text("catalog: missing.json\ncollections: {}\n")
+    monkeypatch.setenv("ETHOS_DATA_CATALOG", str(root / "missing.json"))
+    collections.write_text("collections: {}\n")
 
     def run(*argv):
         return tool_main(collections, prog="sample-data", argv=list(argv))
@@ -65,8 +69,8 @@ def test_wrapper_staging_lifecycle_needs_no_catalogue(workspace, capsys):
     assert "experiment" in capsys.readouterr().out
     staged = root / "staging" / "trial"
     assert (staged / "new.txt").read_text() == "development bytes"
-    with pytest.raises(SystemExit, match="--force"):
-        run("staging", "remove", "trial")
+    assert run("staging", "remove", "trial") == 2
+    assert "--force" in capsys.readouterr().err
     assert staged.exists()
     assert run("staging", "remove", "trial", "--force") == 0
     assert not staged.exists()
@@ -80,8 +84,7 @@ def test_overlay_does_not_mutate_canonical_catalogue(workspace):
         "example",
         "Official",
         entry={"ethos:access": "public"},
-        _descriptor={"resources": []},
-        _resources={"old.txt": old},
+        inventory=Inventory.from_resources("example", {}, [old]),
     )
     catalog = Catalog("local", {}, {"example": dataset})
     with pytest.warns(UserWarning):
@@ -100,7 +103,7 @@ def test_restricted_catalogue_entry_is_not_shadowed(workspace):
         "example",
         "Licensed",
         entry={"ethos:access": "restricted"},
-        _descriptor={"resources": []},
+        inventory=Inventory.from_resources("example", {}, []),
     )
     catalog = Catalog("local", {}, {"example": dataset})
     with pytest.warns(UserWarning, match="IGNORED"):
@@ -112,7 +115,7 @@ def test_explicit_roots_control_the_overlay(workspace, tmp_path):
     _, collections, _ = workspace
     roots = config.Roots(public=tmp_path / "elsewhere")
     loaded = ethos_data.load_collections(collections, roots=roots)
-    with pytest.raises(KeyError, match="unknown dataset"):
+    with pytest.raises(KeyError, match="the dataset 'example' cannot be found"):
         loaded.resolve("test")
 
 
@@ -122,7 +125,7 @@ def test_broken_staging_link_fails_python_and_cli(workspace, capsys):
         root / "missing-input", target_is_directory=True
     )
     collections.write_text(
-        "catalog: datacatalog.json\ncollections:\n  test:\n    include:\n      - dataset: broken\n"
+        "collections:\n  test:\n    include:\n      - dataset: broken\n"
     )
     for call in (
         lambda: ethos_data.fetch("test", collections, progressbar=False),
@@ -135,3 +138,18 @@ def test_broken_staging_link_fails_python_and_cli(workspace, capsys):
             call()
     assert tool_main(str(collections), prog="example-data", argv=["fetch", "test"]) == 2
     assert "staging entry 'broken'" in capsys.readouterr().err
+
+
+def test_an_entry_in_any_listed_restricted_cache_is_an_official_version(workspace):
+    root, _, _ = workspace
+    first, second = root / "group-a", root / "group-b"
+    first.mkdir()
+    (second / "example").mkdir(parents=True)
+    roots = Roots(
+        public=root / "cache", restricted=(first, second), staging=root / "staging"
+    )
+
+    [staged] = staging.classify_staged(roots)
+
+    assert not staged.is_new
+    assert staged.official == second / "example"

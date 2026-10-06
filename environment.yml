@@ -6,6 +6,7 @@ dependencies:
   - pooch
   - pyyaml
   - platformdirs
+  - pydantic >=2
   - tqdm
   - rclone
   # oidc-agent is deliberately NOT listed, because conda-forge skips it on

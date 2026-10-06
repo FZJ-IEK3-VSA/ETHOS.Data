@@ -1,16 +1,149 @@
-\begin{tikzpicture}
-\node[artifact, text width=48mm, minimum height=14mm] (consumer) at (0,0) {Data entry points\\API / wrappers / key CLI};
-\node[artifact, text width=48mm, minimum height=14mm] (maintainer) at (7,0) {Maintenance entry points\\catalogue / cache commands};
-\node[actor, text width=48mm, minimum height=16mm] (access) at (0,-2.5) {Data access};
-\node[actor, text width=48mm, minimum height=16mm] (maintenance) at (7,-2.5) {Catalogue maintenance};
-\node[artifact, text width=118mm, minimum height=16mm] (shared) at (3.5,-5) {Catalogue and configuration\\\texttt{catalog / config}};
-\draw[flow] (consumer) -- node[edgelabel,right]{resolve / fetch / inspect} (access);
-\draw[flow] (maintainer) -- node[edgelabel,right]{build / upload / publish} (maintenance);
-\draw[flow] (maintenance) -- node[edgelabel,above]{matching} (access);
-\draw[flow] (access) -- node[edgelabel,right]{resources / roots} (0,-4.12);
-\draw[flow] (maintenance) -- node[edgelabel,left]{format constants} (7,-4.12);
+% The ethos_data library by layer (C4 level 3, overview). From the bottom:
+% model, adapters, services (data access, then catalogue maintenance above
+% it), presentation. A module imports only its own layer and those below;
+% catalogue maintenance may import data access, never the reverse. The shared
+% errors and reporter form the side rail. tests/test_layers.py holds the rules
+% and lists one upward import, drawn dotted.
+\begin{tikzpicture}[
+  x=1mm, y=1mm,
+  chip/.style={c4component, font=\sffamily\scriptsize, inner sep=1mm,
+    minimum height=8.5mm, text width=#1},
+  chip/.default=24.3mm,
+  modelchip/.style={chip, minimum height=7mm},
+  group/.style={c4component, font=\sffamily\scriptsize, inner sep=1.2mm,
+    minimum height=19mm, text width=#1, align=left, anchor=north},
+  portchip/.style={c4port, minimum height=4.4mm, inner sep=0.8mm, anchor=south,
+    yshift=-0.4pt},
+  band/.style={layerband, inner sep=0mm},
+  groupbox/.style={c4boundary, inner sep=0mm},
+  edgelabel/.style={c4boundarylabel, anchor=west, fill=#1, inner sep=0.8mm},
+  upward/.style={draw=brand, ->, dash pattern=on 1.2pt off 1.6pt, line width=0.8pt},
+]
+\newcommand{\mod}[1]{\texttt{#1}}
+
+% -- presentation ----------------------------------------------------------
+\node[chip=35mm, minimum height=11mm] (cli) at (29.5,0)
+  {\element{Command line}{\mod{cli}}{Parses; prints; exit statuses}};
+\node[chip=35mm, minimum height=11mm] (facade) at (68.5,0)
+  {\element{Package facade}{\mod{ethos\_data}}{Library API; builds handles}};
+\node[chip=35mm, minimum height=11mm] (catcli) at (107.5,0)
+  {\element{Catalogue command group}{\mod{maintain.cli}}{Parses \mod{catalog}; dispatches}};
+
+% -- services: catalogue maintenance ---------------------------------------
+\node[group=19.6mm] (accept) at (22.2,-16)
+  {\textbf{Accept and build}\\Accept\\Bundle intake\\Inventory builder\\Revision};
+\node[group=27mm] (bytes) at (50.6,-16)
+  {\textbf{Bytes and records}\\Uploader\\Cache-copy recorder\\and namespace builder\\Freeze\\Provenance};
+\node[group=24.6mm] (release) at (81.4,-16)
+  {\textbf{Release and remove}\\Public-view generator\\Release\\Checkout updater\\Removal};
+\foreach \n/\name/\y in {pipeline/Pipeline runner/-16, checkout/Checkout access/-20.95,
+    status/Status recorder/-25.9}
+  \node[group=24.6mm, minimum height=4.35mm, inner sep=0.9mm] (\n) at (111.8,\y) {\textbf{\name}};
+\node[group=24.6mm, minimum height=4.35mm, inner sep=0.9mm] (migrate) at (111.8,-30.85)
+  {\textbf{Migrator}, one-time};
+
+% -- services: data access -------------------------------------------------
+\foreach \n/\name/\m/\x/\y in {
+    selection/Collections handle/selection/24.4/-51.25,
+    retrieval/Retrieval/retrieval/53.4/-51.25,
+    verify/Integrity/verify/82.4/-51.25,
+    selftest/Self-test/selftest/111.4/-51.25,
+    config/Settings/config/24.4/-62.25,
+    access/Lookup chain/access/53.4/-62.25,
+    bundles/Bundles/bundles/82.4/-62.25,
+    handoffs/Handoffs/handoffs/111.4/-62.25,
+    catalogs/Catalogue reader/catalogs/24.4/-73.25,
+    staging/Staging/staging/53.4/-73.25,
+    files/Local files/files/82.4/-73.25}
+  \node[chip] (\n) at (\x,\y) {\elementshort{\name}{\mod{\m}}};
+\node[chip] (linking) at (111.4,-73.25) {\elementshort{Cache entries}{\mod{linking}, \mod{materialize}}};
+
+% -- adapters --------------------------------------------------------------
+\node[chip=19mm] (dcache) at (21.5,-100.5) {\elementshort{\mod{DcacheStore}}{rclone, REST}};
+\node[chip=21mm] (pooch) at (45.5,-100.5) {\elementshort{\mod{PoochDownloader}}{pooch}};
+\node[chip=19mm] (git) at (69.5,-100.5) {\elementshort{\mod{GitRepository}}{git}};
+\node[chip=21mm] (sources) at (93.5,-100.5) {\elementshort{Metadata sources}{files, HTTP(S), cache}};
+\node[chip=17.5mm] (fakes) at (116.25,-100.5) {\elementshort{Fakes}{in the package}};
+\node[portchip] at (dcache.north) {Store};
+\node[portchip] at (pooch.north) {Downloader};
+\node[portchip] at (git.north) {Git};
+\node[portchip] at (sources.north) {Metadata source};
+\node[portchip] at (fakes.north) {every port};
+
+% -- model -----------------------------------------------------------------
+\foreach \n/\name/\x/\y in {
+    spec/Format specifications/24.4/-118,
+    keys/Keys and derived values/53.4/-118,
+    templates/Templates/82.4/-118,
+    schemas/Schemas and reference/111.4/-118,
+    digest/Digests/24.4/-127.5,
+    names/Names and entries/53.4/-127.5,
+    resource/Resources/82.4/-127.5,
+    versions/Versions/111.4/-127.5,
+    lifecycle/Lifecycle/24.4/-138,
+    matching/Path matching/53.4/-138}
+  \node[modelchip] (\n) at (\x,\y) {\textbf{\name}};
+\node[chip=55.3mm, minimum height=10mm] (inventory) at (96.9,-138)
+  {\element{Inventory reader}{\mod{model.inventory}}{Reads descriptors and shards for both groups}};
+
+% -- bands, groups and the rail --------------------------------------------
 \begin{scope}[on background layer]
-\node[boundarybox, fit=(consumer)(maintainer)(shared), label={[boundarylabel]above:ethos-data package -- level 1}] {};
+  \node[band, fit={(6,6.5) (131,-6.5)}] (pband) {};
+  \node[band, fit={(6,-11.5) (131,-84)}] (sband) {};
+  \node[groupbox, fit={(8.5,-14) (128.5,-37.5)}] (mgroup) {};
+  \node[groupbox, fit={(8.5,-44.5) (128.5,-81.5)}] (agroup) {};
+  \node[band, fit={(6,-89) (131,-108)}] (aband) {};
+  \node[band, fit={(6,-113) (131,-145)}] (mband) {};
+  \node[band, fit={(135.5,6.5) (159,-145)}] (rail) {};
 \end{scope}
-\node[note, text width=118mm] at (3.5,-6.9) {Arrows point to required components or interfaces.\\The diagram shows code dependencies, not a publication sequence.};
+\node[layerlabel] at (pband.west) {Presentation};
+\node[layerlabel] at (sband.west) {Services};
+\node[layerlabel] at (aband.west) {Adapters};
+\node[layerlabel] at (mband.west) {Model};
+\node[edgelabel=fillsoft] at ($(mgroup.north west)+(3,0)$) {Catalogue maintenance [\mod{maintain}]};
+\node[edgelabel=fillsoft] at ($(agroup.north west)+(3,0)$) {Data access};
+\node[text=muted, font=\sffamily\scriptsize\bfseries, anchor=north] at ($(rail.north)+(0,-1.5)$) {Shared};
+
+% -- shared rail -----------------------------------------------------------
+\node[chip=19.5mm, minimum height=22mm] (errors) at (147.25,-36)
+  {\element{Typed errors}{\mod{errors}}{Every refusal; its class carries the exit status}};
+\node[chip=19.5mm, minimum height=22mm] (report) at (147.25,-108)
+  {\element{Reporter}{\mod{report}}{\mod{info} and \mod{warning}: one channel for progress}};
+
+% -- imports ---------------------------------------------------------------
+\draw[c4rel] (96,-6.5) -- node[c4rellabel, right] {may import every layer below} (96,-11.5);
+\draw[c4relaccent] (66.5,-37.5) -- node[c4rellabel, right, align=left]
+  {may import data access;\\data access never imports \mod{maintain}} (66.5,-44.5);
+\draw[c4rel] (96,-84) -- node[c4rellabel, right] {may import} (96,-89);
+\draw[c4rel] (96,-108) -- node[c4rellabel, right] {may import} (96,-113);
+\foreach \y in {0,-47.75,-98.5,-129}
+  \draw[c4rel] (131,\y) -- (135.5,\y);
+\draw[upward] (selection.west) -- (7.25,-51.25) -- (7.25,0) -- (cli.west);
+\node[c4rellabel, anchor=west] at (9,-9)
+  {the one listed upward import: \mod{Collections.main()}};
+
+% -- container boundary and key ---------------------------------------------
+\begin{scope}[on background layer]
+  \node[c4boundary, inner sep=0mm, fit={(1,10.5) (161.5,-148)}] (lib) {};
+\end{scope}
+\node[edgelabel=paper] at ($(lib.north west)+(3,0)$)
+  {\mod{ethos\_data} library [Container: Python package]};
+\node[edgelabel=paper, anchor=east, font=\sffamily\scriptsize, text=muted]
+  at ($(lib.north east)+(-3,0)$) {\mod{tests/test\_layers.py} checks every import against these rules};
+\begin{scope}[shift={(2,-154)}]
+  \keytitle{Key}
+  \keynode{1}{c4component}{Component, or a list of them}
+  \keyline{2}{c4rel}{May import}
+\end{scope}
+\begin{scope}[shift={(48,-154)}]
+  \keynode{1}{c4port}{Port an adapter implements}
+  \keyline{2}{c4relaccent}{Group rule}
+\end{scope}
+\begin{scope}[shift={(92,-154)}]
+  \keynode{1}{c4boundary}{Container or service group}
+  \keyline{2}{upward}{The one upward import}
+\end{scope}
+\begin{scope}[shift={(136,-154)}]
+  \keynode{1}{layerband}{Layer}
+\end{scope}
 \end{tikzpicture}

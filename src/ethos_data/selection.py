@@ -7,13 +7,14 @@ factory that builds the handle defined here.)
 :class:`Collections` is the object a tool builds once -- from the file beside
 its own code, via :func:`ethos_data.collections` -- and then calls ``fetch``,
 ``paths``, ``resolve`` and ``plan`` on. Its ``catalog`` attribute is the
-catalogue the file pins, for access by key. ``main`` runs the collection
-commands as the tool's own console script (``reskit-data``), so the tool ships
+catalogue the settings choose within the file's release bounds, for access by
+key. ``main`` runs the collection
+commands as the tool's own console script (``<tool>-data``), so the tool ships
 a file and two lines of code and nothing has to be registered anywhere.
 
 A collections file names slices of the shared catalogue; it never repeats file
 paths, sizes or checksums. That is deliberate -- if two tools each carried their
-own inventory they would drift, and the shared cache would stop deduplicating.
+own inventory they would drift, and the public cache would stop deduplicating.
 
 Two things a collection may carry beyond its selection, both for the same
 reason -- a workflow's code should not have to know resource keys:
@@ -34,43 +35,48 @@ against one runs unchanged against the other; the caller only flips ``test=``.
 
 from __future__ import annotations
 
-import fnmatch
 import os
-import warnings
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
 
-from . import retrieval
+from . import report, retrieval
 from .catalogs import (
     Catalog,
     Resource,
+    check_release,
     directory_of,
     load_catalog,
     select_key,
     split_key,
 )
+from .errors import (
+    CollectionError,
+    IncompleteCatalog,
+    UnknownCollection,
+    UnknownDataset,
+    UnknownKey,
+)
+from .formats import keys as k
+from .model.patterns import path_matches
 from .retrieval import DataFiles, NamedPaths
 
 if TYPE_CHECKING:
-    from .config import Roots
+    from .config import Roots, Settings
+    from .formats.collections_file import Collection, Selection
+    from .model.versions import Bounds
 
 __all__ = [
     "COLLECTIONS_FILENAME",
     "PATHS_KEY",
-    "SELECTION_KEYS",
     "VARIANTS",
     "VARIANT_FULL",
     "VARIANT_TEST",
-    "CollectionError",
     "Collections",
-    "CollectionsNotFound",
-    "UnknownCollection",
-    "catalog_pin",
     "load_collections",
-    "path_matches",
     "variant_name",
 ]
 
@@ -78,41 +84,17 @@ __all__ = [
 #: example or a test suite runs on in seconds; ``full`` is the real thing. They
 #: are the only two, deliberately: the caller's switch is one boolean, and a
 #: workflow needs exactly the promise that these two are interchangeable.
-VARIANT_TEST = "test"
-VARIANT_FULL = "full"
-VARIANTS = (VARIANT_TEST, VARIANT_FULL)
+VARIANT_TEST = k.VARIANT_TEST
+VARIANT_FULL = k.VARIANT_FULL
+VARIANTS = k.VARIANTS
 
 #: Handles a workflow asks for by name, mapped to catalogue keys.
 PATHS_KEY = "paths"
-#: The keys that describe *what a collection selects*. They sit either at the
-#: top of a collection or inside each of its variants -- never in both places,
-#: because then nobody could say which one a fetch would use.
-SELECTION_KEYS = ("extends", "include", PATHS_KEY)
 
 
 def variant_name(test: bool) -> str:
     """The variant a ``test=`` flag selects."""
     return VARIANT_TEST if test else VARIANT_FULL
-
-
-class UnknownCollection(KeyError):
-    """A name the collections file does not define.
-
-    Subclasses KeyError so ``except KeyError`` handlers written against the
-    old behaviour keep working; the CLI catches the specific type to print a
-    message rather than a traceback.
-    """
-
-
-class CollectionError(ValueError):
-    """A collection is defined in a way that cannot be resolved.
-
-    A maintainer's mistake in ``collections.yaml`` -- a variant that does not
-    exist, selection keys both inside and outside the variants, a ``paths``
-    handle naming a file the collection does not include, or two variants that
-    disagree about which handles they offer. Subclasses ValueError, which is
-    what the circular-``extends`` check always raised.
-    """
 
 
 @dataclass
@@ -122,43 +104,118 @@ class Collections:
     Built by :func:`ethos_data.collections` (or :func:`load_collections`) and
     kept for the life of the process -- the file is read once and the
     catalogue loaded once, whatever the number of ``fetch`` calls after.
+
+    With ``bundles``, what they hold is read from them first, and the
+    catalogue is opened only for what they do not hold: a handle whose
+    bundles hold every input reads no catalogue index.
     """
 
     path: Path
-    catalog: Catalog
     definitions: dict
-    #: The tool whose file this is (``"reskit"``), for messages and as the
+    #: The tool whose file this is (``"mytool"``), for messages and as the
     #: default name of its command; None for a file named on its own.
     tool: str | None = None
     #: The cache roots the staging overlay was built for; None means the
-    #: configured ones, resolved when a call needs them.
+    #: ones in :attr:`settings`.
     roots: Roots | None = None
+    #: The settings this handle uses, read once when it was built.
+    _settings: Settings | None = field(default=None, repr=False)
+    #: Each collection checked through its model, when it is first used.
+    _checked: dict[str, Collection] = field(default_factory=dict, repr=False)
+    #: The bundles the package ships, read first.
+    bundles: tuple = ()
+    #: The download switch: bundled files the catalogue holds too are read
+    #: through the catalogue route.
+    download: bool = False
+    #: The catalogue view, opened when first needed by :attr:`catalog`.
+    _catalog: Catalog | None = field(default=None, repr=False)
+    _open: Callable[[], Catalog] | None = field(default=None, repr=False)
+    #: The view of the bundles alone, which reads no index.
+    _bundled: Catalog | None = field(default=None, repr=False)
+    #: The catalogue as loaded, without the bundles and staging laid over it.
+    _base: Catalog | None = field(default=None, repr=False)
+
+    def base_catalog(self) -> Catalog:
+        """The catalogue this handle reads, without its bundles and staging."""
+        _ = self.catalog
+        return self._base
+
+    @property
+    def catalog(self) -> Catalog:
+        """The catalogue this handle reads, the bundles and staging laid over it.
+
+        Opened when first needed, then kept.
+        """
+        if self._catalog is None:
+            self._catalog = self._open()
+        return self._catalog
+
+    @property
+    def prog(self) -> str:
+        """The package's data command, ``<tool>-data``."""
+        return f"{self.tool}-data" if self.tool else "<tool>-data"
+
+    def view_for(self, resources: Sequence[Resource]) -> Catalog:
+        """The view that answers for ``resources``: the bundles alone, when they hold all."""
+        if self._bundled is not None and all(
+            resource.dataset in self._bundled.datasets for resource in resources
+        ):
+            return self._bundled
+        return self.catalog
+
+    def _bundled_datasets(self, pattern: str) -> list:
+        """The bundled datasets a rule's ``dataset:`` selects; none when it reaches past them."""
+        if self._bundled is None:
+            return []
+        try:
+            found = self._bundled.matching_datasets(pattern)
+        except UnknownDataset:
+            return []
+        return [dataset for dataset in found if not dataset.namespace]
+
+    @property
+    def settings(self) -> Settings:
+        """The settings file, the catalogue and its version, the caches, and their sources.
+
+        Read once, when the handle was built, and used by every later call, so
+        a script reads the same catalogue and caches from start to finish.
+        ``print(data.settings)`` reports them next to a script's results.
+        """
+        if self._settings is None:
+            from .config import read_settings
+
+            self._settings = read_settings().with_catalog(
+                self.catalog.location, "loaded directly", self.catalog.version
+            )
+        return self._settings
 
     def names(self) -> list[str]:
         return sorted(self.definitions)
 
-    def describe(self, name: str) -> dict:
-        """The collection as written -- title and all -- variants included."""
-        return self.definitions[self._check(name)]
+    def describe(self, name: str) -> Collection:
+        """The collection -- title and all, variants included -- checked through its model.
+
+        Checked when it is first used, so a mistake in one collection is
+        reported with every problem in it and their places, and leaves the
+        other collections in the file usable.
+        """
+        name = self._check(name)
+        if name not in self._checked:
+            self._checked[name] = _checked(name, self.definitions[name])
+        return self._checked[name]
 
     def _check(self, name: str) -> str:
         if name not in self.definitions:
             known = ", ".join(self.names()) or "<none>"
             owner = f"{self.tool} defines" if self.tool else "this file defines"
             raise UnknownCollection(f"unknown collection {name!r}; {owner}: {known}")
-        if not isinstance(self.definitions[name], dict):
-            raise CollectionError(
-                f"collection {name!r} must be a mapping (title, include, ...), "
-                f"got {type(self.definitions[name]).__name__}"
-            )
         return name
 
     def variants(self, name: str) -> tuple[str, ...]:
         """The variants a collection defines, ``test`` first; empty for a plain one."""
-        definition = self.definitions[self._check(name)]
-        return tuple(variant for variant in VARIANTS if variant in definition)
+        return self.describe(name).variants()
 
-    def definition(self, name: str, test: bool = False) -> dict:
+    def definition(self, name: str, test: bool = False) -> Selection:
         """The selection a fetch resolves: the collection's own, or one variant's.
 
         A plain collection answers the same whatever ``test`` says -- a test
@@ -167,35 +224,14 @@ class Collections:
         silent fall-back to the other would either download the full inputs
         under a test or, worse, run a real calculation on the fixtures.
         """
-        name = self._check(name)
-        definition = self.definitions[name]
-        found = self.variants(name)
+        collection = self.describe(name)
+        found = collection.variants()
         if not found:
-            return definition
-        mixed = [key for key in SELECTION_KEYS if key in definition]
-        if mixed:
-            raise CollectionError(
-                f"collection {name!r} has {', '.join(mixed)} at the top level and also the "
-                f"variant(s) {', '.join(found)}; move every selection key inside "
-                f"{' / '.join(f'{v}:' for v in VARIANTS)}"
-            )
+            return collection
         wanted = variant_name(test)
         if wanted not in found:
-            raise CollectionError(
-                f"collection {name!r} has no {wanted!r} variant (it defines: {', '.join(found)}). "
-                + (
-                    "Pass test=True (or --test) for its test data."
-                    if wanted == VARIANT_FULL
-                    else "It has no small test selection; ask for the full data."
-                )
-            )
-        selected = definition[wanted]
-        if not isinstance(selected, dict):
-            raise CollectionError(
-                f"collection {name!r}: {wanted}: must be a mapping (include, extends, paths), "
-                f"got {type(selected).__name__}"
-            )
-        return selected
+            raise _VariantError(name, f"has no {wanted} variant")
+        return getattr(collection, wanted)
 
     def named_keys(
         self, name: str, test: bool = False, _seen: frozenset[str] = frozenset()
@@ -210,10 +246,10 @@ class Collections:
         name = self._check(name)
         seen = _seen | {name}
         definition = self.definition(name, test)
-        own = self._paths_of(name, definition)
+        own = {handle: key.strip("/") for handle, key in definition.paths.items()}
         merged: dict[str, str] = {}
         origin: dict[str, str] = {}
-        for parent in definition.get("extends", []) or []:
+        for parent in definition.extends:
             if parent in seen:
                 continue  # the cycle is reported by resolve(); do not double up
             for handle, key in self.named_keys(parent, test, seen).items():
@@ -228,55 +264,6 @@ class Collections:
         merged.update(own)
         return merged
 
-    def _include_rules(self, name: str, definition: dict) -> list[dict]:
-        """The ``include`` entries, checked for shape.
-
-        A string where a list was meant, or an entry without ``dataset``, used
-        to surface as a TypeError or KeyError from deep inside the glob loop --
-        a traceback that hid every other collection in a package's ``show`` command.
-        """
-        rules = definition.get("include", []) or []
-        if not isinstance(rules, list):
-            raise CollectionError(
-                f"collection {name!r}: include must be a list of {{dataset, files}} entries, "
-                f"got {type(rules).__name__}"
-            )
-        for rule in rules:
-            if not isinstance(rule, dict) or not isinstance(rule.get("dataset"), str):
-                raise CollectionError(
-                    f"collection {name!r}: every include entry needs a 'dataset' name "
-                    f"(and optionally 'files'), got {rule!r}"
-                )
-            files = rule.get("files")
-            if files is not None and (
-                not isinstance(files, list)
-                or not all(isinstance(f, str) for f in files)
-            ):
-                raise CollectionError(
-                    f"collection {name!r}: include.files for {rule['dataset']!r} must be a "
-                    f"list of glob strings, got {files!r}"
-                )
-        return rules
-
-    def _paths_of(self, name: str, definition: dict) -> dict[str, str]:
-        entries = definition.get(PATHS_KEY) or {}
-        if not isinstance(entries, dict):
-            raise CollectionError(
-                f"collection {name!r}: {PATHS_KEY} must be a mapping of handle -> "
-                f"<dataset>/<file or folder>, got {type(entries).__name__}"
-            )
-        for handle, key in entries.items():
-            if not isinstance(handle, str) or not handle:
-                raise CollectionError(
-                    f"collection {name!r}: {PATHS_KEY} handles must be names"
-                )
-            if not isinstance(key, str) or not key.strip("/"):
-                raise CollectionError(
-                    f"collection {name!r}: {PATHS_KEY}.{handle} must be a key such as "
-                    f"'<dataset>/<file>' or '<dataset>/<folder>', got {key!r}"
-                )
-        return {handle: key.strip("/") for handle, key in entries.items()}
-
     def check_variants(self, name: str) -> None:
         """Refuse variants that do not offer the same handles.
 
@@ -287,35 +274,28 @@ class Collections:
         """
         if len(self.variants(name)) < 2:
             return
-        offered = {}
-        for variant in VARIANTS:
-            try:
-                offered[variant] = set(self.named_keys(name, variant == VARIANT_TEST))
-            except CollectionError as error:
-                # The caller may have asked for the *other* variant, and the
-                # inner message then gives advice ("pass test=True") that
-                # contradicts what they typed. Say what was being compared.
-                raise CollectionError(
-                    f"collection {name!r}: its {variant!r} variant cannot be resolved, so its "
-                    f"test and full variants cannot be compared: {error.args[0]}"
-                ) from error
+        offered = {
+            variant: set(self.named_keys(name, variant == VARIANT_TEST))
+            for variant in VARIANTS
+        }
         if offered[VARIANT_TEST] == offered[VARIANT_FULL]:
             return
-        differences = []
+        clauses = []
         for variant in VARIANTS:
             other = VARIANT_FULL if variant == VARIANT_TEST else VARIANT_TEST
             only = sorted(offered[variant] - offered[other])
-            if only:
-                differences.append(f"only in {variant}: {', '.join(only)}")
-        raise CollectionError(
-            f"collection {name!r}: its test and full variants must name the same paths "
-            f"({'; '.join(differences)}), or code written against one will not run "
-            f"against the other"
-        )
+            if len(only) == 1:
+                clauses.append(
+                    f"named path {only[0]!r} is in its {variant} variant only"
+                )
+            elif only:
+                listed = ", ".join(repr(handle) for handle in only)
+                clauses.append(
+                    f"named paths {listed} are in its {variant} variant only"
+                )
+        raise _VariantError(name, *clauses, named_path=True)
 
-    def resolve(
-        self, name: str, test: bool = False, _seen: frozenset[str] = frozenset()
-    ) -> list[Resource]:
+    def resolve(self, name: str, test: bool = False) -> list[Resource]:
         """Expand a collection (and anything it extends) into resources.
 
         Selection is by glob against the resource path. Shapefile sidecars are
@@ -324,8 +304,23 @@ class Collections:
 
         ``test`` picks the variant of a collection that has them; it passes
         down through ``extends``, so a test selection is built from its
-        parents' test selections. A plain parent is the same either way.
+        parents' test selections. A plain parent is the same either way. A
+        variant missing from a collection reached through ``extends`` is
+        reported as that: the collection asked for extends one whose variant
+        is missing.
         """
+        try:
+            return self._resolve(name, test)
+        except _VariantError as problem:
+            if problem.collection == name:
+                raise
+            raise CollectionError(
+                f"collection {name!r} extends {problem.collection!r}, {problem.clause}"
+            ) from None
+
+    def _resolve(
+        self, name: str, test: bool, _seen: frozenset[str] = frozenset()
+    ) -> list[Resource]:
         name = self._check(name)
         if name in _seen:
             chain = " -> ".join([*sorted(_seen), name])
@@ -341,11 +336,11 @@ class Collections:
         self.check_variants(name)
         selected: dict[str, Resource] = {}
 
-        for parent in definition.get("extends", []) or []:
-            for resource in self.resolve(parent, test, seen):
+        for parent in definition.extends:
+            for resource in self._resolve(parent, test, seen):
                 selected[resource.key] = resource
 
-        for rule in self._include_rules(name, definition):
+        for rule in definition.include:
             # One rule may name a family or a glob, so it can reach several
             # datasets. `files:` patterns are matched against each one's own
             # resource paths -- a member's paths are relative to the member, not
@@ -353,22 +348,50 @@ class Collections:
             # `files: ["era5/*.nc"]` selects nothing while
             # `dataset: reskit-test-data/era5` with `files: ["*.nc"]` selects
             # what you meant.
-            for dataset in self.catalog.matching_datasets(rule["dataset"]):
-                patterns = rule.get("files") or ["**"]
+            datasets = self._bundled_datasets(rule.dataset)
+            view = self._bundled if datasets else None
+            if not datasets:
+                view = self.catalog
+                try:
+                    datasets = view.matching_datasets(rule.dataset)
+                except UnknownDataset as error:
+                    raise UnknownDataset(
+                        f"collection {name!r}: {error.message}"
+                    ) from None
+            for dataset in datasets:
+                if dataset.superseded_by:
+                    report.warning(
+                        f"collection {name!r} reads {dataset.name!r}, which "
+                        f"{', '.join(dataset.superseded_by)} supersedes: a newer "
+                        "version of the data with another layout and other keys."
+                    )
+                patterns = rule.files or ["**"]
                 # resources_matching narrows a sharded dataset to the shards these
                 # patterns can reach; the glob below is still the real filter.
-                for resource in list(dataset.resources_matching(patterns).values()):
-                    if not any(path_matches(resource.path, p) for p in patterns):
-                        continue
-                    selected[resource.key] = resource
-                    for sidecar in resource.sidecars:
-                        companion = dataset.resource_at(sidecar)
-                        if companion is not None:
-                            selected[companion.key] = companion
+                matched = [
+                    resource
+                    for resource in list(dataset.inventory.matching(patterns).values())
+                    if any(path_matches(resource.path, p) for p in patterns)
+                ]
+                # A sidecar the inventory lacks is left out: the files that are
+                # there are still the ones the rule asked for.
+                with_companions, _ = view.with_sidecars(matched)
+                selected.update(with_companions)
 
         return sorted(selected.values(), key=lambda r: r.key)
 
     # -- Fetching ------------------------------------------------------------
+
+    def select(self, name: str, test: bool = False) -> list[Resource]:
+        """The resources a collection selects, its ``paths`` handles checked against them.
+
+        What every command resolves first: a handle naming a file the
+        collection does not include is a mistake in the collections file, and
+        is refused here, before anything is reported or moved.
+        """
+        resources = self.resolve(name, test=test)
+        self._named_targets(name, test, resources)
+        return resources
 
     def fetch(
         self,
@@ -377,7 +400,7 @@ class Collections:
         test: bool = False,
         root: Roots | str | Path | None = None,
         progressbar: bool = True,
-        skip_unavailable: bool | None = None,
+        fetch: bool = True,
     ) -> DataFiles:
         """Make a collection available locally and return ``{key: Path}``.
 
@@ -391,10 +414,13 @@ class Collections:
         without variants is the same either way. The result's ``.named`` holds
         the collection's ``paths`` as ``{handle: Path}`` -- see :meth:`paths`.
 
-        ``skip_unavailable`` decides what happens to licensed data this machine
-        cannot reach: ``True`` leaves it out of the result (and out of
-        ``.named``) with a warning, ``False`` raises, ``None`` takes the
-        configured answer.
+        Every input is required: licensed data this machine cannot read raises
+        :class:`~ethos_data.errors.AccessError` before anything is downloaded,
+        describing the dataset and how to register a copy.
+
+        ``fetch=False`` downloads nothing and contacts no store: every file is
+        returned where it is on this machine, and one that is not raises
+        :class:`~ethos_data.errors.NotFetched`, naming the path it belongs at.
         """
         roots = self._roots(root)
         resources = self.resolve(name, test=test)
@@ -403,11 +429,11 @@ class Collections:
         # maintainer should hear about it before a 40 GB transfer, not after.
         targets = self._named_targets(name, test, resources)
         files = retrieval.download(
-            self.catalog,
+            self.view_for(resources),
             resources,
             root=roots,
             progressbar=progressbar,
-            skip_unavailable=skip_unavailable,
+            fetch=fetch,
         )
         files.named = self._named_paths(targets, files, name)
         return files
@@ -419,7 +445,7 @@ class Collections:
         test: bool = False,
         root: Roots | str | Path | None = None,
         progressbar: bool = True,
-        skip_unavailable: bool | None = None,
+        fetch: bool = True,
     ) -> NamedPaths:
         """The inputs a collection names, as ``{handle: absolute Path}``, fetched.
 
@@ -437,18 +463,18 @@ class Collections:
         are the same in both variants, so the call above runs unchanged on the
         full data once ``test`` is dropped. A collection that declares no
         ``paths`` is refused here -- :meth:`fetch` returns its files by key.
-        Under ``skip_unavailable`` a handle whose data this machine cannot
-        reach is left out, with a warning naming it, exactly as the file is
-        left out of :meth:`fetch`'s result.
+        ``fetch=False`` resolves the handles without downloading anything, and
+        raises :class:`~ethos_data.errors.NotFetched` for a file that is not on
+        this machine, naming the path the same call with ``fetch=True`` puts it.
         """
         files = self.fetch(
             name,
             test=test,
             root=root,
             progressbar=progressbar,
-            skip_unavailable=skip_unavailable,
+            fetch=fetch,
         )
-        if not files.named and not files.named.omitted:
+        if not files.named:
             raise CollectionError(
                 f"collection {name!r} declares no named paths -- nothing under 'paths:' in "
                 f"its definition. fetch({name!r}) returns its files by resource key; "
@@ -463,26 +489,73 @@ class Collections:
         *,
         test: bool = False,
         root: Roots | str | Path | None = None,
-        skip_unavailable: bool | None = None,
     ) -> dict:
         """What fetching a collection would do, without touching the network.
 
         The report :func:`ethos_data.plan` builds: what is already cached,
         what would be downloaded and how many bytes, what is used in place.
         """
-        return retrieval.plan(
-            self.catalog,
-            self.resolve(name, test=test),
-            self._roots(root),
-            skip_unavailable,
-        )
+        resources = self.resolve(name, test=test)
+        return retrieval.plan(self.view_for(resources), resources, self._roots(root))
+
+    def prepare(
+        self,
+        name: str,
+        *,
+        test: bool = False,
+        root: Roots | str | Path | None = None,
+    ) -> dict:
+        """The plan of a fetch about to start, after the checks the fetch makes.
+
+        The collection is selected, its ``paths`` checked, and restricted data
+        this account cannot read, or a file with nowhere to download it from,
+        is refused here, before anything is downloaded: what is reported next
+        is a fetch that starts. The plan is :func:`ethos_data.plan`'s.
+        """
+        from .access import locate
+
+        resources = self.select(name, test=test)
+        roots = self._roots(root)
+        view = self.view_for(resources)
+        report = retrieval.plan(view, resources, roots)
+        if report["unavailable"]:
+            locate(view, resources, roots)  # raises the refusal
+        return report
+
+    def resolve_every(self) -> tuple[list[Resource], list[tuple[str, str]]]:
+        """Every collection in every variant, and what could not be resolved.
+
+        What is on disk is one cache, and a file a test variant selects is as
+        much a file to check as one a full variant does. A collection or
+        variant that cannot be resolved -- a dataset this catalogue does not
+        describe, say -- is listed as ``(label, reason)`` and left out, rather
+        than stopping the rest. The resources are in key order, each once.
+        """
+        resources: dict[str, Resource] = {}
+        skipped: list[tuple[str, str]] = []
+        for name in self.names():
+            try:
+                variants = self.variants(name) or (None,)
+            except CollectionError as error:
+                skipped.append((name, _first_line(error)))
+                continue
+            for variant in variants:
+                label = name if variant is None else f"{name} [{variant}]"
+                try:
+                    selected = self.resolve(name, test=variant == VARIANT_TEST)
+                except (UnknownDataset, IncompleteCatalog, CollectionError) as error:
+                    skipped.append((label, _first_line(error)))
+                    continue
+                for resource in selected:
+                    resources[resource.key] = resource
+        return sorted(resources.values(), key=lambda r: r.key), skipped
 
     def main(self, argv: list[str] | None = None, *, prog: str | None = None) -> int:
         """Run the collection commands bound to this file, from a built handle.
 
         ``show``, ``fetch`` and ``verify`` for the collections in this file,
-        resolved against the catalogue it pins, plus ``bundle``, ``staging``
-        and ``config``. A single catalogue key is ``ethos-data``'s to hand out.
+        resolved against the catalogue the settings choose within its release
+        bounds, plus ``bundle``, ``staging`` and ``config``. A single catalogue key is ``ethos-data``'s to hand out.
         ``prog`` names the command in help and messages; the default is
         ``<tool>-data``.
 
@@ -497,9 +570,10 @@ class Collections:
     def _roots(self, root: Roots | str | Path | None) -> Roots:
         from .config import Roots
 
-        if root is not None:
-            return Roots.coerce(root)
-        return self.roots if self.roots is not None else Roots.coerce(None)
+        if isinstance(root, Roots):
+            return root
+        base = self.roots if self.roots is not None else self.settings.roots
+        return base if root is None else base.with_public(root)
 
     def _named_targets(
         self, name: str, test: bool, resources: list[Resource]
@@ -517,12 +591,19 @@ class Collections:
         """
         named = self.named_keys(name, test)
         selected = {resource.key: resource for resource in resources}
+        view = self.view_for(resources)
         targets = []
         for handle, key in named.items():
             try:
-                dataset, inner = split_key(self.catalog, key)
+                dataset, inner = split_key(view, key)
             except KeyError as error:
-                raise _not_in_catalogue(name, handle, key, error) from error
+                if view is self.catalog:
+                    raise _not_in_catalogue(name, error) from error
+                view = self.catalog
+                try:
+                    dataset, inner = split_key(view, key)
+                except KeyError as error:
+                    raise _not_in_catalogue(name, error) from error
             # Answered from the selection first, so that checking a dataset-level
             # handle on a sharded dataset does not pull in every shard the include
             # patterns deliberately avoided. The catalogue is only consulted to
@@ -532,7 +613,7 @@ class Collections:
                 targets.append(_NamedTarget(handle, file.key, dataset, inner, file, ()))
                 continue
             if inner:
-                unselected = self.catalog.dataset(dataset).resource_at(inner)
+                unselected = view.dataset(dataset).inventory.at(inner)
                 if unselected is not None:
                     raise CollectionError(
                         f"collection {name!r}: paths.{handle} names the file {key!r}, which "
@@ -543,9 +624,9 @@ class Collections:
             under = tuple(r for r in resources if r.key.startswith(prefix))
             if not under:
                 try:
-                    select_key(self.catalog, dataset, inner, key)
+                    select_key(view, dataset, inner, key)
                 except KeyError as error:
-                    raise _not_in_catalogue(name, handle, key, error) from error
+                    raise _not_in_catalogue(name, error) from error
                 raise CollectionError(
                     f"collection {name!r}: paths.{handle} names the folder {key!r}, but the "
                     f"collection includes no file under it; the folder would be empty"
@@ -559,36 +640,18 @@ class Collections:
     ) -> NamedPaths:
         """Where each handle ended up on this machine, read off the fetched files.
 
-        A handle whose data this machine cannot reach is left out and named in
-        a warning -- the same contract ``skip_unavailable`` gives the files
-        themselves: absent from the mapping, never a path to nothing. Without
-        ``skip_unavailable`` the unreachable data has already raised before this.
+        Every file is there: a fetch that could not provide one has raised
+        before this, so every handle the collection defines is in the mapping.
         """
         named = NamedPaths(collection=name)
         for target in targets:
             if target.file is not None:
-                local = files.get(target.file.key)
-                if local is None:
-                    named.omitted.append(target.handle)
-                    continue
-                named[target.handle] = Path(os.path.abspath(local))
-                continue
-            available = [r for r in target.under if r.key in files]
-            if not available:
-                named.omitted.append(target.handle)
+                named[target.handle] = Path(os.path.abspath(files[target.file.key]))
                 continue
             directory = directory_of(
-                files, available, target.dataset, target.inner, target.key
+                files, target.under, target.dataset, target.inner, target.key
             )
             named[target.handle] = Path(os.path.abspath(directory))
-        if named.omitted:
-            warnings.warn(
-                f"collection {name!r}: the named path(s) {', '.join(named.omitted)} are not "
-                f"available on this machine and have been left out -- the mapping has no entry "
-                f"for them.",
-                UserWarning,
-                stacklevel=4,
-            )
         return named
 
 
@@ -607,42 +670,40 @@ class _NamedTarget:
     under: tuple[Resource, ...]
 
 
-def _not_in_catalogue(
-    collection: str, handle: str, key: str, error: KeyError
-) -> CollectionError:
-    message = error.args[0] if error.args else str(error)
-    return CollectionError(
-        f"collection {collection!r}: paths.{handle} names {key!r}, which is not in "
-        f"the catalogue. {message}"
+def _first_line(error: BaseException) -> str:
+    """An error's message, first line only, as a list of what was skipped shows it."""
+    message = getattr(error, "message", None) or (error.args[0] if error.args else "")
+    return str(message).splitlines()[0] if message else type(error).__name__
+
+
+def _not_in_catalogue(collection: str, error: KeyError) -> KeyError:
+    """The not-found a ``paths`` key met, naming the collection that asked."""
+    message = getattr(error, "message", None) or (error.args[0] if error.args else "")
+    kind = (
+        type(error) if isinstance(error, (UnknownDataset, UnknownKey)) else UnknownKey
     )
+    return kind(f"collection {collection!r}: {message}")
 
 
-def path_matches(path: str, pattern: str) -> bool:
-    """Glob a resource path with proper directory semantics.
+class _VariantError(CollectionError):
+    """A collection's variant is missing, or its variants name different paths.
 
-    ``*`` matches within one path segment; ``**`` matches any number of
-    segments. Plain ``fnmatch`` would let ``*.tif`` match ``sub/dir/x.tif``,
-    which quietly pulls in far more than a collections file asked for.
-
-    Public because the manifest writer selects files with the same rule -- see
-    ``maintain.manifest.select``. A dataset's ``ethos:include`` and a collection's
-    ``files:`` have to mean the same thing by the same code, or a pattern that
-    picks a file in one place would miss it in the other.
+    Keeps the collection and the clause apart, so that a collection that
+    extends this one can say so: "collection 'all' extends 'onshore_wind',
+    which has no test variant".
     """
-    return _match_segments(path.split("/"), pattern.split("/"))
 
-
-def _match_segments(parts: list[str], patterns: list[str]) -> bool:
-    if not patterns:
-        return not parts
-    head, rest = patterns[0], patterns[1:]
-    if head == "**":
-        if not rest:
-            return True
-        return any(_match_segments(parts[i:], rest) for i in range(len(parts) + 1))
-    if not parts or not fnmatch.fnmatchcase(parts[0], head):
-        return False
-    return _match_segments(parts[1:], rest)
+    def __init__(self, collection: str, *clauses: str, named_path: bool = False):
+        self.collection = collection
+        if named_path:
+            self.clause = ", and ".join(f"whose {clause}" for clause in clauses)
+            own = f"collection {collection!r}: " + ", and ".join(
+                f"the {clause}" for clause in clauses
+            )
+        else:
+            self.clause = ", and ".join(f"which {clause}" for clause in clauses)
+            own = f"collection {collection!r} " + ", and ".join(clauses)
+        super().__init__(own)
 
 
 def load_collections(
@@ -652,78 +713,166 @@ def load_collections(
     include_staging: bool = True,
     roots: Roots | None = None,
     tool: str | None = None,
+    settings: Settings | None = None,
+    bundles: Sequence = (),
+    download: bool | None = None,
 ) -> Collections:
     """Load a collections file with the configured development overlay.
 
-    The catalogue is ``catalog`` if given, else the file's own ``catalog:`` pin,
-    else the built-in public catalogue (``ethos_data.config.DEFAULT_CATALOG``).
+    The catalogue is ``catalog`` if given, else ``$ETHOS_DATA_CATALOG`` or the
+    settings file's, else the public catalogue at the release the file's
+    bounds select: :meth:`~ethos_data.config.Settings.choose_catalog`. A
+    catalogue outside the bounds raises
+    :class:`~ethos_data.errors.CatalogVersionError`, naming both.
     Set ``include_staging=False`` for canonical metadata, for example when
     exporting test fixtures. ``roots`` selects the overlay explicitly; otherwise
     the configured roots apply. A supplied catalogue is not modified. ``tool``
     names the tool whose file this is, for messages and its command's name.
 
-    :func:`ethos_data.collections` is the same with the configured catalogue
-    override (``$ETHOS_DATA_CATALOG``, ``config set-catalog``) applied first,
-    which is what a tool wants.
+    :func:`ethos_data.collections` is the same with ``root=`` and the settings
+    read for it. ``settings`` is the snapshot the handle keeps; by default the
+    settings are read here, once.
+
+    ``bundles`` are the bundle directories the package ships: what they hold
+    is read from them first, and the catalogue is opened only for what they do
+    not hold, so a handle whose bundles hold every input reads no catalogue
+    index. ``download`` -- by default ``$ETHOS_DATA_DOWNLOAD``, as the settings
+    snapshot records it -- reads a bundled file the catalogue holds for the
+    same key through the catalogue route.
     """
+    from .bundles import (
+        Bundle,
+        load_bundle,
+        refuse_what_the_catalogue_withholds,
+        warn_behind,
+        with_bundles,
+    )
+    from .config import read_settings
+
     path = Path(path).expanduser().resolve()
-    document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    bounds, definitions = _read(path)
+    if settings is None:
+        settings = read_settings()
+    settings = settings.with_download(download)
+    if roots is None:
+        roots = settings.roots
+    prog = f"{tool}-data" if tool else "<tool>-data"
+    loaded = tuple(
+        bundle if isinstance(bundle, Bundle) else load_bundle(bundle, prog=prog)
+        for bundle in bundles
+    )
+    for bundle in loaded:
+        bundle.prog = prog
 
-    if isinstance(catalog, Catalog):
-        resolved = catalog
-    else:
-        location = catalog or catalog_pin(path, document)
-        if location is None:
-            # No pin: the public catalogue, so a collections file that selects
-            # only public data works with nothing configured anywhere.
-            from .config import DEFAULT_CATALOG
+    def open_catalog() -> Catalog:
+        nonlocal settings
+        if isinstance(catalog, Catalog):
+            resolved = catalog
+            source = (
+                resolved._settings.catalog_source if resolved._settings else "passed in"
+            )
+        else:
+            location, source = settings.choose_catalog(
+                explicit=str(catalog) if catalog else None, bounds=bounds
+            )
+            resolved = load_catalog(location, settings=settings)
+        if bounds is not None:
+            check_release(resolved, bounds, path.name)
+        settings = settings.with_catalog(resolved.location, source, resolved.version)
+        handle._settings = settings
+        handle._base = resolved
+        if not isinstance(catalog, Catalog):
+            # Loaded here, so it is this handle's: a catalogue passed in is not
+            # modified, and keeps the settings it already has.
+            resolved._settings = settings
+        # The index is read now anyway: each bundle is compared with its rows.
+        for bundle in loaded:
+            refuse_what_the_catalogue_withholds(bundle, resolved)
+            warn_behind(bundle, resolved)
+        view = resolved
+        if loaded:
+            view = with_bundles(
+                resolved, loaded, routes=resolved if settings.download else None
+            )
+        if include_staging:
+            from .staging import with_staging
 
-            location = DEFAULT_CATALOG
-        resolved = load_catalog(str(location))
+            view = with_staging(view, roots)
+        return view
 
-    if include_staging:
-        from .staging import with_staging
+    bundled = None
+    if loaded and not settings.download:
+        bundled = with_bundles(None, loaded)
+        if include_staging:
+            from .staging import with_staging
 
-        resolved = with_staging(resolved, roots)
-    return Collections(
+            bundled = with_staging(bundled, roots, warn=False)
+    handle = Collections(
         path=path,
-        catalog=resolved,
-        definitions=document.get("collections", {}),
+        definitions=definitions,
         tool=tool,
         roots=roots,
+        _settings=settings,
+        bundles=loaded,
+        download=settings.download,
+        _open=open_catalog,
+        _bundled=bundled,
     )
+    if not loaded:
+        # Without bundles, every read needs the catalogue: opened now, so a
+        # catalogue outside the bounds is refused when the handle is made.
+        handle._catalog = open_catalog()
+    return handle
 
 
-def catalog_pin(path: str | Path, document: dict | None = None) -> str | None:
-    """The catalogue a collections file pins for itself, or None if it does not.
+def _read(path: Path) -> tuple[Bounds | None, dict]:
+    """A collections file's release bounds, checked, and its collections as written.
 
-    A relative path is resolved against the file, not the caller's working
-    directory -- the pin belongs to the file. Shared with the commands that take
-    a *key* rather than a collection (``ethos-data fetch``, ``ethos-data ls``),
-    so that ``-c`` means the same catalogue for them as for a collection fetch.
+    The bounds are checked through their model here, since they choose the
+    catalogue; each collection is checked when it is first used.
     """
-    path = Path(path).expanduser().resolve()
-    if document is None:
-        document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    location = document.get("catalog")
-    if not location:
-        return None
-    # Retain compatibility with legacy '@ref' suffixes by stripping them.
-    # Remote revisions must be part of the URL itself; this does not
-    # rewrite a Git host's branch/tag segment.
-    location = str(location)
-    if not Path(location).exists() and "@" in location.rsplit("/", 1)[-1]:
-        location = location.rsplit("@", 1)[0]
-    if not location.startswith(("http://", "https://")):
-        location = str((path.parent / location).resolve())
-    return location
+    from pydantic import ValidationError
+
+    from .formats.collections_file import CatalogBounds
+    from .formats.fields import describe
+
+    document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(document, dict):
+        raise CollectionError(
+            f"{path} must contain a YAML mapping, got {type(document).__name__}"
+        )
+    collections = document.get("collections") or {}
+    if not isinstance(collections, dict):
+        raise CollectionError(
+            f"{path}: collections must be a mapping of names to collections, "
+            f"got {type(collections).__name__}"
+        )
+    if document.get("catalog") is None:
+        return None, collections
+    try:
+        bounds = CatalogBounds.model_validate(document["catalog"]).bounds()
+    except ValidationError as error:
+        problems = "".join(f"\n  {line}" for line in describe(error, ("catalog",)))
+        raise CollectionError(
+            f"{path} is not a valid collections file:{problems}"
+        ) from None
+    return bounds, collections
+
+
+def _checked(name: str, definition: object) -> Collection:
+    """One collection, checked through its model: every problem, with its place."""
+    from pydantic import ValidationError
+
+    from .formats.collections_file import Collection
+    from .formats.fields import describe
+
+    try:
+        return Collection.model_validate(definition)
+    except ValidationError as error:
+        raise CollectionError(
+            "\n".join(f"collection {name!r}: {line}" for line in describe(error))
+        ) from None
 
 
 #: The conventional name of the file a tool ships beside its data module.
 COLLECTIONS_FILENAME = "collections.yaml"
-
-
-class CollectionsNotFound(LookupError):
-    """No collections file where one was asked for: a path with no file behind
-    it, or a command run where none is configured and none lies in the current
-    directory."""

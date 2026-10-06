@@ -34,8 +34,10 @@ from pathlib import Path
 
 import pytest
 import yaml
+from support import write_descriptor
 
 from ethos_data import cli, config
+from ethos_data.formats import keys as k
 from ethos_data.maintain.manifest import render_dataset, write_dataset
 from ethos_data.maintain.manifest import run as build_run
 from ethos_data.maintain.publish import render
@@ -69,8 +71,8 @@ def build_catalog(root: Path) -> Path:
     dataset_dir = root / "datasets" / "d"
     dataset_dir.mkdir(parents=True)
     write_utf8(root / "catalog.yaml", CATALOG)
-    write_utf8(
-        dataset_dir / "dataset.yaml",
+    write_descriptor(
+        dataset_dir,
         f"name: d\ntitle: {CJK}\ndescription: {UMLAUT}\n"
         f"source_dir: {source}\nethos:remote_prefix: d\n"
         f"ethos:attribution: {UMLAUT}\n",
@@ -106,25 +108,25 @@ class TestBuildingADescriptor:
         assert b"\r" not in raw
 
     def test_the_catalogue_index_is_utf8_and_lf(self, catalog):
-        assert build_run(catalog, []) == 0
+        assert build_run(catalog, []).ok
         raw = (catalog / "datacatalog.json").read_bytes()
         assert b"\r" not in raw
         assert CJK in json.loads(raw.decode("utf-8"))["datasets"][0]["title"]
 
     def test_a_freshly_built_catalogue_reports_itself_up_to_date(self, catalog):
         """--check re-reads what build wrote. Mis-encode either half and it drifts."""
-        assert build_run(catalog, []) == 0
-        assert build_run(catalog, [], check=True) == 0
+        assert build_run(catalog, []).ok
+        assert build_run(catalog, [], check=True).ok
 
 
 class TestPublishing:
     def test_the_public_tree_is_utf8_and_lf(self, catalog, tmp_path):
         from ethos_data.maintain.publish import run as publish_run
 
-        assert build_run(catalog, []) == 0
+        assert build_run(catalog, []).ok
         destination = tmp_path / "public"
         destination.mkdir()
-        assert publish_run(catalog, str(destination)) == 0
+        assert publish_run(catalog, str(destination)).ok
 
         for path in sorted(destination.rglob("*")):
             if not path.is_file() or path.suffix == ".pdf":
@@ -141,8 +143,31 @@ class TestPublishing:
 
     def test_render_keys_are_posix_paths(self, catalog):
         """The published tree is addressed with forward slashes on every platform."""
-        assert build_run(catalog, []) == 0
+        assert build_run(catalog, []).ok
         assert "datasets/d/datapackage.json" in {p.as_posix() for p in render(catalog)}
+
+    def test_the_source_line_ending_rules_are_published_too(self, catalog, tmp_path):
+        """A public checkout is used from Windows as well. Without the source's
+        .gitattributes, core.autocrlf=true would rewrite the licence documents
+        whose sha256 the descriptors record."""
+        from ethos_data.maintain.publish import run as publish_run
+
+        rules = (
+            "* text=auto eol=lf" + chr(10) + "datasets/**/licenses/** -text" + chr(10)
+        )
+        write_utf8(catalog / ".gitattributes", rules)
+        assert build_run(catalog, []).ok
+        assert render(catalog)[Path(".gitattributes")] == rules
+        destination = tmp_path / "public"
+        destination.mkdir()
+        assert publish_run(catalog, str(destination)).ok
+        assert (destination / ".gitattributes").read_text(encoding="utf-8") == rules
+        # --check knows the copy is generated, not a stray file to be removed.
+        assert publish_run(catalog, str(destination), check=True).ok
+
+    def test_without_source_rules_none_are_invented(self, catalog):
+        assert build_run(catalog, []).ok
+        assert Path(".gitattributes") not in render(catalog)
 
 
 class TestCommandLineOutput:
@@ -155,7 +180,7 @@ class TestCommandLineOutput:
         own UTF-16 API. Run as a real subprocess, because that difference only
         exists for a process that owns its streams.
         """
-        assert build_run(catalog, []) == 0
+        assert build_run(catalog, []).ok
         destination = tmp_path / "listing.txt"
         # Select the local catalogue explicitly, including in a configured environment.
         env = {
@@ -190,16 +215,15 @@ class TestConfiguration:
     ):
         """A Windows user called Jürgen has a home directory with a "ü" in it."""
         written = tmp_path / "config.yaml"
-        monkeypatch.setattr(
-            config, "writable_config_path", lambda scope="user": written
-        )
+        monkeypatch.setenv(config.CONFIG_ENV_VAR, str(written))
 
         value = str(tmp_path / f"caches-{UMLAUT}")
-        config.set_option(config.PUBLIC_CACHE_KEY, value)
+        config.set_option(k.SETTING_PUBLIC_CACHE, value)
 
         raw = written.read_bytes()
         assert b"\r" not in raw
-        assert yaml.safe_load(raw.decode("utf-8"))[config.PUBLIC_CACHE_KEY] == value
+        assert yaml.safe_load(raw.decode("utf-8"))[k.SETTING_PUBLIC_CACHE] == value
+        assert config.read_settings().roots.public == Path(value)
 
 
 if __name__ == "__main__":

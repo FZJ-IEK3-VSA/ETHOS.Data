@@ -61,3 +61,8 @@ oidc-agent.sock
 *~
 .DS_Store
 Thumbs.db
+
+# Drafts for the institute's internal wiki. They name cluster paths, groups and
+# contacts that the public documentation deliberately leaves out, so they are
+# handed to the wiki maintainer and never committed to this public repository.
+/internal-wiki/

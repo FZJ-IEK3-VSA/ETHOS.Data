@@ -1,25 +1,176 @@
-\begin{tikzpicture}
-\node[actor, text width=34mm, minimum height=13mm] (selection) at (0,0) {Selection};
-\node[actor, text width=34mm, minimum height=13mm] (retrieval) at (5,0) {Retrieval};
-\node[actor, text width=34mm, minimum height=13mm] (access) at (10,0) {Access policy};
-\node[artifact, text width=34mm, minimum height=13mm] (staging) at (0,-2.7) {Staging};
-\node[artifact, text width=34mm, minimum height=13mm] (bundles) at (5,-2.7) {Repository bundles};
-\node[artifact, text width=34mm, minimum height=13mm] (integrity) at (10,-2.7) {Local integrity tools\\\texttt{verify / materialize}};
-\node[artifact, text width=34mm, minimum height=13mm] (catalog) at (0,-5.5) {Catalogue model\\shared block};
-\node[artifact, text width=34mm, minimum height=13mm] (pooch) at (5,-5.5) {Pooch / filesystem\\external};
-\node[artifact, text width=34mm, minimum height=13mm] (config) at (10,-5.5) {Configuration\\shared block};
-\draw[flow] (selection) -- node[edgelabel,right]{development overlay} (staging);
-\draw[flow] (bundles.north west) -- node[edgelabel,above,sloped]{canonical selection} (selection.south east);
-\draw[flow] (retrieval) -- node[edgelabel,above]{locations} (access);
-\draw[flow] (selection.west) -- ++(-7mm,0) |- (catalog.west);
-\draw[flow] (staging) -- node[edgelabel,right]{overlay} (catalog);
-\draw[flow] (bundles) -- node[edgelabel,right]{export / local checks} (pooch);
-\draw[flow] (integrity.north) -- node[edgelabel,left]{locations} (access.south);
-\draw[flow] (access.east) -- ++(7mm,0) |- (config.east);
-\draw[flow] (retrieval.south east) -- (7.3,-1.2) -- (7.3,-4.3) -- (pooch.north east);
-\node[note, rotate=90] at (7.55,-2.9) {verified fetch};
+% C4 level 3, data access (arc42 5.3.1). The collections handle answers which
+% resources: it reads the catalogue view and lays bundles and staging over it.
+% Retrieval asks the lookup chain where each file is read, and downloads the
+% rest through the Downloader port. The five locators are chips on the chain,
+% each pointing at what it reads; the refusing ones (2, 3, 5) have a heavy rim.
+% Chips 1 and 2 point left, at the staging root and the bundles; 3 to 5 point
+% right, at the caches. Cylinders are placed by their centre.
+\begin{tikzpicture}[
+  x=1mm, y=1mm,
+  comp/.style={c4component, font=\sffamily\scriptsize, inner sep=1mm,
+    minimum height=9mm, text width=#1},
+  comp/.default=18mm,
+  locator/.style={c4port, minimum height=5mm, text width=24mm, align=left,
+    inner sep=0.9mm, font=\sffamily\scriptsize},
+  refuser/.style={locator, line width=1.3pt},
+  portchip/.style={c4port, minimum height=4.4mm, inner sep=0.8mm, anchor=south,
+    yshift=-0.4pt},
+  % A cylinder #1 mm wide; its caps stay the same height at any width.
+  st/.style={c4db, minimum height=11mm, inner sep=0.5mm,
+    font=\sffamily\scriptsize, minimum width=#1mm, text width=\dimexpr#1mm-2mm\relax,
+    /utils/exec={\pgfmathsetmacro\cylaspect{3.6/#1}}, shape aspect=\cylaspect},
+  stx/.style={st=#1, draw=muted, fill=fillsoft},
+  lab/.style={c4rellabel},
+  labbg/.style={c4rellabelbg},
+]
+\newcommand{\mod}[1]{\texttt{#1}}
+\newcommand{\store}[2]{{\bfseries #1}\\[-0.2ex]{\color{muted}[#2]}}
+
+% -- presentation, and the maintenance component the command line calls -------
+\node[comp=22mm] (facade) at (13,0) {\elementshort{Package facade}{\mod{ethos\_data}}};
+\node[comp=18mm] (cli) at (50,0) {\elementshort{Command line}{\mod{cli}}};
+\node[comp=38mm] (sm9) at (108,0)
+  {\elementshort{Cache-copy recorder and namespace builder}{\mod{maintain.namespace}}};
 \begin{scope}[on background layer]
-\node[boundarybox, fit=(selection)(access)(staging)(integrity), label={[boundarylabel]above:Data access -- level 2}] {};
+  \node[c4boundary, inner sep=1.6mm, fit=(sm9)] (maint) {};
 \end{scope}
-\node[note, text width=140mm] at (5,-7) {Consumer entry points coordinate Selection then Retrieval.\\Resource metadata and roots also serve local tools; supplementary dependencies are omitted.};
+\node[c4boundarylabel] at (maint.north west) {Catalogue maintenance [service group]};
+
+% -- selection: the handle, the catalogue view and the overlays -------------------
+\node[comp=22mm, minimum height=10mm] (handle) at (13,-22)
+  {\elementshort{Collections handle}{\mod{selection}}};
+\node[st=19] (collfile) at (10.5,-45) {\store{Collections file}{in the package}};
+\node[st=20] (settingsfile) at (42,-42) {\store{Settings file}{one per account}};
+\node[comp=18mm] (config) at (68,-42) {\elementshort{Settings}{\mod{config}}};
+\node[comp=18mm] (staging) at (42,-60) {\elementshort{Staging}{\mod{staging}}};
+\node[st=20] (stagingroot) at (68,-60) {\store{Staging root}{personal}};
+\node[comp=18mm] (bundles) at (42,-78) {\elementshort{Bundles}{\mod{bundles}}};
+\node[st=20] (bundlestore) at (42,-97) {\store{Bundles}{\mod{bundle.json}, in the package}};
+
+% -- the catalogue reader, its inventories and metadata sources ------------------
+\node[comp=26mm] (catalogs) at (102,-22) {\elementshort{Catalogue reader}{\mod{catalogs}}};
+\node[comp=34mm] (inventory) at (142,-22)
+  {\elementshort{Inventory reader}{\mod{model.inventory}}};
+\node[comp=34mm] (sources) at (142,-43)
+  {\elementshort{Metadata sources}{files, HTTPS, cache, memory}};
+\node[portchip] (sourceport) at (sources.north) {Metadata source};
+\node[st=18] (served) at (132,-62) {\store{Served checkout}{cluster}};
+\node[stx=18] (published) at (152,-62) {\store{Published public catalogue}{GitHub}};
+\node[st=18] (metacache) at (134,-80) {\store{Metadata cache}{in the public cache}};
+
+% -- where each file is read ---------------------------------------------------------
+\node[c4component, minimum width=30mm, minimum height=117mm, anchor=north] (access) at (102,-32) {};
+\node[font=\sffamily\scriptsize, anchor=north, align=center, text=ink] at (access.north)
+  {\elementshort{Lookup chain}{\mod{access}}};
+\foreach \i/\name/\y/\s in {1/staging/-60/locator, 2/bundles/-78/refuser,
+    3/restricted caches/-98/refuser, 4/public cache/-117/locator, 5/download/-133/refuser}
+  \node[\s] (l\i) at (102,\y) {\textbf{\i}\enspace \name};
+\node[comp=22mm, minimum height=12mm] (retrieval) at (13,-113)
+  {\elementshort{Retrieval}{\mod{retrieval}}};
+\node[comp=22mm] (pooch) at (13,-137) {\elementshort{\mod{PoochDownloader}}{pooch}};
+\node[portchip] (poochport) at (pooch.north) {Downloader};
+\node[stx=22] (dcache) at (13,-159) {\store{Publication root}{dCache}};
+
+\node[st=26] (restricted) at (139,-98)
+  {\store{Restricted caches}{optional; one per access combination}};
+\node[st=26, minimum height=26mm] (public) at (139,-125)
+  {\store{Public cache}{personal; shared on the cluster}};
+
+% -- integrity, cache entries and the rest ---------------------------------------------
+\node[comp=24mm] (verify) at (50,-135) {\elementshort{Integrity}{\mod{verify}}};
+\node[comp=18mm] (selftest) at (40,-159) {\elementshort{Self-test}{\mod{selftest}}};
+\node[comp=18mm] (handoffs) at (70,-159) {\elementshort{Handoffs}{\mod{handoffs}}};
+\node[comp=24mm] (linking) at (102,-161)
+  {\elementshort{Cache entries}{\mod{linking}, \mod{materialize}}};
+
+% -- relationships: presentation ----------------------------------------------------------
+\draw[c4rel] (facade.south -| 7,0) -- node[lab, right] {builds handles} (handle.north -| 7,0);
+\draw[c4rel] (facade) -- node[lab, above] {\mod{tool\_main}} (cli);
+\draw[c4rel] (cli) -- node[lab, above, align=center, yshift=0.6mm] {\mod{link -{}-all},\\\mod{-{}-catalog-root}} (sm9.west |- cli);
+\draw[c4rel] (cli.south) |- (19,-12.5) -- (handle.north -| 19,0);
+\node[lab, anchor=west, align=left] at (51,-9) {wires handles\\and services};
+
+% -- relationships: selection -----------------------------------------------------------
+\draw[c4rel] (handle.south -| collfile) -- (collfile);
+\draw[c4rel] (handle.east |- 0,-20.5) -- node[lab, above, pos=0.52] {catalogue view; release check} (catalogs.west |- 0,-20.5);
+\draw[c4rel] (handle.east |- 0,-25) -| node[lab, pos=0.32, below] {snapshot; catalogue choice} (config);
+\draw[c4rel] (config) -- (settingsfile);
+\draw[c4rel] (handle.south -| 22,0) -- (retrieval.north -| 22,0);
+\draw[c4rel] (22,-60) -- node[lab, above] {overlays} (staging);
+\draw[c4rel] (22,-78) -- (bundles);
+\node[lab, anchor=east] at (21.3,-100) {\mod{fetch}, \mod{paths},};
+\node[lab, anchor=east] at (21.3,-103.3) {\mod{plan}};
+\draw[c4rel] (staging) -- (stagingroot);
+\draw[c4rel] (bundles) -- (bundlestore);
+
+% -- relationships: the catalogue reader ----------------------------------------------------
+\draw[c4rel] (catalogs) -- (inventory);
+\draw[c4rel] (catalogs.east |- 0,-24.5) -| (120,-34.9) -- (sourceport.west |- 0,-34.9);
+\draw[c4rel] (sources.south -| served) -- (served);
+\draw[c4rel] (sources.south -| published) -- (published);
+\draw[c4rel] (sources.west |- 0,-45) -| (120,-80) -- (metacache);
+
+% -- relationships: the lookup chain ------------------------------------------------------------
+\draw[c4rel] (access.north) -- node[lab, left, xshift=-0.6mm] {index-row facts} (catalogs);
+\draw[c4rel] (access.west |- config) -- node[lab, above, pos=0.45] {roots} (config);
+\draw[c4rel] (l1.west) -- (stagingroot);
+\draw[c4rel] (l2.west) -- node[labbg, pos=0.52] {checked files} (bundles);
+\draw[c4rel] (l3.east) -- (restricted);
+\foreach \i in {4,5} \draw[c4rel] (l\i.east) -- (l\i.east -| public.west);
+\draw[c4rel] (retrieval.east |- 0,-109.5) -- node[lab, above, pos=0.45] {locate every file first} (access.west |- 0,-109.5);
+\draw[c4rel] (retrieval.south |- 0,-119) -- (poochport);
+\draw[c4download] (pooch) -- node[lab, right] {anonymous HTTPS} (dcache);
+
+% -- relationships: integrity, self-test, handoffs, cache entries ----------------------------------
+\draw[c4rel] (verify.east) -- node[lab, above] {describe mode} (access.west |- verify.east);
+\draw[c4rel] (verify.north -| 42,0) |- node[lab, pos=0.75, below] {repair} (retrieval.east |- 0,-116);
+\draw[c4rel] (selftest.north -| 40,0) -- node[lab, right] {checks} (verify.south -| 40,0);
+\draw[c4rel] (handoffs) -- node[lab, above, yshift=0.4mm] {report} (selftest);
+\draw[c4rel] (linking) -- node[lab, right] {which cache} (access);
+\draw[c4rel] (linking.east) -| (157,-98) -- (restricted.east);
+\draw[c4rel] (157,-125) -- (public.east);
+\node[lab, anchor=south east, align=right] at (156.3,-160.6)
+  {links, copies, into a cache\\of the dataset's access class};
+
+% -- local files and the model components the services use ------------------------------------
+\node[comp=26mm] (files) at (70,-182)
+  {\element{Local files}{\mod{files}}{walks and hashes data directories for staging, bundles and handoffs}};
+\draw[c4rel] (handoffs) -- (files);
+\foreach \n/\name/\x in {resource/Resources/101, matching/Path matching/123, keys/Keys and derived values/146}
+  \node[comp=18mm, minimum height=8mm] (\n) at (\x,-182) {\textbf{\name}};
+\begin{scope}[on background layer]
+  \node[layerband, inner sep=1.6mm, fit=(resource)(keys)] (model) {};
+\end{scope}
+\node[layerlabel] at (model.west) {Model};
+\node[lab, anchor=north, text=muted] at (model.south) {used by the components above};
+
+% -- the key ----------------------------------------------------------------------------------------------
+\begin{scope}[shift={(0,-200)}]
+  \keytitle{Key}
+  \keynode{1}{c4component}{Component}
+  \node[c4port, minimum width=9mm] at (4.5,-13) {port};
+  \node[keytext] at (11.5,-13) {Port of an adapter};
+\end{scope}
+\begin{scope}[shift={(42,-200)}]
+  \node[locator, text width={}, minimum width=9mm] at (4.5,-6.5) {\textbf{1}};
+  \node[keytext] at (11.5,-6.5) {Locator: finds or passes};
+  \node[refuser, text width={}, minimum width=9mm] at (4.5,-13) {\textbf{3}};
+  \node[keytext] at (11.5,-13) {Locator that may refuse};
+\end{scope}
+\begin{scope}[shift={(84,-200)}]
+  \keystore{1}{brand}{fillbrand}{Data store}
+  \keystore{2}{muted}{fillsoft}{External store}
+\end{scope}
+\begin{scope}[shift={(118,-200)}]
+  \keyline{1}{c4rel}{Uses, reads, writes}
+  \keyline{2}{c4download}{Download from dCache}
+\end{scope}
+\begin{scope}[shift={(0,-213)}]
+  \node[c4boundary, inner sep=0pt, minimum width=9mm, minimum height=4.2mm] at (4.5,-6.5) {};
+  \node[keytext] at (11.5,-6.5) {Another service group};
+\end{scope}
+\begin{scope}[shift={(42,-213)}]
+  \node[layerband, inner sep=0pt, minimum width=9mm, minimum height=4.2mm] at (4.5,-6.5) {};
+  \node[keytext] at (11.5,-6.5) {Layer};
+\end{scope}
 \end{tikzpicture}

@@ -5,36 +5,33 @@ rules are explained in
 [Caches, classes and roots](../../explanation/caches-and-access.md); the keys
 and precedence are tabulated in [Configuration](../configuration.md).
 
-Every lookup returns a `Resolved` carrying both the value **and its
-provenance** — because "why is my data going there`" is the question people
-actually ask.
+`read_settings` reads every setting at once into `Settings`, each value
+with **its provenance** — because "why is my data going there?" is the
+question people actually ask. A handle keeps it as its `settings`, and every
+later read of a setting goes through it.
+
+The access classes are `public` and `restricted`. Restricted data is read
+from `Roots.restricted`, the restricted caches in order, and `entry_for` decides
+which cache holds an entry that `link` or `materialize` makes.
 
 ## Configuration
 
 ::: ethos_data.config
     options:
       members:
-        - Resolved
+        - Settings
+        - read_settings
         - Roots
-        - resolve_roots
-        - resolve_public_cache
-        - resolve_restricted_cache
-        - resolve_staging_cache
-        - resolve_cache_dir
-        - resolve_skip_unavailable
-        - resolve_catalog
-        - resolve_collections
-        - resolve_publication_url
-        - dataset_roots
-        - set_dataset_root
-        - unset_dataset_root
+        - set_cache
+        - add_restricted_cache
+        - remove_restricted_cache
         - set_option
         - unset_option
         - config_path
-        - writable_config_path
-        - config_sources
-        - find_project_config
+        - account_config_path
         - load_config
+        - unreachable
+        - catalog_index
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3
@@ -45,9 +42,13 @@ actually ask.
     options:
       members:
         - locate
+        - entry_for
+        - restricted_entry
+        - chain_for
+        - Chain
+        - Locator
+        - linked_entry
         - Location
-        - AccessError
-        - requires_local_root
         - check_missing
         - unavailable
       show_root_heading: false

@@ -18,10 +18,13 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from support import write_descriptor
 
 from ethos_data.access import cache_entries
+from ethos_data.errors import DescriptorError
 from ethos_data.maintain import dataset_name_for, is_namespace, iter_dataset_dirs
-from ethos_data.maintain.manifest import render_dataset, run as build_run
+from ethos_data.maintain.manifest import render_dataset
+from ethos_data.maintain.manifest import run as build_run
 
 CATALOG = (
     "name: t\n"
@@ -52,7 +55,7 @@ def build(tmp: Path, members: dict[str, dict], namespace: str = NAMESPACE) -> Pa
     (catalog / "datasets" / "family").mkdir(parents=True)
     (catalog / "catalog.yaml").write_text(CATALOG)
     if namespace is not None:
-        (catalog / "datasets" / "family" / "dataset.yaml").write_text(namespace)
+        write_descriptor(catalog / "datasets" / "family", namespace)
     for name, spec in members.items():
         source = tmp / "src" / name
         source.mkdir(parents=True)
@@ -60,7 +63,8 @@ def build(tmp: Path, members: dict[str, dict], namespace: str = NAMESPACE) -> Pa
             (source / filename).write_text(filename)
         directory = catalog / "datasets" / "family" / name
         directory.mkdir(parents=True, exist_ok=True)
-        directory.joinpath("dataset.yaml").write_text(
+        write_descriptor(
+            directory,
             MEMBER.format(
                 title=name.title(),
                 description=f"Member {name}.",
@@ -68,7 +72,7 @@ def build(tmp: Path, members: dict[str, dict], namespace: str = NAMESPACE) -> Pa
                 access=spec.get("access", "public"),
                 visibility=spec.get("visibility", "public"),
                 extra=spec.get("extra", "ethos:license_status: unresolved\n"),
-            )
+            ),
         )
     return catalog
 
@@ -96,10 +100,10 @@ class TestDiscovery:
             catalog = build(Path(tmp), {"alpha": PUBLIC_MEMBER})
             directory = catalog / "datasets" / "family" / "alpha"
             text = directory.joinpath("dataset.yaml").read_text()
-            directory.joinpath("dataset.yaml").write_text(
-                "name: something-else\n" + text
-            )
-            with pytest.raises(SystemExit, match="the directory it is in makes it"):
+            write_descriptor(directory, "name: something-else\n" + text)
+            with pytest.raises(
+                DescriptorError, match="the directory it is in makes it"
+            ):
                 render_dataset(directory, name="family/alpha")
 
 
@@ -133,7 +137,7 @@ class TestNamespaces:
                 NAMESPACE + f"source_dir: {tmp / 'stray'}\n"
             )
             with pytest.raises(
-                SystemExit, match="cannot also describe files of its own"
+                DescriptorError, match="cannot also describe files of its own"
             ):
                 build_run(catalog, [])
 
@@ -144,7 +148,7 @@ class TestNamespaces:
                 {"alpha": PUBLIC_MEMBER},
                 namespace=NAMESPACE + "licenses:\n  - name: CC-BY-4.0\n",
             )
-            with pytest.raises(SystemExit, match="must not carry licensing"):
+            with pytest.raises(DescriptorError, match="must not carry licensing"):
                 build_run(catalog, [])
 
     def test_a_namespace_may_not_declare_an_access_class(self):
@@ -154,7 +158,7 @@ class TestNamespaces:
                 {"alpha": PUBLIC_MEMBER},
                 namespace=NAMESPACE + "ethos:access: internal\n",
             )
-            with pytest.raises(SystemExit, match="must not declare ethos:access"):
+            with pytest.raises(DescriptorError, match="must not declare ethos:access"):
                 build_run(catalog, [])
 
 
@@ -223,7 +227,7 @@ class TestMembersDifferInAccess:
                 {
                     "alpha": PUBLIC_MEMBER,
                     "beta": {
-                        "access": "internal",
+                        "access": "restricted",
                         "visibility": "hidden",
                         "extra": (
                             "ethos:license_status: unresolved\n"
@@ -239,7 +243,7 @@ class TestMembersDifferInAccess:
             index = json.loads((catalog / "datacatalog.json").read_text())
             rows = {entry["name"]: entry for entry in index["datasets"]}
             assert rows["family/alpha"]["ethos:access"] == "public"
-            assert rows["family/beta"]["ethos:access"] == "internal"
+            assert rows["family/beta"]["ethos:access"] == "restricted"
             # The namespace row classifies nothing -- it has no bytes.
             assert "ethos:access" not in rows["family"]
             assert rows["family"]["ethos:namespace"] is True
@@ -252,7 +256,7 @@ class TestMembersDifferInAccess:
                 {
                     "alpha": PUBLIC_MEMBER,
                     "beta": {
-                        "access": "internal",
+                        "access": "restricted",
                         "visibility": "hidden",
                         "extra": (
                             "ethos:license_status: unresolved\n"
@@ -286,7 +290,6 @@ class TestAddressing:
             build_run(catalog, [])
             collections = tmp / "collections.yaml"
             collections.write_text(
-                f"catalog: {catalog / 'datacatalog.json'}\n"
                 "collections:\n"
                 "  family:\n"
                 "    include:\n"
@@ -300,7 +303,9 @@ class TestAddressing:
             )
             from ethos_data.selection import load_collections
 
-            loaded = load_collections(str(collections))
+            loaded = load_collections(
+                str(collections), str(catalog / "datacatalog.json")
+            )
             whole = [r.key for r in loaded.resolve("family")]
             assert whole == ["family/alpha/one.txt", "family/beta/one.txt"]
             assert [r.key for r in loaded.resolve("one")] == ["family/alpha/one.txt"]
@@ -357,10 +362,11 @@ class TestFlatCataloguesAreUnaffected:
             source = tmp / "src"
             source.mkdir()
             (source / "a.txt").write_text("a")
-            (catalog / "datasets" / "solo" / "dataset.yaml").write_text(
+            write_descriptor(
+                catalog / "datasets" / "solo",
                 f"title: Solo\ndescription: Flat.\nsource_dir: {source}\n"
                 "ethos:access: public\nethos:visibility: public\n"
-                "ethos:license_status: unresolved\n"
+                "ethos:license_status: unresolved\n",
             )
             build_run(catalog, [])
             package = json.loads(

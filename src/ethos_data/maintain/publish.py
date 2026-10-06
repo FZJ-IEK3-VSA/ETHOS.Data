@@ -10,8 +10,16 @@ Fields that only make sense to a maintainer are stripped on the way out --
 crucially the embargo block, which would otherwise announce the existence and
 release date of data nobody outside is supposed to know about.
 
+    ethos-data catalog publish ../ETHOS.Data-Catalogue --dry-run
     ethos-data catalog publish ../ETHOS.Data-Catalogue
     ethos-data catalog publish ../ETHOS.Data-Catalogue --check   # CI: is it current?
+
+It runs as a pipeline (see :mod:`.pipeline`), and ``--dry-run`` prints its plan:
+
+``render``  the public tree, in memory
+``check``   the leak check: no unpublished key, and no withheld dataset named
+``write``   the generated files that differ, and the removal of every file the
+            target holds that is not generated, ``.git`` left alone
 
 Publishing an embargoed dataset is then two edits in dataset.yaml
 (visibility: public, access: public), a rebuild, an upload, and a re-run of this.
@@ -26,27 +34,34 @@ still one ``git log`` away -- see docs/how-to/catalogue-maintainers/bootstrap-a-
 from __future__ import annotations
 
 import json
-import sys
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
 
-import yaml
-
-from ..catalogs import ROLE_KEY, ROLE_PUBLISHED
-from . import NAMESPACE_KEY, dataset_name_for, datasets_dir, iter_dataset_dirs
-
-# Maintainer-only. Never appears in the public catalogue.
-#   ethos:embargo        -- would leak that unpublished data exists, and when it lands
-#   ethos:license_note   -- internal review notes, not a public statement
-#   source_dir          -- a path on someone's workstation
-#   ethos:uploaded       -- workflow bookkeeping about where the manifest came from
-#   ethos:frozen         -- the same, without the claim about dCache
-STRIP_FROM_PACKAGE = (
-    "ethos:embargo",
-    "ethos:license_note",
-    "source_dir",
-    "ethos:uploaded",
-    "ethos:frozen",
+from .. import report
+from ..errors import PublishError
+from ..formats import dataset as dataset_format
+from ..formats import keys as k
+from ..formats.derived import index_row
+from ..formats.registry import unpublished_keys
+from . import (
+    dataset_name_for,
+    datasets_dir,
+    inventory_of,
+    iter_dataset_dirs,
+    read_catalog_meta,
 )
+from .pipeline import Action, Pipeline
+
+#: Maintainer-only, never in the public catalogue: the keys the dataset.yaml
+#: specification marks unpublished. ``ethos:embargo`` would leak that unpublished
+#: data exists and when it lands, ``ethos:license_note`` is an internal review
+#: note, and a draft's ``source_dir`` a path on one machine.
+STRIP_FROM_PACKAGE = dataset_format.STRIPPED
+
+#: What the leak check looks for as a JSON key: every key any format's
+#: specification marks unpublished, not only the descriptor's.
+UNPUBLISHED_KEYS = unpublished_keys()
 
 # Written into the public tree so that a stray local artefact -- an oidc-agent
 # socket symlink, a __pycache__ -- cannot be committed by a careless `git add -A`.
@@ -88,36 +103,44 @@ workflow that needs them fails with a useful message rather than a mystery.
 
 
 def public_datasets(catalog_root: Path) -> list[tuple[Path, dict]]:
-    """Every dataset whose catalogue entry may be published, with its descriptor."""
+    """Every dataset whose catalogue entry may be published, with its descriptor.
+
+    A withdrawn dataset is not one of them, though its descriptor stays on
+    disk until its bytes are gone.
+    """
+    from .manifest import left_out
+
     selected = []
     root = datasets_dir(catalog_root)
     for dataset_dir in iter_dataset_dirs(root):
         descriptor_path = dataset_dir / "datapackage.json"
-        if not descriptor_path.is_file():
+        if not descriptor_path.is_file() or left_out(dataset_dir):
             continue
         package = json.loads(descriptor_path.read_text(encoding="utf-8"))
-        if package.get("ethos:visibility", "public") != "public":
+        if package.get(k.VISIBILITY, k.PUBLIC) != k.PUBLIC:
             continue
         # A namespace is published only if it still has a published member. A
         # family whose members are all hidden must not leave a name behind in the
         # public catalogue pointing at nothing.
-        if package.get(NAMESPACE_KEY) and not _has_public_member(dataset_dir):
+        if package.get(k.NAMESPACE) and not _has_public_member(dataset_dir):
             continue
         selected.append((dataset_dir, package))
     return selected
 
 
 def _has_public_member(namespace_dir: Path) -> bool:
+    from .status import withdrawn
+
     for member in iter_dataset_dirs(namespace_dir):
-        if member == namespace_dir:
+        if member == namespace_dir or withdrawn(member):
             continue
         descriptor = member / "datapackage.json"
         if not descriptor.is_file():
             continue
         package = json.loads(descriptor.read_text(encoding="utf-8"))
-        if package.get(NAMESPACE_KEY):
+        if package.get(k.NAMESPACE):
             continue
-        if package.get("ethos:visibility", "public") == "public":
+        if package.get(k.VISIBILITY, k.PUBLIC) == k.PUBLIC:
             return True
     return False
 
@@ -128,17 +151,26 @@ def strip(package: dict) -> dict:
     }
 
 
-def render(catalog_root: Path) -> dict[Path, str]:
-    """Build the complete public tree in memory: {relative path -> str | bytes}."""
-    catalog_meta = yaml.safe_load(
-        (catalog_root / "catalog.yaml").read_text(encoding="utf-8")
-    )
-    for key in STRIP_FROM_PACKAGE:
+def render(catalog_root: Path, earlier: list[str] | None = None) -> dict[Path, str]:
+    """Build the complete public tree in memory: {relative path -> str | bytes}.
+
+    ``earlier`` are the releases the public catalogue had, which its index
+    keeps listing beside the one being published: a package that bounds its
+    catalogue version finds the newest public release within its bounds there.
+    """
+    from ..formats.catalogue import STRIPPED as STRIP_FROM_INDEX
+
+    catalog_meta = read_catalog_meta(catalog_root)
+    for key in (*STRIP_FROM_PACKAGE, *STRIP_FROM_INDEX):
         catalog_meta.pop(key, None)
     # Overwritten, not inherited: this copy is generated whatever the source says.
     # It is the only durable marker of that -- the public tree has no catalog.yaml,
     # so without it every tool has to guess from which files happen to be present.
-    catalog_meta[ROLE_KEY] = ROLE_PUBLISHED
+    catalog_meta[k.CATALOG_ROLE] = k.ROLE_PUBLISHED
+    if catalog_meta.get(k.VERSION):
+        catalog_meta[k.RELEASES] = _releases(
+            [*(earlier or []), str(catalog_meta[k.VERSION])]
+        )
 
     files: dict[Path, str] = {}
     entries, rows = [], []
@@ -160,7 +192,7 @@ def render(catalog_root: Path) -> dict[Path, str]:
                 continue
             source = dataset_dir / doc
             if not source.is_file():
-                raise SystemExit(
+                raise PublishError(
                     f"{public_package['name']}: licences entry names "
                     f"ethos:document {doc}, which is not a file at {source}."
                 )
@@ -168,27 +200,23 @@ def render(catalog_root: Path) -> dict[Path, str]:
 
         # A sharded dataset is useless without its shards: the index names them
         # by relative path, so they have to travel with it or every resolve
-        # 404s on a file the public catalogue swears exists.
-        for shard in public_package.get("ethos:shards", []):
-            source = dataset_dir / shard["path"]
-            if not source.is_file():
-                raise SystemExit(
-                    f"{public_package['name']}: shard {shard['path']} is missing. Run:\n"
-                    f"    ethos-data catalog build {dataset_name_for(datasets_dir(catalog_root), dataset_dir)}"
-                )
-            files[here / shard["path"]] = source.read_text(encoding="utf-8")
-
-        entries.append(
-            {
-                "name": public_package["name"],
-                "path": f"datasets/{dataset_dir.relative_to(datasets_dir(catalog_root)).as_posix()}/datapackage.json",
-                "title": public_package.get("title", ""),
-                "ethos:access": public_package.get("ethos:access", "public"),
-                "ethos:total_bytes": public_package["ethos:total_bytes"],
-                "ethos:file_count": public_package["ethos:file_count"],
-            }
+        # 404s on a file the public catalogue swears exists. The inventory
+        # lists them, and a missing one says which build is due.
+        inventory = inventory_of(
+            dataset_name_for(datasets_dir(catalog_root), dataset_dir), dataset_dir
         )
-        access = public_package.get("ethos:access", "public")
+        for shard in inventory.shard_files():
+            files[here / shard] = inventory.read_part(shard).decode("utf-8")
+
+        # The row the source index carries, built by the same function, so a
+        # reader of the public catalogue finds what a reader of the internal one
+        # finds: a family row says it is a family, and remote prefix and licence
+        # status cost no descriptor read.
+        relative = dataset_dir.relative_to(datasets_dir(catalog_root)).as_posix()
+        entries.append(
+            index_row(public_package, f"datasets/{relative}/datapackage.json")
+        )
+        access = public_package.get(k.ACCESS, k.PUBLIC)
         size = public_package["ethos:total_bytes"] / 1e6
         note = "downloadable" if access == "public" else "**listed only**"
         rows.append(
@@ -199,9 +227,9 @@ def render(catalog_root: Path) -> dict[Path, str]:
     files[Path("datacatalog.json")] = (
         json.dumps(
             {
-                "$schema": "https://datapackage.org/profiles/2.0/datacatalog.json",
+                k.SCHEMA: k.DATACATALOG_PROFILE,
                 **catalog_meta,
-                "datasets": entries,
+                k.DATASETS: entries,
             },
             indent=2,
             ensure_ascii=False,
@@ -218,89 +246,322 @@ def render(catalog_root: Path) -> dict[Path, str]:
     )
     files[Path("README.md")] = GENERATED_README.format(table=table)
     files[Path(".gitignore")] = GENERATED_GITIGNORE
+    # The handoffs a public user starts, as the repository's issue templates:
+    # the same templates the commands fill in, so the two never ask for
+    # different things.
+    from ..handoffs import ISSUES, issue_template
+
+    for issue in ISSUES:
+        files[Path(".github") / "ISSUE_TEMPLATE" / f"{issue}.md"] = issue_template(
+            issue
+        )
+    # The source catalogue's line-ending rules travel with the tree. A public
+    # checkout is used from Windows too, and without them core.autocrlf=true
+    # would rewrite the licence documents whose sha256 the descriptors record.
+    attributes = catalog_root / ".gitattributes"
+    if attributes.is_file():
+        files[Path(".gitattributes")] = attributes.read_text(encoding="utf-8")
     return files
 
 
-def run(catalog_root: Path, target: str, check: bool = False) -> int:
-    destination_root = Path(target).expanduser().resolve()
-    files = render(catalog_root)
+#: Characters that continue a dataset name or path. A withheld name counts as
+#: mentioned where it stands on its own: ``family/era5``, ``era5-land`` and
+#: ``era5.1`` do not mention a withheld ``era5``, but ``built on secret-plan.``
+#: and the escaped quotes of ``\"secret-plan\"`` in a JSON string do mention
+#: ``secret-plan``. A dot continues a name only when more of it follows.
+_NAME_CHARACTER = r"[A-Za-z0-9_/-]"
 
-    root = datasets_dir(catalog_root)
-    all_datasets = [
-        d for d in iter_dataset_dirs(root) if (d / "datapackage.json").is_file()
-    ]
-    published = {
-        Path(*p.parts[1:-1]).as_posix()
-        for p in files
-        if len(p.parts) > 2 and p.parts[0] == "datasets"
+
+def leaks(files: dict[Path, str | bytes], withheld: list[str]) -> list[str]:
+    """Where a generated public tree says something it must not.
+
+    The two things a release's leak check looks for: a key any format's
+    specification marks unpublished, written as a JSON key, and a withheld
+    dataset mentioned anywhere, in a descriptor, the index or the README, by
+    its name or by its path under ``datasets/``. Licence documents are the
+    publisher's own text, carried verbatim, and are not searched.
+    """
+    mentions = {
+        name: re.compile(
+            rf"(?<!{_NAME_CHARACTER})(?<!\.){re.escape(name)}"
+            rf"(?!{_NAME_CHARACTER}|\.\w)"
+            rf"|datasets/{re.escape(name)}/"
+        )
+        for name in withheld
     }
-    withheld = [
-        dataset_name_for(root, d)
-        for d in all_datasets
-        if dataset_name_for(root, d) not in published
-    ]
+    found = []
+    for relative, content in sorted(files.items(), key=lambda item: str(item[0])):
+        if isinstance(content, bytes):
+            continue
+        where = Path(relative).as_posix()
+        for key in UNPUBLISHED_KEYS:
+            if re.search(rf'"{re.escape(key)}"\s*:', content):
+                found.append(f"{where} carries {key}")
+        for name, mention in mentions.items():
+            if mention.search(content):
+                found.append(f"{where} names the withheld dataset {name}")
+    return found
 
+
+def _differs(path: Path, content: str | bytes) -> bool:
+    """Whether the file at ``path`` is not ``content``; documents compare as bytes."""
+    if not path.is_file():
+        return True
+    if isinstance(content, bytes):
+        return path.read_bytes() != content
+    return path.read_text(encoding="utf-8") != content
+
+
+@dataclass
+class PublishResult:
+    """What ``catalog publish`` wrote, or with ``check`` what is out of date."""
+
+    files: list[str] = field(default_factory=list)
+    withheld: list[str] = field(default_factory=list)
+    stale: list[str] = field(default_factory=list)
+    orphans: list[str] = field(default_factory=list)
+    leaks: list[str] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not (self.stale or self.orphans or self.leaks)
+
+
+def _releases(names: list[str]) -> list[str]:
+    """Distinct releases, oldest first; anything not of the form vMAJOR.MINOR.PATCH dropped."""
+    from ..model.versions import releases
+
+    return [str(release) for release in releases(names)]
+
+
+def _published_releases(destination_root: Path) -> list[str]:
+    """The releases the public catalogue in ``destination_root`` lists, if any."""
+    index = destination_root / "datacatalog.json"
+    if not index.is_file():
+        return []
+    try:
+        published = json.loads(index.read_text(encoding="utf-8"))
+    except ValueError:
+        return []
+    names = list(published.get(k.RELEASES) or [])
+    if published.get(k.VERSION):
+        names.append(str(published[k.VERSION]))
+    return names
+
+
+@dataclass
+class Publication:
+    """What ``catalog publish`` was asked for, and what its stages found."""
+
+    catalog_root: Path
+    target: Path
+    #: Compare only, as ``--check`` does: a leak is reported, not refused.
+    comparing: bool = False
+    #: The public tree, by path relative to the target: set by ``render``.
+    files: dict[Path, str | bytes] = field(default_factory=dict)
+    withheld: list[str] = field(default_factory=list)
+    #: What the leak check found: set by ``check``.
+    leaked: list[str] = field(default_factory=list)
+    #: Generated files that differ or are missing, and files the target holds
+    #: that are not generated: set by ``write``.
+    stale: list[str] = field(default_factory=list)
+    orphans: list[str] = field(default_factory=list)
+
+
+class Render:
+    """Render the public tree in memory."""
+
+    name = "render"
+
+    def plan(self, publication: Publication) -> list[Action]:
+        target = publication.target
+        # Publishing removes every file in its target but .git, so a source
+        # checkout, which holds catalog.yaml, is never one.
+        if (target / "catalog.yaml").is_file():
+            raise PublishError(
+                f"{target} holds a catalog.yaml, so it is a source catalogue, not the "
+                "public one; nothing was written. Point publish at the public "
+                "catalogue's checkout."
+            )
+        files = render(publication.catalog_root, _published_releases(target))
+        publication.files = files
+
+        root = datasets_dir(publication.catalog_root)
+        published = {
+            Path(*p.parts[1:-1]).as_posix()
+            for p in files
+            if len(p.parts) > 2 and p.parts[0] == "datasets"
+        }
+        # Withheld are the datasets the tree leaves out, hidden ones among them;
+        # a withdrawn dataset is neither published nor withheld.
+        from .manifest import left_out
+
+        publication.withheld = [
+            dataset_name_for(root, directory)
+            for directory in iter_dataset_dirs(root)
+            if (directory / k.PACKAGE_FILE).is_file()
+            and not left_out(directory)
+            and dataset_name_for(root, directory) not in published
+        ]
+        return []
+
+
+class Check:
+    """Refuse a tree that would leak, before anything is compared or written."""
+
+    name = "check"
+
+    def plan(self, publication: Publication) -> list[Action]:
+        # In both modes, so CI's --check fails on exactly what would stop a
+        # publish.
+        publication.leaked = leaks(publication.files, publication.withheld)
+        if publication.comparing:
+            return []
+        if publication.leaked:
+            raise PublishError(
+                "the public catalogue would leak, so nothing was written:\n"
+                + "".join(f"  {problem}\n" for problem in publication.leaked)
+                + "Fix the source descriptor or its visibility, rebuild, and publish "
+                "again."
+            )
+        if not publication.target.exists():
+            raise PublishError(
+                f"target does not exist: {publication.target}\n"
+                "Clone the public repo there first."
+            )
+        return []
+
+
+class Write:
+    """Write the generated files that differ, and remove the ones not generated."""
+
+    name = "write"
+
+    def plan(self, publication: Publication) -> list[Action]:
+        target = publication.target
+        generated = {str(relative) for relative in publication.files}
+        # Anything in the target that is not generated goes: a dataset withdrawn
+        # from publication must actually disappear. Symbolic links are removed
+        # without following them, so a dangling one does not survive.
+        orphans = sorted(
+            path
+            for path in (target.rglob("*") if target.is_dir() else [])
+            if (path.is_file() or path.is_symlink())
+            and ".git" not in path.relative_to(target).parts
+            and str(path.relative_to(target)) not in generated
+        )
+        publication.orphans = [str(path.relative_to(target)) for path in orphans]
+        changed = sorted(
+            (
+                relative
+                for relative, content in publication.files.items()
+                if _differs(target / relative, content)
+            ),
+            key=str,
+        )
+        publication.stale = [str(relative) for relative in changed]
+        actions = [
+            Action(f"remove {path.relative_to(target)}", self._remove(target, path))
+            for path in orphans
+        ]
+        actions += [
+            Action(
+                f"write {relative}",
+                self._write(target / relative, publication.files[relative]),
+            )
+            for relative in changed
+        ]
+        return actions
+
+    @staticmethod
+    def _remove(target: Path, path: Path):
+        def remove() -> None:
+            path.unlink()
+            parent = path.parent
+            while parent != target and not any(parent.iterdir()):
+                parent.rmdir()
+                parent = parent.parent
+
+        return remove
+
+    @staticmethod
+    def _write(destination: Path, content: str | bytes):
+        def write() -> None:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            # Licence documents are carried verbatim and may be PDFs, so the
+            # rendered tree is not text-only. Everything else is generated text,
+            # and both arguments below are load-bearing: the README says
+            # "Jülich", which write_text left to its defaults would encode with
+            # the locale codec and line-end as CRLF on Windows, so the public
+            # catalogue would differ byte for byte depending on who published it.
+            if isinstance(content, bytes):
+                destination.write_bytes(content)
+            else:
+                destination.write_text(content, encoding="utf-8", newline="\n")
+
+        return write
+
+
+PIPELINE: Pipeline[Publication] = Pipeline("publish", [Render(), Check(), Write()])
+
+
+def plan(
+    catalog_root: Path, target: Path
+) -> tuple[dict[Path, str | bytes], list[str], list[str]]:
+    """The public tree for ``target``, the datasets it withholds, and its leaks.
+
+    What ``render`` and ``check`` find, as ``catalog release`` checks it before
+    it publishes; nothing is written, and a leak is returned, not refused.
+    """
+    publication = Publication(catalog_root, Path(target), comparing=True)
+    Render().plan(publication)
+    Check().plan(publication)
+    return publication.files, publication.withheld, publication.leaked
+
+
+@report.reported
+def run(
+    catalog_root: Path, target: str, check: bool = False, *, dry_run: bool = False
+) -> PublishResult:
+    """Write the public catalogue into ``target``, or with ``check`` compare it.
+
+    ``dry_run`` prints the plan: the files publish would write and remove.
+    """
+    publication = Publication(
+        catalog_root, Path(target).expanduser().resolve(), comparing=check
+    )
     if check:
-        stale = [
-            rel
-            for rel, text in files.items()
-            if not (destination_root / rel).is_file()
-            or (destination_root / rel).read_text(encoding="utf-8") != text
-        ]
-        # Anything in the target that we no longer generate is also staleness --
-        # a dataset withdrawn from publication must actually disappear.
-        generated = {str(rel) for rel in files}
-        orphans = [
-            str(p.relative_to(destination_root))
-            for p in destination_root.rglob("*")
-            if p.is_file()
-            and ".git" not in p.parts
-            and str(p.relative_to(destination_root)) not in generated
-        ]
-        if stale or orphans:
-            print("Public catalogue is out of date:", file=sys.stderr)
-            for rel in stale:
-                print(f"  changed/missing: {rel}", file=sys.stderr)
-            for rel in orphans:
-                print(f"  should be removed: {rel}", file=sys.stderr)
-            return 1
-        print(f"Public catalogue is current ({len(files)} files).")
-        return 0
-
-    if not destination_root.exists():
-        raise SystemExit(
-            f"target does not exist: {destination_root}\nClone the public repo there first."
+        PIPELINE.plan(publication)
+        for problem in publication.leaked:
+            report.warning(f"  LEAK: {problem}")
+        if publication.stale or publication.orphans:
+            report.warning("Public catalogue is out of date:")
+            for relative in publication.stale:
+                report.warning(f"  changed/missing: {relative}")
+            for relative in publication.orphans:
+                report.warning(f"  should be removed: {relative}")
+        if not (publication.leaked or publication.stale or publication.orphans):
+            report.info(
+                f"Public catalogue is current ({len(publication.files)} files)."
+            )
+        return PublishResult(
+            withheld=publication.withheld,
+            stale=publication.stale,
+            orphans=publication.orphans,
+            leaks=publication.leaked,
         )
 
-    # Remove previously generated content so withdrawn datasets really go away.
-    # Symlinks are unlinked without following them: a dangling one is neither a
-    # file nor a directory, and would otherwise survive every publish forever.
-    for path in sorted(destination_root.rglob("*"), reverse=True):
-        if ".git" in path.parts:
-            continue
-        if path.is_symlink() or path.is_file():
-            path.unlink()
-        elif path.is_dir() and not any(path.iterdir()):
-            path.rmdir()
-
-    for rel, content in files.items():
-        destination = destination_root / rel
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        # Licence documents are carried verbatim and may be PDFs, so the rendered
-        # tree is not text-only. Everything else is generated text, and both
-        # arguments below are load-bearing: this README says "Jülich", which
-        # write_text left to its defaults would encode with the locale codec and
-        # line-end as CRLF on Windows, so the public catalogue would differ byte
-        # for byte depending on who published it.
-        if isinstance(content, bytes):
-            destination.write_bytes(content)
-        else:
-            destination.write_text(content, encoding="utf-8", newline="\n")
-
-    print(f"Published to {destination_root}")
-    for rel in sorted(files, key=str):
-        print(f"  + {rel}")
-    if withheld:
-        print(f"\nWithheld (visibility: hidden): {', '.join(withheld)}")
-    print("\nReview and commit in the public repo, then push.")
-    return 0
+    outcome = PIPELINE.run(publication, dry_run=dry_run)
+    if publication.withheld:
+        report.info(
+            f"\nWithheld (visibility: hidden): {', '.join(publication.withheld)}"
+        )
+    if outcome.planned and not dry_run:
+        report.info(
+            f"\nPublished to {publication.target}. Review and commit in the public "
+            "repo, then push."
+        )
+    return PublishResult(
+        files=sorted(str(relative) for relative in publication.files),
+        withheld=publication.withheld,
+    )

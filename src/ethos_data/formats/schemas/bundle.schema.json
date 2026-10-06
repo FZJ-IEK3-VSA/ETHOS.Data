@@ -1,0 +1,348 @@
+{
+  "$defs": {
+    "Alignment": {
+      "additionalProperties": false,
+      "description": "The catalogue revision a bundled dataset was last aligned with.",
+      "properties": {
+        "revision": {
+          "description": "The dataset's revision in the catalogue; 1 for the first.",
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "release": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The catalogue release it was taken from; only shown.",
+          "title": "Release"
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "title": "Alignment",
+      "type": "object"
+    },
+    "BundledDataset": {
+      "additionalProperties": false,
+      "description": "One dataset the bundle holds.",
+      "properties": {
+        "alignment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Alignment"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The catalogue revision last aligned with; null for a dataset the catalogue does not describe yet."
+        },
+        "selection": {
+          "default": "all",
+          "description": "Whether the bundle holds every file of the dataset.",
+          "enum": [
+            "all",
+            "some"
+          ],
+          "title": "Selection",
+          "type": "string"
+        },
+        "changes": {
+          "default": [],
+          "description": "The changes recorded since the alignment.",
+          "items": {
+            "$ref": "#/$defs/Change"
+          },
+          "title": "Changes",
+          "type": "array"
+        },
+        "resources": {
+          "description": "Every file under `data/<dataset>/`, with its size and SHA-256.",
+          "items": {
+            "$ref": "#/$defs/ResourceRecord"
+          },
+          "title": "Resources",
+          "type": "array"
+        },
+        "documents": {
+          "default": [],
+          "description": "The description, `dataset.yaml`, and the licence documents.",
+          "items": {
+            "$ref": "#/$defs/DocumentRecord"
+          },
+          "title": "Documents",
+          "type": "array"
+        }
+      },
+      "required": [
+        "resources"
+      ],
+      "title": "BundledDataset",
+      "type": "object"
+    },
+    "BundledFamily": {
+      "additionalProperties": false,
+      "description": "A family whose members the bundle holds: its own description.",
+      "properties": {
+        "documents": {
+          "description": "The family's `dataset.yaml`, and any licence document it names.",
+          "items": {
+            "$ref": "#/$defs/DocumentRecord"
+          },
+          "title": "Documents",
+          "type": "array"
+        }
+      },
+      "required": [
+        "documents"
+      ],
+      "title": "BundledFamily",
+      "type": "object"
+    },
+    "Change": {
+      "additionalProperties": false,
+      "description": "One change ``bundle update`` recorded since the alignment.",
+      "properties": {
+        "path": {
+          "description": "The file's path in the dataset, or the document's in its description directory.",
+          "title": "Path",
+          "type": "string"
+        },
+        "change": {
+          "description": "What became of the file or the document since the alignment.",
+          "enum": [
+            "changed",
+            "added",
+            "removed"
+          ],
+          "title": "Change",
+          "type": "string"
+        },
+        "document": {
+          "default": false,
+          "description": "A description or licence document, not a data file.",
+          "title": "Document",
+          "type": "boolean"
+        },
+        "was": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The SHA-256 at the alignment, for a changed or removed file.",
+          "title": "Was"
+        }
+      },
+      "required": [
+        "path",
+        "change"
+      ],
+      "title": "Change",
+      "type": "object"
+    },
+    "DocumentRecord": {
+      "additionalProperties": false,
+      "description": "A description or licence document under ``datasets/<dataset>/``.",
+      "properties": {
+        "path": {
+          "description": "Relative to the dataset's description directory.",
+          "title": "Path",
+          "type": "string"
+        },
+        "bytes": {
+          "description": "Its size.",
+          "minimum": 0,
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "hash": {
+          "description": "`sha256:<hex>`.",
+          "title": "Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "bytes",
+        "hash"
+      ],
+      "title": "DocumentRecord",
+      "type": "object"
+    },
+    "ResourceRecord": {
+      "additionalProperties": true,
+      "description": "One file of a dataset's inventory.",
+      "properties": {
+        "name": {
+          "description": "Unique within the dataset; derived from the path.",
+          "title": "Name",
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "path": {
+          "description": "Relative to the dataset's folder, with `/`.",
+          "title": "Path",
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "bytes": {
+          "description": "The file's size.",
+          "title": "Bytes",
+          "type": "integer",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "hash": {
+          "default": null,
+          "description": "`sha256:<hex>`, the convention pooch reads; a bare digest is read the same.",
+          "title": "Hash",
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "mediatype": {
+          "default": "application/octet-stream",
+          "description": "The file's media type.",
+          "title": "Mediatype",
+          "type": "string",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "ethos:sidecars": {
+          "default": [],
+          "description": "Companion files that must travel with this one.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Ethos:Sidecars",
+          "type": "array",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "licenses": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Present only on files a narrowed licence matched.",
+          "title": "Licenses",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        },
+        "ethos:revision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The revision the file's bytes were published in, when not the first.",
+          "title": "Ethos:Revision",
+          "x-ethos": {
+            "inherited": false,
+            "promoted": false,
+            "published": true,
+            "user_facing": false
+          }
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "bytes"
+      ],
+      "title": "ResourceRecord",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "What a bundle holds: its datasets, their alignment and changes.",
+  "properties": {
+    "format": {
+      "const": "ethos-data-bundle",
+      "default": "ethos-data-bundle",
+      "description": "What the file is; always `ethos-data-bundle`.",
+      "title": "Format",
+      "type": "string"
+    },
+    "datasets": {
+      "additionalProperties": {
+        "$ref": "#/$defs/BundledDataset"
+      },
+      "description": "Each dataset by its name; a member of a family is `<family>/<member>`.",
+      "title": "Datasets",
+      "type": "object"
+    },
+    "families": {
+      "additionalProperties": {
+        "$ref": "#/$defs/BundledFamily"
+      },
+      "default": {},
+      "description": "The families of the bundled members, by name.",
+      "title": "Families",
+      "type": "object"
+    }
+  },
+  "required": [
+    "datasets"
+  ],
+  "title": "bundle.json",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

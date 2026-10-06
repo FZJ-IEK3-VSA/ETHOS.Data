@@ -1,0 +1,32 @@
+# A small, real collections file for the examples in the ETHOS.Data
+# documentation. Every dataset it names is public and tiny, so the examples
+# can be run as written; the two collections together are under 200 KB.
+#
+# A package declares the catalogue releases it works with (see "Write a
+# collections file"), for example:
+#   catalog:
+#     min_version: v1.0.0
+# This file declares none, so it reads the public catalogue's main index.
+
+collections:
+
+  # Two rasters an offshore siting step reads: water depth and distance to the
+  # nearest coast, both clipped to a small box in the German Bight.
+  offshore_siting:
+    title: Water depth and distance to coast, German Bight test fixtures
+    include:
+      - dataset: reskit-test-data/gebco
+      - dataset: reskit-test-data/dist2coast
+    paths:
+      water_depth: reskit-test-data/gebco/water_depth_northsea.tif
+      coast_distance: reskit-test-data/dist2coast/coast_distance_northsea.tif
+
+  # Turbine placement tables, as a CSV and as a shapefile with its sidecars.
+  placements:
+    title: Turbine placements around Aachen
+    include:
+      - dataset: reskit-test-data/placements
+        files: ["turbine_placements.csv", "turbinePlacements.shp"]
+    paths:
+      turbines_csv: reskit-test-data/placements/turbine_placements.csv
+      turbines_shp: reskit-test-data/placements/turbinePlacements.shp

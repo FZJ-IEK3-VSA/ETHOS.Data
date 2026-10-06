@@ -1,13 +1,10 @@
 """Downloading catalogue resources into the shared, hash-verified cache.
 
-(Module named ``retrieval`` rather than ``fetch`` so it can never shadow the
-public ``ethos_data.fetch`` function -- the same reason ``selection`` is not
-called ``collections``. At runtime the function won anyway, because ``def
-fetch`` in ``__init__`` runs after the ``from .fetch import ...`` line, but
-static tooling saw only the module: griffe could not document the package's
-main entry point, and editors and type checkers offered the module's members
-for ``ethos_data.fetch``. ``download`` and ``plan`` are exported from here under
-their own names for the same reason -- do not rename this module to either.)
+(Named ``retrieval`` rather than ``fetch``, ``download`` or ``plan``, so that
+it never shadows the public functions of those names in the view static tooling
+takes of the package: griffe documents them, and editors and type checkers
+offer them, only while no module has their name. ``selection`` is not called
+``collections`` for the same reason.)
 
 The cache layout is the whole trick behind cross-tool deduplication:
 
@@ -25,29 +22,32 @@ ever create real directories, and never write through a link.
 
 from __future__ import annotations
 
-import warnings
+import os
+import shutil
 from pathlib import Path
 
-import pooch
-
+from . import report
 from .access import (
-    AccessError,
+    ORIGIN_CACHED,
     Location,
     check_missing,
+    linked_entry,
     locate,
     unavailable,
 )
-from .catalogs import Catalog, Resource
-from .config import ENV_VAR, Roots, dataset_roots, resolve_public_cache
+from .adapters import Downloader
+from .adapters.downloads import PoochDownloader
+from .catalogs import Catalog
+from .config import Roots
+from .errors import AccessError, NotFetched
+from .formats import keys as k
+from .model import digest, names
+from .model.resource import Resource
 
 __all__ = [
-    "AccessError",
     "DataFiles",
-    "ENV_VAR",
     "NamedPaths",
-    "cache_dir",
     "download",
-    "local_path",
     "plan",
 ]
 
@@ -64,19 +64,10 @@ class NamedPaths(dict):
     def __init__(self, *args, collection: str = "", **kwargs):
         super().__init__(*args, **kwargs)
         self.collection = collection
-        #: Handles the collection defines but this machine cannot reach, left
-        #: out under ``skip_unavailable``. Kept so a missing-key error can say
-        #: "unavailable here" rather than "never defined".
-        self.omitted: list[str] = []
 
     def __missing__(self, handle):
         offered = ", ".join(sorted(self)) or "none"
         where = f" in collection {self.collection!r}" if self.collection else ""
-        if handle in self.omitted:
-            raise KeyError(
-                f"named path {handle!r}{where} is not available on this machine "
-                f"(left out under skip_unavailable); available: {offered}"
-            )
         raise KeyError(f"no named path {handle!r}{where}; it defines: {offered}")
 
 
@@ -129,29 +120,69 @@ class DataFiles(dict):
         return self[matches[0]]
 
 
-def cache_dir(explicit: str | Path | None = None) -> Path:
-    """Root of the shared public cache.
+def _seeded(
+    public: Path, dataset, items: list[Location], files: DataFiles
+) -> list[Location]:
+    """The files still to download once those an earlier revision holds are copied.
 
-    Resolved from an explicit argument, then $ETHOS_DATA_DIR, then the user /
-    environment / site config files, then the per-user OS cache directory.
-    See :mod:`ethos_data.config` for the full precedence and the reasoning.
+    A later revision keeps most files of the one before, and its cache entry
+    is a directory of its own, so a file unchanged since an earlier revision
+    is taken from that revision's entry, hard-linked where the filesystem
+    allows and copied where not, rather than downloaded again. Only a file of
+    the recorded size and hash is taken.
     """
-    return resolve_public_cache(explicit).value
+    if dataset.revision <= 1:
+        return items
+    earlier = [
+        public / names.entry(dataset.name, revision)
+        for revision in range(dataset.revision - 1, 0, -1)
+    ]
+    remaining = []
+    for location in items:
+        target, resource = location.path, location.resource
+        source = next(
+            (
+                entry / resource.path
+                for entry in earlier
+                if _holds(entry / resource.path, resource)
+            ),
+            None,
+        )
+        if source is None or target.exists():
+            remaining.append(location)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(source, target)
+        except OSError:
+            shutil.copy2(source, target)
+        files[resource.key] = target
+    return remaining
 
 
-def local_path(resource: Resource, root: Path | None = None) -> Path:
-    return (root or cache_dir()) / resource.dataset / resource.path
+def _holds(path: Path, resource: Resource) -> bool:
+    """Whether ``path`` is the file ``resource`` describes, by size and hash."""
+    try:
+        if path.is_symlink() or path.stat().st_size != resource.bytes:
+            return False
+    except OSError:
+        return False
+    return digest.matches(resource.hash, digest.of_file(path))
 
 
 def plan(
     catalog: Catalog,
     resources: list[Resource],
-    roots: "Roots | str | Path | None" = None,
-    skip_unavailable: bool | None = None,
+    roots: Roots | None = None,
 ) -> dict:
-    """Report what a fetch would do, without touching the network."""
-    roots = Roots.coerce(roots)
-    locations = locate(catalog, resources, roots, dataset_roots(), skip_unavailable)
+    """Report what a fetch would do, without touching the network.
+
+    Restricted data this machine cannot read is listed under ``unavailable``,
+    with the reason on each location, rather than refused: the report only
+    describes. The fetch itself refuses it.
+    """
+    roots = roots if roots is not None else catalog.settings.roots
+    locations = locate(catalog, resources, roots, describe=True)
 
     present, missing, in_place = [], [], []
     by_origin: dict[str, list[Resource]] = {}
@@ -180,6 +211,9 @@ def plan(
         "in_place_by_origin": by_origin,
         "unreadable": check_missing(locations),
         "unavailable": [l.resource for l in unavailable(locations)],
+        "unavailable_reasons": {
+            l.resource.dataset: l.reason for l in unavailable(locations)
+        },
         "bytes_total": sum(r.bytes for r in resources),
         "bytes_to_download": sum(l.resource.bytes for l in missing),
     }
@@ -188,33 +222,33 @@ def plan(
 def download(
     catalog: Catalog,
     resources: list[Resource],
-    root: "Roots | str | Path | None" = None,
+    root: Roots | None = None,
     progressbar: bool = True,
-    skip_unavailable: bool | None = None,
+    *,
+    fetch: bool = True,
+    downloader: Downloader | None = None,
 ) -> DataFiles:
     """Make every resource available locally and return where each one is.
 
-    Resources resolved in place -- a link in the public cache, the restricted
-    cache, a staging entry, or a configured root -- are used where they lie and
-    never copied; the rest are downloaded into the public cache, skipping
-    anything already present and hash-verified.
+    Resources resolved in place -- a link in the public cache, a listed
+    restricted cache or a staging entry -- are used where they lie and never
+    copied; the rest are downloaded into the public cache through
+    ``downloader``, skipping anything already present and hash-verified. Every
+    resource is required: restricted data this machine cannot read raises
+    AccessError, describing the dataset, before anything is downloaded, and a
+    file that cannot be downloaded raises
+    :class:`~ethos_data.errors.DownloadError`, naming its URL.
+
+    With ``fetch=False`` nothing is downloaded and no store is contacted: a
+    copy already in the public cache is returned as it is, and a file that
+    would have to be downloaded raises :class:`~ethos_data.errors.NotFetched`,
+    naming the path it belongs at.
     """
-    roots = Roots.coerce(root)
-    _warn_about_licensing(catalog, resources)
+    roots = root if root is not None else catalog.settings.roots
+    downloader = downloader if downloader is not None else PoochDownloader()
+    warn_about_licensing(catalog, resources)
 
-    locations = locate(catalog, resources, roots, dataset_roots(), skip_unavailable)
-
-    absent = unavailable(locations)
-    if absent:
-        names = sorted({loc.resource.dataset for loc in absent})
-        warnings.warn(
-            f"{len(absent)} file(s) from {', '.join(names)} are not available on this "
-            f"machine and have been left out of the result. The returned mapping has no "
-            f"entry for them -- check for the keys you need rather than assuming they "
-            f"are there.",
-            UserWarning,
-            stacklevel=3,
-        )
+    locations = locate(catalog, resources, roots)
 
     unreadable = check_missing(locations)
     if unreadable:
@@ -235,49 +269,72 @@ def download(
     files = DataFiles()
     to_download: dict[str, list[Location]] = {}
     for location in locations:
-        if not location.available:
-            continue
-        if location.in_place:
+        if location.in_place or (not fetch and location.origin == ORIGIN_CACHED):
             files[location.resource.key] = location.path
         else:
             to_download.setdefault(location.resource.dataset, []).append(location)
 
-    for dataset_name, items in sorted(to_download.items()):
-        dataset = catalog.dataset(dataset_name)
-        destination = roots.public / dataset_name
-        _refuse_to_write_through_a_link(destination)
-        base_url = catalog.base_url_for(dataset)
-        puller = pooch.create(
-            path=destination,
-            base_url=base_url,
-            # Frictionless writes "sha256:..."; pooch reads the same "alg:hash"
-            # convention, so the manifest value passes straight through.
-            registry={loc.resource.path: loc.resource.hash for loc in items},
-            retry_if_failed=3,
+    if not fetch and to_download:
+        raise NotFetched(
+            _not_fetched([loc for items in to_download.values() for loc in items])
         )
-        for location in items:
-            fetched = puller.fetch(location.resource.path, progressbar=progressbar)
-            files[location.resource.key] = Path(fetched)
 
-    # Return in catalogue order, not download order. Unavailable resources are
-    # simply absent -- a missing key is something a caller can notice, whereas a
-    # path to a file that is not there is not.
-    return DataFiles(
-        (loc.resource.key, files[loc.resource.key])
-        for loc in locations
-        if loc.available
+    for dataset_name, items in sorted(to_download.items()):
+        # A bundled file the download switch reads through the catalogue route
+        # comes from the catalogue's dataset, never the bundle's.
+        source = (
+            catalog.routes
+            if catalog.routes is not None and catalog.bundle_of(dataset_name)
+            else catalog
+        )
+        dataset = source.dataset(dataset_name)
+        destination = roots.public / dataset.entry_name
+        _refuse_to_write_through_a_link(roots.public, dataset.entry_name)
+        items = _seeded(roots.public, dataset, items, files)
+        # Each file from the folder of the revision its bytes were published in.
+        by_revision: dict[int, list[Location]] = {}
+        for location in items:
+            by_revision.setdefault(location.resource.revision, []).append(location)
+        for revision, group in sorted(by_revision.items()):
+            fetched = downloader.fetch(
+                source.base_url_for(dataset, revision),
+                destination,
+                {loc.resource.path: loc.resource.hash for loc in group},
+                progressbar=progressbar,
+            )
+            for location in group:
+                files[location.resource.key] = fetched[location.resource.path]
+
+    # In catalogue order, not download order.
+    return DataFiles((loc.resource.key, files[loc.resource.key]) for loc in locations)
+
+
+def _not_fetched(locations: list[Location]) -> str:
+    """Which files ``fetch=False`` found missing, and where each belongs."""
+    shown = locations[:8]
+    width = max(len(loc.resource.key) for loc in shown)
+    listing = "\n".join(
+        f"    {loc.resource.key:<{width}}  belongs at {loc.path}" for loc in shown
+    )
+    more = "" if len(locations) <= 8 else f"\n    ... and {len(locations) - 8} more"
+    return (
+        f"{len(locations)} file(s) are not on this machine, and fetch=False "
+        f"downloads nothing:\n{listing}{more}\n"
+        "The same call with fetch=True downloads them to those paths."
     )
 
 
-def _refuse_to_write_through_a_link(destination: Path) -> None:
+def _refuse_to_write_through_a_link(root: Path, name: str) -> None:
     """Never let a download land in somebody else's directory.
 
-    ``locate`` already routes a symbolic-link entry to "in-place", so reaching
-    here with one means a bug or a race -- a link created between planning and
-    fetching. Either way the consequence would be writing into shared project
-    storage that this cache only borrows, so it is worth a second check.
+    ``locate`` already routes a linked entry, the dataset's own or its
+    family's, to "in-place", so reaching here with one means a bug or a race --
+    a link created between planning and fetching. Either way the consequence
+    would be writing into shared project storage that this cache only borrows,
+    so it is worth a second check.
     """
-    if destination.is_symlink():
+    destination = linked_entry(root, name)
+    if destination is not None:
         raise AccessError(
             f"{destination} is a symbolic link to {destination.resolve()}, so it is data "
             f"this machine already has and does not own. Refusing to download into it.\n"
@@ -286,11 +343,12 @@ def _refuse_to_write_through_a_link(destination: Path) -> None:
         )
 
 
-def _warn_about_licensing(catalog: Catalog, resources: list[Resource]) -> None:
-    """Refuse to let unresolved licensing pass silently.
+def warn_about_licensing(catalog: Catalog, resources: list[Resource]) -> None:
+    """Refuse to let unresolved licensing pass silently, for whoever reads the data.
 
     An absent licence is a question, not a default. Datasets are published with
     ethos:license_status until somebody has actually read the upstream terms.
+    The warning names the line that called the caller: a fetch, or a verify.
     """
     unresolved = sorted(
         {
@@ -300,8 +358,8 @@ def _warn_about_licensing(catalog: Catalog, resources: list[Resource]) -> None:
         }
     )
     for name in unresolved:
-        note = catalog.dataset(name).descriptor.get("ethos:license_note", "")
-        warnings.warn(
+        note = catalog.dataset(name).descriptor.get(k.LICENSE_NOTE, "")
+        report.warning(
             f"dataset {name!r} has unresolved licensing; redistribution terms "
             f"have not been confirmed. {note}".strip(),
             UserWarning,

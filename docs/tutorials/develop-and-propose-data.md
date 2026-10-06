@@ -15,13 +15,16 @@ In a terminal with your package's Python environment active:
 mkdir ethos-local-lesson
 cd ethos-local-lesson
 mkdir candidate
+export ETHOS_DATA_CONFIG="$PWD/lesson-settings.yaml"
 export ETHOS_STAGING_DIR="$PWD/.ethos-staging"
 export ETHOS_DATA_DIR="$PWD/.ethos-cache"
 ```
 
-These environment variables apply to this shell and its child processes. The
-staging directory holds development entries; the ordinary cache has a separate
-location.
+These environment variables apply to this shell and its child processes.
+`ETHOS_DATA_CONFIG` names the lesson's settings file: while it is named,
+ETHOS.Data reads it instead of the settings in your account, and writes any
+setting into it. The staging directory holds development entries; the ordinary
+cache has a separate location.
 
 Create the input and a minimal local catalogue index:
 
@@ -30,8 +33,7 @@ from pathlib import Path
 
 Path("candidate/temperatures.csv").write_bytes(b"station,value\nA,12.5\nB,13.0\n")
 Path("datacatalog.json").write_text('{"name": "local-lesson", "datasets": []}\n')
-Path("collections.yaml").write_text("""catalog: datacatalog.json
-collections:
+Path("collections.yaml").write_text("""collections:
   example_input:
     include:
       - dataset: lesson-temperatures
@@ -43,7 +45,16 @@ collections:
 
 The empty index deliberately does not describe `lesson-temperatures`. It is a
 local teaching fixture, not the generated index of an official catalogue. The
-next step supplies the dataset through staging.
+next step supplies the dataset through staging. Name it as the lesson's
+catalogue:
+
+```bash
+ethos-data config set-catalog "$PWD/datacatalog.json"
+```
+
+The catalogue is a setting of the user's, never of the collections file: a
+package's file only bounds which catalogue releases it accepts, and this one
+sets no bounds.
 
 Save this small package-style wrapper as `data_cli.py` beside `collections.yaml`:
 
@@ -66,14 +77,14 @@ exposes through `tool_main`, without needing RESKit installed for this lesson.
 ```bash
 python data_cli.py staging add lesson-temperatures "$PWD/candidate" --note "local CSV lesson"
 python data_cli.py staging list
-python data_cli.py --catalog "$PWD/datacatalog.json" info example_input
-python data_cli.py --catalog "$PWD/datacatalog.json" info all
+python data_cli.py show example_input
+python data_cli.py show all
 ```
 
 Both collections resolve the same CSV; `all` aggregates the inputs this example
-workflow uses. Naming the local
-catalogue explicitly also overrides any catalogue configured for your usual
-project. No remote metadata is needed for this lesson.
+workflow uses. The lesson's settings file names the local catalogue, so the
+catalogue configured for your usual work is not read. No remote metadata is
+needed for this lesson.
 
 ## 3. Use the same API your package will use
 
@@ -81,11 +92,9 @@ Run Python in this directory and shell:
 
 ```python
 import csv
-from pathlib import Path
 from ethos_data import fetch
 
-files = fetch("example_input", collections="collections.yaml",
-              catalog=str(Path("datacatalog.json").resolve()))
+files = fetch("example_input", collections="collections.yaml")
 with files.one("temperatures.csv").open() as handle:
     rows = list(csv.DictReader(handle))
 
@@ -105,11 +114,12 @@ experiments and cannot establish that an input matches a released version.
 
 ## 4. Prepare a proposal
 
-Once the experiment works, preserve the candidate version and prepare a draft
-`dataset.yaml` for the reviewer:
+Once the experiment works, prepare the draft description for the reviewer.
+`staging add` wrote a minimal `candidate/dataset.yaml`; replace it with:
 
 ```yaml
 name: lesson-temperatures
+source_dir: .
 title: Synthetic temperatures for the local development lesson
 description: Two invented station observations used to exercise a CSV reader.
 ethos:origin: created
@@ -125,27 +135,27 @@ licenses:
 ```
 
 The licence here applies to the invented example; choose appropriate terms for
-real data. The catalogue maintainer will set `source_dir` to the candidate
-location they can read. For a minimal inventory to accompany this proposal:
+real data. `source_dir` names the directory that holds the bytes, relative to
+the draft; the catalogue maintainer reads them from there. Let the package's
+command check the draft and write the proposal:
 
-```python
-import hashlib
-from pathlib import Path
-
-candidate = Path("candidate/temperatures.csv")
-print(candidate.name, candidate.stat().st_size,
-      "sha256:" + hashlib.sha256(candidate.read_bytes()).hexdigest())
+```bash
+python data_cli.py propose candidate
 ```
 
-With real data, you would now hand the CSV, this inventory, the draft metadata,
-and the validation result to a catalogue maintainer. This teaching example stays
-on your machine.
+`propose` checks the draft as the catalogue's build would, inventories the
+bytes under `source_dir` and prints the proposal: the dataset, a new one, the
+file and its size, the collections `example_input` and `all`, which already
+name it, and the tracker to post it at. It also warns that the file can be
+written to: a candidate whose bytes may change cannot be reviewed. With real
+data you would now make the directory read-only, add the validation you ran
+to the proposal, and post it. This teaching example stays on your machine.
 
 ## 5. End the experiment
 
 ```bash
 python data_cli.py staging remove lesson-temperatures
-unset ETHOS_STAGING_DIR ETHOS_DATA_DIR
+unset ETHOS_DATA_CONFIG ETHOS_STAGING_DIR ETHOS_DATA_DIR
 ```
 
 Removing this linked staging entry leaves `candidate/temperatures.csv` intact.
@@ -157,14 +167,14 @@ verified official copy.
 ## What you did
 
 You read an uncatalogued input through the same `fetch` call a package uses,
-saw that staging follows the files on disk without checksums, and prepared the
-metadata and inventory a catalogue maintainer reviews.
+saw that staging follows the files on disk without checksums, and drafted the
+proposal a catalogue maintainer reviews.
 
 ## Next
 
 - [Run a test with repository data](bundled-tests.md) — the next lesson:
   catalogued test data in a repository, and deliberate local edits to it.
-- [Stage uncatalogued data](../how-to/package-maintainers/propose-a-dataset.md#stage-development-data) — staging for
+- [Stage uncatalogued data](../how-to/package-maintainers/stage-development-data.md#stage-development-data) — staging for
   real data.
 - [Propose a dataset](../how-to/package-maintainers/propose-a-dataset.md) — a real submission,
   including provenance and access to the bytes.

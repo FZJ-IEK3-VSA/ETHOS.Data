@@ -1,10 +1,12 @@
 # Installation
 
 `ethos-data` is a small pure-Python package. Its only runtime dependencies are
-[pooch](https://www.fatiando.org/pooch/) (hash-verified downloads), PyYAML and
+[pooch](https://www.fatiando.org/pooch/) (hash-verified downloads), PyYAML,
 [platformdirs](https://platformdirs.readthedocs.io/) (cross-platform config and
-cache locations), so it installs cleanly next to whatever scientific stack you
-already have. Python 3.10 or newer.
+cache locations) and [pydantic](https://docs.pydantic.dev/) `>=2` (the file
+format specifications, loaded only when a file is validated), so it installs
+cleanly next to whatever scientific stack you already have. Python 3.10 or
+newer.
 
 Installing it gives you one executable with a catalogue-maintenance command group:
 
@@ -79,7 +81,7 @@ mamba install -c conda-forge rclone oidc-agent
     `bash` on `PATH`; the one Git for Windows ships will do.
 
 Everything else in the group — `build` and `publish` — needs only the package,
-and so does `ethos-data link`, which builds shared cache links from a top-level
+and so does `ethos-data link`, which builds cache links from a top-level
 command rather than a `catalog` subcommand: filling a cache on the machine that
 already holds the data touches no remote storage, so it asks nothing of
 `rclone` or `oidc-agent`.
@@ -92,10 +94,19 @@ The one-time credential setup is in
 ethos-data config show
 ```
 
-This prints the cache directories in use, **why** each was chosen, and every
-config file that was consulted along the way. It needs no catalogue and no
-network, so it is the fastest way to confirm the install works — and the first
-thing to run when data turns up somewhere unexpected.
+This prints the settings file it read, the cache directories in use, and
+**why** each was chosen. It needs no catalogue and no network, so it is the
+fastest way to confirm the install works — and the first thing to run when
+data turns up somewhere unexpected.
+
+```bash
+ethos-data selftest
+```
+
+This fetches a few public test files, under 200 KB in total, from the
+catalogue in effect and checks them, so it confirms that downloads work on
+this machine. See
+[Check that a download works](how-to/data-users/set-up-your-machine.md#check-a-download).
 
 ```bash
 python -c "import ethos_data; print(ethos_data.__version__)"
@@ -106,7 +117,10 @@ python -c "import ethos_data; print(ethos_data.__version__)"
 Nothing more is required for public data: the cache defaults to your OS's
 per-user cache directory (`~/.cache/ethos-data` on Linux). If you want it
 somewhere with room — a project filesystem, a scratch volume — see
-[Point the cache somewhere](how-to/data-users/set-up-your-machine.md#cache-locations).
+[Point the cache somewhere](how-to/data-users/set-up-your-machine.md#public-installation-users).
+Any setting you make is stored in one file in your account, the same for a
+conda environment, a virtual environment or a plain pip install; see
+[Where the settings are stored](how-to/data-users/set-up-your-machine.md#settings-file).
 
 ## Development install
 

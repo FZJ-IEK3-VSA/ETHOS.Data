@@ -1,0 +1,255 @@
+{
+  "$defs": {
+    "Copy": {
+      "additionalProperties": true,
+      "description": "One place the dataset's bytes can be read from, as a command put them there.",
+      "properties": {
+        "kind": {
+          "description": "uploaded to dCache, linked into a cache, or materialized there",
+          "enum": [
+            "uploaded",
+            "linked",
+            "materialized"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "description": "The dataset's folder on the store for an upload; the cache entry otherwise.",
+          "title": "Location",
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The directory a linked entry points at.",
+          "title": "Target"
+        },
+        "verified": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When a command last found every file there, in UTC.",
+          "title": "Verified"
+        }
+      },
+      "required": [
+        "kind",
+        "location"
+      ],
+      "title": "Copy",
+      "type": "object"
+    },
+    "Event": {
+      "additionalProperties": true,
+      "description": "One entry of the history: a step taken, by whom and when.",
+      "properties": {
+        "at": {
+          "description": "When, in UTC.",
+          "title": "At",
+          "type": "string"
+        },
+        "by": {
+          "default": "",
+          "description": "The account that took the step.",
+          "title": "By",
+          "type": "string"
+        },
+        "step": {
+          "description": "add, migrate, build, revise, change, upload, verify, link, materialize, record, check-source, remove, purge or release.",
+          "title": "Step",
+          "type": "string"
+        },
+        "from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The state before, when the step changed it.",
+          "title": "From"
+        },
+        "to": {
+          "description": "The state after.",
+          "title": "To",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why, as the command was told: a removal's reason, a check's note.",
+          "title": "Note"
+        },
+        "files": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The inventory's file count, for a step that read it.",
+          "title": "Files"
+        },
+        "bytes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The inventory's size in bytes.",
+          "title": "Bytes"
+        },
+        "copy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Copy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The copy the step made or checked."
+        },
+        "source_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The build input that freezing the dataset retired.",
+          "title": "Source Dir"
+        },
+        "release": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The catalogue release a release step made, vMAJOR.MINOR.PATCH.",
+          "title": "Release"
+        }
+      },
+      "required": [
+        "at",
+        "step",
+        "to"
+      ],
+      "title": "Event",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "Where a dataset stands: its state, build input, copies and history.",
+  "properties": {
+    "state": {
+      "description": "Where the dataset stands; see the lifecycle.",
+      "enum": [
+        "draft",
+        "built",
+        "available",
+        "frozen",
+        "withdrawn",
+        "purged"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "source_dir": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The build input: the directory the build reads, relative to the dataset directory if relative.",
+      "title": "Source Dir"
+    },
+    "revision": {
+      "default": 1,
+      "description": "Which revision of the dataset the inventory describes; 1 for the first.",
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "authority": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The location of the authoritative copy, once the dataset is frozen.",
+      "title": "Authority"
+    },
+    "copies": {
+      "default": [],
+      "description": "Every place the bytes were made available.",
+      "items": {
+        "$ref": "#/$defs/Copy"
+      },
+      "title": "Copies",
+      "type": "array"
+    },
+    "history": {
+      "default": [],
+      "description": "Every step taken, oldest first.",
+      "items": {
+        "$ref": "#/$defs/Event"
+      },
+      "title": "History",
+      "type": "array"
+    }
+  },
+  "required": [
+    "state"
+  ],
+  "title": "status.yaml",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

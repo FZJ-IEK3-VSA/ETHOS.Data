@@ -11,13 +11,18 @@
 #
 # Usage:  ./check_dcache_access.sh [VO]        (default VO: FZJ-ICE2)
 # Needs:  oidc-agent configured with a profile named HIFIS  (oidc-token HIFIS)
+#
+# `ethos-data catalog check-store` sets ETHOS_STORE_VO_PATH, ETHOS_STORE_FRONTEND
+# and ETHOS_STORE_OIDC_PROFILE from catalog.yaml's ethos:store; they win over
+# the defaults here.
 
 set -uo pipefail
 
 VO="${1:-FZJ-ICE2}"
-API="https://hifis-storage-web.desy.de/api/v1/namespace"
+API="${ETHOS_STORE_FRONTEND:-https://hifis-storage-web.desy.de/api/v1}/namespace"
 DOOR="https://hifis-storage-ht.desy.de:2880"
-BASE="Helmholtz/${VO}"
+BASE="${ETHOS_STORE_VO_PATH:-Helmholtz/${VO}}"
+PROFILE="${ETHOS_STORE_OIDC_PROFILE:-HIFIS}"
 PROBE="_access-check-$$"
 
 pass() { printf '  \033[32mPASS\033[0m  %s\n' "$1"; }
@@ -48,9 +53,9 @@ else
 fi
 
 # --- token -----------------------------------------------------------------
-TOKEN="$(oidc-token HIFIS 2>/dev/null)"
+TOKEN="$(oidc-token "${PROFILE}" 2>/dev/null)"
 if [ -z "$TOKEN" ]; then
-  fail "no token from 'oidc-token HIFIS' - run: eval \$(oidc-agent-service use)"
+  fail "no token from 'oidc-token ${PROFILE}' - run: eval \$(oidc-agent-service use)"
   echo; exit 1
 fi
 pass "got an OIDC token"
