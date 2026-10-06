@@ -64,6 +64,14 @@ commands, and a local HTTP server standing in for the published store, so the
 download path runs with real checksums and no network. Prefer them, and the
 public entry points they go through, to building `Dataset` objects by hand.
 
+A test exercises the package as imported, so it passes in a packaged test run
+too: the conda-forge feedstock copies `tests/` and nothing else beside the
+installed package. A test that reads the package's source finds it through
+`ethos_data.__file__`, not through `src/`. A test that checks the repository
+around the package, such as a documentation page or an example the pages show,
+is marked `@pytest.mark.repository`, and a packaged run deselects it with
+`pytest -m "not repository"`.
+
 ## Library code does not print
 
 Only `ethos_data.cli` prints and chooses an exit status. Below it, a refusal
