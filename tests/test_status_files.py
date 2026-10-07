@@ -15,6 +15,7 @@ import pytest
 import yaml
 from support import SourceCatalogue, run_cli
 
+from ethos_data import report
 from ethos_data.adapters import dcache
 from ethos_data.adapters.fakes import FakeStore
 from ethos_data.errors import DescriptorError, TransitionError
@@ -828,9 +829,23 @@ class TestStatus:
         code, out, err = catalogue.catalog("status", "--check")
 
         assert code == 0, out + err
-        assert "ok    datapackage.json is current" in out
-        assert "2 of 2 files readable" in out
+        header, row = out.splitlines()[:2]
+        assert header.split()[4] == "check"
+        assert row.split()[:5] == ["flat", "available", "public", "-", "ok"]
+        assert "datapackage.json is current" not in out, "what held is not listed"
         assert "Every record holds." in out
+
+    def test_check_keeps_every_comparison_in_the_result(self, uploading):
+        catalogue, _ = uploading
+        assert catalogue.catalog("upload", "flat")[0] == 0
+
+        result = dataset_status.run(
+            catalogue.root, ["flat"], check=True, reporter=report.NullReporter()
+        )
+
+        texts = [finding.text for finding in result.findings["flat"]]
+        assert texts[0] == "datapackage.json is current"
+        assert "2 of 2 files readable" in texts[1]
 
     def test_check_finds_what_no_longer_holds(self, linking):
         source, cache, cli = linking
@@ -841,8 +856,45 @@ class TestStatus:
         code, out, _ = source.catalog("status", "--check")
 
         assert code == 1
-        assert "FAIL  datapackage.json is out of date" in out
-        assert "the entry is missing" in out
+        lines = out.splitlines()
+        assert lines[1].split()[:2] == ["shared", "available"]
+        assert lines[1].split()[4] == "FAIL"
+        assert lines[2].startswith("      FAIL  datapackage.json is out of date")
+        assert "the entry is missing" in lines[3]
+
+    def test_a_long_name_widens_only_its_own_row(self, source):
+        long_name = "a-dataset-whose-name-is-longer-than-the-name-column"
+        source.dataset("short", {"a.csv": "1"})
+        source.dataset(long_name, {"a.csv": "1"})
+
+        _, out, _ = source.catalog("status")
+
+        rows = {line.split()[0]: line for line in out.splitlines() if line.strip()}
+        column = 2 + dataset_status.NAME_WIDTH + 2
+        assert rows["dataset"].index("state") == column
+        assert rows["short"].index("draft") == column
+        assert rows[long_name].index("draft") == 2 + len(long_name) + 2
+
+    def test_check_shows_a_warning_under_the_row_of_its_dataset(self, source):
+        source.dataset("clean", {"a.csv": "1"})
+        source.dataset("stray", {"a.csv": "1"}, ethos_exclude=["*.tmp"])
+        assert source.build()[0] == 0
+        lines = []
+
+        class Ordered(report.Reporter):
+            def info(self, message: str = "") -> None:
+                lines.append(message)
+
+            def warning(self, message, category=UserWarning, stacklevel=1) -> None:
+                lines.append(message)
+
+        dataset_status.run(source.root, [], check=True, reporter=Ordered())
+
+        row = next(i for i, line in enumerate(lines) if line.split()[:1] == ["stray"])
+        assert lines[row + 1].startswith(
+            "      warning: stray: ethos:exclude pattern '*.tmp' matches nothing"
+        )
+        assert sum("matches nothing" in line for line in lines) == 1
 
     def test_check_flags_a_copy_on_dcache_of_data_that_became_restricted(
         self, uploading

@@ -69,6 +69,10 @@ class ConsoleReporter(Reporter):
     def warning(
         self, message: str, category: type[Warning] = UserWarning, stacklevel: int = 1
     ) -> None:
+        # Standard output is block-buffered when it goes to a pipe and standard
+        # error is not, so without the flush a warning sent to the same pipe
+        # (`2>&1 | less`) prints above the lines it follows.
+        sys.stdout.flush()
         print(message, file=sys.stderr)
 
 
