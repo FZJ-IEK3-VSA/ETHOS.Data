@@ -120,6 +120,31 @@ def datasets_dir(catalog_root: Path) -> Path:
     return catalog_root / "datasets"
 
 
+#: The folder of the clone that ``catalog add-bundle`` copies a bundle's files
+#: into by default. It ignores itself in git, and ``catalog record`` deletes a
+#: build input there once it retires it.
+BUILD_INPUTS = "build-inputs"
+
+
+def build_inputs_dir(catalog_root: Path) -> Path:
+    """The default build inputs of ``catalog_root``."""
+    return catalog_root.absolute() / BUILD_INPUTS
+
+
+def make_build_inputs(catalog_root: Path) -> None:
+    """Make the default build inputs of ``catalog_root``, ignored in git, unless there."""
+    directory = build_inputs_dir(catalog_root)
+    directory.mkdir(exist_ok=True)
+    ignore = directory / ".gitignore"
+    if not ignore.is_file():
+        ignore.write_text("*\n", encoding="utf-8", newline="\n")
+
+
+def in_build_inputs(catalog_root: Path, path: str | Path) -> bool:
+    """Whether ``path`` lies in the default build inputs of ``catalog_root``."""
+    return Path(path).absolute().is_relative_to(build_inputs_dir(catalog_root))
+
+
 #: The hand-written description of one dataset, in its directory under
 #: ``datasets/``.
 DESCRIPTOR = "dataset.yaml"

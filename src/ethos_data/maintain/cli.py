@@ -140,7 +140,8 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         "catalogue, or the ones named: add new datasets, make the next revision of "
         "changed ones while the catalogue is at the bundle's alignment, and take "
         "changed descriptions. The files are copied into a build input the "
-        "catalogue maintainers own.",
+        "catalogue maintainers own, build-inputs/ in the clone unless --into names "
+        "another; `catalog record` deletes it there.",
     )
     bundler.add_argument("directory", help="the bundle directory, in a checkout")
     bundler.add_argument(
@@ -148,9 +149,10 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
     )
     bundler.add_argument(
         "--into",
-        required=True,
+        default=None,
         metavar="DIR",
-        help="the directory of build inputs the catalogue maintainers own",
+        help="the directory of build inputs the catalogue maintainers own "
+        "(default: build-inputs/ in the clone, ignored in git)",
     )
     bundler.add_argument(
         "--remove-missing",

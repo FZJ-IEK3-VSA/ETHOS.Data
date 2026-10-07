@@ -547,6 +547,22 @@ class TestRecord:
         assert catalogue.build()[0] == 0
         assert catalogue.package("flat")["resources"] == inventory
 
+    def test_a_build_input_in_the_clone_is_deleted(self, uploading):
+        catalogue, _ = uploading
+        inputs = catalogue.root / "build-inputs"
+        (inputs / "group" / "inbound").mkdir(parents=True)
+        (inputs / "group" / "inbound" / "a.csv").write_text("1\n", encoding="utf-8")
+        catalogue.dataset("inbound", source_dir=str(inputs / "group" / "inbound"))
+        assert catalogue.build()[0] == 0
+        assert catalogue.catalog("upload", "inbound")[0] == 0
+
+        code, out, err = catalogue.catalog("record", "inbound")
+
+        assert code == 0, err
+        assert "is retired and deleted" in out
+        assert not (inputs / "group").exists() and inputs.is_dir()
+        assert catalogue.status("inbound")["state"] == "frozen"
+
     def test_a_dry_run_checks_the_copy_and_writes_nothing(self, uploading):
         catalogue, _ = uploading
         assert catalogue.catalog("upload", "flat")[0] == 0

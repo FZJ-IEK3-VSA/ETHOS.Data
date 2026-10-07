@@ -134,31 +134,73 @@ the file as `modified` until it is restored.
 
 Realign a bundle soon after it is ahead, in one of two ways.
 
-**The catalogue takes the bundle's version.** Draft the proposal for the
-datasets that are ahead and submit it as under
-[Propose a dataset](propose-a-dataset.md#4-submit):
+**The catalogue takes the bundle's version.** It goes in five steps, the
+first and last yours, the others the catalogue maintainer's.
 
-```bash
-<your-tool>-data propose your_tool/data/test_data
-```
+1. Record your changes with the catalogue readable, and check that every
+   dataset you changed is ahead:
 
-The bundle's `datasets/` holds the descriptions and licence documents and its
-`data/` the bytes, which is everything the catalogue maintainer needs. The
-maintainer takes the ahead datasets in:
+    ```bash
+    <your-tool>-data bundle update your_tool/data/test_data
+    <your-tool>-data bundle verify your_tool/data/test_data
+    ```
 
-```bash
-ethos-data catalog add-bundle /path/to/checkout/your_tool/data/test_data --into <build inputs>
-```
+    `bundle update` compares each dataset's files, description and licence
+    documents with the catalogue, every key of the description included. A
+    dataset the catalogue holds as the bundle does is `aligned`, and its
+    recorded changes are cleared. Every other changed dataset is listed as
+    `ahead`, with what changed. Only these are taken in: a dataset listed as
+    `aligned` is not, even when it is named. Commit `bundle.json` with the
+    change.
 
-`add-bundle` takes new datasets, revisions of changed ones and changed
-descriptions, and copies the files into a build input the catalogue
-maintainers own, so the catalogue never reads your checkout. It takes a
-revision only while the catalogue is still at the bundle's alignment. The
-maintainer then builds, uploads, records, merges and
-[releases](../catalogue-maintainers/release-the-catalogue.md). Once the
-release is out, raise `catalog.min_version` in your collections file and run
-`bundle update` with the catalogue readable: it records the new alignment,
-and the warning stops.
+2. Draft the proposal for the datasets that are ahead and submit it as under
+   [Propose a dataset](propose-a-dataset.md#4-submit):
+
+    ```bash
+    <your-tool>-data propose your_tool/data/test_data
+    ```
+
+    The bundle's `datasets/` holds the descriptions and licence documents and
+    its `data/` the bytes, which is everything the catalogue maintainer needs.
+
+3. The catalogue maintainer takes the ahead datasets in, in a clone on the
+   machine that uploads:
+
+    ```bash
+    ethos-data catalog add-bundle /path/to/checkout/your_tool/data/test_data --dry-run
+    ethos-data catalog add-bundle /path/to/checkout/your_tool/data/test_data
+    ethos-data catalog status your-tool-test-data
+    ```
+
+    `add-bundle` takes new datasets, revisions of changed ones and changed
+    descriptions. It copies the files of new and revised datasets into
+    `build-inputs/` in the clone, a folder that ignores itself in git, so the
+    catalogue never reads your checkout. It takes a revision only while the
+    catalogue is still at the bundle's alignment. A changed description needs
+    no copy: the dataset is built again with it, and a frozen one stays
+    frozen.
+
+4. The maintainer makes each dataset `catalog status` names a next step for
+   available, and freezes it:
+
+    ```bash
+    ethos-data catalog upload your-tool-test-data/placements
+    ethos-data catalog record your-tool-test-data/placements
+    ```
+
+    A revision's changed and new files go to dCache under
+    `<remote_prefix>@<revision>/`, and its unchanged files stay where they
+    are. `record` makes the upload the authoritative copy and deletes the
+    build input from `build-inputs/`. The maintainer then commits, merges and
+    [releases](../catalogue-maintainers/release-the-catalogue.md) the
+    catalogue.
+
+5. Once the release is out, raise `catalog.min_version` in your collections
+   file and run `bundle update` with the catalogue readable. It lists each
+   dataset taken in as `aligned`, with the catalogue's revision, and the
+   warning stops. `bundle verify` then exits 0. A dataset it names as
+   differing from the catalogue was not taken in as the bundle holds it:
+   find out why before you take the catalogue's version.
 
 **The bundle takes the catalogue's version.** To drop your changes to a
 dataset, or to catch up with a later revision, take what the catalogue holds:

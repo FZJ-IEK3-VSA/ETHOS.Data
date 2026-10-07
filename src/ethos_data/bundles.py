@@ -271,12 +271,32 @@ def description_of(descriptor: Mapping) -> dict:
 def _comparable(meta: Mapping) -> dict:
     """The keys of a description two copies of one dataset must agree on.
 
-    The user-facing keys, the defaults filled in, so a description that leaves
-    out ``ethos:access: public`` agrees with one that states it.
+    Every key the description publishes, contributors and provenance as much
+    as the title, the defaults filled in, so a description that leaves out
+    ``ethos:access: public`` agrees with one that states it.
     """
-    from .formats.dataset import apply_defaults, described
+    from .formats.dataset import apply_defaults
 
-    return described(apply_defaults(dict(meta)))
+    return apply_defaults(description_of(meta))
+
+
+def _inheriting(root: Path, name: str, families: Iterable[str]) -> dict:
+    """The description a bundle keeps for ``name``, its families' inherited keys applied."""
+    from .formats.dataset import INHERITED
+
+    meta = {}
+    for family in names.ancestors(name):
+        if family in families:
+            meta.update(
+                {
+                    key: value
+                    for key, value in _read_description(root, family).items()
+                    if key in INHERITED
+                }
+            )
+    meta.update(_read_description(root, name))
+    meta[k.NAME] = name
+    return meta
 
 
 # -- a bundle ---------------------------------------------------------------------
@@ -972,9 +992,13 @@ def _same(one: str, other: str) -> bool:
 
 
 def _holds_the_same(
-    bundle_root: Path, name: str, entry: Mapping, catalog: Catalog
+    bundle_root: Path, name: str, entry: Mapping, meta: Mapping, catalog: Catalog
 ) -> bool:
-    """Whether ``catalog`` holds what the bundle holds of ``name``: files, description, terms."""
+    """Whether ``catalog`` holds what the bundle holds of ``name``: files, description, terms.
+
+    ``meta`` is the bundle's description of ``name``, its families' inherited
+    keys applied.
+    """
     dataset = catalog.datasets.get(name)
     if dataset is None or dataset.namespace:
         return False
@@ -989,8 +1013,7 @@ def _holds_the_same(
     for path, recorded in mine.items():
         if path not in held or digest.expected(held[path]) != digest.expected(recorded):
             return False
-    meta = _read_description(bundle_root, name)
-    if _comparable({**meta, k.NAME: name}) != _comparable(descriptor):
+    if _comparable(meta) != _comparable(descriptor):
         return False
     for document in _license_documents(meta):
         try:
@@ -1018,7 +1041,8 @@ def differs_from_catalog(bundle: Bundle, catalog: Catalog) -> dict[str, str]:
         if entry.alignment is None or entry.changes:
             continue
         document = entry.model_dump(mode="json", by_alias=True, exclude_none=True)
-        if not _holds_the_same(bundle.path, name, document, catalog):
+        meta = bundle.descriptions[name]
+        if not _holds_the_same(bundle.path, name, document, meta, catalog):
             found[name] = (
                 "the catalogue holds other files, description or licence documents; "
                 f"take its version: {bundle.prog} bundle update {bundle.path} "
@@ -1201,7 +1225,8 @@ def update_bundle(
         for name, entry in datasets.items():
             if name in taken:
                 continue
-            if _holds_the_same(root, name, entry, catalog):
+            meta = _inheriting(root, name, families)
+            if _holds_the_same(root, name, entry, meta, catalog):
                 revision = catalog.dataset(name).revision
                 if (
                     entry["alignment"]

@@ -306,6 +306,36 @@ class TestUpdate:
         assert update.aligned == {"sites": 1}
         assert load_bundle(root).ahead() == {}
 
+    def test_a_change_of_contributors_stays_ahead(self, tmp_path, reader):
+        files = {"a.csv": b"1\n"}
+        reader.dataset("sites", files, descriptor=same_description("sites"))
+        catalog = load_catalog(str(reader.write()))
+        root = bundled(tmp_path / "bundle", {"sites": files})
+        update_bundle(root, catalog=catalog)
+        describe(root, "sites", contributors=[{"title": "Ada", "roles": ["modifier"]}])
+
+        update = update_bundle(root, catalog=catalog)
+
+        assert update.aligned == {}
+        assert load_bundle(root).ahead() == {"sites": "its description changed"}
+
+    def test_a_familys_inherited_keys_are_no_change(self, tmp_path, reader):
+        files = {"a.csv": b"1\n"}
+        root = bundled(tmp_path / "bundle", {"fam/sites": files}, family="fam")
+        describe(root, "fam", homepage="https://example.invalid/fam")
+        reader.dataset(
+            "fam/sites",
+            files,
+            descriptor={
+                **same_description("fam/sites"),
+                "homepage": "https://example.invalid/fam",
+            },
+        )
+
+        update = update_bundle(root, catalog=load_catalog(str(reader.write())))
+
+        assert update.aligned == {"fam/sites": 1}
+
     def test_the_catalogues_version_is_taken(self, tmp_path, reader, store):
         root = bundled(tmp_path / "bundle", {"sites": {"a.csv": b"1\n"}})
         reader.dataset(
@@ -537,6 +567,25 @@ class TestAddBundle:
         status = catalogue.status("sites")
         assert (status["state"], status["source_dir"]) == ("built", str(into / "sites"))
         assert catalogue.package("sites")["resources"][0]["hash"] == digest(b"1\n")
+
+    def test_the_build_input_is_kept_in_the_clone_out_of_git(self, catalogue, tmp_path):
+        root = bundled(tmp_path / "bundle", {"sites": {"a.csv": b"1\n"}})
+        inputs = catalogue.root / "build-inputs"
+
+        code, _, err = catalogue.catalog("add-bundle", str(root))
+
+        assert code == 0, err
+        assert (inputs / "sites" / "a.csv").read_bytes() == b"1\n"
+        assert (inputs / ".gitignore").read_text(encoding="utf-8") == "*\n"
+        assert catalogue.status("sites")["source_dir"] == str(inputs / "sites")
+
+    def test_a_dry_run_makes_no_build_inputs(self, catalogue, tmp_path):
+        root = bundled(tmp_path / "bundle", {"sites": {"a.csv": b"1\n"}})
+
+        code, _, err = catalogue.catalog("add-bundle", str(root), "--dry-run")
+
+        assert code == 0, err
+        assert not (catalogue.root / "build-inputs").exists()
 
     def test_an_access_change_from_a_bundle_is_refused(self, catalogue, tmp_path):
         root = bundled(tmp_path / "bundle", {"sites": {"a.csv": b"1\n"}})

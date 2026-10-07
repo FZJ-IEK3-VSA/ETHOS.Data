@@ -135,7 +135,9 @@ bundle's datasets that are ahead of the catalogue: new datasets, revisions
 descriptions. It writes one directory per dataset, a family's members below
 the family's own `dataset.yaml`
 (`datasets/your-tool-test-data/era5/dataset.yaml`), and copies the files into
-a build input the catalogue maintainers own; see
+`build-inputs/` in your clone, a folder that ignores itself in git. Run it on
+the machine you upload from: `source_dir` is recorded as an absolute path.
+The steps from the package's change to the realigned bundle are in
 [Keep data in the repository](../package-maintainers/keep-data-in-the-repository.md#sync). The build walks `source_dir`, hashes every
 selected file and writes `datapackage.json` beside the description; never
 hand-edit the generated JSON. Check the generated paths, counts, sizes and
@@ -167,7 +169,8 @@ ethos-data catalog --catalog-root <your clone> record my-dataset
 ```
 
 `record` checks the copy on dCache again, makes it the authoritative copy and
-retires `source_dir`: the recorded inventory is frozen. For linked data, the
+retires `source_dir`: the recorded inventory is frozen. A build input in
+`build-inputs/`, copied there by `add-bundle`, is deleted. For linked data, the
 original directory stays the build input until the dataset is
 [materialized](materialize-linked-data.md#retire-the-original), and the copy
 is recorded then. Commit the status file on the branch and merge it by merge
