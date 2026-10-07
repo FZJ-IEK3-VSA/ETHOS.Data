@@ -47,6 +47,12 @@ class PoochDownloader:
             except (OSError, ValueError) as error:
                 # requests' errors are OSErrors; a hash that does not
                 # match after the retries is pooch's ValueError.
+                # pooch streams the response and raises on its status without
+                # closing it: close it here, or its socket stays open until a
+                # garbage collection, in whatever code happens to run then.
+                response = getattr(error, "response", None)
+                if response is not None:
+                    response.close()
                 url = f"{base_url.rstrip('/')}/{path}"
                 raise DownloadError(f"cannot download {url}: {error}") from error
         return found

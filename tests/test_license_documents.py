@@ -19,6 +19,7 @@ from support import write_descriptor
 from ethos_data.errors import DescriptorError
 from ethos_data.maintain.manifest import render_dataset, write_dataset
 from ethos_data.maintain.manifest import run as build_run
+from ethos_data.report import RecordingReporter
 
 TERMS = b"You may use these bytes, with attribution.\n"
 DIGEST = hashlib.sha256(TERMS).hexdigest()
@@ -143,7 +144,10 @@ def test_the_documents_digest_is_written_and_a_changed_text_is_reported_stale(tm
     (root / "datasets" / "d" / "licenses" / "terms.txt").write_bytes(
         TERMS + b"revised upstream\n"
     )
-    assert not build_run(root, [], check=True).ok
+    recorded = RecordingReporter()
+    assert not build_run(root, [], check=True, reporter=recorded).ok
+    (stale,) = recorded.warnings
+    assert "datapackage.json" in stale
     assert build_run(root, []).ok
     rebuilt = json.loads(
         (root / "datasets" / "d" / "datapackage.json").read_text(encoding="utf-8")

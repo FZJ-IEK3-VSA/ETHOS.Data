@@ -14,6 +14,7 @@ import pytest
 import yaml
 from support import digest
 
+from ethos_data import report
 from ethos_data.errors import MaintenanceError
 from ethos_data.maintain import accept
 from ethos_data.maintain.pipeline import Action, Pipeline
@@ -120,11 +121,13 @@ class TestPipeline:
                     Action("record b", lambda: done.append("record b"), subject="b"),
                 ]
 
-        run = Pipeline("p", [Transfer(), Record()]).run(None)
+        with report.reporting(recorded := report.RecordingReporter()):
+            run = Pipeline("p", [Transfer(), Record()]).run(None)
 
         assert done == ["copy b", "record b"]
         assert not run.ok
         assert run.failed == {"a": "rclone exited 7"}
+        assert recorded.warnings == ["p, transfer, a: rclone exited 7"]
 
 
 class TestAdd:

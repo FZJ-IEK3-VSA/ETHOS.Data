@@ -74,3 +74,10 @@ packages = ["src/ethos_data"]
 # the licence, which has to travel with any copy of the source.
 include = ["/src", "/tests", "/LICENSE"]
 
+[tool.pytest.ini_options]
+# A warning a test does not assert fails it, so none piles up unread in the
+# summary. Set here rather than in tests/conftest.py: a packaged test run (the
+# conda-forge feedstock) copies tests/ alone and runs against newer
+# dependencies, whose deprecation warnings are no reason to fail that build.
+filterwarnings = ["error"]
+

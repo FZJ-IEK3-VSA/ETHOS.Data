@@ -84,7 +84,9 @@ script filters it like any other. The maintainer entry points take
 `reporter=`, so a test records what a build said with
 `report.RecordingReporter()` and a script silences it with
 `report.NullReporter()`. A test fails when a `print` or a `warnings.warn`
-appears below the command line.
+appears below the command line. A test also fails on a warning it does not
+expect, because `pyproject.toml` turns warnings into errors: record the warning
+with a `RecordingReporter` or assert it with `pytest.warns`.
 
 ## External systems sit behind ports
 
