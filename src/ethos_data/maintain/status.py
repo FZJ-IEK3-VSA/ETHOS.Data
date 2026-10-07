@@ -467,6 +467,44 @@ def evidence(
 
 # -- the command ---------------------------------------------------------------
 
+#: The widest the name column gets. A longer name pushes the rest of its own row
+#: to the right; sized to the longest name, one nested dataset with a long name
+#: widened every row of a catalogue past what a terminal shows on one line.
+NAME_WIDTH = 40
+#: Where the lines under a row start: what ``--check`` found that needs a look.
+UNDER_ROW = " " * 6
+
+
+@dataclass
+class _Held(report.Reporter):
+    """Holds the warnings of checking one dataset, for the lines under its row.
+
+    The check renders the dataset again, as a build does. The render's progress
+    belongs to a build and is dropped; its warnings are about this dataset and
+    would otherwise print above the row they belong to.
+    """
+
+    warnings: list[tuple[str, type[Warning]]] = field(default_factory=list)
+
+    def warning(
+        self, message: str, category: type[Warning] = UserWarning, stacklevel: int = 1
+    ) -> None:
+        self.warnings.append((message, category))
+
+
+def _row(
+    name: str,
+    width: int,
+    state: str,
+    access: str,
+    release: str,
+    check: str | None,
+    rest: str,
+) -> str:
+    """One line of the table; ``check`` is None when ``--check`` was not given."""
+    checked = "" if check is None else f"{check:<5} "
+    return f"  {name:<{width}}  {state:<10} {access:<11} {release:<16} {checked}{rest}"
+
 
 def datasets(
     catalog_root: Path, names: list[str], *, tombstones: bool = False
@@ -549,10 +587,10 @@ def run(
         from . import manifest
 
         superseded = manifest.superseded_by_map(catalog_root)
-    width = max([len(name) for name, _ in rows] + [7])
-    report.info(
-        f"  {'dataset':<{width}}  {'state':<10} {'access':<11} {'release':<16} next"
-    )
+    width = min(max([len(name) for name, _ in rows] + [7]), NAME_WIDTH)
+    unchecked = "-" if check else None
+    column = "check" if check else None
+    report.info(_row("dataset", width, "state", "access", "release", column, "next"))
     for name, dataset_dir in rows:
         described = (dataset_dir / "dataset.yaml").is_file()
         meta = read_descriptor(dataset_dir) if described else {}
@@ -561,14 +599,12 @@ def run(
             status = read(dataset_dir)
         except DescriptorError as error:
             result.unreadable.append(name)
-            report.info(
-                f"  {name:<{width}}  {'?':<10} {access:<11} {'':<16} {error.message}"
-            )
+            report.info(_row(name, width, "?", access, "", unchecked, error.message))
             continue
         if status is None:
             result.unreadable.append(name)
             hint = f"ethos-data catalog migrate {name}"
-            report.info(f"  {name:<{width}}  {'-':<10} {access:<11} {'-':<16} {hint}")
+            report.info(_row(name, width, "-", access, "-", unchecked, hint))
             continue
         result.states[name] = status.state
         last, after = releases(status)
@@ -582,15 +618,27 @@ def run(
             licensed=license_settled(meta),
             checkout=str(catalog_root),
         )
-        report.info(
-            f"  {name:<{width}}  {status.state:<10} {access:<11} {release:<16} "
-            f"{hint or '-'}"
-        )
+        found: list[Finding] = []
+        held = _Held()
         if check and described:
-            found = evidence(catalog_root, dataset_dir, name, status, store, superseded)
+            with report.reporting(held):
+                found = evidence(
+                    catalog_root, dataset_dir, name, status, store, superseded
+                )
             result.findings[name] = found
-            for finding in found:
-                report.info(f"  {'':<{width}}    {finding}")
+        verdict = unchecked
+        if found:
+            verdict = "ok" if all(finding.ok for finding in found) else "FAIL"
+        report.info(
+            _row(name, width, status.state, access, release, verdict, hint or "-")
+        )
+        # Only what needs a look goes under the row: the check column already
+        # says that the rest held, and StatusResult keeps every comparison.
+        for finding in found:
+            if not finding.ok:
+                report.info(f"{UNDER_ROW}{finding}")
+        for message, category in held.warnings:
+            report.warning(f"{UNDER_ROW}{message.strip()}", category)
     if not names:
         _next_release(catalog_root, git)
     if check:
