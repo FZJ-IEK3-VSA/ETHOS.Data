@@ -49,6 +49,23 @@ class TestDownloading:
         assert first == second
         assert store.downloads() == ["/flat/a.csv"]
 
+    def test_a_copy_of_the_recorded_size_is_used_without_hashing_it_again(
+        self, reader, store, monkeypatch
+    ):
+        reader.dataset("flat", {"a.csv": "1,2\n"}, where="store")
+        handle = catalogue(reader)
+        copy = handle.path("flat/a.csv")
+        copy.write_bytes(b"9,9\n")
+
+        def hashed(*args, **kwargs):
+            pytest.fail("a copy of the recorded size was hashed again")
+
+        monkeypatch.setattr(pooch.core, "hash_matches", hashed)
+
+        assert handle.path("flat/a.csv") == copy
+        assert copy.read_bytes() == b"9,9\n", "verify --deep is what finds this"
+        assert store.downloads() == ["/flat/a.csv"]
+
     def test_bytes_that_differ_from_the_catalogue_are_refused(
         self, reader, store, no_retry_delay
     ):
