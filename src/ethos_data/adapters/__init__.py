@@ -23,9 +23,12 @@ returns data and raises a typed error when it fails; none returns a status.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from ..model.inventory import PartReader
+
+if TYPE_CHECKING:
+    from ..errors import UploadError
 
 __all__ = ["Downloader", "Git", "MetadataSource", "Store"]
 
@@ -82,6 +85,16 @@ class Store(Protocol):
 
         What any reader gets, without credentials: a file that is not
         world-readable, or not there, raises.
+        """
+        ...
+
+    def served_each(self, urls: list[str]) -> list[int | UploadError]:
+        """:meth:`served` for many URLs at once, in their order.
+
+        For each URL the size, or the :class:`~ethos_data.errors.UploadError`
+        that :meth:`served` raises for it. A batch reports every file it asked
+        about: raising on the first that is not readable would hide what the
+        others answer.
         """
         ...
 

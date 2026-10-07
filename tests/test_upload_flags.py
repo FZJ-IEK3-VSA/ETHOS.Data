@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 from support import SourceCatalogue
 
+from ethos_data import report
 from ethos_data.adapters.fakes import FakeStore
 from ethos_data.maintain import upload
 
@@ -103,6 +104,31 @@ def test_a_folder_nobody_may_read_fails_the_read_back(uploading):
 
     assert code == 1
     assert "NOT READABLE   2" in out and "HTTP 401" in out
+
+
+def test_a_large_read_back_reports_how_far_it_got(monkeypatch, tmp_path):
+    for name in ("a.csv", "b.csv", "c.csv", "d.csv"):
+        (tmp_path / name).write_bytes(b"1\n")
+    store = FakeStore()
+    store.copy(tmp_path, "root/flat", ["a.csv", "b.csv", "c.csv", "d.csv"], transfers=1)
+    resources = [{"path": n, "bytes": 2} for n in ("a.csv", "b.csv", "c.csv", "e.csv")]
+    resources.append({"path": "d.csv", "bytes": 5})
+    monkeypatch.setattr(upload, "READ_BACK_BATCH", 2)
+    recorded = report.RecordingReporter()
+
+    with report.reporting(recorded):
+        ok, unreadable, wrong = upload.read_back(
+            store, resources, "https://store.invalid/root/flat/", progress="flat"
+        )
+
+    assert [r["path"] for r, _ in ok] == ["a.csv", "b.csv", "c.csv"]
+    assert [r["path"] for r, _ in unreadable] == ["e.csv"]
+    assert wrong == [({"path": "d.csv", "bytes": 5}, 2)]
+    assert recorded.infos == [
+        "  flat: 2 of 5 files read back",
+        "  flat: 4 of 5 files read back",
+        "  flat: 5 of 5 files read back",
+    ]
 
 
 def test_a_dataset_without_a_prefix_goes_to_the_folder_named_after_it(
