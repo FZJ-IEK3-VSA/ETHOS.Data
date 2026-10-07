@@ -18,6 +18,9 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
   "pooch>=1.8.0",
+  # The upload's read-back keeps its connections open; urllib opens one per
+  # request. pooch depends on it too.
+  "requests>=2.19",
   "pyyaml>=5.4",
   "platformdirs>=3.0",   # cross-platform config and cache locations
   # The file-format specifications (ethos_data.formats) are pydantic models.

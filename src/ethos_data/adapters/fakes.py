@@ -135,6 +135,15 @@ class FakeStore:
         status = "HTTP 404 Not Found" if self.readable else "HTTP 401 Unauthorized"
         raise UploadError(f"{url} is not readable: {status}")
 
+    def served_each(self, urls: list[str]) -> list[int | UploadError]:
+        found: list[int | UploadError] = []
+        for url in urls:
+            try:
+                found.append(self.served(url))
+            except UploadError as error:
+                found.append(error)
+        return found
+
 
 @dataclass
 class FakeDownloader:

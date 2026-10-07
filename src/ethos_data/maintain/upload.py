@@ -84,6 +84,11 @@ from . import (
 from . import status as dataset_status
 from .pipeline import Action, Pipeline
 
+#: A read-back asks the store for this many files at a time, and a larger one
+#: reports after each batch: thousands of files read back without a line of
+#: output look like a command that hangs.
+READ_BACK_BATCH = 500
+
 
 @dataclass(frozen=True)
 class UploadOptions:
@@ -173,23 +178,28 @@ def preflight(
 
 
 def read_back(
-    store: Store, resources: list[dict], base_url: str
+    store: Store, resources: list[dict], base_url: str, *, progress: str = ""
 ) -> tuple[list, list, list]:
     """Read every resource back anonymously: ``(ok, unreadable, wrong_size)``.
 
     ``base_url`` is the dataset's folder on the published store. ``ok`` and
     ``wrong_size`` hold ``(resource, size the server reports)``,
-    ``unreadable`` holds ``(resource, why)``.
+    ``unreadable`` holds ``(resource, why)``. With ``progress``, the dataset's
+    name, a read-back of more than one batch reports after each batch how far
+    it got.
     """
     ok, unreadable, wrong = [], [], []
-    for resource in resources:
-        url = object_url(base_url, resource)
-        try:
-            size = store.served(url)
-        except UploadError as error:
-            unreadable.append((resource, error.message))
-            continue
-        (ok if size == resource[k.BYTES] else wrong).append((resource, size))
+    for start in range(0, len(resources), READ_BACK_BATCH):
+        batch = resources[start : start + READ_BACK_BATCH]
+        found = store.served_each([object_url(base_url, item) for item in batch])
+        for resource, size in zip(batch, found):
+            if isinstance(size, UploadError):
+                unreadable.append((resource, size.message))
+            else:
+                (ok if size == resource[k.BYTES] else wrong).append((resource, size))
+        if progress and len(resources) > READ_BACK_BATCH:
+            done = start + len(batch)
+            report.info(f"  {progress}: {done:,} of {len(resources):,} files read back")
     return ok, unreadable, wrong
 
 
@@ -498,7 +508,9 @@ class Verify:
             resources = inventory_of(plan.name, plan.dataset_dir).records()
             dataset_url = upload.url(plan)
             namespace_path = upload.namespace_path(plan)
-            ok, missing, wrong = read_back(upload.store, resources, dataset_url)
+            ok, missing, wrong = read_back(
+                upload.store, resources, dataset_url, progress=plan.name
+            )
             report.info(f"\n{plan.name}, read back anonymously from {dataset_url}")
             report.info(f"  readable       {len(ok)}/{plan.package[k.FILE_COUNT]}")
             if wrong:

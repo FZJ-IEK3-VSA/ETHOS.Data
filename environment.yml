@@ -4,6 +4,7 @@ channels:
 dependencies:
   - python >=3.10
   - pooch
+  - requests >=2.19
   - pyyaml
   - platformdirs
   - pydantic >=2
