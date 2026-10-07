@@ -9,12 +9,15 @@ the DESY frontend or to the public door -- which is why tests pass a
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import subprocess
 import tempfile
 import urllib.error
 import urllib.request
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from .. import report
@@ -32,6 +35,23 @@ def _run(command: list[str], **kwargs) -> subprocess.CompletedProcess:
 
 def _capture(command: list[str], **kwargs) -> subprocess.CompletedProcess:
     return _run(command, text=True, capture_output=True, **kwargs)
+
+
+@contextmanager
+def _urlopen(request: urllib.request.Request) -> Iterator[http.client.HTTPResponse]:
+    """Every HTTP request this adapter makes, closed however it ends.
+
+    An HTTPError holds the response it reports, and with it the connection.
+    Left open, it is closed by a garbage collection, with a ResourceWarning, in
+    whatever code happens to run then.
+    """
+    try:
+        response = urllib.request.urlopen(request, timeout=60)
+    except urllib.error.HTTPError as error:
+        error.close()
+        raise
+    with response:
+        yield response
 
 
 class DcacheStore:
@@ -169,7 +189,7 @@ class DcacheStore:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=60):
+            with _urlopen(request):
                 return
         except (OSError, ValueError) as error:
             raise UploadError(
@@ -183,7 +203,7 @@ class DcacheStore:
             url, headers={"Authorization": f"Bearer {bearer}"}
         )
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
+            with _urlopen(request) as response:
                 return json.load(response).get("fileLocality", "unknown")
         except (OSError, ValueError) as error:
             raise UploadError(
@@ -194,7 +214,7 @@ class DcacheStore:
         """HEAD ``url`` without credentials; the Content-Length it answers."""
         request = urllib.request.Request(url, method="HEAD")
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
+            with _urlopen(request) as response:
                 return int(response.headers.get("Content-Length", -1))
         except (OSError, ValueError) as error:
             raise UploadError(f"{url} is not readable: {_reason(error)}") from None

@@ -66,6 +66,9 @@ class HttpSource:
                     raw = gzip.decompress(raw)
                 return raw
         except urllib.error.HTTPError as error:
+            # It holds the response and its connection: closed now, not by a
+            # garbage collection in whatever code happens to run then.
+            error.close()
             reason = f"HTTP {error.code} {error.reason}"
             if error.code == 404:
                 raise IncompleteCatalog(f"{location}: {reason}") from error
