@@ -231,7 +231,8 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
         "datasets",
         nargs="+",
         help="dataset directory names, or paths to them (e.g. datasets/global-wind-atlas-v4); "
-        "a family name such as reskit-test-data uploads every member beneath it",
+        "a family name such as reskit-test-data uploads every member beneath it "
+        "that has something to upload, its frozen and withdrawn members passed over",
     )
     uploader.add_argument(
         "--remote",
@@ -297,18 +298,22 @@ def add_catalog_parser(sub: "argparse._SubParsersAction") -> argparse.ArgumentPa
 
     recorder = catalog_sub.add_parser(
         "record",
-        help="freeze a dataset whose bytes are available, naming its authoritative copy",
-        description="Check a recorded copy file by file, make it the dataset's "
-        "authoritative copy and retire its source_dir; a rebuild then keeps the "
-        "inventory as it is.",
+        help="freeze datasets whose bytes are available, naming their authoritative copy",
+        description="Check a recorded copy of each dataset file by file, make it the "
+        "authoritative copy and retire the source_dir; a rebuild then keeps the "
+        "inventory as it is. Every dataset is checked before any is frozen. A family "
+        "stands for its members, those frozen or withdrawn already passed over.",
     )
-    recorder.add_argument("dataset", help="dataset name, or the path to it")
+    recorder.add_argument(
+        "datasets", nargs="+", help="dataset or family names, or the paths to them"
+    )
     recorder.add_argument(
         "--copy",
         default=None,
         metavar="LOCATION",
-        help="the recorded copy to make authoritative (default: the upload, else the "
-        "copy a cache owns, else for restricted data its registered installation)",
+        help="the recorded copy to make authoritative, of one dataset (default: the "
+        "upload, else the copy a cache owns, else for restricted data its registered "
+        "installation)",
     )
     recorder.add_argument(
         "--dry-run", action="store_true", help="check the copy; write nothing"
@@ -530,7 +535,7 @@ def dispatch(args) -> int:
         from . import freeze
 
         return _status(
-            freeze.run(root, args.dataset, copy=args.copy, dry_run=args.dry_run)
+            freeze.run(root, args.datasets, copy=args.copy, dry_run=args.dry_run)
         )
 
     if args.catalog_command == "migrate":

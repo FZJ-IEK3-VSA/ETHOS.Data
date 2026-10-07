@@ -256,23 +256,28 @@ def resolve_name(catalog_root: Path, argument: str) -> str:
     )
 
 
-def expand_families(catalog_root: Path, names: list[str]) -> list[str]:
+def expand_families(
+    catalog_root: Path, names: list[str], step: str = "upload"
+) -> dict[str, str | None]:
     """Replace a family name by its member datasets, in name order.
 
     A namespace -- ``reskit-test-data`` -- describes no files and carries no
     licence of its own, so as an upload it is nothing, and checking it as one
     dataset only produces a puzzling "unresolved licensing". What somebody
     naming it means is "every member under it". Expanded here, before any
-    check, so the members are vetted and uploaded exactly as if listed.
+    check, so the members are vetted exactly as if listed. Each name maps to
+    the family it was reached through, None for a dataset named itself: a
+    member with nothing left for ``step`` is passed over, a dataset named
+    itself is not.
     """
     root = datasets_dir(catalog_root)
-    expanded: list[str] = []
+    expanded: dict[str, str | None] = {}
     for name in names:
         dataset_dir = root / name
         if not (dataset_dir / "dataset.yaml").is_file() or not is_namespace(
             dataset_dir
         ):
-            expanded.append(name)
+            expanded[name] = None
             continue
         members = [
             dataset_name_for(root, member)
@@ -281,13 +286,26 @@ def expand_families(catalog_root: Path, names: list[str]) -> list[str]:
         ]
         if not members:
             raise UploadError(
-                f"{name} is a family with no member dataset beneath it; nothing to upload."
+                f"{name} is a family with no member dataset beneath it; nothing to "
+                f"{step}."
             )
         report.info(
-            f"{name} is a family: its {len(members)} members are uploaded in its place"
+            f"{name} is a family: its {len(members)} members stand in its place"
         )
-        expanded.extend(members)
+        for member in members:
+            expanded.setdefault(member, name)
     return expanded
+
+
+def passed_over(family: str | None, state: str, *, frozen: bool = True) -> bool:
+    """Whether a member reached through ``family`` has nothing left for the step.
+
+    A withdrawn member is out of the catalogue; a frozen one, unless ``frozen``
+    is False, has its authoritative copy already.
+    """
+    if family is None:
+        return False
+    return state == lifecycle.WITHDRAWN or (frozen and state == lifecycle.FROZEN)
 
 
 class Plan(NamedTuple):
@@ -384,17 +402,20 @@ class Check:
 
         # Deduplicated, because naming a dataset twice should cost one upload,
         # and ordered, so the run reads in the order it was asked for.
-        names = dict.fromkeys(
-            expand_families(
-                upload.catalog_root,
-                [resolve_name(upload.catalog_root, each) for each in upload.arguments],
-            )
+        names = expand_families(
+            upload.catalog_root,
+            [resolve_name(upload.catalog_root, each) for each in upload.arguments],
         )
         step = "verify" if options.verify_only else "upload"
-        for name in names:
+        for name, family in names.items():
             meta, package, source_dir, dataset_dir = load(upload.catalog_root, name)
-            prefix = preflight(name, package, source_dir, options.verify_only)
             status = dataset_status.build_input(dataset_dir, meta, name).status
+            if passed_over(family, status.state, frozen=not options.verify_only):
+                report.info(
+                    f"  {self.name:<12} {name}: {status.state}, nothing to {step}"
+                )
+                continue
+            prefix = preflight(name, package, source_dir, options.verify_only)
             plan = Plan(name, package, source_dir, dataset_dir, prefix, status)
             if not options.verify_only and _uploaded(status, upload.url(plan)):
                 report.info(
