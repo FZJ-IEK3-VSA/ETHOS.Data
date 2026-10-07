@@ -12,7 +12,7 @@ from pathlib import Path
 import pooch
 import pytest
 import yaml
-from support import run_cli
+from support import drop_from_rows, run_cli
 
 import ethos_data
 from ethos_data import staging
@@ -84,6 +84,20 @@ class TestSelfTest:
         assert code == 1
         assert "2. catalogue" in out and "3. files" not in out
         assert "selftest FAILED at catalogue" in err
+
+    def test_an_index_another_version_wrote_fails_the_second_step(
+        self, example, tmp_path
+    ):
+        drop_from_rows(example, "ethos:remote_prefix")
+
+        code, out, err = run_cli(
+            ["--catalog", str(example), "--root", str(tmp_path / "fresh"), "selftest"]
+        )
+
+        assert code == 1
+        assert "3. files" not in out
+        assert "selftest FAILED at catalogue" in err
+        assert "lacks ethos:remote_prefix" in out + err
 
     def test_a_file_that_does_not_match_fails_the_third_step(
         self, example, store, tmp_path, monkeypatch

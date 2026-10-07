@@ -76,9 +76,10 @@ class UnknownKey(EthosDataError, KeyError):
 class CatalogUnavailable(EthosDataError, OSError):
     """The catalogue index itself could not be read.
 
-    Distinct from :class:`IncompleteCatalog`, which is about a dataset the index
-    promised: here there is no index. The message names the location and says
-    how to point at another catalogue.
+    Either there is no index, or another version of ETHOS.Data wrote it and a
+    dataset's row lacks a key this version reads from it. Distinct from
+    :class:`IncompleteCatalog`, which is about a dataset the index promised.
+    The message names the location and says how to point at another catalogue.
     """
 
 

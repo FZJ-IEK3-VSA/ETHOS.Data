@@ -591,6 +591,7 @@ def _cli_workspace(tmp_path, monkeypatch):
                         "ethos:access": "public",
                         "ethos:file_count": 1,
                         "ethos:total_bytes": 10,
+                        "ethos:remote_prefix": "example",
                         "ethos:license_status": "resolved",
                     }
                 ]

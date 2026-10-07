@@ -17,8 +17,9 @@ patterns can reach.
 
 Three errors say what went wrong:
 [`CatalogUnavailable`][ethos_data.errors.CatalogUnavailable] when the index
-itself cannot be read — a wrong location, or a release tag that does not
-exist; its message names the location and says how to point at another
+itself cannot be read — a wrong location, a release tag that does not
+exist, or an index another version wrote, whose dataset rows lack a key this
+version reads; its message names the location and says how to point at another
 catalogue — [`UnknownDataset`][ethos_data.errors.UnknownDataset] for
 a dataset the catalogue does not describe, and
 [`IncompleteCatalog`][ethos_data.errors.IncompleteCatalog] for a dataset the

@@ -76,6 +76,15 @@ def write_descriptor(
     return path
 
 
+def drop_from_rows(index: Path, key: str) -> Path:
+    """Remove ``key`` from every row of the index at ``index``: an index another version wrote."""
+    document = json.loads(index.read_text(encoding="utf-8"))
+    for row in document["datasets"]:
+        row.pop(key, None)
+    index.write_text(json.dumps(document), encoding="utf-8")
+    return index
+
+
 def run_cli(argv: list[str]) -> tuple[int, str, str]:
     """Run ``ethos-data`` as a process would: exit code, standard output, standard error.
 

@@ -18,7 +18,7 @@ Use the reporter's catalogue, collection and cache settings, not yours.
 
 | Symptom | Check and action |
 | --- | --- |
-| `CatalogUnavailable` | The location is wrong, or the release a package's bounds select is not tagged. Check the reporter's catalogue setting, the release bounds in the package's `collections.yaml` and the served path. |
+| `CatalogUnavailable` | The location is wrong, the release a package's bounds select is not tagged, or another version of ETHOS.Data wrote the index, so a dataset row lacks a key the reporter's version reads. Check the reporter's catalogue setting, the release bounds in the package's `collections.yaml`, the served path, and the reporter's ETHOS.Data version against the one that built the index. |
 | `IncompleteCatalog`, descriptor or shard missing | The served copy is stale or partial: an index from one revision beside inventories from another. [Release](release-the-catalogue.md#internal) the complete version again; copying only the index is not a fix. |
 | Unknown dataset or unresolvable collection | Spelling, revision, a hidden dataset seen through the public catalogue, or a staging entry gone. |
 | Cluster catalogue unreadable | Filesystem permissions, or a checkout that was moved or is half-way through an update. |
