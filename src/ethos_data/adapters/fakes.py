@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import unquote
 
 from ..errors import DownloadError, UploadError
 from ..model import digest
@@ -126,8 +127,10 @@ class FakeStore:
     def served(self, url: str) -> int:
         self.reads.append(url)
         if self.readable:
+            # The store decodes the percent-encoded path of the request.
+            asked = unquote(url)
             for path, data in self.objects.items():
-                if url.endswith(f"/{path}"):
+                if asked.endswith(f"/{path}"):
                     return len(data)
         status = "HTTP 404 Not Found" if self.readable else "HTTP 401 Unauthorized"
         raise UploadError(f"{url} is not readable: {status}")

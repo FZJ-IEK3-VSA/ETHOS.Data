@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
+from urllib.parse import quote
 
 from . import keys as k
 
@@ -121,11 +122,16 @@ def object_folder(remote_prefix: str, revision: int = 1) -> str:
 
 
 def object_url(dataset_url: str, record: Mapping) -> str:
-    """Where the store serves one resource record, ``dataset_url`` its first folder."""
+    """Where the store serves one resource record, ``dataset_url`` its first folder.
+
+    The path is percent-encoded. A file name may hold a space, which a request
+    line may not: ``urllib`` refuses such a URL outright, and a read-back of
+    ``Supplementary material.txt`` stopped the upload of every dataset after it.
+    """
     revision = int(record.get(k.REVISION, 1))
     base = dataset_url.rstrip("/")
     folder = base if revision <= 1 else f"{base}@{revision}"
-    return f"{folder}/{record[k.PATH]}"
+    return f"{folder}/{quote(record[k.PATH])}"
 
 
 def resource_url(publication_url: str, remote_prefix: str, path: str = "") -> str:
