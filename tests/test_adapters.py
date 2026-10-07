@@ -9,8 +9,10 @@ real checkout.
 
 from __future__ import annotations
 
+import io
 import shutil
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -28,6 +30,7 @@ from ethos_data.errors import (
     MaintenanceError,
     UploadError,
 )
+from ethos_data.formats.derived import object_url
 
 
 def test_each_adapter_and_its_fake_satisfy_the_port():
@@ -89,6 +92,37 @@ class TestDcache:
         with pytest.raises(UploadError, match="b.csv is not readable: HTTP 404"):
             adapter.served(missing)
         assert store.requests[-1] == ("HEAD", "/ethos-data/flat/b.csv")
+
+    def test_the_read_back_asks_for_a_file_whose_name_has_a_space(self, store):
+        store.put("ethos-data/flat", "Supplementary material.txt", "1\n")
+        record = {"path": "Supplementary material.txt"}
+        url = object_url(f"{store.url}/ethos-data/flat/", record)
+
+        assert dcache.DcacheStore().served(url) == 2
+        assert store.requests[-1] == (
+            "HEAD",
+            "/ethos-data/flat/Supplementary%20material.txt",
+        )
+
+    def test_the_frontend_is_asked_for_a_percent_encoded_path(self, monkeypatch):
+        asked = []
+
+        @contextmanager
+        def answer(request):
+            asked.append(request.full_url)
+            yield io.BytesIO(b'{"fileLocality": "ONLINE"}')
+
+        monkeypatch.setattr(dcache, "_urlopen", answer)
+        adapter = dcache.DcacheStore(frontend="https://frontend.invalid/api/v1")
+
+        assert adapter.locality("ethos-data/flat/a b.txt", "token") == "ONLINE"
+        adapter.chmod("ethos-data/a folder", dcache.MODE_0755, "token")
+
+        namespace = "https://frontend.invalid/api/v1/namespace"
+        assert asked == [
+            f"{namespace}/ethos-data/flat/a%20b.txt?locality=true",
+            f"{namespace}/ethos-data/a%20folder",
+        ]
 
     @pytest.mark.repository
     def test_the_login_hint_matches_the_guide(self, monkeypatch):
@@ -215,6 +249,14 @@ class TestTheFakeStore:
         assert fake.served("https://store.invalid/root/flat/a.csv") == 2
         with pytest.raises(UploadError, match="HTTP 404"):
             fake.served("https://store.invalid/root/flat/b.csv")
+
+    def test_it_decodes_the_path_it_is_asked_for_as_the_store_does(self, tmp_path):
+        (tmp_path / "a b.csv").write_bytes(b"1\n")
+        fake = FakeStore()
+
+        fake.copy(tmp_path, "root/flat", ["a b.csv"], transfers=1)
+
+        assert fake.served("https://store.invalid/root/flat/a%20b.csv") == 2
 
     def test_it_rehearses_a_failed_copy_and_a_missing_chmod(self, tmp_path):
         (tmp_path / "a.csv").write_bytes(b"1\n")

@@ -19,6 +19,7 @@ import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 from .. import report
 from ..errors import UploadError
@@ -52,6 +53,11 @@ def _urlopen(request: urllib.request.Request) -> Iterator[http.client.HTTPRespon
         raise
     with response:
         yield response
+
+
+def _namespace(frontend: str, path: str) -> str:
+    """The frontend's URL of a path below the VO, percent-encoded for the request line."""
+    return f"{frontend}/namespace/{quote(path.lstrip('/'))}"
 
 
 class DcacheStore:
@@ -180,7 +186,7 @@ class DcacheStore:
 
     def chmod(self, path: str, mode: int, bearer: str) -> None:
         request = urllib.request.Request(
-            f"{self.frontend}/namespace/{path.lstrip('/')}",
+            _namespace(self.frontend, path),
             data=json.dumps({"action": "chmod", "mode": mode}).encode(),
             headers={
                 "Authorization": f"Bearer {bearer}",
@@ -198,7 +204,7 @@ class DcacheStore:
 
     def locality(self, path: str, bearer: str) -> str:
         """ONLINE (disk) / NEARLINE (tape only) / ONLINE_AND_NEARLINE (both)."""
-        url = f"{self.frontend}/namespace/{path.lstrip('/')}?locality=true"
+        url = f"{_namespace(self.frontend, path)}?locality=true"
         request = urllib.request.Request(
             url, headers={"Authorization": f"Bearer {bearer}"}
         )
