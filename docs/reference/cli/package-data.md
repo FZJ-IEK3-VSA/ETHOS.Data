@@ -124,8 +124,9 @@ the catalogue lacks is a `CollectionError` — printed as `error: ...`, exit `2`
 ## `fetch <collection> [--test] [--plan | --paths]` { #fetch-collection }
 
 Download whatever the collection selects and this machine does not already
-have. Files already present and matching their recorded checksum are skipped —
-including files another tool fetched earlier into the same cache. Datasets
+have. A copy already in the public cache at its recorded size is used as it
+is, without hashing it again, including one another tool fetched earlier into
+the same cache; each download is hash-checked. Datasets
 resolved in place are used where they lie and never copied. A faulty `paths`
 handle is refused before any transfer (see [above](#show)). Progress messages
 label the variant:
@@ -150,9 +151,9 @@ to download:        2 files     32.4 MB
 not available here:    4 files                  (licensed-example -- a fetch stops here)
 ```
 
-Presence is checked by size, which is cheap; a real fetch verifies the hash and
-re-fetches anything that fails, so `--plan`'s "already cached" is an estimate,
-not a promise.
+Presence is checked by size, as the fetch checks it: what `--plan` lists as
+already cached is what the fetch uses. `verify --deep` checks the hashes of
+those copies.
 
 Files expected in place but missing are reported separately, under `MISSING
 from where they were expected`.

@@ -405,10 +405,11 @@ class Collections:
     ) -> DataFiles:
         """Make a collection available locally and return ``{key: Path}``.
 
-        Keys are ``"<dataset>/<resource path>"``. Files already present and
-        matching their recorded checksum are not re-downloaded -- including
-        files another tool fetched earlier. Datasets with a configured local
-        root are used in place.
+        Keys are ``"<dataset>/<resource path>"``. A copy already in the
+        public cache at its recorded size is used as it is, without hashing
+        it again -- including a file another tool fetched earlier; each
+        download is hash-checked. Datasets with a configured local root are
+        used in place.
 
         ``test=True`` selects the collection's small ``test`` variant where the
         maintainer defined one; the default is the full data. A collection

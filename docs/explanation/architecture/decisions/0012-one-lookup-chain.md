@@ -21,7 +21,7 @@ file decides where it is read; a refusal ends the call before any transfer.
 | 1 | Staging | every dataset except restricted ones, once a staging root is set | in the staging root, in place and unchecked; it warns once per dataset per call | never |
 | 2 | Bundles | a dataset that a listed bundle holds; with the download switch on, only files whose recorded SHA-256 the catalogue does not hold for the same key | in the bundle, in place, after a size and SHA-256 check | a missing file, or a change `bundle update` has not recorded: `BundleError`, never a download |
 | 3 | Restricted caches | restricted data only | in the first listed restricted cache whose entry is readable, in place | no listed cache has a readable entry: `AccessError` ([0013](0013-every-input-is-required.md)) |
-| 4 | Public cache | public data | in the public cache: in place when the entry, or a family entry above it, is a link; otherwise a file of the recorded size, hash-checked when fetched | never |
+| 4 | Public cache | public data | in the public cache: in place when the entry, or a family entry above it, is a link; otherwise a file of the recorded size, used as it is: it was hash-checked when it was downloaded | never |
 | 5 | Download | public data | at `<publication_url>/<remote_prefix>[@<r>]/<path>`, downloaded into the public cache | a missing publication URL: `AccessError` |
 
 - The chain is built from the handle's settings snapshot

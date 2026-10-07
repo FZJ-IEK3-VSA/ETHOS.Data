@@ -15,6 +15,10 @@ The first form compares sizes, which is cheap. `--deep` reads every byte and
 compares SHA-256 hashes. `verify --all --deep` checks every collection the
 package defines. Neither form changes anything.
 
+A fetch checks the hash of each file it downloads, and uses a copy already in
+the public cache at its recorded size as it is. Only `--deep` finds a copy of
+that size whose bytes changed.
+
 | Finding | Meaning and next step |
 | --- | --- |
 | `ok` | The file matches. Only a deep check establishes a hash match. |

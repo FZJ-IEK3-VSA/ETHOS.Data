@@ -49,7 +49,7 @@
   {the entry, or a family\\entry above it, is a link:\\read in place};
 \draw[yes] (link) -- node[exitlabel] {yes} (f4);
 \node[copynarrow, anchor=west] (c4) at (59.5,-103)
-  {a file of the recorded size:\\hash-checked when fetched};
+  {a file of the recorded size:\\used as it is};
 \draw[no] (link.south) |- node[exitlabel, pos=0.75] {no} (c4.west);
 
 % the download, or not
