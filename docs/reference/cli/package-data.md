@@ -45,15 +45,6 @@ data, and `verify` checks what is already on disk. A single catalogue key — on
 dataset, folder or file — belongs to [`ethos-data ls` and
 `ethos-data fetch`](ethos-data.md), which read the same catalogue.
 
-`list`, `info`, `plan`, `paths`, `path` and `ls` were retired, not aliased.
-Each answers with the line to type instead:
-
-```text
-$ <your-tool>-data plan onshore_wind
-error: `<your-tool>-data plan` is gone -- use `<your-tool>-data fetch <collection> --plan`.
-Run `<your-tool>-data --help` for the commands this version has.
-```
-
 ## `--test` { #test }
 
 `show`, `fetch` and `verify` take `--test` before or after the
