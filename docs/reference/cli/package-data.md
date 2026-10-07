@@ -240,7 +240,7 @@ Data that is not in the catalogue yet. See
 | Flag | |
 |---|---|
 | `--note TEXT` | what this is, for the next person |
-| `--copy` | copy the data instead of linking to it |
+| `--copy` | copy the data instead of linking to it; the directory is only read |
 | `--new-only` | only datasets with no entry in the public or restricted cache |
 | `--force` | on `remove`: required if the entry is a real directory, not a link |
 
@@ -254,8 +254,9 @@ Removing a link preserves its source. Removing a copied entry requires
 `--force` and deletes that staged copy. Verification reports staged resources
 as `unverifiable`; restricted datasets are never shadowed.
 
-`add` writes a minimal `dataset.yaml` into the directory, with the name, `source_dir: .`
-and the `--note` as its description, unless the directory has one already.
+`add` writes a minimal `dataset.yaml` into the staged directory, the linked
+one or the copy, with the name, `source_dir: .` and the `--note` as its
+description, unless the directory has one already.
 It is the start of the dataset's [proposal](../../how-to/package-maintainers/propose-a-dataset.md);
 staging never reads it, and it is not one of the staged dataset's files.
 

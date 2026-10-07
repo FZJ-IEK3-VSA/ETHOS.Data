@@ -37,11 +37,12 @@ caches.
 
 Registration links to the directory by default, so later edits there are
 seen at once. `--copy` copies it instead, which turns the entry into a
-snapshot. Restricted datasets are never shadowed: who may read them is not a
-development concern.
+snapshot and leaves the directory as it is: use it for a directory that is
+not yours to change, such as a shared one. Restricted datasets are never
+shadowed: who may read them is not a development concern.
 
-`staging add` also writes a minimal `dataset.yaml` into the directory, unless
-one is there already:
+`staging add` also writes a minimal `dataset.yaml` into the staged directory,
+the linked one or the copy, unless one is there already:
 
 ```yaml
 name: my-new-dataset
