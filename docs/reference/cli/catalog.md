@@ -104,6 +104,13 @@ every generated file in memory; `write` writes the files that differ from the
 ones on disk, and the index; `record` records what the build changed. A build
 that changes nothing writes nothing.
 
+`render` keeps each dataset's hashes in `.ethos-data-hash-cache.json` beside
+its `dataset.yaml` as soon as they are computed, whether the dataset is then
+rendered or refused. A dataset `render` refuses does not stop the others: the
+build renders every one, then names each refused dataset and why, and writes
+no descriptor, shard or index. The build after the fix hashes only the files
+that changed since. `--check` and `--dry-run` keep the hashes in memory.
+
 Walks `source_dir`, computes a SHA-256 per file, applies
 `ethos:include`/`ethos:exclude`, pulls in shapefile companions, and excludes VCS
 plumbing, `__pycache__` and root `README*`/`LICENSE*`/`CHANGELOG*`. A

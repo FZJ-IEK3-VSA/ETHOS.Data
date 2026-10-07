@@ -8,9 +8,11 @@ A stage looks at the catalogue and returns its plan: the actions it would
 take, each a line to show and the work to do. Planning may read anything --
 hash files, ask the store -- and writes nothing, so a dry run is the plan, and
 a refusal, a dataset in the wrong state or a draft the build would reject,
-comes before anything is touched. The pipeline asks every stage for its plan
-first and only then carries the plans out, in order, checking each action's
-result as it goes.
+comes before anything is touched. The one thing planning may keep is a
+cache of what it read, outside a dry run: the build saves each dataset's
+hashes as it computes them, so a refusal does not cost that work again. The
+pipeline asks every stage for its plan first and only then carries the plans
+out, in order, checking each action's result as it goes.
 
 A stage records what it did in the datasets' status files, and plans nothing
 for work that is done already, so a pipeline run again after an interruption
