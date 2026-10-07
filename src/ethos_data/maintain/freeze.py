@@ -15,7 +15,9 @@ Two stages:
 
 ``check``   choose the copy and check it, file by file: an upload read back
             anonymously through the store, a cache entry on this machine
-``freeze``  record it as the authoritative copy and retire ``source_dir``
+``freeze``  record it as the authoritative copy and retire ``source_dir``;
+            one in the clone's ``build-inputs/``, where ``catalog add-bundle``
+            copies a bundle's files, is deleted
 
 Which copy, when there are several: the upload, else the copy a cache owns,
 else, for restricted data, the registered installation, a link in a
@@ -25,6 +27,7 @@ authoritative copy only when named with ``--copy``.
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,7 +37,13 @@ from ..errors import MaintenanceError
 from ..formats import keys as k
 from ..formats.status_file import Copy, StatusFile
 from ..model import lifecycle
-from . import inventory_of, is_namespace, read_descriptor
+from . import (
+    build_inputs_dir,
+    in_build_inputs,
+    inventory_of,
+    is_namespace,
+    read_descriptor,
+)
 from . import status as dataset_status
 from .pipeline import Action, Pipeline
 
@@ -144,6 +153,9 @@ class Retire:
         text = f"freeze {freeze.name}: {chosen.location} becomes its authoritative copy"
         if retired:
             text += f", and its source_dir {retired} is retired"
+        doomed = _deletable(freeze.catalog_root, retired, status)
+        if doomed:
+            text += " and deleted"
 
         def perform() -> None:
             dataset_status.take(
@@ -155,8 +167,37 @@ class Retire:
                 source_dir=retired,
                 changes={"source_dir": None, "authority": chosen.location},
             )
+            if doomed:
+                _delete(freeze.catalog_root, doomed)
 
         return [Action(text, perform)]
+
+
+def _deletable(
+    catalog_root: Path, retired: str | None, status: StatusFile
+) -> Path | None:
+    """The retired build input ``record`` deletes: one in the clone's build inputs.
+
+    Not while a link in a cache still points into it.
+    """
+    if not retired or not in_build_inputs(catalog_root, retired):
+        return None
+    path = Path(retired)
+    for copy in status.copies:
+        if copy.kind == k.COPY_LINKED and copy.target:
+            if Path(copy.target).absolute().is_relative_to(path.absolute()):
+                return None
+    return path if path.is_dir() else None
+
+
+def _delete(catalog_root: Path, path: Path) -> None:
+    """Delete ``path``, and the folders above it it leaves empty, up to the build inputs."""
+    shutil.rmtree(path)
+    top = build_inputs_dir(catalog_root)
+    parent = path.absolute().parent
+    while parent != top and parent.is_relative_to(top) and not any(parent.iterdir()):
+        parent.rmdir()
+        parent = parent.parent
 
 
 PIPELINE: Pipeline[Freeze] = Pipeline("record", [Check(), Retire()])

@@ -62,8 +62,8 @@ Take a package's bundle's datasets that are ahead of the catalogue, or the
 ones named, into your own clone.
 
 ```bash
-ethos-data catalog add-bundle /checkout/your_tool/test_data --into /projects/inputs --dry-run
-ethos-data catalog add-bundle /checkout/your_tool/test_data --into /projects/inputs
+ethos-data catalog add-bundle /checkout/your_tool/test_data --dry-run
+ethos-data catalog add-bundle /checkout/your_tool/test_data
 ```
 
 One stage, `update`, plans a step per dataset, each planned before any is
@@ -72,17 +72,25 @@ taken: a dataset the catalogue does not describe, added and built as
 whose files changed, made its next [revision](#build-datasets), only while the
 catalogue is at the revision the bundle is aligned with; a dataset not
 published yet whose files changed, built again; a changed description or
-licence document, taken. The files are first copied into `--into`, a build
-input the catalogue maintainers own, `<into>/<dataset>` or
+licence document, taken. The files are first copied into a build input the
+catalogue maintainers own, `<into>/<dataset>` or
 `<into>/<dataset>@<revision>`, each checked against `bundle.json`, so the
-catalogue never reads a package checkout. A change of access or visibility
+catalogue never reads a package checkout. `<into>` is `build-inputs/` in the
+clone unless `--into` names another directory. That folder ignores itself in
+git, and [`record`](#record-dataset) deletes a build input there once the
+upload is the authoritative copy. `source_dir` is recorded as an absolute
+path, so run `add-bundle` on the machine that uploads.
+
+A bundled dataset is ahead only when `bundle.json` records a change for it,
+or the catalogue does not describe it. A dataset the bundle records as aligned
+is not taken, even when it is named. A change of access or visibility
 that comes from a bundle is refused, as is a file gone from the bundle,
 unless `--remove-missing` says it is meant. The families above the datasets
 are built again last.
 
 | Flag | |
 |---|---|
-| `--into DIR` | the directory of build inputs the catalogue maintainers own; required |
+| `--into DIR` | the directory of build inputs the catalogue maintainers own (default: `build-inputs/` in the clone) |
 | `--remove-missing` | let files gone from the bundle go, keys and all |
 | `--dry-run` | compare and plan; write nothing |
 
@@ -317,7 +325,10 @@ Exit `1` also when a status file cannot be read.
 
 Freeze a dataset whose bytes are available: check a recorded copy file by file,
 make it the authoritative copy, and retire `source_dir`. A rebuild afterwards
-keeps the inventory as it is and re-derives only the metadata.
+keeps the inventory as it is and re-derives only the metadata. A retired
+`source_dir` in the clone's `build-inputs/`, where
+[`add-bundle`](#add-bundle) copies a bundle's files, is deleted, and the
+folders it leaves empty with it, unless a cache link still points into it.
 
 ```bash
 ethos-data catalog record my-dataset --dry-run
