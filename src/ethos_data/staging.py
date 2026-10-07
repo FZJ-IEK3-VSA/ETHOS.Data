@@ -98,8 +98,8 @@ class StagedDataset:
     status: str = ""
     #: Where the official version lives, when this entry is SHADOWING one.
     official: Path | None = None
-    #: The ``dataset.yaml`` that :func:`add` wrote into the directory; None if
-    #: the directory already had one, which is then left alone.
+    #: The ``dataset.yaml`` that :func:`add` wrote into the staged directory;
+    #: None if the directory already had one, which is then left alone.
     descriptor: Path | None = None
 
     @property
@@ -205,9 +205,10 @@ def add(
     a scratch or project directory that is still being written to, and a copy
     would go stale the moment it was made.
 
-    The directory gets a minimal ``dataset.yaml`` unless it has one: the start
-    of the dataset's description, and later of its proposal. Staging itself
-    never reads it.
+    The staged directory gets a minimal ``dataset.yaml`` unless it has one:
+    the start of the dataset's description, and later of its proposal.
+    Staging itself never reads it. With ``copy`` that is the copy, and the
+    source is only read; a link's is the directory it points at.
     """
     staging = _require_root(root)
     staging.mkdir(parents=True, exist_ok=True)
@@ -239,13 +240,14 @@ def add(
             f"Remove it first with your package's data command: staging remove {name}"
         )
 
-    descriptor = _describe_new(source, name, note)
     entry.parent.mkdir(parents=True, exist_ok=True)
     if copy:
         import shutil
 
         shutil.copytree(source, entry, symlinks=False)
+        descriptor = _describe_new(entry, name, note)
     else:
+        descriptor = _describe_new(source, name, note)
         entry.symlink_to(source)
 
     index = _read_index(staging)

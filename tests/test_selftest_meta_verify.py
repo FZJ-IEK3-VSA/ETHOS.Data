@@ -252,9 +252,7 @@ class TestStagingWritesADescription:
         return directory
 
     def test_add_writes_the_minimal_descriptor_with_the_note(self, work):
-        staged = staging.add(
-            "candidate", work, note="candidate: for review # soon", copy=True
-        )
+        staged = staging.add("candidate", work, note="candidate: for review # soon")
 
         written = yaml.safe_load((work / "dataset.yaml").read_text(encoding="utf-8"))
         assert written == {
@@ -265,6 +263,15 @@ class TestStagingWritesADescription:
         assert staged.descriptor == work / "dataset.yaml"
         assert staged.files == 1, "the description is not one of the dataset's files"
 
+    def test_a_copy_is_described_and_its_source_only_read(self, work):
+        staged = staging.add("candidate", work, note="for review", copy=True)
+
+        assert [path.name for path in work.iterdir()] == ["new.nc"]
+        assert staged.descriptor == staged.entry / "dataset.yaml"
+        written = yaml.safe_load(staged.descriptor.read_text(encoding="utf-8"))
+        assert written["description"] == "for review"
+        assert staged.files == 1, "the description is not one of the dataset's files"
+
     def test_an_existing_descriptor_is_left_alone(self, work):
         (work / "dataset.yaml").write_bytes(b"name: mine\n")
 
@@ -272,3 +279,4 @@ class TestStagingWritesADescription:
 
         assert staged.descriptor is None
         assert (work / "dataset.yaml").read_bytes() == b"name: mine\n"
+        assert (staged.entry / "dataset.yaml").read_bytes() == b"name: mine\n"

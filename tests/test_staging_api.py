@@ -64,10 +64,13 @@ def test_wrapper_staging_lifecycle_needs_no_catalogue(workspace, capsys, monkeyp
         run("staging", "add", "trial", str(source), "--copy", "--note", "experiment")
         == 0
     )
-    assert "sample-data staging remove trial" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    staged = root / "staging" / "trial"
+    assert f"wrote {staged / 'dataset.yaml'}" in out
+    assert not (source / "dataset.yaml").exists(), "the source is only read"
+    assert "sample-data staging remove trial" in out
     assert run("staging", "list", "--new-only") == 0
     assert "experiment" in capsys.readouterr().out
-    staged = root / "staging" / "trial"
     assert (staged / "new.txt").read_text() == "development bytes"
     assert run("staging", "remove", "trial") == 2
     assert "--force" in capsys.readouterr().err

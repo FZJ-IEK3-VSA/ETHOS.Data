@@ -708,7 +708,9 @@ def _add_staging_commands(sub) -> None:
     adder.add_argument("directory")
     adder.add_argument("--note", default="", help="what this is, for the next person")
     adder.add_argument(
-        "--copy", action="store_true", help="copy the data instead of linking to it"
+        "--copy",
+        action="store_true",
+        help="copy the data instead of linking to it; the directory is only read",
     )
     lister = stager_sub.add_parser("list", help="show what is staged")
     lister.add_argument(
