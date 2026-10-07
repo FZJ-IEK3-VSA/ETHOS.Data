@@ -51,7 +51,7 @@ Key concepts used across `ethos-data`.
 | Term | Meaning |
 |---|---|
 | **Plan** | Report what a fetch would download; resolving remote metadata may require network access. |
-| **Fetch** | Make a collection available locally, downloading only what is missing or hash-mismatched. |
+| **Fetch** | Make a collection available locally, downloading only what is missing or of another size, each download hash-checked. |
 | **Verify** | Compare what is on disk against the manifest — sizes by default, checksums with `--deep`. |
 | **Repair** | Download a damaged copy again into the public cache. Never removes or replaces a link, and never touches restricted or staged data: a broken link is only reported. |
 | **Publish** | Regenerate the public catalogue from the source one, stripping everything internal. |

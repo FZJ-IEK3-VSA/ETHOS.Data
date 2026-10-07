@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from support import SourceCatalogue, run_cli
+from support import SourceCatalogue, drop_from_rows, run_cli
 
 import ethos_data
 from ethos_data import handoffs
@@ -368,6 +368,21 @@ class TestReport:
 
         assert "### What a fetch would do\n\n```text\nerror: " in text
         assert "### What verify finds, by size\n\n```text\n(nothing to verify)" in text
+
+    def test_an_index_another_version_wrote_fails_the_self_test_not_the_report(
+        self, reader, tmp_path
+    ):
+        reader.dataset("flat", {"a.csv": "1\n"}, where="store")
+        index = drop_from_rows(reader.write(), "ethos:remote_prefix")
+
+        code, out, _ = run_cli(
+            ["--catalog", str(index), "--root", str(tmp_path / "fresh"), "report"]
+        )
+
+        assert code == 0
+        assert "selftest FAILED at catalogue: cannot read the catalogue index" in out
+        assert "lacks ethos:remote_prefix" in out
+        assert "## Problem report" in out and "### Settings and caches" in out
 
 
 @pytest.fixture

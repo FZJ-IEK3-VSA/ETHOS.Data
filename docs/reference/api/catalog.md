@@ -17,8 +17,9 @@ patterns can reach.
 
 Three errors say what went wrong:
 [`CatalogUnavailable`][ethos_data.errors.CatalogUnavailable] when the index
-itself cannot be read — a wrong location, or a release tag that does not
-exist; its message names the location and says how to point at another
+itself cannot be read — a wrong location, a release tag that does not
+exist, or an index another version wrote, whose dataset rows lack a key this
+version reads; its message names the location and says how to point at another
 catalogue — [`UnknownDataset`][ethos_data.errors.UnknownDataset] for
 a dataset the catalogue does not describe, and
 [`IncompleteCatalog`][ethos_data.errors.IncompleteCatalog] for a dataset the
@@ -62,7 +63,9 @@ refuses one outside them with
 instead takes a catalogue key against explicit or shared settings or the
 public default.
 `Collections.fetch`, `paths` and `plan` make a collection available, by key
-and by named handle, and `main` runs the collection commands on the file;
+and by named handle, `catalog_path` one catalogue key, and `main` runs the
+collection commands on the file. Each answers from the handle's bundles what
+they hold, and opens `Collections.catalog` only for the rest;
 `ethos_data.collections()` builds the handle a tool keeps for the life of the
 process. The file format is in
 [`collections.yaml`](../schemas.md#collectionsyaml).

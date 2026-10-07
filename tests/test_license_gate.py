@@ -251,6 +251,9 @@ def test_the_whole_command_line_refuses(tmp_path, monkeypatch, capsys):
                         "title": "Example",
                         "path": "example/datapackage.json",
                         "ethos:access": "public",
+                        "ethos:file_count": 1,
+                        "ethos:total_bytes": 10,
+                        "ethos:remote_prefix": "example",
                         "ethos:license_status": "unresolved",
                     }
                 ]

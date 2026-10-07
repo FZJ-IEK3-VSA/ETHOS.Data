@@ -12,7 +12,7 @@ from pathlib import Path
 import pooch
 import pytest
 import yaml
-from support import run_cli
+from support import drop_from_rows, run_cli
 
 import ethos_data
 from ethos_data import staging
@@ -85,6 +85,20 @@ class TestSelfTest:
         assert "2. catalogue" in out and "3. files" not in out
         assert "selftest FAILED at catalogue" in err
 
+    def test_an_index_another_version_wrote_fails_the_second_step(
+        self, example, tmp_path
+    ):
+        drop_from_rows(example, "ethos:remote_prefix")
+
+        code, out, err = run_cli(
+            ["--catalog", str(example), "--root", str(tmp_path / "fresh"), "selftest"]
+        )
+
+        assert code == 1
+        assert "3. files" not in out
+        assert "selftest FAILED at catalogue" in err
+        assert "lacks ethos:remote_prefix" in out + err
+
     def test_a_file_that_does_not_match_fails_the_third_step(
         self, example, store, tmp_path, monkeypatch
     ):
@@ -107,6 +121,7 @@ class TestSelfTest:
         assert result.failed == "settings"
         assert "does not exist" in result.error
 
+    @pytest.mark.repository
     def test_the_documentation_uses_the_file_that_ships(self):
         shipped = ethos_data.EXAMPLE_COLLECTIONS.read_bytes()
         documented = (
@@ -237,9 +252,7 @@ class TestStagingWritesADescription:
         return directory
 
     def test_add_writes_the_minimal_descriptor_with_the_note(self, work):
-        staged = staging.add(
-            "candidate", work, note="candidate: for review # soon", copy=True
-        )
+        staged = staging.add("candidate", work, note="candidate: for review # soon")
 
         written = yaml.safe_load((work / "dataset.yaml").read_text(encoding="utf-8"))
         assert written == {
@@ -250,6 +263,15 @@ class TestStagingWritesADescription:
         assert staged.descriptor == work / "dataset.yaml"
         assert staged.files == 1, "the description is not one of the dataset's files"
 
+    def test_a_copy_is_described_and_its_source_only_read(self, work):
+        staged = staging.add("candidate", work, note="for review", copy=True)
+
+        assert [path.name for path in work.iterdir()] == ["new.nc"]
+        assert staged.descriptor == staged.entry / "dataset.yaml"
+        written = yaml.safe_load(staged.descriptor.read_text(encoding="utf-8"))
+        assert written["description"] == "for review"
+        assert staged.files == 1, "the description is not one of the dataset's files"
+
     def test_an_existing_descriptor_is_left_alone(self, work):
         (work / "dataset.yaml").write_bytes(b"name: mine\n")
 
@@ -257,3 +279,4 @@ class TestStagingWritesADescription:
 
         assert staged.descriptor is None
         assert (work / "dataset.yaml").read_bytes() == b"name: mine\n"
+        assert (staged.entry / "dataset.yaml").read_bytes() == b"name: mine\n"

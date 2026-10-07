@@ -4,25 +4,38 @@ The real :class:`~ethos_data.adapters.Store`. Every call here leaves the
 machine -- an ``oidc-token`` subprocess, an rclone transfer, an HTTP request to
 the DESY frontend or to the public door -- which is why tests pass a
 :class:`~ethos_data.adapters.fakes.FakeStore` instead. Every failure raises
-:class:`~ethos_data.errors.UploadError`.
+:class:`~ethos_data.errors.UploadError`; ``served_each`` returns it in place of
+the size of each file it could not read.
 """
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import subprocess
 import tempfile
 import urllib.error
 import urllib.request
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 from .. import report
 from ..errors import UploadError
 from ..formats.catalogue import DCACHE_FRONTEND as FRONTEND
 
-__all__ = ["FRONTEND", "MODE_0755", "DcacheStore"]
+__all__ = ["FRONTEND", "MODE_0755", "READ_BACK_LANES", "DcacheStore"]
 MODE_0755 = 493  # dCache wants the mode as a decimal integer, not octal
+
+#: How many files a read-back asks for at once. dCache takes about 2.4 s to
+#: answer for a file it has not looked up lately, so one at a time the 3,861
+#: files of a tiled dataset took two and a half hours; the time fell in step with
+#: the lanes up to 32, the most measured, to five minutes. Each lane keeps its
+#: connection open, which saves the TLS handshake of every further request.
+READ_BACK_LANES = 32
 
 
 def _run(command: list[str], **kwargs) -> subprocess.CompletedProcess:
@@ -32,6 +45,28 @@ def _run(command: list[str], **kwargs) -> subprocess.CompletedProcess:
 
 def _capture(command: list[str], **kwargs) -> subprocess.CompletedProcess:
     return _run(command, text=True, capture_output=True, **kwargs)
+
+
+@contextmanager
+def _urlopen(request: urllib.request.Request) -> Iterator[http.client.HTTPResponse]:
+    """Every HTTP request this adapter makes, closed however it ends.
+
+    An HTTPError holds the response it reports, and with it the connection.
+    Left open, it is closed by a garbage collection, with a ResourceWarning, in
+    whatever code happens to run then.
+    """
+    try:
+        response = urllib.request.urlopen(request, timeout=60)
+    except urllib.error.HTTPError as error:
+        error.close()
+        raise
+    with response:
+        yield response
+
+
+def _namespace(frontend: str, path: str) -> str:
+    """The frontend's URL of a path below the VO, percent-encoded for the request line."""
+    return f"{frontend}/namespace/{quote(path.lstrip('/'))}"
 
 
 class DcacheStore:
@@ -160,7 +195,7 @@ class DcacheStore:
 
     def chmod(self, path: str, mode: int, bearer: str) -> None:
         request = urllib.request.Request(
-            f"{self.frontend}/namespace/{path.lstrip('/')}",
+            _namespace(self.frontend, path),
             data=json.dumps({"action": "chmod", "mode": mode}).encode(),
             headers={
                 "Authorization": f"Bearer {bearer}",
@@ -169,7 +204,7 @@ class DcacheStore:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=60):
+            with _urlopen(request):
                 return
         except (OSError, ValueError) as error:
             raise UploadError(
@@ -178,12 +213,12 @@ class DcacheStore:
 
     def locality(self, path: str, bearer: str) -> str:
         """ONLINE (disk) / NEARLINE (tape only) / ONLINE_AND_NEARLINE (both)."""
-        url = f"{self.frontend}/namespace/{path.lstrip('/')}?locality=true"
+        url = f"{_namespace(self.frontend, path)}?locality=true"
         request = urllib.request.Request(
             url, headers={"Authorization": f"Bearer {bearer}"}
         )
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
+            with _urlopen(request) as response:
                 return json.load(response).get("fileLocality", "unknown")
         except (OSError, ValueError) as error:
             raise UploadError(
@@ -192,12 +227,51 @@ class DcacheStore:
 
     def served(self, url: str) -> int:
         """HEAD ``url`` without credentials; the Content-Length it answers."""
-        request = urllib.request.Request(url, method="HEAD")
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                return int(response.headers.get("Content-Length", -1))
-        except (OSError, ValueError) as error:
-            raise UploadError(f"{url} is not readable: {_reason(error)}") from None
+        (found,) = self.served_each([url])
+        if isinstance(found, UploadError):
+            raise found
+        return found
+
+    def served_each(self, urls: list[str]) -> list[int | UploadError]:
+        """HEAD each URL without credentials, ``READ_BACK_LANES`` at a time."""
+        import requests
+
+        found: list[int | UploadError] = [UploadError("not asked")] * len(urls)
+        lanes = min(READ_BACK_LANES, len(urls))
+
+        def lane(first: int) -> None:
+            with requests.Session() as session:
+                # Without an auth of its own, a session sends the credentials
+                # ~/.netrc holds for the host, and a read-back that should prove
+                # what anyone can read would prove what the maintainer can.
+                session.auth = _anonymous
+                for index in range(first, len(urls), lanes):
+                    found[index] = _served_on(session, urls[index])
+
+        if lanes:
+            with ThreadPoolExecutor(max_workers=lanes) as pool:
+                list(pool.map(lane, range(lanes)))
+        return found
+
+
+def _anonymous(request):
+    """A requests auth that adds nothing: no header, and no ~/.netrc lookup either."""
+    return request
+
+
+def _served_on(session, url: str) -> int | UploadError:
+    """One HEAD on ``session``: the Content-Length, or why the file is not readable."""
+    try:
+        with session.head(url, timeout=60, allow_redirects=True) as response:
+            if response.status_code >= 400:
+                return UploadError(
+                    f"{url} is not readable: "
+                    f"HTTP {response.status_code} {response.reason}"
+                )
+            return int(response.headers.get("Content-Length", -1))
+    except (OSError, ValueError) as error:
+        # requests' errors are OSErrors.
+        return UploadError(f"{url} is not readable: {error}")
 
 
 def _reason(error: Exception) -> str:

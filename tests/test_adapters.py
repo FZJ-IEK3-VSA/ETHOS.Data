@@ -9,8 +9,12 @@ real checkout.
 
 from __future__ import annotations
 
+import http.server
+import io
 import shutil
 import subprocess
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -28,6 +32,7 @@ from ethos_data.errors import (
     MaintenanceError,
     UploadError,
 )
+from ethos_data.formats.derived import object_url
 
 
 def test_each_adapter_and_its_fake_satisfy_the_port():
@@ -90,6 +95,98 @@ class TestDcache:
             adapter.served(missing)
         assert store.requests[-1] == ("HEAD", "/ethos-data/flat/b.csv")
 
+    def test_the_read_back_asks_for_a_file_whose_name_has_a_space(self, store):
+        store.put("ethos-data/flat", "Supplementary material.txt", "1\n")
+        record = {"path": "Supplementary material.txt"}
+        url = object_url(f"{store.url}/ethos-data/flat/", record)
+
+        assert dcache.DcacheStore().served(url) == 2
+        assert store.requests[-1] == (
+            "HEAD",
+            "/ethos-data/flat/Supplementary%20material.txt",
+        )
+
+    def test_the_frontend_is_asked_for_a_percent_encoded_path(self, monkeypatch):
+        asked = []
+
+        @contextmanager
+        def answer(request):
+            asked.append(request.full_url)
+            yield io.BytesIO(b'{"fileLocality": "ONLINE"}')
+
+        monkeypatch.setattr(dcache, "_urlopen", answer)
+        adapter = dcache.DcacheStore(frontend="https://frontend.invalid/api/v1")
+
+        assert adapter.locality("ethos-data/flat/a b.txt", "token") == "ONLINE"
+        adapter.chmod("ethos-data/a folder", dcache.MODE_0755, "token")
+
+        namespace = "https://frontend.invalid/api/v1/namespace"
+        assert asked == [
+            f"{namespace}/ethos-data/flat/a%20b.txt?locality=true",
+            f"{namespace}/ethos-data/a%20folder",
+        ]
+
+    def test_many_files_are_read_back_in_their_order(self, store):
+        names = [f"f{i:02}.csv" for i in range(20)]
+        for name in names:
+            store.put("ethos-data/flat", name, "1\n")
+        urls = [f"{store.url}/ethos-data/flat/{name}" for name in names]
+        urls.insert(7, f"{store.url}/ethos-data/flat/missing.csv")
+
+        found = dcache.DcacheStore().served_each(urls)
+
+        assert found[:7] == [2] * 7 and found[8:] == [2] * 13
+        assert isinstance(found[7], UploadError)
+        assert "missing.csv is not readable: HTTP 404" in found[7].message
+
+    def test_each_lane_keeps_one_session_for_its_files(self, store, monkeypatch):
+        import requests
+
+        opened = []
+
+        class Counted(requests.Session):
+            def __init__(self):
+                super().__init__()
+                opened.append(self)
+
+        monkeypatch.setattr(requests, "Session", Counted)
+        store.put("ethos-data/flat", "a.csv", "1\n")
+        urls = [f"{store.url}/ethos-data/flat/a.csv"] * 50
+
+        assert dcache.DcacheStore().served_each(urls) == [2] * 50
+        assert len(opened) == dcache.READ_BACK_LANES
+
+    def test_the_read_back_sends_no_credentials_even_from_a_netrc(
+        self, tmp_path, monkeypatch
+    ):
+        heard = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_HEAD(self):
+                heard.append(self.headers.get("Authorization"))
+                self.send_response(200)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        netrc = tmp_path / "netrc"
+        netrc.write_text("machine 127.0.0.1 login maintainer password secret\n")
+        monkeypatch.setenv("NETRC", str(netrc))
+        try:
+            url = f"http://127.0.0.1:{server.server_address[1]}/ethos-data/a.csv"
+            assert dcache.DcacheStore().served(url) == 2
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        assert heard == [None]
+
+    @pytest.mark.repository
     def test_the_login_hint_matches_the_guide(self, monkeypatch):
         """The redirect port the guide forwards is the one the hint registers."""
         monkeypatch.setattr(
@@ -214,6 +311,26 @@ class TestTheFakeStore:
         assert fake.served("https://store.invalid/root/flat/a.csv") == 2
         with pytest.raises(UploadError, match="HTTP 404"):
             fake.served("https://store.invalid/root/flat/b.csv")
+
+    def test_it_decodes_the_path_it_is_asked_for_as_the_store_does(self, tmp_path):
+        (tmp_path / "a b.csv").write_bytes(b"1\n")
+        fake = FakeStore()
+
+        fake.copy(tmp_path, "root/flat", ["a b.csv"], transfers=1)
+
+        assert fake.served("https://store.invalid/root/flat/a%20b.csv") == 2
+
+    def test_it_answers_many_urls_with_a_size_or_the_error(self, tmp_path):
+        (tmp_path / "a.csv").write_bytes(b"1\n")
+        fake = FakeStore()
+        fake.copy(tmp_path, "root/flat", ["a.csv"], transfers=1)
+
+        found = fake.served_each(
+            ["https://store.invalid/root/flat/a.csv", "https://store.invalid/root/b"]
+        )
+
+        assert found[0] == 2
+        assert isinstance(found[1], UploadError) and "HTTP 404" in found[1].message
 
     def test_it_rehearses_a_failed_copy_and_a_missing_chmod(self, tmp_path):
         (tmp_path / "a.csv").write_bytes(b"1\n")

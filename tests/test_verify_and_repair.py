@@ -143,6 +143,18 @@ class TestRepair:
         assert "re-fetched 1 file(s)." in capsys.readouterr().out
         assert verify(wind, "--deep") == 0
 
+    def test_changed_bytes_of_the_same_size_are_fetched_again(
+        self, wind, reader, store, capsys
+    ):
+        """A fetch takes this copy as it is; the deep check is what finds it."""
+        (reader.cache / "wind" / "u.nc").write_bytes(b"uuuX")
+
+        assert verify(wind, "--deep", "--repair") == 0
+
+        assert (reader.cache / "wind" / "u.nc").read_bytes() == b"uuuu"
+        assert store.downloads() == ["/wind/u.nc"]
+        assert "re-fetched 1 file(s)." in capsys.readouterr().out
+
     def test_a_dry_run_says_what_it_would_fetch_and_changes_nothing(
         self, wind, reader, store, capsys
     ):

@@ -227,7 +227,7 @@ def select(name: str, root: Path, paths: list[Path], meta: dict) -> list[Path]:
         for extension in SHAPEFILE_SIDECAR_EXTS:
             companion = path.with_suffix(extension)
             if companion in relative and companion not in kept:
-                report.warning(
+                report.info(
                     f"note: {name}: keeping {relative[companion]} -- companion of "
                     f"{relative[path]}, which a filter would otherwise have dropped"
                 )
@@ -235,7 +235,7 @@ def select(name: str, root: Path, paths: list[Path], meta: dict) -> list[Path]:
 
     skipped = len(paths) - len(kept)
     if skipped:
-        report.warning(
+        report.info(
             f"  {name}: {len(kept)} of {len(paths)} files under {root} "
             f"selected, {skipped} filtered out"
         )

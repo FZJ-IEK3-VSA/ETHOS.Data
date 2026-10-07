@@ -498,9 +498,10 @@ class PublicCache(Locator):
     """4. The public cache: data already on this machine, or a copy it holds.
 
     In place where the dataset's entry, or a family entry above it, is a link.
-    Otherwise a file of the size the catalogue records, which is still a
-    download location: fetching it checks the hash, and replaces the copy if
-    it differs.
+    Otherwise a file of the size the catalogue records: a copy the cache owns,
+    which a fetch uses as it is. Its hash was checked when it was downloaded;
+    a deep verify checks it again, and a repair downloads it again where it
+    differs.
     """
 
     root: Path

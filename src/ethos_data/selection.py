@@ -8,9 +8,10 @@ factory that builds the handle defined here.)
 its own code, via :func:`ethos_data.collections` -- and then calls ``fetch``,
 ``paths``, ``resolve`` and ``plan`` on. Its ``catalog`` attribute is the
 catalogue the settings choose within the file's release bounds, for access by
-key. ``main`` runs the collection
-commands as the tool's own console script (``<tool>-data``), so the tool ships
-a file and two lines of code and nothing has to be registered anywhere.
+key; ``catalog_path`` answers a key from the tool's bundles first. ``main``
+runs the collection commands as the tool's own console script
+(``<tool>-data``), so the tool ships a file and two lines of code and nothing
+has to be registered anywhere.
 
 A collections file names slices of the shared catalogue; it never repeats file
 paths, sizes or checksums. That is deliberate -- if two tools each carried their
@@ -404,10 +405,11 @@ class Collections:
     ) -> DataFiles:
         """Make a collection available locally and return ``{key: Path}``.
 
-        Keys are ``"<dataset>/<resource path>"``. Files already present and
-        matching their recorded checksum are not re-downloaded -- including
-        files another tool fetched earlier. Datasets with a configured local
-        root are used in place.
+        Keys are ``"<dataset>/<resource path>"``. A copy already in the
+        public cache at its recorded size is used as it is, without hashing
+        it again -- including a file another tool fetched earlier; each
+        download is hash-checked. Datasets with a configured local root are
+        used in place.
 
         ``test=True`` selects the collection's small ``test`` variant where the
         maintainer defined one; the default is the full data. A collection
@@ -482,6 +484,36 @@ class Collections:
                 f"workflow's inputs."
             )
         return files.named
+
+    def catalog_path(
+        self,
+        key: str,
+        *,
+        root: Roots | str | Path | None = None,
+        progressbar: bool = False,
+        fetch: bool = True,
+    ) -> Path:
+        """One dataset, folder or file by catalogue key, fetched: :meth:`Catalog.path`.
+
+        A key a bundle holds is answered from the bundles, without the
+        catalogue index; any other key from :attr:`catalog`. A collection
+        name goes to :meth:`paths`, a key here.
+        """
+        return self._view_for_key(key).path(
+            key, root=self._roots(root), progressbar=progressbar, fetch=fetch
+        )
+
+    def _view_for_key(self, key: str) -> Catalog:
+        """The view that answers for ``key``: the bundles alone, when one holds it."""
+        if self._bundled is not None:
+            try:
+                name, inner = split_key(self._bundled, key)
+                select_key(self._bundled, name, inner, key)
+            except KeyError:
+                pass
+            else:
+                return self._bundled
+        return self.catalog
 
     def plan(
         self,

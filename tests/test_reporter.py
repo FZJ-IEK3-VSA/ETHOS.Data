@@ -90,6 +90,31 @@ def test_outside_a_command_a_warning_is_a_python_warning_of_its_category():
     assert caught[0].filename == __file__, "it names the line that warned"
 
 
+def test_the_console_prints_a_warning_after_the_progress_before_it(monkeypatch):
+    class Stream:
+        def __init__(self, written):
+            self.written, self.pending = written, []
+
+        def write(self, text):
+            self.pending.append(text)
+
+        def flush(self):
+            self.written += self.pending
+            self.pending.clear()
+
+    written = []
+    out, err = Stream(written), Stream(written)
+    monkeypatch.setattr("sys.stdout", out)
+    monkeypatch.setattr("sys.stderr", err)
+    console = report.ConsoleReporter()
+
+    console.info("row")
+    console.warning("under the row")
+    err.flush()
+
+    assert "".join(written).split() == ["row", "under", "the", "row"]
+
+
 def test_nothing_below_the_report_issues_a_python_warning_itself():
     package = Path(ethos_data.__file__).parent
     offenders = []

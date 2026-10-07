@@ -708,7 +708,9 @@ def _add_staging_commands(sub) -> None:
     adder.add_argument("directory")
     adder.add_argument("--note", default="", help="what this is, for the next person")
     adder.add_argument(
-        "--copy", action="store_true", help="copy the data instead of linking to it"
+        "--copy",
+        action="store_true",
+        help="copy the data instead of linking to it; the directory is only read",
     )
     lister = stager_sub.add_parser("list", help="show what is staged")
     lister.add_argument(
@@ -1048,7 +1050,7 @@ def _show_one_collection(args, loaded) -> int:
     print(f"{label}: {len(resources)} files, {_human(sum(r.bytes for r in resources))}")
     if args.meta:
         print()
-        _print_meta(loaded.catalog, sorted({r.dataset for r in resources}))
+        _print_meta(loaded.view_for(resources), sorted({r.dataset for r in resources}))
         return 0
     title = loaded.describe(args.collection).title
     if title:
@@ -1098,7 +1100,7 @@ def _collection_fetch_command(args, loaded, roots) -> int:
         return _paths_command(args, loaded, roots)
 
     if args.plan:
-        report = plan(loaded.catalog, resources, roots)
+        report = plan(loaded.view_for(resources), resources, roots)
         print(f"public cache:    {report['root']}")
         for origin, items in sorted(report["in_place_by_origin"].items()):
             print(
@@ -1224,7 +1226,13 @@ def _verify_command(args, loaded, roots) -> int:
         + (" --test" if args.test else "")
     )
     return _report_findings(
-        args, loaded.catalog, ordered, roots, what=what, retry=retry, skipped=skipped
+        args,
+        loaded.view_for(ordered),
+        ordered,
+        roots,
+        what=what,
+        retry=retry,
+        skipped=skipped,
     )
 
 

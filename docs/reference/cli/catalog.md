@@ -104,6 +104,13 @@ every generated file in memory; `write` writes the files that differ from the
 ones on disk, and the index; `record` records what the build changed. A build
 that changes nothing writes nothing.
 
+`render` keeps each dataset's hashes in `.ethos-data-hash-cache.json` beside
+its `dataset.yaml` as soon as they are computed, whether the dataset is then
+rendered or refused. A dataset `render` refuses does not stop the others: the
+build renders every one, then names each refused dataset and why, and writes
+no descriptor, shard or index. The build after the fix hashes only the files
+that changed since. `--check` and `--dry-run` keep the hashes in memory.
+
 Walks `source_dir`, computes a SHA-256 per file, applies
 `ethos:include`/`ethos:exclude`, pulls in shapefile companions, and excludes VCS
 plumbing, `__pycache__` and root `README*`/`LICENSE*`/`CHANGELOG*`. A
@@ -266,17 +273,32 @@ ethos-data catalog status --check          # and whether each record still holds
 ```
 
 ```text
-  dataset          state      access      next
-  era5             built      public      ethos-data catalog upload era5
-  climate-inputs   available  public      none while its source_dir stays; materialize it before that goes
-  gadm-3.6         frozen     restricted  -
-  old-dataset      -          public      ethos-data catalog migrate old-dataset
+  dataset          state      access      release          next
+  era5             built      public      -                ethos-data catalog upload era5
+  climate-inputs   available  public      v1.2.0           none while its source_dir stays; materialize it before that goes
+  gadm-3.6         frozen     restricted  v1.2.0           -
+  old-dataset      -          public      -                ethos-data catalog migrate old-dataset
 ```
 
-A dataset without a status file shows `-` and names
-[`migrate`](#migrate-datasets), and one whose status file cannot be read shows
-`?` with the reason; either fails the command. `--check` compares each record with the
-evidence, one line per comparison:
+The name column is at most 40 characters wide; a longer name pushes the rest
+of its own row to the right. A dataset without a status file shows `-` and
+names [`migrate`](#migrate-datasets), and one whose status file cannot be read
+shows `?` with the reason; either fails the command.
+
+`--check` adds a `check` column: `ok` when every comparison holds, `FAIL` when
+one does not. Under the row it lists each comparison that does not hold, and
+each warning the comparison raised:
+
+```text
+  dataset          state      access      release          check next
+  era5             built      public      -                ok    ethos-data catalog upload era5
+  gebco-2025       built      public      -                ok    ethos-data catalog upload gebco-2025
+      warning: gebco-2025: ethos:exclude pattern '**/__init__.py' matches nothing under /data/gebco-2025 -- already cleaned up, or a typo?
+  trep-db          built      public      -                FAIL  ethos-data catalog upload trep-db
+      FAIL  datapackage.json is out of date: ethos-data catalog build trep-db
+```
+
+It compares the record with the evidence:
 
 - the `datapackage.json` the build would write, against the one there;
 - a draft's `source_dir`;

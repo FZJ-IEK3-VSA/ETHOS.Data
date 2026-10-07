@@ -39,6 +39,16 @@ ETHOS_VARIABLES = (
 _LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 
 
+def pytest_configure(config):
+    # Registered here rather than in pyproject.toml: a packaged test run copies
+    # tests/ and nothing else, and deselects these with -m "not repository".
+    config.addinivalue_line(
+        "markers",
+        "repository: reads the repository around the package (docs/), "
+        "which a packaged test run does not have",
+    )
+
+
 @pytest.fixture(autouse=True)
 def _no_network(monkeypatch):
     real_connect = socket.socket.connect

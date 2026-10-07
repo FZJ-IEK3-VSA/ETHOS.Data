@@ -35,7 +35,8 @@ either position. A package may supply an environment override such as
 See [catalogue resolution](../configuration.md#catalogue-resolution).
 
 `--help`, `config show`, staging management, and bundle reads do not load the
-catalogue. Collection commands need readable metadata.
+catalogue. `show`, `fetch` and `verify` answer from the package's bundles
+what they hold, and read the catalogue index only for the rest.
 
 ## Collections, not keys { #scope }
 
@@ -44,15 +45,6 @@ questions about them and never transfers a byte, `fetch` is the one that moves
 data, and `verify` checks what is already on disk. A single catalogue key — one
 dataset, folder or file — belongs to [`ethos-data ls` and
 `ethos-data fetch`](ethos-data.md), which read the same catalogue.
-
-`list`, `info`, `plan`, `paths`, `path` and `ls` were retired, not aliased.
-Each answers with the line to type instead:
-
-```text
-$ <your-tool>-data plan onshore_wind
-error: `<your-tool>-data plan` is gone -- use `<your-tool>-data fetch <collection> --plan`.
-Run `<your-tool>-data --help` for the commands this version has.
-```
 
 ## `--test` { #test }
 
@@ -132,8 +124,9 @@ the catalogue lacks is a `CollectionError` — printed as `error: ...`, exit `2`
 ## `fetch <collection> [--test] [--plan | --paths]` { #fetch-collection }
 
 Download whatever the collection selects and this machine does not already
-have. Files already present and matching their recorded checksum are skipped —
-including files another tool fetched earlier into the same cache. Datasets
+have. A copy already in the public cache at its recorded size is used as it
+is, without hashing it again, including one another tool fetched earlier into
+the same cache; each download is hash-checked. Datasets
 resolved in place are used where they lie and never copied. A faulty `paths`
 handle is refused before any transfer (see [above](#show)). Progress messages
 label the variant:
@@ -158,9 +151,9 @@ to download:        2 files     32.4 MB
 not available here:    4 files                  (licensed-example -- a fetch stops here)
 ```
 
-Presence is checked by size, which is cheap; a real fetch verifies the hash and
-re-fetches anything that fails, so `--plan`'s "already cached" is an estimate,
-not a promise.
+Presence is checked by size, as the fetch checks it: what `--plan` lists as
+already cached is what the fetch uses. `verify --deep` checks the hashes of
+those copies.
 
 Files expected in place but missing are reported separately, under `MISSING
 from where they were expected`.
@@ -249,7 +242,7 @@ Data that is not in the catalogue yet. See
 | Flag | |
 |---|---|
 | `--note TEXT` | what this is, for the next person |
-| `--copy` | copy the data instead of linking to it |
+| `--copy` | copy the data instead of linking to it; the directory is only read |
 | `--new-only` | only datasets with no entry in the public or restricted cache |
 | `--force` | on `remove`: required if the entry is a real directory, not a link |
 
@@ -263,8 +256,9 @@ Removing a link preserves its source. Removing a copied entry requires
 `--force` and deletes that staged copy. Verification reports staged resources
 as `unverifiable`; restricted datasets are never shadowed.
 
-`add` writes a minimal `dataset.yaml` into the directory, with the name, `source_dir: .`
-and the `--note` as its description, unless the directory has one already.
+`add` writes a minimal `dataset.yaml` into the staged directory, the linked
+one or the copy, with the name, `source_dir: .` and the `--note` as its
+description, unless the directory has one already.
 It is the start of the dataset's [proposal](../../how-to/package-maintainers/propose-a-dataset.md);
 staging never reads it, and it is not one of the staged dataset's files.
 

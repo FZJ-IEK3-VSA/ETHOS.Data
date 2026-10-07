@@ -32,7 +32,9 @@ its plan:
 
 ``check``   the catalogue's ``catalog.yaml``, and every dataset's state, before
             anything is hashed
-``render``  every generated file, in memory
+``render``  every generated file, in memory; a refused dataset does not stop
+            the others, and the refusals are raised together before
+            anything is written
 ``write``   the generated files that differ from the ones on disk, and the index
 ``record``  in each status file what the build changed: a draft's first build,
             and an inventory that differs from the one before, which returns a
@@ -62,11 +64,13 @@ of gigabytes on shared storage -- so each dataset directory keeps a
 map of relative path to the size/mtime last seen and the digest that went with
 them. A rebuild re-hashes a file only when its size or mtime has moved; the rest
 is a stat call. It is not a Data Package property (a maintainer's disk paths and
-timestamps mean nothing to a consumer) and it is written by the ``write``
-stage only, so neither ``--check`` nor ``--dry-run`` writes it. Whatever needs
-hashing is read through a small thread pool: the cost is waiting on shared storage, not
-CPU, and hashlib releases the GIL while it works a chunk, so concurrent reads
-actually overlap.
+timestamps mean nothing to a consumer). A build that writes saves it in the
+``render`` stage, as soon as the dataset's files are hashed and whether the
+dataset is then rendered or refused, so a build that one dataset stops keeps
+every hash it computed; neither ``--check`` nor ``--dry-run`` writes it.
+Whatever needs hashing is read through a small thread pool: the cost is waiting
+on shared storage, not CPU, and hashlib releases the GIL while it works a
+chunk, so concurrent reads actually overlap.
 
 Spec: https://datapackage.org/standard/data-package/
 """
@@ -80,7 +84,7 @@ from pathlib import Path, PurePosixPath
 
 from .. import report
 from ..adapters.metadata import MemorySource
-from ..errors import DescriptorError
+from ..errors import DescriptorError, EthosDataError, MaintenanceError
 from ..files import build_resource, iter_data_files, select, slugify
 from ..formats import catalogue as catalogue_format
 from ..formats import dataset as dataset_format
@@ -782,6 +786,9 @@ class Build:
 
     catalog_root: Path
     names: list[str]
+    #: Whether the build writes; under ``--check`` and ``--dry-run`` the
+    #: hashes it computes stay in memory.
+    writes: bool = False
     #: The dataset directories to build, members before the families above
     #: them, and the successors of each dataset: set by ``check``.
     selected: list[Path] = field(default_factory=list)
@@ -789,9 +796,6 @@ class Build:
     #: Each one's rendered files and descriptor: set by ``render``.
     files: dict[Path, dict[str, str]] = field(default_factory=dict)
     packages: dict[Path, dict] = field(default_factory=dict)
-    #: Each one's hash cache, and the directories whose cache gained entries.
-    caches: dict[Path, dict] = field(default_factory=dict)
-    grown: set[Path] = field(default_factory=set)
     #: One line per dataset, for the report.
     rows: list[str] = field(default_factory=list)
     #: The generated files the build changes: set by ``write``.
@@ -848,15 +852,35 @@ class Check:
 
 
 class Render:
-    """Render every generated file in memory, hashing what changed since the last build."""
+    """Render every generated file in memory, hashing what changed since the last build.
+
+    A build that writes keeps each dataset's hashes in its hash cache as soon
+    as they are computed, whether the dataset is then rendered or refused, so
+    a refusal costs none of that hashing again. A refused dataset does not
+    stop the others: every one is rendered, and the refusals are raised
+    together, before anything is written.
+    """
 
     name = "render"
 
     def plan(self, build: Build) -> list[Action]:
+        refused: list[EthosDataError] = []
         for dataset_dir in build.selected:
-            namespace = is_namespace(dataset_dir)
-            cache = load_hash_cache(dataset_dir)
-            known = dict(cache)
+            try:
+                self._render(build, dataset_dir)
+            except EthosDataError as error:
+                refused.append(error)
+        for row in sorted(build.rows):
+            report.info(row)
+        if refused:
+            raise _together(refused)
+        return []
+
+    def _render(self, build: Build, dataset_dir: Path) -> None:
+        namespace = is_namespace(dataset_dir)
+        cache = load_hash_cache(dataset_dir)
+        known = dict(cache)
+        try:
             files = render_dataset(
                 dataset_dir,
                 name=build.name(dataset_dir),
@@ -866,15 +890,12 @@ class Render:
                 cache=cache,
                 superseded_by=build.superseded.get(build.name(dataset_dir)),
             )
-            build.files[dataset_dir] = files
-            package = build.packages[dataset_dir] = json.loads(files[k.PACKAGE_FILE])
-            if cache != known:
-                build.caches[dataset_dir] = cache
-                build.grown.add(dataset_dir)
-            build.rows.append(_row(package))
-        for row in sorted(build.rows):
-            report.info(row)
-        return []
+        finally:
+            if build.writes and cache != known:
+                save_hash_cache(dataset_dir, cache)
+        build.files[dataset_dir] = files
+        package = build.packages[dataset_dir] = json.loads(files[k.PACKAGE_FILE])
+        build.rows.append(_row(package))
 
     @staticmethod
     def _totals(build: Build, dataset_dir: Path) -> tuple[int, int]:
@@ -900,6 +921,19 @@ class Render:
         return total_bytes, file_count
 
 
+def _together(refused: list[EthosDataError]) -> EthosDataError:
+    """One refused dataset's error as it is; several as one that names each."""
+    if len(refused) == 1:
+        return refused[0]
+    listed = "\n".join(
+        "  " + error.message.replace("\n", "\n    ") for error in refused
+    )
+    return MaintenanceError(
+        f"{len(refused)} datasets cannot be built, so no descriptor, shard or "
+        f"index was written:\n{listed}"
+    )
+
+
 def _row(package: dict) -> str:
     """One dataset's line in the build's report."""
     if package.get(k.NAMESPACE):
@@ -922,17 +956,14 @@ class Write:
         actions = []
         for dataset_dir, files in build.files.items():
             stale = stale_files(dataset_dir, files)
-            build.stale += stale
-            if stale:
-                listed = [path.relative_to(dataset_dir).as_posix() for path in stale]
-                shown = ", ".join(listed[:3])
-                if len(listed) > 3:
-                    shown += f" and {len(listed) - 3} more"
-                text = f"write datasets/{build.name(dataset_dir)}/: {shown}"
-            elif dataset_dir in build.grown:
-                text = f"update the hash cache of {build.name(dataset_dir)}"
-            else:
+            if not stale:
                 continue
+            build.stale += stale
+            listed = [path.relative_to(dataset_dir).as_posix() for path in stale]
+            shown = ", ".join(listed[:3])
+            if len(listed) > 3:
+                shown += f" and {len(listed) - 3} more"
+            text = f"write datasets/{build.name(dataset_dir)}/: {shown}"
             actions.append(Action(text, self._write(build, dataset_dir)))
 
         index = build.catalog_root / k.INDEX_FILE
@@ -952,8 +983,6 @@ class Write:
     def _write(build: Build, dataset_dir: Path):
         def write() -> None:
             write_dataset(dataset_dir, build.files[dataset_dir])
-            if dataset_dir in build.grown:
-                save_hash_cache(dataset_dir, build.caches[dataset_dir])
 
         return write
 
@@ -1059,7 +1088,7 @@ def run(
     With ``check`` nothing is written: the result names the files a build would
     change, and is not ok when there are any. ``dry_run`` prints the plan.
     """
-    build = Build(catalog_root, list(names))
+    build = Build(catalog_root, list(names), writes=not (check or dry_run))
     if check:
         PIPELINE.plan(build)
     else:
@@ -1071,9 +1100,12 @@ def run(
     )
     if check:
         if build.stale:
-            report.warning("Out of date (re-run `ethos-data catalog build`):")
-            for path in build.stale:
-                report.warning(f"  {path.relative_to(catalog_root)}")
+            report.warning(
+                "Out of date (re-run `ethos-data catalog build`):"
+                + "".join(
+                    f"\n  {path.relative_to(catalog_root)}" for path in build.stale
+                )
+            )
         else:
             report.info("All manifests up to date.")
     return result

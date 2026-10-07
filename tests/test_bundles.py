@@ -33,7 +33,7 @@ from ethos_data.bundles import (
     update_bundle,
 )
 from ethos_data.catalogs import load_catalog
-from ethos_data.errors import BundleError
+from ethos_data.errors import BundleError, CatalogUnavailable
 
 LICENSED = {
     "licenses": [{"name": "CC-BY-4.0", "path": "https://example.invalid/cc-by"}],
@@ -184,6 +184,39 @@ class TestReading:
         assert inputs["sites"] == root / "data" / "sites"
         assert data._catalog is None, "the index was never read"
 
+    def test_a_key_a_bundle_holds_reads_no_catalogue_index(self, package):
+        root, collections = package
+        data = ethos_data.collections(collections, tool="mytool", bundles=[root])
+
+        with pytest.warns(BundleAlignmentWarning, match="not in the catalogue"):
+            found = data.catalog_path("sites/a.csv")
+
+        assert found == root / "data" / "sites" / "a.csv"
+        assert data._catalog is None, "the index was never read"
+
+    @pytest.mark.parametrize("key", ["elsewhere/a.csv", "sites/c.csv"])
+    def test_a_key_no_bundle_holds_is_read_from_the_catalogue(self, package, key):
+        root, collections = package
+        data = ethos_data.collections(collections, tool="mytool", bundles=[root])
+
+        with pytest.raises(CatalogUnavailable, match="nowhere.json"):
+            data.catalog_path(key)
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["fetch", "inputs", "--plan"],
+            ["verify", "inputs"],
+            ["show", "inputs", "--meta"],
+        ],
+    )
+    def test_the_commands_read_no_catalogue_index(self, package, argv, capsys):
+        root, collections = package
+        data = ethos_data.collections(collections, tool="mytool", bundles=[root])
+
+        assert data.main(argv) == 0, capsys.readouterr().err
+        assert data._catalog is None, "the index was never read"
+
     def test_the_warning_comes_once_per_bundle(self, package):
         root, collections = package
         data = ethos_data.collections(collections, tool="mytool", bundles=[root])
@@ -212,7 +245,10 @@ class TestReading:
 
         with pytest.raises(BundleError, match="Record the change"):
             bundle.fetch("sites")
-        with pytest.warns(ModifiedBundleWarning, match="sites/a.csv"):
+        with (
+            pytest.warns(BundleAlignmentWarning, match="not in the catalogue"),
+            pytest.warns(ModifiedBundleWarning, match="sites/a.csv"),
+        ):
             files = bundle.fetch("sites", allow_modified=True)
         assert files["sites/a.csv"].read_bytes() == b"9\n"
         assert next(f.status for f in bundle.verify("sites/a.csv")) == "modified"
@@ -372,7 +408,8 @@ class TestTheDownloadSwitch:
         )
         data = ethos_data.collections(collections, bundles=[root], download=True)
 
-        files = data.fetch("inputs")
+        with pytest.warns(BundleAlignmentWarning, match="ahead of the catalogue"):
+            files = data.fetch("inputs")
 
         assert files["sites/a.csv"] == reader.cache / "sites" / "a.csv"
         assert files["sites/b.csv"] == root / "data" / "sites" / "b.csv"

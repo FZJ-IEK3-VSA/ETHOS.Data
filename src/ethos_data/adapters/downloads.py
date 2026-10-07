@@ -1,8 +1,10 @@
 """Downloads from the publication root, hash-checked, through pooch.
 
-The real :class:`~ethos_data.adapters.Downloader`. pooch keeps what it has
-fetched and re-fetches a file whose hash no longer matches, so a cache that
-was interrupted or tampered with heals on the next fetch.
+The real :class:`~ethos_data.adapters.Downloader`. pooch keeps a file it is
+handed when its hash matches and fetches it again when not, and a download
+appears under its name only once its hash is checked. Retrieval hands it the
+files missing from the cache or of another size, and a repair the copies a
+deep check found damaged.
 """
 
 from __future__ import annotations
@@ -47,6 +49,12 @@ class PoochDownloader:
             except (OSError, ValueError) as error:
                 # requests' errors are OSErrors; a hash that does not
                 # match after the retries is pooch's ValueError.
+                # pooch streams the response and raises on its status without
+                # closing it: close it here, or its socket stays open until a
+                # garbage collection, in whatever code happens to run then.
+                response = getattr(error, "response", None)
+                if response is not None:
+                    response.close()
                 url = f"{base_url.rstrip('/')}/{path}"
                 raise DownloadError(f"cannot download {url}: {error}") from error
         return found

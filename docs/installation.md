@@ -1,7 +1,8 @@
 # Installation
 
 `ethos-data` is a small pure-Python package. Its only runtime dependencies are
-[pooch](https://www.fatiando.org/pooch/) (hash-verified downloads), PyYAML,
+[pooch](https://www.fatiando.org/pooch/) (hash-verified downloads),
+[requests](https://requests.readthedocs.io/) (the upload's read-back), PyYAML,
 [platformdirs](https://platformdirs.readthedocs.io/) (cross-platform config and
 cache locations) and [pydantic](https://docs.pydantic.dev/) `>=2` (the file
 format specifications, loaded only when a file is validated), so it installs

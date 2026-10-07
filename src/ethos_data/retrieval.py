@@ -193,8 +193,7 @@ def plan(
             in_place.append(location)
             by_origin.setdefault(location.origin, []).append(location.resource)
             continue
-        # Size is a cheap presence check; download() verifies the hash and
-        # re-fetches anything that fails, so this is an estimate, not a promise.
+        # The check download() makes: a copy of the recorded size is used.
         target = location.path
         if target.is_file() and target.stat().st_size == location.resource.bytes:
             present.append(location)
@@ -226,23 +225,31 @@ def download(
     progressbar: bool = True,
     *,
     fetch: bool = True,
+    rehash: bool = False,
     downloader: Downloader | None = None,
 ) -> DataFiles:
     """Make every resource available locally and return where each one is.
 
     Resources resolved in place -- a link in the public cache, a listed
     restricted cache or a staging entry -- are used where they lie and never
-    copied; the rest are downloaded into the public cache through
-    ``downloader``, skipping anything already present and hash-verified. Every
+    copied. A copy already in the public cache at its recorded size is used
+    as it is: its hash was checked when it was downloaded, and
+    :func:`~ethos_data.verify.verify` with ``deep=True`` checks it again on
+    request. The rest are downloaded into the public cache through
+    ``downloader``, each hash-checked before it appears there. Every
     resource is required: restricted data this machine cannot read raises
     AccessError, describing the dataset, before anything is downloaded, and a
     file that cannot be downloaded raises
     :class:`~ethos_data.errors.DownloadError`, naming its URL.
 
     With ``fetch=False`` nothing is downloaded and no store is contacted: a
-    copy already in the public cache is returned as it is, and a file that
-    would have to be downloaded raises :class:`~ethos_data.errors.NotFetched`,
-    naming the path it belongs at.
+    file that would have to be downloaded raises
+    :class:`~ethos_data.errors.NotFetched`, naming the path it belongs at.
+
+    ``rehash=True`` hands the copies in the public cache to ``downloader``
+    too, which hashes each and downloads it again where its bytes differ:
+    what :func:`~ethos_data.verify.repair` does with the copies a deep check
+    found damaged.
     """
     roots = root if root is not None else catalog.settings.roots
     downloader = downloader if downloader is not None else PoochDownloader()
@@ -269,7 +276,8 @@ def download(
     files = DataFiles()
     to_download: dict[str, list[Location]] = {}
     for location in locations:
-        if location.in_place or (not fetch and location.origin == ORIGIN_CACHED):
+        cached = location.origin == ORIGIN_CACHED and not (fetch and rehash)
+        if location.in_place or cached:
             files[location.resource.key] = location.path
         else:
             to_download.setdefault(location.resource.dataset, []).append(location)

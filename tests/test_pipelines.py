@@ -12,13 +12,17 @@ import json
 
 import pytest
 import yaml
-from support import digest
+from support import DEFAULT_LICENSES, digest
 
+from ethos_data import report
 from ethos_data.errors import MaintenanceError
-from ethos_data.maintain import accept
+from ethos_data.maintain import accept, manifest
 from ethos_data.maintain.pipeline import Action, Pipeline
 
 TERMS = "licenses:\n  - name: CC-BY-4.0\n    path: https://creativecommons.org/licenses/by/4.0/\n"
+#: A licence narrowed to files the dataset lacks: the build refuses it once
+#: the dataset's files are hashed.
+NARROWED = [{**DEFAULT_LICENSES[0], "ethos:applies_to": ["missing/*"]}]
 
 
 @pytest.fixture
@@ -120,11 +124,13 @@ class TestPipeline:
                     Action("record b", lambda: done.append("record b"), subject="b"),
                 ]
 
-        run = Pipeline("p", [Transfer(), Record()]).run(None)
+        with report.reporting(recorded := report.RecordingReporter()):
+            run = Pipeline("p", [Transfer(), Record()]).run(None)
 
         assert done == ["copy b", "record b"]
         assert not run.ok
         assert run.failed == {"a": "rclone exited 7"}
+        assert recorded.warnings == ["p, transfer, a: rclone exited 7"]
 
 
 class TestAdd:
@@ -508,6 +514,54 @@ class TestBuild:
         assert code == 1
         assert "ethos-data catalog migrate zz" in err
         assert source.package("ok")["title"] != "Renamed"
+
+    def test_a_refused_dataset_keeps_the_hashes_the_build_computed(
+        self, source, monkeypatch
+    ):
+        first = source.dataset("first", {"a.csv": "1"})
+        second = source.dataset("second", {"b.csv": "2"}, licenses=NARROWED)
+
+        code, _, err = source.build()
+
+        assert code == 1
+        assert "second: licenses entry 'CC-BY-4.0' has ethos:applies_to" in err
+        for directory in (first, second):
+            assert (directory / ".ethos-data-hash-cache.json").is_file()
+            assert not (directory / "datapackage.json").exists()
+        assert not (source.root / "datacatalog.json").exists()
+
+        hashed = []
+        monkeypatch.setattr(
+            manifest, "of_file", lambda path, *args: hashed.append(path) or ""
+        )
+        source.edit("second", licenses=DEFAULT_LICENSES)
+
+        assert source.build()[0] == 0
+        assert hashed == [], "the build after the fix hashes nothing again"
+
+    def test_every_refused_dataset_is_named_and_nothing_is_written(self, source):
+        source.dataset("first", {"a.csv": "1"})
+        source.dataset("second", {"b.csv": "2"}, licenses=NARROWED)
+        source.dataset("third", {"c.csv": "3"}, licenses=NARROWED)
+
+        code, _, err = source.build()
+
+        assert code == 1
+        assert (
+            "2 datasets cannot be built, so no descriptor, shard or index was written"
+            in err
+        )
+        assert "\n  second: licenses entry" in err
+        assert "\n  third: licenses entry" in err
+        assert not (source.directory("first") / "datapackage.json").exists()
+        assert not (source.root / "datacatalog.json").exists()
+
+    def test_check_keeps_the_hashes_in_memory(self, source):
+        directory = source.dataset("flat", {"a.csv": "1"})
+
+        assert source.build(check=True)[0] == 1
+
+        assert not (directory / ".ethos-data-hash-cache.json").exists()
 
 
 class TestPublish:

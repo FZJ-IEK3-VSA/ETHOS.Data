@@ -3,10 +3,10 @@
 Existence is not integrity. A cache entry that is a symbolic link into shared
 project storage is only as stable as that storage: the target can be moved,
 re-generated, truncated or replaced by a well-meaning colleague, and nothing
-about the path changes when it happens. ``download`` verifies checksums for the
-files it fetches, but data read *in place* has never been checked at all -- so
-this is the one place where the promise "these bytes are the ones in the
-manifest" is actually tested.
+about the path changes when it happens. ``download`` verifies the checksum of
+each file it downloads and then takes the copy at its recorded size, and data
+read *in place* has never been checked at all -- so this is the one place
+where the promise "these bytes are the ones in the manifest" is tested again.
 
     <tool>-data verify onshore_wind            # sizes: cheap, run it often
     <tool>-data verify onshore_wind --deep     # checksums: slow, run it before you publish
@@ -326,7 +326,11 @@ def repair(
         return report
 
     files = download(
-        catalog, [f.resource for f in fetchable], root=roots, progressbar=progressbar
+        catalog,
+        [f.resource for f in fetchable],
+        root=roots,
+        progressbar=progressbar,
+        rehash=True,
     )
     report["downloaded"] = len(files)
     return report

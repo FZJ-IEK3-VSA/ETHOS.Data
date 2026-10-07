@@ -18,6 +18,9 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
   "pooch>=1.8.0",
+  # The upload's read-back keeps its connections open; urllib opens one per
+  # request. pooch depends on it too.
+  "requests>=2.19",
   "pyyaml>=5.4",
   "platformdirs>=3.0",   # cross-platform config and cache locations
   # The file-format specifications (ethos_data.formats) are pydantic models.
@@ -73,4 +76,11 @@ packages = ["src/ethos_data"]
 # local fonts, diagram sources. Source and tests are what a rebuild needs, and
 # the licence, which has to travel with any copy of the source.
 include = ["/src", "/tests", "/LICENSE"]
+
+[tool.pytest.ini_options]
+# A warning a test does not assert fails it, so none piles up unread in the
+# summary. Set here rather than in tests/conftest.py: a packaged test run (the
+# conda-forge feedstock) copies tests/ alone and runs against newer
+# dependencies, whose deprecation warnings are no reason to fail that build.
+filterwarnings = ["error"]
 

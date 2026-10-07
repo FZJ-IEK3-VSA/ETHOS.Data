@@ -11,7 +11,7 @@ that fixes it. The common ones:
 
 | Error | Meaning | What to do |
 | --- | --- | --- |
-| `CatalogUnavailable` | The catalogue location cannot be read: wrong path or URL, no network, or a version that does not exist yet. | Run `ethos-data config show`; check the location and, on the cluster computer, your read permission. |
+| `CatalogUnavailable` | The catalogue location cannot be read: wrong path or URL, no network, or a version that does not exist yet. Or another version of ETHOS.Data wrote its index. | Run `ethos-data config show`; check the location and, on the cluster computer, your read permission. An index from another version is not yours to fix: report it. |
 | `IncompleteCatalog` | The catalogue index lists a dataset whose descriptor is missing from the served copy. | Not yours to fix: report it. A copy of only the index is not a catalogue. |
 | `UnknownDataset`, unknown key | The dataset or key cannot be found: the name is mistyped, or the catalogue in use does not publish it. | Check the spelling and which catalogue is selected. A hidden dataset is not in the public catalogue. |
 | `CollectionError` | The collection has no test (or full) variant, or a named path is in one variant only; the message names the collection and the variant or the named path. | Ask for a variant the collection defines; otherwise report it to the package maintainer. |
