@@ -3,8 +3,8 @@
 Check that a downloaded dataset, catalogued or proposed, still matches what
 its source publishes. This applies to datasets with `ethos:origin:
 downloaded`. Created and derived datasets have no external source to compare
-against; for those, the review checks the author, inputs and derivation record
-instead.
+against; for those, the review checks the author or modifier, inputs and
+derivation record instead.
 
 Do this before adding a downloaded candidate, when a user reports a mismatch,
 and periodically for datasets whose source keeps publishing new versions.

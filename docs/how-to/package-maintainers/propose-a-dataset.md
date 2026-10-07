@@ -96,7 +96,7 @@ facts in the proposal. Which facts depend on where the data came from.
     ethos:origin: derived
     contributors:
       - title: Your name
-        roles: [author]
+        roles: [modifier]
     sources:
       - title: ERA5 hourly data on single levels
         path: https://doi.org/10.24381/cds.adbb2d47
@@ -108,10 +108,13 @@ facts in the proposal. Which facts depend on where the data came from.
     ethos:contact: Your name
     ```
 
-    `created` is data made from scratch here; `derived` is computed from other
-    data and inherits that data's obligations, so name the inputs and the
-    method. Test data cut from a licensed product is derived data under that
-    product's terms.
+    `created` is data made from scratch here, and you are its `author`.
+    `derived` is computed from other data and inherits that data's
+    obligations, so name the inputs and the method. If you converted,
+    combined or clipped the inputs, you are its `modifier` and the content
+    stays the inputs' authors'; if you computed new data from them, you are
+    its `author`. Test data cut from a licensed product is derived data under
+    that product's terms.
 
 If the terms are unclear, write `ethos:license_status: unresolved` and the
 question in `ethos:license_note`; do not guess a licence. Data that may not be

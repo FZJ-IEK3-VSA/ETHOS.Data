@@ -473,17 +473,28 @@ ethos:derivation: >-
   reprojected to EPSG:3035 with nearest-neighbour resampling.
 
 contributors:
-  - title: A Researcher
+  - title: ESA Land Cover CCI project team
     roles: [author]
+  - title: A Researcher
+    roles: [modifier]
     organization: Forschungszentrum Jülich, ICE-2
-  - title: ETHOS.RESKit maintainers
-    roles: [maintainer]
 ```
 
 `roles` is a **list** — Data Package v2. A v1-style scalar `roles: author` is
 rejected rather than coerced: a descriptor half-following two versions of the
-spec is worse than one told which it follows. Valid roles are `author`,
-`contributor`, `maintainer`, `publisher`, `wrangler`.
+spec is worse than one told which it follows.
+
+There are two roles:
+
+| Role | Who |
+|---|---|
+| `author` | created the data originally |
+| `modifier` | made minor alterations to it: converted it to another data type, combined parts of it, or clipped it |
+
+Converting, combining or clipping somebody else's data makes you a modifier,
+not an author: the content stays theirs. Computing new data from it, such as a
+new indicator, makes you its author. Whoever adds data of their own to the data
+they altered is both: `roles: [author, modifier]`.
 
 What the build enforces:
 
@@ -491,7 +502,7 @@ What the build enforces:
 |---|---|
 | `downloaded` (default) | nothing — every dataset written before this key existed still builds |
 | `created` | at least one contributor with `roles: [author]` |
-| `derived` | an author, **plus** `sources` (derived from what) and `ethos:derivation` (by what method) |
+| `derived` | at least one contributor with `roles: [modifier]` or `roles: [author]`, **plus** `sources` (derived from what) and `ethos:derivation` (by what method) |
 
 ### Licences
 

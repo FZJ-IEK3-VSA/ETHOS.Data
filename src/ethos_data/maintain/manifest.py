@@ -46,7 +46,8 @@ and not in the index, and nor is a family whose members are all withdrawn.
 
 Provenance and licensing are checked here rather than left to a reviewer's eye.
 ``ethos:origin`` says whether the data was downloaded, derived or created, and an
-origin that claims authorship has to name an author in ``contributors``.
+origin that claims the data was made here names who in ``contributors``: an
+author for created data, a modifier or an author for derived data.
 ``licenses`` is a list because a dataset really can be under several; one entry
 may narrow itself to some of the files with ``ethos:applies_to``, which is
 rendered as a resource-level ``licenses`` override.

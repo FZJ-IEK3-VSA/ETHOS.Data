@@ -33,9 +33,9 @@ ethos:contact: Dataset maintainer
 
 `source_dir` is the directory you can read the bytes from; a relative path is
 relative to the draft. It is the draft's build input: `catalog add` moves it
-into the dataset's `status.yaml` ([step 3](#add-it)). For created or derived
-data, add `contributors` with an `author`, and for derived data `sources` and
-`ethos:derivation`. Every key is in the
+into the dataset's `status.yaml` ([step 3](#add-it)). For created data,
+add an `author` to `contributors`; for derived data, a `modifier` or an
+`author`, `sources` and `ethos:derivation`. Every key is in the
 [format reference](../../reference/schemas.md#datasetyaml).
 
 ### Select the files {#select-the-files}
@@ -105,7 +105,7 @@ Settle every row before the file enters the catalogue:
 | Question | Settled when |
 | --- | --- |
 | What is it, and for which workflows | Name, version, title and purpose are agreed. A new version of catalogued data is a [revision or a successor](publish-a-new-version.md), never new bytes behind published objects. |
-| Where does it come from | `ethos:origin` is right. Downloaded data names its source and retrieval date and [matches that source](verify-provenance.md). Created or derived data names its authors, inputs and method. |
+| Where does it come from | `ethos:origin` is right. Downloaded data names its source and retrieval date and [matches that source](verify-provenance.md). Created data names its authors; derived data names its modifiers or authors, inputs and method. |
 | May it be redistributed | A `licenses:` entry, or an explicit `resolved` status, based on terms somebody read. Unclear terms stay `ethos:license_status: unresolved` with the question in `ethos:license_note`, which blocks linking and upload until answered. Attribution text is recorded where the licence requires it. |
 | Who may read it | `ethos:access` and `ethos:visibility` are right, a hidden dataset has an embargo block, and a restricted dataset says in `ethos:restriction` who may obtain it and how. |
 | Which files | The selection covers the files the workflows need, their sidecars, and nothing unrelated. |
