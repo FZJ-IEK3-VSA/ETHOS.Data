@@ -86,8 +86,8 @@ def fetch(
 
 
 def catalog_path(key: str, *, fetch: bool = True, progressbar: bool = False) -> Path:
-    """One dataset, folder or file by catalogue key, in the catalogue this package reads."""
-    return handle().catalog.path(key, fetch=fetch, progressbar=progressbar)
+    """One dataset, folder or file by catalogue key, from the bundles or the catalogue."""
+    return handle().catalog_path(key, fetch=fetch, progressbar=progressbar)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -101,7 +101,8 @@ takes the name of a collection from the package's file and returns every
 input the workflow needs, by handle. `catalog_path(key)` takes a catalogue
 key, `<dataset>/<path>`, and returns the location of that one dataset, folder
 or file, whether or not any collection selects it; that is how a maintainer
-tries a dataset before adding it to a collection.
+tries a dataset before adding it to a collection. Both answer from the
+bundles what they hold, and read the catalogue index only for the rest.
 
 Wire `main` up as a console script and ship the file and the bundles as
 package data:

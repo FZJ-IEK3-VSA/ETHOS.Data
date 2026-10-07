@@ -24,7 +24,8 @@ Two kinds of name, two handles. A **collection** is what a tool's workflow
 needs, named once by its maintainer in the tool's `collections.yaml`;
 `collections(path, tool=...)` loads that file into a
 [`Collections`](catalog.md#collections) handle whose `paths()`, `fetch()`,
-`resolve()` and `plan()` answer by collection name, and whose `main()` runs
+`resolve()` and `plan()` answer by collection name, whose `catalog_path()`
+answers by key from its bundles first, and whose `main()` runs
 the collection commands. `tool_main()` is the body of a tool's own console
 script: it builds the handle only for the commands that need one. A **key**
 (`<dataset>/<path>`) names one dataset, folder or file; `catalog()` loads the

@@ -35,7 +35,8 @@ either position. A package may supply an environment override such as
 See [catalogue resolution](../configuration.md#catalogue-resolution).
 
 `--help`, `config show`, staging management, and bundle reads do not load the
-catalogue. Collection commands need readable metadata.
+catalogue. `show`, `fetch` and `verify` answer from the package's bundles
+what they hold, and read the catalogue index only for the rest.
 
 ## Collections, not keys { #scope }
 

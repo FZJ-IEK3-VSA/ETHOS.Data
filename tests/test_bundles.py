@@ -33,7 +33,7 @@ from ethos_data.bundles import (
     update_bundle,
 )
 from ethos_data.catalogs import load_catalog
-from ethos_data.errors import BundleError
+from ethos_data.errors import BundleError, CatalogUnavailable
 
 LICENSED = {
     "licenses": [{"name": "CC-BY-4.0", "path": "https://example.invalid/cc-by"}],
@@ -182,6 +182,39 @@ class TestReading:
             inputs = data.paths("inputs")
 
         assert inputs["sites"] == root / "data" / "sites"
+        assert data._catalog is None, "the index was never read"
+
+    def test_a_key_a_bundle_holds_reads_no_catalogue_index(self, package):
+        root, collections = package
+        data = ethos_data.collections(collections, tool="mytool", bundles=[root])
+
+        with pytest.warns(BundleAlignmentWarning, match="not in the catalogue"):
+            found = data.catalog_path("sites/a.csv")
+
+        assert found == root / "data" / "sites" / "a.csv"
+        assert data._catalog is None, "the index was never read"
+
+    @pytest.mark.parametrize("key", ["elsewhere/a.csv", "sites/c.csv"])
+    def test_a_key_no_bundle_holds_is_read_from_the_catalogue(self, package, key):
+        root, collections = package
+        data = ethos_data.collections(collections, tool="mytool", bundles=[root])
+
+        with pytest.raises(CatalogUnavailable, match="nowhere.json"):
+            data.catalog_path(key)
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["fetch", "inputs", "--plan"],
+            ["verify", "inputs"],
+            ["show", "inputs", "--meta"],
+        ],
+    )
+    def test_the_commands_read_no_catalogue_index(self, package, argv, capsys):
+        root, collections = package
+        data = ethos_data.collections(collections, tool="mytool", bundles=[root])
+
+        assert data.main(argv) == 0, capsys.readouterr().err
         assert data._catalog is None, "the index was never read"
 
     def test_the_warning_comes_once_per_bundle(self, package):
