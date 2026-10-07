@@ -63,7 +63,9 @@ refuses one outside them with
 instead takes a catalogue key against explicit or shared settings or the
 public default.
 `Collections.fetch`, `paths` and `plan` make a collection available, by key
-and by named handle, and `main` runs the collection commands on the file;
+and by named handle, `catalog_path` one catalogue key, and `main` runs the
+collection commands on the file. Each answers from the handle's bundles what
+they hold, and opens `Collections.catalog` only for the rest;
 `ethos_data.collections()` builds the handle a tool keeps for the life of the
 process. The file format is in
 [`collections.yaml`](../schemas.md#collectionsyaml).
