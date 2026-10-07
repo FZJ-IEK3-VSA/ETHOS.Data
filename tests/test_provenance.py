@@ -55,23 +55,67 @@ def test_unknown_origin_is_rejected():
 
 
 @pytest.mark.parametrize("origin", ["created", "derived"])
-def test_authorship_claim_must_name_an_author(origin):
+def test_a_claim_to_have_made_it_says_by_whom(origin):
     """Claiming the data was made here without saying by whom is not a claim."""
     with pytest.raises(DescriptorError, match="has to say by whom"):
         check({"ethos:origin": origin})
 
 
+def test_created_data_names_its_author():
+    """Created data originated here; whoever only altered it did not create it."""
+    with pytest.raises(DescriptorError, match=r"roles: \[author\]"):
+        check(
+            {
+                "ethos:origin": "created",
+                "contributors": [{"title": "A Researcher", "roles": ["modifier"]}],
+            }
+        )
+
+
+@pytest.mark.parametrize("role", ["modifier", "author"])
+def test_derived_data_names_its_modifier_or_author(role):
+    """Derived data was altered here from its inputs, or made here from them as new data."""
+    assert (
+        origin_of(
+            {
+                "ethos:origin": "derived",
+                "contributors": [{"title": "A Researcher", "roles": [role]}],
+                "sources": [{"title": "upstream"}],
+                "ethos:derivation": "cdo sellonlatbox,5,7.5,49,52",
+            }
+        )
+        == "derived"
+    )
+
+
+def test_one_entry_may_be_author_and_modifier():
+    """Whoever adds data of their own to the data they altered holds both roles."""
+    both = [{"title": "A Researcher", "roles": ["author", "modifier"]}]
+    assert origin_of({"ethos:origin": "created", "contributors": both}) == "created"
+    assert (
+        origin_of(
+            {
+                "ethos:origin": "derived",
+                "contributors": both,
+                "sources": [{"title": "upstream"}],
+                "ethos:derivation": "A new indicator, computed by scripts/index.py.",
+            }
+        )
+        == "derived"
+    )
+
+
 def test_derived_needs_sources_and_a_derivation():
-    author = [{"title": "A Researcher", "roles": ["author"]}]
+    modifier = [{"title": "A Researcher", "roles": ["modifier"]}]
 
     with pytest.raises(DescriptorError, match="derived FROM"):
-        check({"ethos:origin": "derived", "contributors": author})
+        check({"ethos:origin": "derived", "contributors": modifier})
 
     with pytest.raises(DescriptorError, match="needs ethos:derivation"):
         check(
             {
                 "ethos:origin": "derived",
-                "contributors": author,
+                "contributors": modifier,
                 "sources": [{"title": "upstream"}],
             }
         )
@@ -80,7 +124,7 @@ def test_derived_needs_sources_and_a_derivation():
         origin_of(
             {
                 "ethos:origin": "derived",
-                "contributors": author,
+                "contributors": modifier,
                 "sources": [{"title": "upstream"}],
                 "ethos:derivation": "gdalwarp to EPSG:3035, nearest neighbour.",
             }
@@ -219,7 +263,7 @@ def test_build_renders_package_and_resource_licences():
                     "sources": [
                         {"title": "upstream", "path": "https://example.invalid/"}
                     ],
-                    "contributors": [{"title": "A Researcher", "roles": ["author"]}],
+                    "contributors": [{"title": "A Researcher", "roles": ["modifier"]}],
                     "licenses": [
                         {"name": "CC-BY-4.0", "ethos:applies_to": ["originals/**"]},
                         {"name": "CC0-1.0"},

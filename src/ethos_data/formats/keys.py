@@ -132,8 +132,12 @@ UNRESOLVED = "unresolved"
 UNKNOWN = "unknown"
 LICENSE_STATUSES = (RESOLVED, UNRESOLVED, UNKNOWN)
 
+#: The two roles a contributor holds: the author created the data
+#: originally; the modifier made minor alterations to it, such as converting
+#: it to another data type, combining its parts or clipping it.
 AUTHOR = "author"
-CONTRIBUTOR_ROLES = (AUTHOR, "contributor", "maintainer", "publisher", "wrangler")
+MODIFIER = "modifier"
+CONTRIBUTOR_ROLES = (AUTHOR, MODIFIER)
 
 UPSTREAM_STATUSES = (
     "available",

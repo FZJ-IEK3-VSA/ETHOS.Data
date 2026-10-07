@@ -1,7 +1,8 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/FZJ-IEK3-VSA/ETHOS.Data/main/src/ethos_data/formats/schemas/dataset.schema.json
 #
 # A dataset computed from other data. It inherits the obligations of its
-# inputs: name them, the method and its parameters, and the author.
+# inputs: name them, the method and its parameters, and the modifier who
+# altered them or the author who made new data from them.
 name: ${name}
 title: ${title}
 description: What was computed, from what, and what it is for.
@@ -11,7 +12,7 @@ ethos:visibility: public
 ethos:origin: derived
 contributors:
   - title: ${contact}
-    roles: [author]
+    roles: [modifier]
 sources:
   - title: The input dataset
     path: https://example.org/input-dataset

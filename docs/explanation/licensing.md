@@ -91,11 +91,15 @@ thing that should require somebody to type it.
 The default is `downloaded`, which is both the common case and the conservative
 one: claiming less authorship than is true is safe, claiming more is not.
 
-Claiming more than `downloaded` obliges you to say who — an `author` in
-`contributors` — and, for `derived`, both what it came from (`sources`) and how
-(`ethos:derivation`). Derived data inherits obligations from its inputs; a
-derivation with no named input cannot be checked against them, and one with no
-method is only half a claim.
+Claiming more than `downloaded` obliges you to say who, in `contributors`.
+Created data names its `author`, who created the data originally. Derived data
+names its `modifier`, who made minor alterations to the inputs, or its
+`author`, who made new data from them. Converting, combining or clipping
+somebody else's data makes you a modifier, not an author: the content stays
+theirs. Derived data also says what it came from
+(`sources`) and how (`ethos:derivation`). Derived data inherits obligations
+from its inputs; a derivation with no named input cannot be checked against
+them, and one with no method is only half a claim.
 
 ## One dataset, several licences
 
