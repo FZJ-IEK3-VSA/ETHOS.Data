@@ -21,6 +21,9 @@ INDEX = {
         {
             "name": "flat",
             "path": "datasets/flat/datapackage.json",
+            "ethos:total_bytes": 1,
+            "ethos:file_count": 1,
+            "ethos:remote_prefix": "flat",
             "ethos:license_status": "resolved",
         }
     ],

@@ -60,6 +60,11 @@ __all__ = [
 #: Set to read catalogue metadata over HTTPS without the metadata cache.
 NO_CACHE_ENV = "ETHOS_CATALOG_NO_CACHE"
 
+#: What every dataset's index row gives :class:`Dataset`: its size and file count.
+_ROW_KEYS = (keys.TOTAL_BYTES, keys.FILE_COUNT)
+#: What a public dataset's row gives besides: the folder its downloads read.
+_PUBLIC_ROW_KEYS = (*_ROW_KEYS, keys.REMOTE_PREFIX)
+
 
 def metadata_source(location: str, settings: Settings | None = None) -> MetadataSource:
     """Where a catalogue at ``location`` is read from.
@@ -452,7 +457,7 @@ def load_catalog(
     ``source`` is where it and every descriptor and shard are read from,
     :func:`metadata_source` by default, with the metadata cache of
     ``settings``. Raises :class:`CatalogUnavailable` when there is no index to
-    read there.
+    read there, or when a dataset's row lacks a key the reader answers from it.
     """
     index = location
     if source is None:
@@ -466,12 +471,10 @@ def load_catalog(
     except (IncompleteCatalog, CatalogUnavailable) as error:
         # A 404 for a release tag nobody has cut arrives here too.
         reason = error.message.removeprefix(f"{index}: ")
-        raise CatalogUnavailable(
-            f"cannot read the catalogue index at {location}: {reason}\n"
-            f"Use another catalogue for this run with --catalog / catalog=, for this "
-            f"shell with $ETHOS_DATA_CATALOG, or for good with "
-            f"`ethos-data config set-catalog <datacatalog.json>`."
-        ) from error
+        raise _unavailable(location, reason) from error
+    lacking = _lacking(descriptor.get(keys.DATASETS, []))
+    if lacking:
+        raise _unavailable(location, lacking)
 
     datasets = {
         entry[keys.NAME]: Dataset(
@@ -493,6 +496,38 @@ def load_catalog(
             location, "loaded directly", loaded.version
         )
     return loaded
+
+
+def _unavailable(location: str, reason: str) -> CatalogUnavailable:
+    """The refusal of the index at ``location``, and how to use another catalogue."""
+    return CatalogUnavailable(
+        f"cannot read the catalogue index at {location}: {reason}\n"
+        f"Use another catalogue for this run with --catalog / catalog=, for this "
+        f"shell with $ETHOS_DATA_CATALOG, or for good with "
+        f"`ethos-data config set-catalog <datacatalog.json>`."
+    )
+
+
+def _lacking(rows: list[dict]) -> str | None:
+    """The first dataset row without a key the reader answers from it, or None.
+
+    ``build`` and ``publish`` write each of them, so an index whose row lacks
+    one was written by another version of ETHOS.Data. A family's row is not
+    checked: nothing is fetched under it.
+    """
+    for row in rows:
+        if row.get(keys.NAMESPACE):
+            continue
+        public = row.get(keys.ACCESS, keys.PUBLIC) == keys.PUBLIC
+        missing = [
+            key for key in (_PUBLIC_ROW_KEYS if public else _ROW_KEYS) if key not in row
+        ]
+        if missing:
+            return (
+                f"the row of {row.get(keys.NAME)!r} lacks {', '.join(missing)}: "
+                f"another version of ETHOS.Data wrote this index"
+            )
+    return None
 
 
 def not_found(name: str) -> str:

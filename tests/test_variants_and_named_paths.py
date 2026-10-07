@@ -26,6 +26,7 @@ import warnings
 from pathlib import Path
 
 import pytest
+from support import drop_from_rows
 
 import ethos_data
 from ethos_data import config, retrieval, selection, tool_main
@@ -903,15 +904,14 @@ def incomplete(world):
     document = json.loads(index.read_text())
     document["datasets"] += [
         {
-            "name": "ghost",
-            "path": "datasets/ghost/datapackage.json",
+            "name": name,
+            "path": f"datasets/{name}/datapackage.json",
             "ethos:license_status": "resolved",
-        },
-        {
-            "name": "sharded",
-            "path": "datasets/sharded/datapackage.json",
-            "ethos:license_status": "resolved",
-        },
+            "ethos:remote_prefix": name,
+            "ethos:total_bytes": 1,
+            "ethos:file_count": 1,
+        }
+        for name in ("ghost", "sharded")
     ]
     broken = catalogue / "incomplete.json"
     broken.write_text(json.dumps(document))
@@ -1528,7 +1528,40 @@ class TestCollectionsFileRoute:
 
 
 class TestCatalogUnavailable:
-    """No index at all -- unlike IncompleteCatalog, where the index promised a dataset."""
+    """No index this version reads -- unlike IncompleteCatalog, where the index promised a dataset."""
+
+    @pytest.mark.parametrize(
+        "dropped",
+        [("ethos:remote_prefix",), ("ethos:total_bytes", "ethos:file_count")],
+    )
+    def test_an_index_another_version_wrote_names_the_row_and_the_keys(
+        self, world, dropped
+    ):
+        """Loading refuses it, rather than the first download failing with a KeyError."""
+        _, _, index = world
+        for key in dropped:
+            drop_from_rows(index, key)
+
+        with pytest.raises(ethos_data.CatalogUnavailable) as caught:
+            ethos_data.load_catalog(str(index))
+
+        message = str(caught.value)
+        assert message.startswith(
+            f"cannot read the catalogue index at {index}: the row of "
+            f"'reskit-test-data/era5' lacks {', '.join(dropped)}: "
+            "another version of ETHOS.Data wrote this index\n"
+        )
+        assert "ethos-data config set-catalog" in message
+        assert caught.value.__cause__ is None
+
+    def test_a_restricted_or_family_row_needs_no_remote_prefix(self, world):
+        """Nothing is downloaded under either, so neither has a folder on the store."""
+        _, _, index = world
+
+        catalog = ethos_data.load_catalog(str(index))
+
+        assert "ethos:remote_prefix" not in catalog.dataset("licensed").entry
+        assert "ethos:remote_prefix" not in catalog.dataset("reskit-test-data").entry
 
     def test_a_missing_local_index_names_the_path_and_says_how_to_point_elsewhere(
         self, world
