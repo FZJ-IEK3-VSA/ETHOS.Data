@@ -275,6 +275,26 @@ class TestNamingAFamily:
             "ice2-data-files/fam/a",
         ]
 
+    def test_a_frozen_member_is_passed_over_and_refused_by_name(
+        self, workspace, no_rclone
+    ):
+        make_family(workspace, {"a": {}, "b": {}})
+        path = workspace / "datasets" / "fam" / "b" / "status.yaml"
+        status = yaml.safe_load(path.read_text(encoding="utf-8"))
+        del status["source_dir"]
+        authority = "https://example.invalid/fam/b/"
+        status.update(
+            state="frozen",
+            authority=authority,
+            copies=[{"kind": "uploaded", "location": authority}],
+        )
+        path.write_text(yaml.safe_dump(status), encoding="utf-8")
+
+        assert upload.run(workspace, *make_args(["fam"])).ok
+        assert destinations(no_rclone) == ["ice2-data-files/fam/a"]
+        with pytest.raises(UploadError, match="nothing left to upload"):
+            upload.run(workspace, *make_args(["fam/b"]))
+
     def test_an_ineligible_member_stops_the_whole_family(self, workspace, no_rclone):
         make_family(workspace, {"a": {}, "b": {"ethos:access": "restricted"}})
         with pytest.raises(TransitionError, match="restricted"):

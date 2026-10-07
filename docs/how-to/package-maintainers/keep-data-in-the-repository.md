@@ -180,13 +180,18 @@ first and last yours, the others the catalogue maintainer's.
     no copy: the dataset is built again with it, and a frozen one stays
     frozen.
 
-4. The maintainer makes each dataset `catalog status` names a next step for
-   available, and freezes it:
+4. The maintainer makes what was taken in available, and freezes it, by
+   naming the bundle's family:
 
     ```bash
-    ethos-data catalog upload your-tool-test-data/placements
-    ethos-data catalog record your-tool-test-data/placements
+    ethos-data catalog upload your-tool-test-data --dry-run
+    ethos-data catalog upload your-tool-test-data
+    ethos-data catalog record your-tool-test-data
     ```
+
+    Both pass over the members frozen already, so only new and revised
+    datasets are uploaded and frozen. A member whose description alone changed
+    stays frozen and needs neither.
 
     A revision's changed and new files go to dCache under
     `<remote_prefix>@<revision>/`, and its unchanged files stay where they

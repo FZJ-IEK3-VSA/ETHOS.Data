@@ -547,6 +547,24 @@ class TestRecord:
         assert catalogue.build()[0] == 0
         assert catalogue.package("flat")["resources"] == inventory
 
+    def test_a_family_freezes_its_members_not_frozen_yet(self, uploading):
+        catalogue, _ = uploading
+        catalogue.namespace("fam")
+        catalogue.dataset("fam/a", {"a.csv": "1\n"})
+        catalogue.dataset("fam/b", {"b.csv": "2\n"})
+        assert catalogue.build()[0] == 0
+        assert catalogue.catalog("upload", "fam")[0] == 0
+        assert catalogue.catalog("record", "fam/a")[0] == 0
+
+        code, out, err = catalogue.catalog("record", "fam")
+
+        assert code == 0, err
+        assert "fam/a: frozen, nothing to record" in out
+        assert catalogue.status("fam/b")["state"] == "frozen"
+        code, _, err = catalogue.catalog("record", "fam", "--copy", "elsewhere")
+        assert code == 1
+        assert "--copy names the copy of one dataset" in err
+
     def test_a_build_input_in_the_clone_is_deleted(self, uploading):
         catalogue, _ = uploading
         inputs = catalogue.root / "build-inputs"

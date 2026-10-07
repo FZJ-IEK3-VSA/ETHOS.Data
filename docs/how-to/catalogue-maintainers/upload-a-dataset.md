@@ -29,7 +29,8 @@ ethos-data catalog upload my-dataset
 ```
 
 For several datasets, name them in one invocation; naming a family such as
-`reskit-test-data` uploads every member beneath it. Every named dataset is checked
+`reskit-test-data` uploads every member beneath it that has something to
+upload; members frozen or withdrawn already are passed over. Every named dataset is checked
 before transfer. A dataset that fails afterwards does not stop the others, and
 earlier successes stay; run the command again to finish, since a dataset whose
 upload is verified and recorded is not uploaded again.
