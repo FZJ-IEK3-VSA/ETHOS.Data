@@ -33,9 +33,9 @@ ethos:contact: Dataset maintainer
 
 `source_dir` is the directory you can read the bytes from; a relative path is
 relative to the draft. It is the draft's build input: `catalog add` moves it
-into the dataset's `status.yaml` ([step 3](#add-it)). For created or derived
-data, add `contributors` with an `author`, and for derived data `sources` and
-`ethos:derivation`. Every key is in the
+into the dataset's `status.yaml` ([step 3](#add-it)). For created data,
+add an `author` to `contributors`; for derived data, a `modifier` or an
+`author`, `sources` and `ethos:derivation`. Every key is in the
 [format reference](../../reference/schemas.md#datasetyaml).
 
 ### Select the files {#select-the-files}
@@ -105,7 +105,7 @@ Settle every row before the file enters the catalogue:
 | Question | Settled when |
 | --- | --- |
 | What is it, and for which workflows | Name, version, title and purpose are agreed. A new version of catalogued data is a [revision or a successor](publish-a-new-version.md), never new bytes behind published objects. |
-| Where does it come from | `ethos:origin` is right. Downloaded data names its source and retrieval date and [matches that source](verify-provenance.md). Created or derived data names its authors, inputs and method. |
+| Where does it come from | `ethos:origin` is right. Downloaded data names its source and retrieval date and [matches that source](verify-provenance.md). Created data names its authors; derived data names its modifiers or authors, inputs and method. |
 | May it be redistributed | A `licenses:` entry, or an explicit `resolved` status, based on terms somebody read. Unclear terms stay `ethos:license_status: unresolved` with the question in `ethos:license_note`, which blocks linking and upload until answered. Attribution text is recorded where the licence requires it. |
 | Who may read it | `ethos:access` and `ethos:visibility` are right, a hidden dataset has an embargo block, and a restricted dataset says in `ethos:restriction` who may obtain it and how. |
 | Which files | The selection covers the files the workflows need, their sidecars, and nothing unrelated. |
@@ -135,7 +135,9 @@ bundle's datasets that are ahead of the catalogue: new datasets, revisions
 descriptions. It writes one directory per dataset, a family's members below
 the family's own `dataset.yaml`
 (`datasets/your-tool-test-data/era5/dataset.yaml`), and copies the files into
-a build input the catalogue maintainers own; see
+`build-inputs/` in your clone, a folder that ignores itself in git. Run it on
+the machine you upload from: `source_dir` is recorded as an absolute path.
+The steps from the package's change to the realigned bundle are in
 [Keep data in the repository](../package-maintainers/keep-data-in-the-repository.md#sync). The build walks `source_dir`, hashes every
 selected file and writes `datapackage.json` beside the description; never
 hand-edit the generated JSON. Check the generated paths, counts, sizes and
@@ -167,7 +169,8 @@ ethos-data catalog --catalog-root <your clone> record my-dataset
 ```
 
 `record` checks the copy on dCache again, makes it the authoritative copy and
-retires `source_dir`: the recorded inventory is frozen. For linked data, the
+retires `source_dir`: the recorded inventory is frozen. A build input in
+`build-inputs/`, copied there by `add-bundle`, is deleted. For linked data, the
 original directory stays the build input until the dataset is
 [materialized](materialize-linked-data.md#retire-the-original), and the copy
 is recorded then. Commit the status file on the branch and merge it by merge

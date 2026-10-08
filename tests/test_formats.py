@@ -144,13 +144,19 @@ BROKEN = [
     ({"contributors": [{"title": "A", "roles": ["writer"]}]}, "contributors[0]: unknown role 'writer'."),
     ({"ethos:origin": "created"}, "ethos:origin is 'created', which claims this data was made here"),
     (
-        {"ethos:origin": "derived", "contributors": [{"title": "A", "roles": ["author"]}]},
+        {"ethos:origin": "derived"},
+        "ethos:origin is 'derived', which claims this data was made here, so it has to say "
+        "by whom: the modifier, who altered its inputs, or the author, who made new data "
+        "from them.",
+    ),
+    (
+        {"ethos:origin": "derived", "contributors": [{"title": "A", "roles": ["modifier"]}]},
         "ethos:origin: derived needs 'sources'",
     ),
     (
         {
             "ethos:origin": "derived",
-            "contributors": [{"title": "A", "roles": ["author"]}],
+            "contributors": [{"title": "A", "roles": ["modifier"]}],
             "sources": [{"title": "x"}],
         },
         "ethos:origin: derived needs ethos:derivation",

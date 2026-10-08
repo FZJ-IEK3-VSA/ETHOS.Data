@@ -62,7 +62,12 @@ class Contributor(_Part):
     title: str = Field(description="The person's or the group's name.")
     roles: list[str] = Field(
         [],
-        description="What they did; a list, as in Data Package v2.",
+        description=(
+            "What they did: author, who created the data originally; modifier, "
+            "who made minor alterations to it, such as converting it to another "
+            "data type, combining its parts or clipping it. A list, as in Data "
+            "Package v2."
+        ),
         json_schema_extra={
             "items": {"type": "string", "enum": list(k.CONTRIBUTOR_ROLES)}
         },
@@ -170,7 +175,10 @@ class DatasetDescriptor(_Part):
     contributors: list[Contributor] = field(
         k.CONTRIBUTORS,
         [],
-        description="Who made it; an author is required for derived and created data.",
+        description=(
+            "Who made it; created data names an author, derived data a modifier "
+            "or an author."
+        ),
     )
     licenses: list[License] = field(
         k.LICENSES,
@@ -431,7 +439,7 @@ def _classification(meta: dict) -> str | None:
 
 
 def _provenance(meta: dict) -> str | None:
-    """``ethos:origin`` and ``contributors``; an origin claiming authorship names an author."""
+    """``ethos:origin`` and ``contributors``; data made here names who made it."""
     origin = meta.get(k.ORIGIN, k.DOWNLOADED)
     if origin not in k.ORIGINS:
         return f"{k.ORIGIN} must be one of {k.ORIGINS}, got {origin!r}"
@@ -464,15 +472,24 @@ def _provenance(meta: dict) -> str | None:
     if origin == k.DOWNLOADED:
         return None
 
-    authors = [p for p in contributors if k.AUTHOR in (p.get("roles") or [])]
-    if not authors:
+    # Created data originated here. Derived data was altered here from its
+    # inputs, or made here from them as new data.
+    if origin == k.CREATED:
+        accepted, who = (k.AUTHOR,), "the author, who created the data originally"
+    else:
+        accepted, who = (k.MODIFIER, k.AUTHOR), (
+            "the modifier, who altered its inputs, or the author, who made new "
+            "data from them"
+        )
+    role = accepted[0]
+    if not any(r in accepted for p in contributors for r in p.get("roles") or []):
         return (
             f"{k.ORIGIN} is {origin!r}, which claims this data was made here, "
-            f"so it has to say by whom. Add a {k.CONTRIBUTORS} entry with "
-            f"roles: [{k.AUTHOR}]:\n"
+            f"so it has to say by whom: {who}. Add a {k.CONTRIBUTORS} entry "
+            f"with roles: [{role}]:\n"
             f"    {k.CONTRIBUTORS}:\n"
             f"      - title: Some Person\n"
-            f"        roles: [{k.AUTHOR}]\n"
+            f"        roles: [{role}]\n"
             f"        organization: Forschungszentrum Julich, ICE-2"
         )
     if origin == k.DERIVED:

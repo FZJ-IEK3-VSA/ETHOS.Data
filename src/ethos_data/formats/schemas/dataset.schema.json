@@ -11,14 +11,11 @@
         },
         "roles": {
           "default": [],
-          "description": "What they did; a list, as in Data Package v2.",
+          "description": "What they did: author, who created the data originally; modifier, who made minor alterations to it, such as converting it to another data type, combining its parts or clipping it. A list, as in Data Package v2.",
           "items": {
             "enum": [
               "author",
-              "contributor",
-              "maintainer",
-              "publisher",
-              "wrangler"
+              "modifier"
             ],
             "type": "string"
           },
@@ -448,7 +445,7 @@
     },
     "contributors": {
       "default": [],
-      "description": "Who made it; an author is required for derived and created data.",
+      "description": "Who made it; created data names an author, derived data a modifier or an author.",
       "items": {
         "$ref": "#/$defs/Contributor"
       },

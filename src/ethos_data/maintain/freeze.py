@@ -1,7 +1,8 @@
-"""``catalog record``: freeze a dataset, naming the copy that is authoritative from now on.
+"""``catalog record``: freeze datasets, naming the copy that is authoritative from now on.
 
     ethos-data catalog record era5 --dry-run
     ethos-data catalog record era5
+    ethos-data catalog record reskit-test-data
     ethos-data catalog record gadm-3.6 --copy /shared/restricted/gadm-3.6
 
 Once its bytes are uploaded and verified, or copied into a cache that owns
@@ -15,7 +16,13 @@ Two stages:
 
 ``check``   choose the copy and check it, file by file: an upload read back
             anonymously through the store, a cache entry on this machine
-``freeze``  record it as the authoritative copy and retire ``source_dir``
+``freeze``  record it as the authoritative copy and retire ``source_dir``;
+            one in the clone's ``build-inputs/``, where ``catalog add-bundle``
+            copies a bundle's files, is deleted
+
+Every dataset named is checked before any is frozen. A family stands for
+its members, and a member frozen or withdrawn already is passed over; a
+dataset named itself is checked all the same.
 
 Which copy, when there are several: the upload, else the copy a cache owns,
 else, for restricted data, the registered installation, a link in a
@@ -25,7 +32,8 @@ authoritative copy only when named with ``--copy``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import shutil
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .. import report
@@ -34,11 +42,16 @@ from ..errors import MaintenanceError
 from ..formats import keys as k
 from ..formats.status_file import Copy, StatusFile
 from ..model import lifecycle
-from . import inventory_of, is_namespace, read_descriptor
+from . import (
+    build_inputs_dir,
+    in_build_inputs,
+    inventory_of,
+    read_descriptor,
+)
 from . import status as dataset_status
 from .pipeline import Action, Pipeline
 
-__all__ = ["PIPELINE", "Freeze", "RecordResult", "choose", "run"]
+__all__ = ["PIPELINE", "Freeze", "RecordResult", "Target", "choose", "run"]
 
 
 def _same(location: str, other: str) -> bool:
@@ -84,48 +97,65 @@ def choose(dataset: str, status: StatusFile, access: str, named: str | None) -> 
     return candidates[0]
 
 
+@dataclass(frozen=True)
+class Target:
+    """One dataset ``record`` freezes, and the copy it is frozen with."""
+
+    name: str
+    directory: Path
+    status: StatusFile
+    chosen: Copy
+
+
 @dataclass
 class Freeze:
-    """The dataset ``record`` freezes, and the copy it is frozen with."""
+    """The datasets ``record`` freezes, and the copy each is frozen with."""
 
     catalog_root: Path
-    dataset: str
+    datasets: list[str]
     named: str | None = None
     #: Reads an upload back.
     store: Store | None = None
-    name: str = ""
-    directory: Path | None = None
-    status: StatusFile | None = None
-    chosen: Copy | None = None
+    #: Each dataset checked and cleared, in the order asked for: set by ``check``.
+    targets: list[Target] = field(default_factory=list)
 
 
 class Check:
     name = "check"
 
     def plan(self, freeze: Freeze) -> list[Action]:
-        from .upload import resolve_name
+        from .upload import expand_families, passed_over, resolve_name
 
-        name = resolve_name(freeze.catalog_root, freeze.dataset)
-        directory = dataset_status.dataset_dir_in(freeze.catalog_root, name)
-        if is_namespace(directory):
+        names = expand_families(
+            freeze.catalog_root,
+            [resolve_name(freeze.catalog_root, each) for each in freeze.datasets],
+            "record",
+        )
+        if freeze.named is not None and len(names) != 1:
             raise MaintenanceError(
-                f"{name} is a family and has no bytes of its own; record each member."
+                "--copy names the copy of one dataset; name that one dataset with it."
             )
-        meta = read_descriptor(directory)
-        status = dataset_status.build_input(directory, meta, name).status
-        lifecycle.step("record", status.state, name)
-        access = meta.get(k.ACCESS, k.PUBLIC)
-        chosen = choose(name, status, access, freeze.named)
-        records = inventory_of(name, directory).records()
-        finding = dataset_status.check_copy(chosen, records, freeze.store)
-        report.info(f"  {self.name:<12} {finding}")
-        if not finding.ok:
-            raise MaintenanceError(
-                f"{name}: the copy does not hold the inventory as built, so it "
-                "cannot be the authoritative one. Find out why before freezing it."
-            )
-        freeze.name, freeze.directory = name, directory
-        freeze.status, freeze.chosen = status, chosen
+        for name, family in names.items():
+            directory = dataset_status.dataset_dir_in(freeze.catalog_root, name)
+            meta = read_descriptor(directory)
+            status = dataset_status.build_input(directory, meta, name).status
+            if passed_over(family, status.state):
+                report.info(
+                    f"  {self.name:<12} {name}: {status.state}, nothing to record"
+                )
+                continue
+            lifecycle.step("record", status.state, name)
+            access = meta.get(k.ACCESS, k.PUBLIC)
+            chosen = choose(name, status, access, freeze.named)
+            records = inventory_of(name, directory).records()
+            finding = dataset_status.check_copy(chosen, records, freeze.store)
+            report.info(f"  {self.name:<12} {finding}")
+            if not finding.ok:
+                raise MaintenanceError(
+                    f"{name}: the copy does not hold the inventory as built, so it "
+                    "cannot be the authoritative one. Find out why before freezing it."
+                )
+            freeze.targets.append(Target(name, directory, status, chosen))
         return []
 
 
@@ -133,30 +163,70 @@ class Retire:
     name = "freeze"
 
     def plan(self, freeze: Freeze) -> list[Action]:
-        status, chosen = freeze.status, freeze.chosen
-        if status.state == lifecycle.FROZEN and status.authority == chosen.location:
-            report.info(
-                f"  {freeze.name} is frozen already, with this copy as its "
-                "authoritative one."
-            )
-            return []
+        actions = []
+        for target in freeze.targets:
+            status, chosen = target.status, target.chosen
+            if status.state == lifecycle.FROZEN and status.authority == chosen.location:
+                report.info(
+                    f"  {target.name} is frozen already, with this copy as its "
+                    "authoritative one."
+                )
+                continue
+            actions.append(self._freeze(freeze.catalog_root, target))
+        return actions
+
+    @staticmethod
+    def _freeze(catalog_root: Path, target: Target) -> Action:
+        status, chosen = target.status, target.chosen
         retired = status.source_dir
-        text = f"freeze {freeze.name}: {chosen.location} becomes its authoritative copy"
+        text = f"freeze {target.name}: {chosen.location} becomes its authoritative copy"
         if retired:
             text += f", and its source_dir {retired} is retired"
+        doomed = _deletable(catalog_root, retired, status)
+        if doomed:
+            text += " and deleted"
 
         def perform() -> None:
             dataset_status.take(
-                freeze.directory,
+                target.directory,
                 status,
                 "record",
-                dataset=freeze.name,
+                dataset=target.name,
                 copy=chosen.model_copy(update={"verified": dataset_status.now()}),
                 source_dir=retired,
                 changes={"source_dir": None, "authority": chosen.location},
             )
+            if doomed:
+                _delete(catalog_root, doomed)
 
-        return [Action(text, perform)]
+        return Action(text, perform, subject=target.name)
+
+
+def _deletable(
+    catalog_root: Path, retired: str | None, status: StatusFile
+) -> Path | None:
+    """The retired build input ``record`` deletes: one in the clone's build inputs.
+
+    Not while a link in a cache still points into it.
+    """
+    if not retired or not in_build_inputs(catalog_root, retired):
+        return None
+    path = Path(retired)
+    for copy in status.copies:
+        if copy.kind == k.COPY_LINKED and copy.target:
+            if Path(copy.target).absolute().is_relative_to(path.absolute()):
+                return None
+    return path if path.is_dir() else None
+
+
+def _delete(catalog_root: Path, path: Path) -> None:
+    """Delete ``path``, and the folders above it it leaves empty, up to the build inputs."""
+    shutil.rmtree(path)
+    top = build_inputs_dir(catalog_root)
+    parent = path.absolute().parent
+    while parent != top and parent.is_relative_to(top) and not any(parent.iterdir()):
+        parent.rmdir()
+        parent = parent.parent
 
 
 PIPELINE: Pipeline[Freeze] = Pipeline("record", [Check(), Retire()])
@@ -164,41 +234,57 @@ PIPELINE: Pipeline[Freeze] = Pipeline("record", [Check(), Retire()])
 
 @dataclass(frozen=True)
 class RecordResult:
-    """The dataset ``catalog record`` froze, or would freeze, and its authoritative copy."""
+    """The datasets ``catalog record`` froze, or would freeze, and their authoritative copies."""
 
-    dataset: str
-    authority: str
-    #: Whether the status file was written: not for a dry run, nor for a
-    #: dataset frozen with this copy already.
-    written: bool
+    #: Each dataset checked, by name: its authoritative copy.
+    authorities: dict[str, str]
+    #: The datasets whose status file was written: none for a dry run, nor
+    #: one frozen with this copy already.
+    written: list[str]
+    #: Why each dataset that failed to freeze did.
+    failed: dict[str, str] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
-        return True
+        return not self.failed
 
 
 @report.reported
 def run(
     catalog_root: Path,
-    dataset: str,
+    datasets: str | list[str],
     *,
     copy: str | None = None,
     dry_run: bool = False,
     store: Store | None = None,
 ) -> RecordResult:
-    """Freeze ``dataset`` with its authoritative copy checked, or raise why not.
+    """Freeze ``datasets`` -- names, paths or families -- each copy checked first.
 
-    ``store`` reads an upload back, dCache's public door by default.
+    Every dataset is checked before any is frozen, or the reason is raised. A
+    family stands for its members, those frozen or withdrawn already passed
+    over. ``copy`` names the copy of a single dataset. ``store`` reads an
+    upload back, dCache's public door by default.
     """
     if store is None:
         from ..adapters.dcache import DcacheStore
 
         store = DcacheStore()
-    freeze = Freeze(catalog_root, dataset, copy, store)
-    written = bool(PIPELINE.run(freeze, dry_run=dry_run).planned) and not dry_run
-    if written:
-        report.info(
-            f"\nrecorded     {freeze.name} is frozen; a rebuild keeps its inventory "
-            "as it is"
+    names = [datasets] if isinstance(datasets, str) else list(datasets)
+    freeze = Freeze(catalog_root, names, copy, store)
+    outcome = PIPELINE.run(freeze, dry_run=dry_run)
+    written = [
+        target.name
+        for target in freeze.targets
+        if not dry_run
+        and target.name not in outcome.failed
+        and not (
+            target.status.state == lifecycle.FROZEN
+            and target.status.authority == target.chosen.location
         )
-    return RecordResult(freeze.name, freeze.chosen.location, written)
+    ]
+    for name in written:
+        report.info(
+            f"\nrecorded     {name} is frozen; a rebuild keeps its inventory as it is"
+        )
+    authorities = {target.name: target.chosen.location for target in freeze.targets}
+    return RecordResult(authorities, written, outcome.failed)

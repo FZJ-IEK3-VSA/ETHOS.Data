@@ -547,6 +547,40 @@ class TestRecord:
         assert catalogue.build()[0] == 0
         assert catalogue.package("flat")["resources"] == inventory
 
+    def test_a_family_freezes_its_members_not_frozen_yet(self, uploading):
+        catalogue, _ = uploading
+        catalogue.namespace("fam")
+        catalogue.dataset("fam/a", {"a.csv": "1\n"})
+        catalogue.dataset("fam/b", {"b.csv": "2\n"})
+        assert catalogue.build()[0] == 0
+        assert catalogue.catalog("upload", "fam")[0] == 0
+        assert catalogue.catalog("record", "fam/a")[0] == 0
+
+        code, out, err = catalogue.catalog("record", "fam")
+
+        assert code == 0, err
+        assert "fam/a: frozen, nothing to record" in out
+        assert catalogue.status("fam/b")["state"] == "frozen"
+        code, _, err = catalogue.catalog("record", "fam", "--copy", "elsewhere")
+        assert code == 1
+        assert "--copy names the copy of one dataset" in err
+
+    def test_a_build_input_in_the_clone_is_deleted(self, uploading):
+        catalogue, _ = uploading
+        inputs = catalogue.root / "build-inputs"
+        (inputs / "group" / "inbound").mkdir(parents=True)
+        (inputs / "group" / "inbound" / "a.csv").write_text("1\n", encoding="utf-8")
+        catalogue.dataset("inbound", source_dir=str(inputs / "group" / "inbound"))
+        assert catalogue.build()[0] == 0
+        assert catalogue.catalog("upload", "inbound")[0] == 0
+
+        code, out, err = catalogue.catalog("record", "inbound")
+
+        assert code == 0, err
+        assert "is retired and deleted" in out
+        assert not (inputs / "group").exists() and inputs.is_dir()
+        assert catalogue.status("inbound")["state"] == "frozen"
+
     def test_a_dry_run_checks_the_copy_and_writes_nothing(self, uploading):
         catalogue, _ = uploading
         assert catalogue.catalog("upload", "flat")[0] == 0

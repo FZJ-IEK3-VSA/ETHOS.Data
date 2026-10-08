@@ -15,7 +15,7 @@ This is the comparison and its record, in two stages:
 A sample is enough: the files under the folder are the ones compared, and the
 record says how many of the inventory's that is. A file the inventory does not
 list is reported and not compared. Only downloaded data has a source to check
-against; created and derived data is reviewed by its author, inputs and
+against; created and derived data is reviewed by who made it, its inputs and
 derivation instead.
 """
 
@@ -75,7 +75,7 @@ class Compare:
         if origin != k.DOWNLOADED:
             raise MaintenanceError(
                 f"{check.dataset} is {origin}, so it has no source to download it "
-                "from again. Its review checks the authors, the inputs and the "
+                "from again. Its review checks who made it, the inputs and the "
                 "derivation instead."
             )
         if not check.folder.is_dir():

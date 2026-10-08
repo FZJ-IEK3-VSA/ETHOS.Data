@@ -1,7 +1,7 @@
 """``catalog add-bundle``: take a bundle's ahead datasets into the catalogue.
 
-    ethos-data catalog add-bundle /checkout/your_tool/test_data --into /projects/inputs --dry-run
-    ethos-data catalog add-bundle /checkout/your_tool/test_data --into /projects/inputs
+    ethos-data catalog add-bundle /checkout/your_tool/test_data --dry-run
+    ethos-data catalog add-bundle /checkout/your_tool/test_data
 
 A package's bundle is ahead of the catalogue when it holds changes ``bundle
 update`` recorded, or datasets the catalogue does not describe (see
@@ -21,7 +21,9 @@ named, into the maintainer's clone, one step each:
 The files are copied first into a build input the catalogue maintainers own,
 ``<into>/<dataset>`` or ``<into>/<dataset>@<revision>``, checked against
 ``bundle.json`` as they are copied, so the catalogue never reads a package
-checkout. A bundle is authoritative for its bytes and descriptions, not for
+checkout. ``<into>`` is the clone's ``build-inputs/`` unless named: a folder
+that ignores itself in git, and whose build input ``catalog record`` deletes
+once the upload is the authoritative copy. A bundle is authoritative for its bytes and descriptions, not for
 access or visibility: a change of either that comes from a bundle is refused.
 Every step is recorded in the dataset's status file, and the families above
 the datasets are built again last.
@@ -42,7 +44,14 @@ from ..errors import MaintenanceError
 from ..formats import keys as k
 from ..formats.edit import without_keys
 from ..model import digest, lifecycle, names
-from . import DESCRIPTOR, datasets_dir, read_descriptor
+from . import (
+    DESCRIPTOR,
+    build_inputs_dir,
+    datasets_dir,
+    in_build_inputs,
+    make_build_inputs,
+    read_descriptor,
+)
 from . import status as dataset_status
 from .pipeline import Action, Pipeline
 
@@ -67,6 +76,13 @@ def _published(status) -> bool:
     return status.state in (lifecycle.AVAILABLE, lifecycle.FROZEN) and any(
         copy.kind in (k.COPY_UPLOADED, k.COPY_MATERIALIZED) for copy in status.copies
     )
+
+
+def _make_parent(intake: BundleIntake, target: Path) -> None:
+    """Make the directory ``target`` is copied into, the default build inputs ignored in git."""
+    if in_build_inputs(intake.catalog_root, target):
+        make_build_inputs(intake.catalog_root)
+    target.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _copy_files(bundle: Bundle, name: str, target: Path) -> None:
@@ -238,7 +254,7 @@ class Update:
         target = intake.into / name
 
         def add() -> None:
-            target.parent.mkdir(parents=True, exist_ok=True)
+            _make_parent(intake, target)
             _copy_files(bundle, name, target)
             with tempfile.TemporaryDirectory(prefix=".ethos-draft-") as draft:
                 draft_dir = Path(draft)
@@ -283,7 +299,7 @@ class Update:
         target = intake.into / names.entry(name, number)
 
         def revise() -> None:
-            target.parent.mkdir(parents=True, exist_ok=True)
+            _make_parent(intake, target)
             if not target.exists():
                 _copy_files(bundle, name, target)
             revision.run(
@@ -304,7 +320,7 @@ class Update:
         target = intake.into / names.entry(name, status.revision)
 
         def rebuild() -> None:
-            target.parent.mkdir(parents=True, exist_ok=True)
+            _make_parent(intake, target)
             stale = target.with_name(target.name + ".before")
             if target.exists():
                 target.rename(stale)
@@ -346,18 +362,21 @@ def run(
     directory: str | Path,
     datasets: list[str] | None = None,
     *,
-    into: str | Path,
+    into: str | Path | None = None,
     remove_missing: bool = False,
     dry_run: bool = False,
 ) -> IntakeResult:
     """Take the ahead datasets of the bundle at ``directory``, or ``datasets``, in.
 
-    ``into`` is the directory of build inputs the catalogue maintainers own.
+    ``into`` is the directory of build inputs the catalogue maintainers own,
+    the clone's ``build-inputs/`` by default.
     """
     intake = BundleIntake(
         catalog_root,
         Path(directory).expanduser().absolute(),
-        Path(into).expanduser().absolute(),
+        Path(into).expanduser().absolute()
+        if into is not None
+        else build_inputs_dir(catalog_root),
         list(datasets or []),
         remove_missing,
     )

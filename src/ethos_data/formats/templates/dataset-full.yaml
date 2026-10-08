@@ -26,7 +26,7 @@ sources:                                      # repeatable
 
 contributors:                                 # repeatable
   - title: A Researcher                       # required within an entry
-    roles: [author]                           # repeatable; see below for the vocabulary
+    roles: [author]                           # repeatable: author | modifier
     organization: Forschungszentrum Jülich, ICE-2
     path: https://orcid.org/0000-0000-0000-0000
     email: a.researcher@fz-juelich.de
